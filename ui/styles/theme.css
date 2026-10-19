@@ -1,0 +1,1062 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* =========================================================
+   Design tokens (light). Dark mode overrides these in
+   components/theme_toggle.py (_DARK_CSS).
+   ========================================================= */
+:root {
+    --mc-radius-tile: 20px;
+    --mc-radius-card: 16px;
+    --mc-radius-ctrl: 12px;
+    --mc-bg: #efe7d6;            /* cream / light-brown */
+    --mc-tile: #ffffff;          /* white tiles */
+    --mc-tile-border: rgba(120, 96, 52, 0.12);
+    /* Elevated "floating card" shadow, applied to every content feature
+       (section tiles, charts, top bar, popover, What-if panel, metric cards).
+       The left-sidebar nav pills are pinned back to a lighter shadow below. */
+    --mc-tile-shadow: 0 8px 22px rgba(120, 96, 52, 0.14);
+    --mc-sidebar-bg: #e7ddc8;    /* slightly deeper cream */
+    --mc-ink: #0f172a;
+    --mc-muted: #64748b;
+    --mc-teal: #0d9488;
+}
+
+/* =========================================================
+   Global typography (font-family may be overridden by the
+   in-app font selector; see theme_toggle.inject_font_css)
+   ========================================================= */
+html, body, [class*="css"], .stApp, .main, .block-container {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--mc-ink);
+}
+
+/* =========================================================
+   App background — cream with a subtle paper texture (a faint
+   SVG fractal-noise overlay, no external asset).
+   ========================================================= */
+.stApp,
+[data-testid="stAppViewContainer"] {
+    background-color: var(--mc-bg);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+}
+
+/* =========================================================
+   Page frame (8px grid): the main column and the sidebar's first
+   section share one 48px top edge, and the main column uses the same
+   48px for its side gutters. (Streamlit 1.52 dropped the `.main` class,
+   so the old `.main .block-container` rule here had silently stopped
+   applying and the default 96px top padding came back.)
+   ========================================================= */
+[data-testid="stMainBlockContainer"] {
+    padding: 48px 48px 64px;
+}
+/* Sidebar collapsed: its reopen (») control sits at the top-left (to ~50px);
+   start the content below it instead of under it. */
+.stApp:has(section[data-testid="stSidebar"][aria-expanded="false"]) [data-testid="stMainBlockContainer"] {
+    padding-top: 64px;
+}
+/* The theme/font <style> blocks and the 0-height animation iframe render above
+   the top card, and each still claimed a 16px row gap (64px of dead space).
+   Lift them out of the flow; the progress slot stays in flow while it shows. */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
+  > .stElementContainer:has(~ [data-testid="stLayoutWrapper"] > .st-key-mc-topbar):not(:has([data-testid="stProgress"])) {
+    position: absolute;
+}
+
+/* =========================================================
+   Section tiles — every main-panel section is a keyed
+   st.container(border=True, key="mc-tile-*"), rendered as a
+   white rounded tile. Keyed on the stable st-key-* class
+   (this Streamlit version puts the container border on the
+   stVerticalBlock itself, not a separate border-wrapper).
+   ========================================================= */
+[class*="st-key-mc-tile"] {
+    background: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+    border-radius: var(--mc-radius-tile) !important;
+    box-shadow: var(--mc-tile-shadow) !important;
+    padding: 10px 26px 22px 26px !important;
+    margin-bottom: 24px;
+}
+
+/* =========================================================
+   Card utilities
+   ========================================================= */
+.mc-card {
+    background: var(--mc-tile);
+    border: none !important;
+    border-radius: var(--mc-radius-card);
+    padding: 24px;
+    box-shadow: 0 8px 22px rgba(120, 96, 52, 0.14) !important;
+}
+
+.mc-stat-card {
+    background: var(--mc-tile);
+    border: none !important;
+    border-radius: var(--mc-radius-card);
+    padding: 16px;
+    box-shadow: 0 8px 22px rgba(120, 96, 52, 0.14) !important;
+}
+
+.mc-stat-value {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--mc-ink);
+    line-height: 1.2;
+}
+
+.mc-stat-label {
+    font-size: 13px;
+    color: var(--mc-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+}
+
+/* =========================================================
+   Hero numbers
+   ========================================================= */
+.mc-hero-num {
+    font-size: 56px;
+    font-weight: 700;
+    color: var(--mc-ink);
+    line-height: 1.1;
+}
+
+.mc-hero-label {
+    font-size: 14px;
+    color: var(--mc-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+/* =========================================================
+   Section heading — bold title with a teal accent bar UNDER
+   the text that spans the full width and fades out to the
+   right, with a rounded left cap.
+   ========================================================= */
+.mc-section {
+    position: relative;
+    font-size: 27px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 2px 0 20px 0;
+    padding: 2px 0 12px 0;
+    color: var(--mc-ink);
+}
+.mc-section::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 4px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #14b8a6 0%, rgba(20, 184, 166, 0) 70%);
+}
+
+/* =========================================================
+   Semantic color utilities
+   ========================================================= */
+.mc-muted   { color: #64748b; }
+.mc-good  { color: #059669; }
+.mc-warn  { color: #d97706; }
+.mc-bad   { color: #dc2626; }
+.mc-teal  { color: #0d9488; }
+
+/* =========================================================
+   Sidebar — modern, rounded, cream panel
+   ========================================================= */
+section[data-testid="stSidebar"] {
+    background-color: var(--mc-sidebar-bg);
+    min-width: 328px;
+    width: 328px;
+}
+
+/* Small screens: 328px of a 768px tablet left the main pane only 434px wide,
+   and Streamlit only reveals the collapse chevron on hover — so a touch tablet
+   could not shrink it. Give back some width there. */
+@media (max-width: 900px) {
+    section[data-testid="stSidebar"]:not([aria-expanded="false"]) {
+        min-width: 260px;
+        width: 260px;
+    }
+    /* Streamlit only reveals the collapse chevron on sidebar :hover, which a
+       touch device never fires — the sidebar was uncollapsable on an iPad.
+       Force it visible at these widths. */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapseButton"] button {
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+}
+
+/* When collapsed, drop the sidebar's layout width to 0 so the main content
+   reclaims the full width and re-centers (otherwise it stays biased right by
+   the sidebar's 328px of still-occupied layout space). */
+section[data-testid="stSidebar"][aria-expanded="false"] {
+    min-width: 0 !important;
+    width: 0 !important;
+    margin-left: 0 !important;
+}
+
+section[data-testid="stSidebar"] > div {
+    background-color: var(--mc-sidebar-bg);
+    padding-top: 8px;
+}
+/* The sidebar header only holds the collapse control (shown on hover): a 32px
+   row instead of 60px, so the first section sits on the main column's 48px
+   top edge (8px padding + 32px header + 8px). */
+[data-testid="stSidebarHeader"] {
+    height: 32px;
+    margin-bottom: 8px;
+}
+
+/* Round the sidebar's outer edge so it reads as a panel. */
+section[data-testid="stSidebar"] {
+    border-top-right-radius: 24px;
+    border-bottom-right-radius: 24px;
+}
+
+/* =========================================================
+   Sidebar — everything pill-shaped for a consistent look.
+   ========================================================= */
+/* Section + FAQ expander tiles: a pill when collapsed; softened to a
+   rounded rectangle when expanded (a full pill on a tall open panel looks
+   wrong). :has(details[open]) detects the expanded state. */
+section[data-testid="stSidebar"] [data-testid="stExpander"] {
+    border-radius: 999px !important;
+    /* Nav pills keep the lighter shadow — the elevated floating shadow is for
+       content cards; stacked heavy shadows on nav read as cluttered. */
+    box-shadow: 0 2px 14px rgba(120, 96, 52, 0.09) !important;
+}
+section[data-testid="stSidebar"] [data-testid="stExpander"]:has(details[open]) {
+    border-radius: 22px !important;
+}
+/* Buttons — clean symmetric pill (shadow handled globally by the primary-button
+   rule, which uses a drop-shadow filter to avoid a rounded-corner seam). */
+section[data-testid="stSidebar"] .stButton > button {
+    border-radius: 999px !important;
+}
+/* Inputs / selectboxes — pill (they're pill globally; make it explicit here). */
+section[data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] > div,
+section[data-testid="stSidebar"] .stNumberInput [data-baseweb="input"],
+section[data-testid="stSidebar"] .stTextInput input {
+    border-radius: 999px !important;
+}
+
+/* =========================================================
+   Buttons
+   ========================================================= */
+.stButton > button {
+    background-color: #ffffff;
+    color: var(--mc-ink);
+    border: 1px solid var(--mc-tile-border);
+    border-radius: var(--mc-radius-ctrl);
+    padding: 10px 20px;
+    font-weight: 500;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+    box-shadow: none;
+}
+
+.stButton > button:hover {
+    border-color: #cbb48c;
+    background-color: #faf6ec;
+    box-shadow: none;
+}
+
+.stButton > button[kind="primary"],
+.stButton > button[data-testid="baseButton-primary"] {
+    background: linear-gradient(90deg, #0d9488 0%, #22c55e 100%);
+    /* No border: a 1px transparent border made the gradient (sized to the
+       padding-box) repeat into the border ring, showing wrap-around colors
+       (green sliver left / teal seam right) at the rounded caps. border:none
+       makes padding-box == border-box so the gradient covers the full pill. */
+    border: none;
+    background-origin: border-box;
+    background-repeat: no-repeat;
+    color: #ffffff;
+    border-radius: 999px;
+    padding: 11px 28px;
+    font-weight: 600;
+    /* drop-shadow (not box-shadow): follows the pill's alpha shape so nothing
+       seams at the rounded caps. */
+    box-shadow: none;
+    filter: drop-shadow(0 3px 10px rgba(13, 148, 136, 0.35));
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+
+.stButton > button[kind="primary"]:hover,
+.stButton > button[data-testid="baseButton-primary"]:hover {
+    background: linear-gradient(90deg, #0f766e 0%, #16a34a 100%);
+    background-origin: border-box;
+    background-repeat: no-repeat;
+    border: none;
+    color: #ffffff;
+    box-shadow: none;
+    filter: drop-shadow(0 6px 16px rgba(13, 148, 136, 0.5));
+    transform: translateY(-1px);
+}
+
+/* Remove the browser/Streamlit focus outline + focus box-shadow — the
+   rectangular "blue box" that appeared around a button on hover/focus/click.
+   The button's own soft shadow is a drop-shadow FILTER, which is preserved. */
+.stButton > button:focus,
+.stButton > button:focus-visible,
+.stButton > button:active,
+[data-testid="stBaseButton-primary"]:focus,
+[data-testid="stBaseButton-primary"]:focus-visible,
+[data-testid="stBaseButton-primary"]:active,
+[data-testid="stBaseButton-secondary"]:focus,
+[data-testid="stBaseButton-secondary"]:active {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* =========================================================
+   Inputs: number, text, selectbox
+   ========================================================= */
+.stNumberInput input,
+.stTextInput input,
+.stTextArea textarea {
+    background-color: #ffffff;
+    border: 1px solid var(--mc-tile-border);
+    border-radius: var(--mc-radius-ctrl);
+    padding: 12px;
+    color: var(--mc-ink);
+}
+
+/* Number input — the WHOLE control (field + ± steppers) is
+   stNumberInputContainer; make THAT the single pill. Both the container AND the
+   inner [data-baseweb="input"] field carried their own border/radius, which
+   rendered as a DOUBLED outline (an outer rounded-rectangle + an inner "D"
+   pill). Put the pill + focus ring on the container only, and strip the inner
+   field's border/radius/background so exactly one capsule shows. overflow:hidden
+   clips the ± steppers to the pill. */
+.stNumberInput [data-testid="stNumberInputContainer"] {
+    border-radius: 999px !important;
+    overflow: hidden;
+    border: 1px solid var(--mc-tile-border) !important;
+}
+.stNumberInput [data-testid="stNumberInputContainer"]:focus-within {
+    border-color: var(--mc-teal) !important;
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12) !important;
+}
+.stNumberInput [data-baseweb="input"] {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+.stNumberInput input,
+.stNumberInput input:focus {
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding-left: 18px;
+}
+
+.stSelectbox [data-baseweb="select"] > div {
+    background-color: #ffffff;
+    border: 1px solid var(--mc-tile-border);
+    border-radius: 999px;
+    padding: 4px 14px;
+    min-height: 44px;
+}
+
+.stNumberInput input:focus,
+.stTextInput input:focus,
+.stTextArea textarea:focus {
+    border-color: var(--mc-teal);
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+    outline: none;
+}
+
+/* =========================================================
+   Sliders — minimal thin track + small teal thumb, with the
+   current value shown as a floating teal "bubble" above the
+   thumb (Streamlit renders that value node as stThumbValue).
+   ========================================================= */
+.stSlider [data-baseweb="slider"] [role="slider"] {
+    height: 15px !important;
+    width: 15px !important;
+    background-color: var(--mc-teal) !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 1px 5px rgba(13, 148, 136, 0.45) !important;
+}
+/* Thin the track (both the base rail and the teal filled portion). */
+.stSlider [data-baseweb="slider"] > div > div,
+.stSlider [data-baseweb="slider"] > div:first-child > div {
+    height: 4px !important;
+}
+/* Reserve a gap between the label and the track so the floating value bubble
+   (which rises above the thumb) has room and never collides with the label. */
+.stSlider [data-baseweb="slider"] {
+    margin-top: 20px !important;
+}
+/* Floating value bubble — anchor it just ABOVE the thumb via bottom:100% (of
+   the thumb box) rather than a fixed negative top. A negative `top` is measured
+   from a containing block whose size differs between WebKit and Chrome, so it
+   hugged the label in one engine and floated far in the other; bottom-anchoring
+   to the thumb is consistent across browsers. */
+.stSlider [data-testid="stSliderThumbValue"] {
+    background: var(--mc-teal);
+    color: #ffffff !important;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 12px;
+    box-shadow: 0 2px 8px rgba(13, 148, 136, 0.35);
+    top: auto;
+    bottom: calc(100% + 5px);
+}
+
+/* =========================================================
+   Progress bar — striped teal fill (Run-simulation progress).
+   ========================================================= */
+.stProgress > div > div > div {
+    background-color: var(--mc-teal);
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.22) 0, rgba(255, 255, 255, 0.22) 10px,
+        rgba(255, 255, 255, 0) 10px, rgba(255, 255, 255, 0) 20px
+    );
+    background-size: 28px 28px;
+    animation: mcStripes 0.9s linear infinite;
+}
+@keyframes mcStripes {
+    from { background-position: 0 0; }
+    to   { background-position: 28px 0; }
+}
+
+/* =========================================================
+   Sidebar section icons — the leading material icon on each
+   sidebar expander sits inside a soft teal "chip".
+   ========================================================= */
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stExpanderIcon"] {
+    background: rgba(13, 148, 136, 0.14);
+    color: var(--mc-teal) !important;
+    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    font-size: 19px !important;
+    line-height: 1 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 16px;
+    flex: 0 0 auto;
+}
+/* Position the round chip concentric with the pill tile's left cap (chip center
+   ≈ half the tile height in from the edge) and keep clear text spacing. */
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+    padding-left: 7px !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+}
+/* The enlarged chip overflows its own (separate) flex wrapper, so its
+   margin-right can't push the label — the label sits in a sibling container.
+   Push the label text itself so it never overlaps the circle. */
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] {
+    margin-left: 22px !important;
+}
+/* The summary's inner label wrapper has overflow:hidden on a short (~27px) line
+   box, which clipped the taller (40px) round chip into an octagon. Let the
+   summary + its inner span wrappers overflow so the full circle shows — the
+   tile itself keeps overflow:hidden for the pill and has room for the chip. */
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary,
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary span {
+    overflow: visible !important;
+}
+
+/* =========================================================
+   Expander — a single clean white rounded tile. The CONTAINER
+   is the tile; the summary is transparent/borderless so there
+   is no doubled rounded edge (that concentric-border artifact).
+   ========================================================= */
+[data-testid="stExpander"] {
+    border: 1px solid var(--mc-tile-border);
+    border-radius: var(--mc-radius-card);
+    background-color: var(--mc-tile);
+    box-shadow: var(--mc-tile-shadow);
+    overflow: hidden;
+}
+
+.streamlit-expanderHeader,
+[data-testid="stExpander"] summary {
+    background-color: transparent;
+    font-weight: 600;
+    color: var(--mc-ink);
+    border: none;
+    border-radius: 0;
+    padding: 12px 16px;
+}
+
+/* Streamlit draws its OWN border + radius on the inner <details> and the
+   body (stExpanderDetails). Left in, those sit inside our outer tile and
+   read as a doubled concentric outline. Strip them so only the outer
+   stExpander tile draws an edge. */
+[data-testid="stExpander"] details,
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Keyboard-nav focus ring on the "current" sidebar section (arrow-key nav). */
+section[data-testid="stSidebar"] [data-testid="stExpander"].mc-kbd-focus {
+    outline: 2px solid #14b8a6;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.20), var(--mc-tile-shadow);
+}
+
+/* =========================================================
+   Sidebar section titles — larger + bold expander headers.
+   Streamlit renders the label text in a child <p> inside
+   [data-testid="stMarkdownContainer"] that has its OWN emotion font-size,
+   so styling only <summary> doesn't visibly change it — we must target the
+   inner <p>/<span> directly (with !important to beat the emotion classes).
+   Scoped to the SIDEBAR so main-area expanders are unchanged.
+   ========================================================= */
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary,
+section[data-testid="stSidebar"] .streamlit-expanderHeader,
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p,
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] span,
+section[data-testid="stSidebar"] .streamlit-expanderHeader p {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+}
+
+/* Larger + semibold sidebar widget labels (Age, Filing status, radios, …).
+   Same story — target the inner <p>, not just the <label>. */
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"],
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] [data-testid="stMarkdownContainer"] p,
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+section[data-testid="stSidebar"] label p {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+}
+
+/* =========================================================
+   Sticky top card (components.top_bar). The keyed st.container
+   -> .st-key-mc-topbar carries the card chrome; its layout wrapper
+   is the sticky element. Two rows, like a standard app header:
+     1. toolbar: Retirement plan | Spending switch on the left, the
+        actions (Run / simulations / Settings) on the right;
+     2. title + metrics across the full card width.
+   ========================================================= */
+.st-key-mc-topbar {
+    background: var(--mc-tile);
+    border: 1px solid var(--mc-tile-border);
+    border-radius: var(--mc-radius-tile);
+    box-shadow: var(--mc-tile-shadow);
+    padding: 20px 26px;
+    gap: 16px;
+}
+
+/* Toolbar row. Every column keeps at least its intrinsic width (the labels are
+   nowrap: a squeezed column CLIPS "Run simulation" and the Settings gear, and
+   a squeezed switch column painted over the Run button), so when they no
+   longer fit, the row WRAPS rather than overlapping or overflowing stMain —
+   at any viewport or sidebar width. */
+.st-key-mc-topbar [data-testid="stHorizontalBlock"] {
+    flex-wrap: wrap;
+    align-items: center !important;
+}
+.st-key-mc-topbar [data-testid="stColumn"] { align-self: center !important; }
+.st-key-mc-topbar [data-testid="stColumn"]:first-child { min-width: fit-content; }
+.st-key-mc-topbar [data-testid="stColumn"]:not(:first-child) {
+    flex-basis: auto !important;
+    min-width: fit-content;
+}
+.st-key-mc-topbar button,
+.st-key-mc-topbar button p,
+.st-key-mc-topbar button div {
+    white-space: nowrap;
+}
+
+/* Streamlit wraps a keyed st.container in a stLayoutWrapper that tightly hugs
+   it (so sticky ON the container has no travel room). The wrapper is a direct
+   child of the tall main block, so making IT sticky is what actually pins the
+   bar while scrolling. Scoped via :has() to only OUR container's wrapper. */
+[data-testid="stLayoutWrapper"]:has(> [data-testid="stVerticalBlock"].st-key-mc-topbar) {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    margin-bottom: 8px;   /* + the 16px row gap = 24px to the first section */
+    /* Transparent (not cream): a cream background here shows through the tile's
+       rounded corners and covers the cards below while scrolling. Transparent
+       lets the corners reveal the content behind. padding-top:0 keeps the tile
+       flush at the viewport top so no scrolling content peeks ABOVE it either. */
+    padding-top: 0;
+    background: transparent;
+}
+
+/* Streamlit gives markdown a -16px bottom margin, which pulled the metrics row
+   into the card's bottom padding (5px left vs 20px on top). */
+.st-key-mc-topbar [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
+
+/* Metrics row: title + metrics, wrapping onto a second line when they don't
+   fit. Bottoms aligned so the title sits on the values' baseline. */
+.mc-topbar {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    width: 100%;
+    container-type: inline-size;
+}
+/* When the title and all five metrics can't share one line (~1240px of card
+   with a long household name), give the title its own line so the metrics stay
+   together on the next one, instead of the last metric wrapping alone. */
+@container (max-width: 1240px) {
+    .mc-topbar-title { flex-basis: 100%; }
+}
+
+/* Below ~1240px the switch and the three controls no longer fit one line:
+   the switch takes its own line and the controls share the line beneath. */
+@media (max-width: 1240px) {
+    .st-key-mc-topbar [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        row-gap: 10px;
+    }
+    .st-key-mc-topbar [data-testid="stColumn"]:first-child {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+    }
+    .st-key-mc-topbar [data-testid="stColumn"]:not(:first-child) {
+        min-width: 0;
+        flex: 1 1 auto !important;
+    }
+}
+
+/* Below ~1100px a two-up chart row leaves each chart ~208-230px wide, which is
+   narrower than its own legend (the donut's "Taxable brokerage" entry overhung the
+   chart edge) and far too small to read. Stack main-pane column rows instead so
+   each chart gets the full content width. The sticky top bar is excluded — it has
+   its own wrap rules above. */
+@media (max-width: 1100px) {
+    section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:not(.st-key-mc-topbar [data-testid="stHorizontalBlock"]) {
+        flex-wrap: wrap !important;
+        row-gap: 8px;
+    }
+    section[data-testid="stMain"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+    /* ...but keep the top bar's own layout intact. */
+    .st-key-mc-topbar [data-testid="stColumn"]:not(:first-child) {
+        flex: 1 1 auto !important;
+        width: auto !important;
+    }
+}
+
+/* Mid-narrow (small laptop / landscape tablet): shed the most redundant metric
+   (Name(s) — the profile picker already names the household). */
+@media (max-width: 1100px) {
+    .mc-topbar .mc-topbar-metric:nth-of-type(1) { display: none; }
+}
+
+/* Very narrow (phone/small tablet): shed the two lowest-priority metrics so the
+   metrics line stays one or two rows tall instead of five. */
+@media (max-width: 820px) {
+    .mc-topbar { gap: 8px 20px; }
+    .mc-topbar-title { font-size: 20px; }
+    .mc-topbar .mc-topbar-metric:nth-of-type(1),
+    .mc-topbar .mc-topbar-metric:nth-of-type(3) {
+        display: none;   /* Name(s) and Income — both visible in the sidebar */
+    }
+}
+
+
+.mc-topbar-title {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--mc-teal);
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+}
+
+.mc-topbar-metric {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.mc-topbar-metric-label {
+    font-size: 12px;
+    color: #0f766e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.mc-topbar-metric-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--mc-ink);
+}
+
+.mc-topbar-metric-hint {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 400;
+}
+
+/* =========================================================
+   Tabs — clean underline style
+   ========================================================= */
+.stTabs [data-baseweb="tab-list"] {
+    display: inline-flex;
+    gap: 2px;
+    background: var(--mc-tile);
+    border: 1px solid var(--mc-tile-border);
+    border-radius: 12px;
+    padding: 4px;
+    box-shadow: 0 2px 8px rgba(120, 96, 52, 0.08);
+}
+
+.stTabs [data-baseweb="tab"] {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 9px !important;
+    padding: 7px 16px !important;
+    margin: 0 !important;
+    color: var(--mc-muted) !important;
+    font-weight: 600;
+}
+.stTabs [data-baseweb="tab"] p { color: inherit !important; font-weight: 600 !important; }
+
+.stTabs [aria-selected="true"] {
+    color: #0d9488 !important;
+    background: rgba(13, 148, 136, 0.14) !important;
+    border: none !important;
+}
+.stTabs [aria-selected="true"] p { color: #0d9488 !important; }
+
+.stTabs [data-baseweb="tab-highlight"],
+.stTabs [data-baseweb="tab-border"] {
+    display: none;
+}
+
+/* =========================================================
+   Metric component
+   ========================================================= */
+[data-testid="stMetric"] {
+    background: transparent;
+    border: none;
+    padding: 4px 0;
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--mc-ink);
+}
+
+[data-testid="stMetricLabel"] {
+    font-size: 13px;
+    color: var(--mc-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+}
+
+/* Metric LABELS wrap instead of ellipsizing. Streamlit clips the inner <p>
+   with text-overflow:ellipsis, which turned real labels into
+   "PENALTY-FREE FUEL AT RE…" / "EFFECTIVE RETIREM…" at 1280–1440px. Targeting
+   the inner <p> (not stMetricLabel itself) is what actually takes effect. */
+[data-testid="stMetricLabel"] p,
+[data-testid="stMetricLabel"] [data-testid="stMarkdownContainer"] p {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+/* ---- Sidebar metrics -------------------------------------------------
+   The sidebar is a fixed 328px, so its 3-4-across KPI strips give each
+   metric a 47-125px column. At the global 32px the nowrap values ran into
+   each other ("$403.$1K15.$5K18.") and past the sidebar's right edge.
+   Scale the type down to fit and let long labels wrap onto two lines. */
+section[data-testid="stSidebar"] [data-testid="stMetricValue"] {
+    font-size: 17px;
+    line-height: 1.3;
+    /* Clip rather than spill if a value is still too wide for its column. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+section[data-testid="stSidebar"] [data-testid="stMetricLabel"] {
+    font-size: 10.5px;
+    letter-spacing: 0.02em;
+}
+
+section[data-testid="stSidebar"] [data-testid="stMetricLabel"] p,
+section[data-testid="stSidebar"] [data-testid="stMetricLabel"] [data-testid="stMarkdownContainer"] p {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.25;
+}
+
+/* =========================================================
+   Hide Streamlit chrome
+   ========================================================= */
+/* Hide page chrome — but NOT the whole <header>. The sidebar collapse/reopen
+   controls live inside the header, so hiding it wholesale (the previous
+   `header { visibility: hidden }`) trapped the sidebar closed with no way to
+   reopen. Hide only the specific toolbar/menu/deploy widgets instead. */
+#MainMenu { display: none !important; }
+footer { display: none !important; }
+/* Hide the deploy/menu/status widgets — but NOT stToolbar itself: the sidebar
+   REOPEN (») button lives inside the toolbar, so display:none-ing the toolbar
+   hid it too (the "can't reopen" bug — a display:none ancestor made it 0×0).
+   Keep the toolbar; hide only its individual chrome widgets. */
+[data-testid="stMainMenu"],
+[data-testid="stStatusWidget"],
+[data-testid="stAppDeployButton"] { display: none !important; }
+[data-testid="stToolbar"],
+[data-testid="stAppToolbar"] { background: transparent !important; }
+
+/* Keep the header transparent and click-through (its only remaining content is
+   the sidebar collapse/reopen control); lift that control above the sticky top
+   bar so it's clickable when the sidebar is collapsed. */
+[data-testid="stHeader"] {
+    background: transparent !important;
+    pointer-events: none !important;
+}
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapseButton"] {
+    pointer-events: auto !important;
+    z-index: 1000001 !important;
+}
+/* The reopen (») control's Material glyph was rendering at 0 width, collapsing
+   the whole button to 0×0 (unclickable — the "can't reopen" bug). Force a glyph
+   size and a minimum hit area so it always renders and is clickable. */
+[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
+    font-size: 24px !important;
+    width: auto !important;
+    min-width: 24px !important;
+    line-height: 1 !important;
+}
+[data-testid="stExpandSidebarButton"],
+[data-testid="stExpandSidebarButton"] button {
+    min-width: 2.5rem !important;
+    min-height: 2.5rem !important;
+}
+
+/* =========================================================
+   Subtle entrance + hover animations
+   ========================================================= */
+@keyframes mcFadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+[data-testid="stPlotlyChart"],
+.mc-card,
+.mc-stat-card,
+[data-testid="stMetric"] {
+    /* Entrance is NO LONGER applied via this broad selector: it replayed on
+       ~59 elements on EVERY Streamlit rerun (every slider/toggle change),
+       causing churn and frame drops. The animation engine now applies a
+       one-time staggered entrance (.mc-entrance) to the section tiles on first
+       page load only. Keeping the transition here for hover/other effects. */
+}
+
+/* One-time entrance (applied once per session by components/animations.py). */
+.mc-entrance {
+    animation: mcFadeInUp 0.42s cubic-bezier(.22, .61, .36, 1) both;
+}
+
+.mc-card,
+.mc-stat-card {
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+
+/* =========================================================
+   Plots — give each chart the same raised card treatment as
+   the KPI cards (bg + rounded + soft shadow), following the
+   theme tokens (white in light, grey in dark).
+   NOTE: only horizontal padding — the Plotly chart has a fixed
+   pixel height, so vertical padding would overflow the fixed
+   container and trigger a scrollbar. overflow:hidden clips any
+   residual (and rounds the chart's corners to the card radius).
+   ========================================================= */
+[data-testid="stPlotlyChart"] {
+    background: var(--mc-tile);
+    border: 1px solid var(--mc-tile-border);
+    border-radius: var(--mc-radius-card);
+    box-shadow: var(--mc-tile-shadow);
+    padding: 0 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+}
+
+/* The chart's own card gets the elevated shadow, but Streamlit wraps each
+   element in an stElementContainer set to overflow:auto — which clips the
+   shadow to the card's bounding box (cutting off the drop shadow at the
+   rounded corners). Let the chart's container (and its full-screen frame)
+   overflow visibly so the elevated shadow can bleed past the rounded card. */
+/* The chart's own card gets the elevated shadow, but Streamlit wraps each
+   element in an stElementContainer set to overflow:auto — which clips the
+   shadow to the card's bounding box (cutting off the drop shadow at the
+   rounded corners). Let the chart's container (and its full-screen frame)
+   overflow VISIBLY so the elevated shadow can bleed past the rounded card,
+   and so chart hover tooltips aren't clipped. The old donut height-overflow
+   that forced overflow:hidden here is now prevented at the source: the pie
+   is domain-constrained with a fixed height (see portfolio_breakdown.py), and
+   every other chart sets an explicit height — so Plotly can't grow past the
+   card regardless of ancestor overflow. */
+[data-testid="stElementContainer"]:has(> [data-testid="stFullScreenFrame"]),
+[data-testid="stElementContainer"]:has([data-testid="stPlotlyChart"]),
+[data-testid="stFullScreenFrame"]:has([data-testid="stPlotlyChart"]) {
+    overflow: visible !important;
+}
+
+/* "By category" donut: decouple the white CARD from the Plotly chart so the card
+   fills the column (like "By account") while the donut stays a fixed, bounded
+   size. The inner chart is width="content" = a fixed 440px SVG. CRITICAL: the
+   container must be `display:block` (NOT flex) so the fixed SVG is never stretched
+   to the card width — a stretched pie SVG makes Plotly size the donut to the wide
+   width and grow the height on first paint (overflow race). The OUTER container
+   is the full-width card; the fixed 440px chart is centered inside via margin
+   auto. Only the donut is keyed "…_category". */
+[class*="st-key-"][class*="_category"] {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: var(--mc-tile);
+    border: 1px solid var(--mc-tile-border);
+    border-radius: var(--mc-radius-card);
+    box-shadow: var(--mc-tile-shadow);
+    padding: 0 10px;
+    margin-bottom: 14px;
+}
+[class*="st-key-"][class*="_category"] > [data-testid="stFullScreenFrame"],
+[class*="st-key-"][class*="_category"] [data-testid="stPlotlyChart"] {
+    width: 100% !important;
+    max-width: 440px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.mc-card:hover,
+.mc-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 30px rgba(120, 96, 52, 0.20) !important;
+}
+
+[data-testid="stExpander"] {
+    transition: border-color .15s ease;
+}
+
+/* =========================================================
+   Popover panel (top-bar Settings) — a rounded tile that
+   follows the theme (white in light, grey tile in dark via
+   the --mc-* tokens). Streamlit paints it with the config
+   secondaryBackground, so override the surface + its inner
+   wrapper.
+   ========================================================= */
+[data-testid="stPopoverBody"] {
+    background-color: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+    border-radius: var(--mc-radius-card) !important;
+    box-shadow: var(--mc-tile-shadow) !important;
+}
+[data-testid="stPopoverBody"] > div {
+    background-color: transparent !important;
+}
+
+/* =========================================================
+   Soft-segmented toggle — horizontal st.radio groups tagged
+   .mc-seg by the app's JS (only flex-direction:row groups, so
+   the tall sidebar mode-radios keep their vertical layout).
+   White pill container; active segment = soft teal tint. The
+   radio circle is hidden; the whole segment is the click target.
+   ========================================================= */
+[role="radiogroup"].mc-seg {
+    display: inline-flex !important;
+    background: var(--mc-tile);
+    border: 1px solid var(--mc-tile-border);
+    border-radius: 12px;
+    padding: 4px;
+    gap: 2px;
+    box-shadow: 0 2px 8px rgba(120, 96, 52, 0.08);
+}
+[role="radiogroup"].mc-seg label {
+    margin: 0 !important;
+    padding: 7px 16px !important;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease;
+}
+[role="radiogroup"].mc-seg label > div:first-child { display: none !important; }  /* radio circle */
+[role="radiogroup"].mc-seg label input { position: absolute; opacity: 0; width: 0; height: 0; }
+[role="radiogroup"].mc-seg label,
+[role="radiogroup"].mc-seg label div,
+[role="radiogroup"].mc-seg label p {
+    color: #64748b !important;
+    font-weight: 600 !important;
+}
+[role="radiogroup"].mc-seg label:has(input:checked) {
+    background: rgba(13, 148, 136, 0.14);
+}
+[role="radiogroup"].mc-seg label:has(input:checked),
+[role="radiogroup"].mc-seg label:has(input:checked) div,
+[role="radiogroup"].mc-seg label:has(input:checked) p {
+    color: #0d9488 !important;
+}
+
+/* =========================================================
+   Callout banners (st.info / st.warning) — clean card look
+   with a teal icon (the "icon chip card" style).
+   ========================================================= */
+[data-testid="stAlert"],
+[data-testid="stAlertContainer"] {
+    background: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 22px rgba(120, 96, 52, 0.14) !important;
+}
+[data-testid="stAlert"] p,
+[data-testid="stAlertContainer"] p {
+    color: #334155 !important;
+}
+[data-testid="stAlert"] svg {
+    color: #0d9488 !important;
+    fill: #0d9488 !important;
+}
+
+.streamlit-expanderHeader,
+[data-testid="stExpander"] summary {
+    transition: background-color .15s ease, border-color .15s ease;
+}
+
+[data-testid="stExpander"] summary svg {
+    transition: transform .15s ease;
+}
+
+/* Accessibility: respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}

@@ -1,0 +1,9 @@
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+scipy>=1.10
+# Optional: for running the example notebook
+# jupyter>=1.0
+# seaborn>=0.12
+# Optional: for running tests
+# pytest>=7.0

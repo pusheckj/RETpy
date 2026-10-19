@@ -1,0 +1,11 @@
+# Everything the hosted app needs. Streamlit Community Cloud installs the
+# requirements file next to the entrypoint (ui/app.py), so this is the one it
+# uses. Pinned to the versions the test suite runs on: the theme CSS targets
+# Streamlit's page structure, so upgrade Streamlit deliberately, then re-test.
+numpy==2.2.6
+pandas==2.2.2
+scipy==1.15.1
+matplotlib==3.9.1
+streamlit==1.52.2
+plotly==6.5.0
+pymupdf==1.28.2

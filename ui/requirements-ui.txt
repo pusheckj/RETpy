@@ -1,0 +1,7 @@
+# UI-specific dependencies (installed in addition to the core package)
+-r ../requirements.txt
+streamlit>=1.30
+plotly>=5.18
+pandas>=2.0
+# PDF bank/card statements for the Spending tab (CSV sources work without it)
+pymupdf>=1.23

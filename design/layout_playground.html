@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Layout Playground — Retirement App</title>
+<style>
+  :root {
+    --base-fs: 14px;
+    --teal: #0d9488;
+    --teal2: #14b8a6;
+    --slate: #0f172a;
+    --slate-mut: #64748b;
+    --bg: #f8fafc;
+    --border: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--slate);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+  }
+
+  /* ---------- Toolbar ---------- */
+  #toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: #ffffff;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 16px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+  #toolbar .group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 14px;
+    border-right: 1px solid var(--border);
+  }
+  #toolbar .group:last-child { border-right: none; }
+  #toolbar .brand {
+    font-weight: 700;
+    color: var(--teal);
+    font-size: 15px;
+    letter-spacing: -0.01em;
+  }
+  #toolbar label {
+    font-size: 12px;
+    color: var(--slate-mut);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  #toolbar input[type="range"] { width: 120px; accent-color: var(--teal); }
+  #toolbar input[type="number"] {
+    width: 56px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 12px;
+  }
+  #toolbar input[type="checkbox"] { accent-color: var(--teal); }
+  button.tb {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--slate);
+    padding: 7px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, transform 0.05s;
+  }
+  button.tb:hover { background: #f1f5f9; }
+  button.tb:active { transform: translateY(1px); }
+  button.tb.primary {
+    background: var(--teal);
+    color: #fff;
+    border-color: var(--teal);
+  }
+  button.tb.primary:hover { background: #0b8177; }
+  button.tb.danger:hover { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+  #helpline {
+    width: 100%;
+    font-size: 12px;
+    color: var(--slate-mut);
+    padding-top: 2px;
+  }
+  #baseFsVal { font-variant-numeric: tabular-nums; color: var(--slate); font-weight: 600; }
+
+  /* ---------- Stage: canvas + properties ---------- */
+  #stage {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px;
+  }
+  #canvasWrap {
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background:
+      linear-gradient(#ffffff, #ffffff);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6);
+    flex: 1 1 auto;
+    max-height: calc(100vh - 140px);
+  }
+  #canvas {
+    position: relative;
+    width: 1440px;
+    height: 2200px;
+    background: #fdfdfe;
+    background-image:
+      linear-gradient(to right, rgba(15,23,42,0.02) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15,23,42,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    font-size: var(--base-fs);
+  }
+  /* sidebar guide line at x=320 */
+  #guideLine {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 320px;
+    width: 0;
+    border-left: 1px dashed #cbd5e1;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .watermark {
+    position: absolute;
+    top: 8px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #cbd5e1;
+    font-weight: 700;
+    pointer-events: none;
+    z-index: 1;
+    user-select: none;
+  }
+  #wmSidebar { left: 12px; }
+  #wmMain { left: 336px; }
+
+  /* ---------- Blocks ---------- */
+  .block {
+    position: absolute;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 10px;
+    cursor: grab;
+    user-select: none;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.05);
+    overflow: hidden;
+    z-index: 5;
+    transition: box-shadow 0.12s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .block:hover { box-shadow: 0 3px 8px rgba(15,23,42,0.10); }
+  .block.dragging { cursor: grabbing; box-shadow: 0 8px 20px rgba(15,23,42,0.18); }
+  .block.selected {
+    outline: 2px solid var(--teal);
+    outline-offset: 1px;
+    z-index: 50;
+  }
+  .block .title {
+    font-size: 1em;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--slate);
+    outline: none;
+    word-break: break-word;
+  }
+  .block .title[contenteditable="true"] {
+    background: #ecfeff;
+    border-radius: 4px;
+    cursor: text;
+  }
+  .block .tag {
+    align-self: flex-start;
+    font-size: 0.72em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 1px 7px;
+    border-radius: 999px;
+    color: #fff;
+    opacity: 0.85;
+  }
+  /* type tints */
+  .block.type-plot    { background: #f0fdfa; border-color: #99f6e4; }
+  .block.type-plot .tag    { background: var(--teal); }
+  .block.type-card    { background: #f8fafc; border-color: #e2e8f0; }
+  .block.type-card .tag    { background: var(--slate-mut); }
+  .block.type-control { background: #fffbeb; border-color: #fde68a; }
+  .block.type-control .tag { background: #d97706; }
+  .block.type-sidebar { background: #f9fafb; border-color: #e5e7eb; }
+  .block.type-sidebar .tag { background: #6b7280; }
+  .block.type-section {
+    background: #ecfeff;
+    border-left: 4px solid var(--teal);
+    border-color: #a5f3fc;
+  }
+  .block.type-section .title { font-weight: 800; color: var(--teal); font-size: 1.05em; }
+  .block.type-section .tag { background: var(--teal2); }
+
+  .resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    z-index: 60;
+  }
+  .resize-handle::after {
+    content: "";
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid #94a3b8;
+    border-bottom: 2px solid #94a3b8;
+    border-bottom-right-radius: 2px;
+  }
+  .del-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(15,23,42,0.12);
+    color: #fff;
+    font-size: 13px;
+    line-height: 16px;
+    text-align: center;
+    cursor: pointer;
+    display: none;
+    padding: 0;
+    z-index: 61;
+  }
+  .block:hover .del-btn { display: block; }
+  .del-btn:hover { background: #ef4444; }
+
+  /* ---------- Properties panel ---------- */
+  #props {
+    flex: 0 0 240px;
+    width: 240px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    position: sticky;
+    top: 76px;
+    max-height: calc(100vh - 140px);
+    overflow: auto;
+  }
+  #props h3 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    color: var(--slate);
+  }
+  #props .hint { font-size: 12px; color: var(--slate-mut); margin-bottom: 12px; }
+  #props .field { margin-bottom: 12px; }
+  #props .field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--slate-mut);
+    margin-bottom: 4px;
+  }
+  #props input[type="text"],
+  #props select,
+  #props input[type="number"] {
+    width: 100%;
+    padding: 7px 8px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font: inherit;
+    font-size: 13px;
+  }
+  #props .row { display: flex; gap: 8px; }
+  #props .row .field { flex: 1; }
+  #props input[type="range"] { width: 100%; accent-color: var(--teal); }
+  #props #fsVal { font-weight: 600; color: var(--slate); }
+  #props .propDelete {
+    width: 100%;
+    margin-top: 6px;
+    background: #fff;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    font-weight: 600;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    font: inherit;
+  }
+  #props .propDelete:hover { background: #fef2f2; }
+  #propsEmpty { color: var(--slate-mut); font-size: 13px; }
+
+  /* ---------- Import area ---------- */
+  #importArea {
+    display: none;
+    width: 100%;
+    margin-top: 8px;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  #importArea textarea {
+    flex: 1;
+    height: 46px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font: 12px monospace;
+    resize: vertical;
+  }
+
+  /* ---------- Toast ---------- */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--slate);
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 2000;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.28);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="group">
+    <span class="brand">Layout Playground</span>
+  </div>
+
+  <div class="group">
+    <label>Base text size
+      <input type="range" id="baseFs" min="10" max="28" step="1" value="14" />
+      <span id="baseFsVal">14px</span>
+    </label>
+  </div>
+
+  <div class="group">
+    <label><input type="checkbox" id="snapToggle" /> Snap to grid</label>
+    <label>Grid <input type="number" id="gridSize" min="2" max="64" step="1" value="8" /></label>
+  </div>
+
+  <div class="group">
+    <label>Type
+      <select id="addType">
+        <option value="card">card</option>
+        <option value="plot">plot</option>
+        <option value="section">section</option>
+        <option value="control">control</option>
+        <option value="sidebar">sidebar</option>
+      </select>
+    </label>
+    <button class="tb" id="addBtn">+ Add box</button>
+  </div>
+
+  <div class="group">
+    <button class="tb primary" id="exportBtn">Export JSON</button>
+    <button class="tb" id="importBtn">Import JSON</button>
+    <button class="tb danger" id="resetBtn">Reset layout</button>
+  </div>
+
+  <div id="importArea">
+    <textarea id="importText" placeholder="Paste exported layout JSON here, then click Load"></textarea>
+    <button class="tb" id="importLoadBtn">Load</button>
+    <input type="file" id="importFile" accept="application/json,.json" />
+  </div>
+
+  <div id="helpline">Drag to move · corner to resize · double-click to rename · Export or screenshot when done.</div>
+</div>
+
+<div id="stage">
+  <div id="canvasWrap">
+    <div id="canvas">
+      <div id="guideLine"></div>
+      <div class="watermark" id="wmSidebar">Sidebar</div>
+      <div class="watermark" id="wmMain">Main panel</div>
+    </div>
+  </div>
+
+  <div id="props">
+    <h3 id="propsTitle">Properties</h3>
+    <div id="propsEmpty">Select a block to edit its properties.</div>
+    <div id="propsBody" style="display:none;">
+      <div class="hint" id="propsId"></div>
+      <div class="field">
+        <label>Label</label>
+        <input type="text" id="pLabel" />
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <select id="pType">
+          <option value="card">card</option>
+          <option value="plot">plot</option>
+          <option value="section">section</option>
+          <option value="control">control</option>
+          <option value="sidebar">sidebar</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Width</label>
+          <input type="number" id="pW" min="60" step="1" />
+        </div>
+        <div class="field">
+          <label>Height</label>
+          <input type="number" id="pH" min="36" step="1" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>X</label>
+          <input type="number" id="pX" step="1" />
+        </div>
+        <div class="field">
+          <label>Y</label>
+          <input type="number" id="pY" step="1" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Text size × <span id="fsVal">1.0</span></label>
+        <input type="range" id="pFs" min="0.6" max="2.5" step="0.05" value="1" />
+      </div>
+      <button class="propDelete" id="pDelete">Delete block</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast">Copied!</div>
+
+<script>
+"use strict";
+(function () {
+  // ---------- State ----------
+  var canvas = document.getElementById("canvas");
+  var CANVAS_W = 1440, CANVAS_H = 2200;
+  var blocks = {};          // id -> {id,label,type,x,y,w,h,fontScale,el}
+  var selectedId = null;
+  var uid = 1;
+
+  var snapToggle = document.getElementById("snapToggle");
+  var gridSizeInput = document.getElementById("gridSize");
+
+  function snap(v) {
+    if (!snapToggle.checked) return Math.round(v);
+    var g = parseInt(gridSizeInput.value, 10) || 8;
+    if (g < 1) g = 1;
+    return Math.round(v / g) * g;
+  }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // ---------- Block creation ----------
+  function makeBlock(spec) {
+    var b = {
+      id: spec.id || ("b" + (uid++)),
+      label: spec.label != null ? spec.label : "New block",
+      type: spec.type || "card",
+      x: spec.x || 0,
+      y: spec.y || 0,
+      w: spec.w || 200,
+      h: spec.h || 90,
+      fontScale: spec.fontScale != null ? spec.fontScale : 1
+    };
+    // ensure uid stays ahead of numeric ids like "b12"
+    var m = /^b(\d+)$/.exec(b.id);
+    if (m) { var n = parseInt(m[1], 10); if (n >= uid) uid = n + 1; }
+
+    var el = document.createElement("div");
+    el.className = "block type-" + b.type;
+    el.setAttribute("data-id", b.id);
+
+    var tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = b.type;
+
+    var title = document.createElement("div");
+    title.className = "title";
+    title.textContent = b.label;
+
+    var del = document.createElement("button");
+    del.className = "del-btn";
+    del.type = "button";
+    del.textContent = "×";
+    del.title = "Delete";
+
+    var handle = document.createElement("div");
+    handle.className = "resize-handle";
+
+    el.appendChild(tag);
+    el.appendChild(title);
+    el.appendChild(del);
+    el.appendChild(handle);
+    canvas.appendChild(el);
+
+    b.el = el;
+    b._tag = tag;
+    b._title = title;
+    blocks[b.id] = b;
+    applyStyle(b);
+
+    // ----- interactions -----
+    // Delete
+    del.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+    del.addEventListener("click", function (e) {
+      e.stopPropagation();
+      deleteBlock(b.id);
+    });
+
+    // Double-click title to edit
+    title.addEventListener("dblclick", function (e) {
+      e.stopPropagation();
+      startEdit(b);
+    });
+
+    // Resize handle
+    handle.addEventListener("pointerdown", function (e) {
+      e.stopPropagation();
+      e.preventDefault();
+      beginResize(b, e);
+    });
+
+    // Drag body / select
+    el.addEventListener("pointerdown", function (e) {
+      if (title.getAttribute("contenteditable") === "true") return;
+      beginDrag(b, e);
+    });
+
+    return b;
+  }
+
+  function applyStyle(b) {
+    var el = b.el;
+    el.style.left = b.x + "px";
+    el.style.top = b.y + "px";
+    el.style.width = b.w + "px";
+    el.style.height = b.h + "px";
+    el.style.fontSize = b.fontScale + "em";
+    el.className = "block type-" + b.type + (b.id === selectedId ? " selected" : "");
+    b._tag.textContent = b.type;
+  }
+
+  function deleteBlock(id) {
+    var b = blocks[id];
+    if (!b) return;
+    canvas.removeChild(b.el);
+    delete blocks[id];
+    if (selectedId === id) { selectedId = null; renderProps(); }
+  }
+
+  // ---------- Selection ----------
+  function selectBlock(id) {
+    if (selectedId && blocks[selectedId]) {
+      blocks[selectedId].el.classList.remove("selected");
+    }
+    selectedId = id;
+    if (id && blocks[id]) {
+      blocks[id].el.classList.add("selected");
+      // bring to front
+      canvas.appendChild(blocks[id].el);
+    }
+    renderProps();
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    if (e.target === canvas || e.target.classList.contains("watermark")) {
+      selectBlock(null);
+    }
+  });
+
+  // ---------- Inline title edit ----------
+  function startEdit(b) {
+    var title = b._title;
+    title.setAttribute("contenteditable", "true");
+    title.focus();
+    // select all text
+    var range = document.createRange();
+    range.selectNodeContents(title);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    function commit() {
+      title.removeAttribute("contenteditable");
+      b.label = title.textContent.trim() || "Untitled";
+      title.textContent = b.label;
+      title.removeEventListener("blur", commit);
+      title.removeEventListener("keydown", onKey);
+      if (b.id === selectedId) renderProps();
+    }
+    function onKey(ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); title.blur(); }
+      else if (ev.key === "Escape") { title.textContent = b.label; title.blur(); }
+    }
+    title.addEventListener("blur", commit);
+    title.addEventListener("keydown", onKey);
+  }
+
+  // ---------- Drag ----------
+  var drag = null;
+  function beginDrag(b, e) {
+    selectBlock(b.id);
+    drag = {
+      b: b,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: b.x,
+      origY: b.y,
+      pointerId: e.pointerId
+    };
+    b.el.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    b.el.setPointerCapture(e.pointerId);
+    b.el.addEventListener("pointermove", onDragMove);
+    b.el.addEventListener("pointerup", onDragEnd);
+    b.el.addEventListener("pointercancel", onDragEnd);
+    e.preventDefault();
+  }
+  function onDragMove(e) {
+    if (!drag) return;
+    var b = drag.b;
+    var nx = drag.origX + (e.clientX - drag.startX);
+    var ny = drag.origY + (e.clientY - drag.startY);
+    nx = snap(nx); ny = snap(ny);
+    nx = clamp(nx, 0, CANVAS_W - b.w);
+    ny = clamp(ny, 0, CANVAS_H - b.h);
+    b.x = nx; b.y = ny;
+    b.el.style.left = nx + "px";
+    b.el.style.top = ny + "px";
+    if (b.id === selectedId) updatePosFields(b);
+  }
+  function onDragEnd(e) {
+    if (!drag) return;
+    var b = drag.b;
+    b.el.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    try { b.el.releasePointerCapture(drag.pointerId); } catch (err) {}
+    b.el.removeEventListener("pointermove", onDragMove);
+    b.el.removeEventListener("pointerup", onDragEnd);
+    b.el.removeEventListener("pointercancel", onDragEnd);
+    drag = null;
+  }
+
+  // ---------- Resize ----------
+  var resize = null;
+  function beginResize(b, e) {
+    selectBlock(b.id);
+    resize = {
+      b: b,
+      startX: e.clientX,
+      startY: e.clientY,
+      origW: b.w,
+      origH: b.h,
+      pointerId: e.pointerId
+    };
+    document.body.style.userSelect = "none";
+    b.el.setPointerCapture(e.pointerId);
+    b.el.addEventListener("pointermove", onResizeMove);
+    b.el.addEventListener("pointerup", onResizeEnd);
+    b.el.addEventListener("pointercancel", onResizeEnd);
+  }
+  function onResizeMove(e) {
+    if (!resize) return;
+    var b = resize.b;
+    var nw = resize.origW + (e.clientX - resize.startX);
+    var nh = resize.origH + (e.clientY - resize.startY);
+    nw = snap(nw); nh = snap(nh);
+    nw = clamp(nw, 60, CANVAS_W - b.x);
+    nh = clamp(nh, 36, CANVAS_H - b.y);
+    b.w = nw; b.h = nh;
+    b.el.style.width = nw + "px";
+    b.el.style.height = nh + "px";
+    if (b.id === selectedId) updateSizeFields(b);
+  }
+  function onResizeEnd(e) {
+    if (!resize) return;
+    var b = resize.b;
+    document.body.style.userSelect = "";
+    try { b.el.releasePointerCapture(resize.pointerId); } catch (err) {}
+    b.el.removeEventListener("pointermove", onResizeMove);
+    b.el.removeEventListener("pointerup", onResizeEnd);
+    b.el.removeEventListener("pointercancel", onResizeEnd);
+    resize = null;
+  }
+
+  // ---------- Properties panel ----------
+  var pLabel = document.getElementById("pLabel");
+  var pType = document.getElementById("pType");
+  var pW = document.getElementById("pW");
+  var pH = document.getElementById("pH");
+  var pX = document.getElementById("pX");
+  var pY = document.getElementById("pY");
+  var pFs = document.getElementById("pFs");
+  var fsVal = document.getElementById("fsVal");
+
+  function renderProps() {
+    var empty = document.getElementById("propsEmpty");
+    var body = document.getElementById("propsBody");
+    if (!selectedId || !blocks[selectedId]) {
+      empty.style.display = "block";
+      body.style.display = "none";
+      return;
+    }
+    var b = blocks[selectedId];
+    empty.style.display = "none";
+    body.style.display = "block";
+    document.getElementById("propsId").textContent = "id: " + b.id;
+    pLabel.value = b.label;
+    pType.value = b.type;
+    pW.value = b.w;
+    pH.value = b.h;
+    pX.value = b.x;
+    pY.value = b.y;
+    pFs.value = b.fontScale;
+    fsVal.textContent = Number(b.fontScale).toFixed(2) + "×";
+  }
+  function updatePosFields(b) { pX.value = b.x; pY.value = b.y; }
+  function updateSizeFields(b) { pW.value = b.w; pH.value = b.h; }
+
+  function curBlock() { return selectedId ? blocks[selectedId] : null; }
+
+  pLabel.addEventListener("input", function () {
+    var b = curBlock(); if (!b) return;
+    b.label = pLabel.value;
+    b._title.textContent = pLabel.value;
+  });
+  pType.addEventListener("change", function () {
+    var b = curBlock(); if (!b) return;
+    b.type = pType.value;
+    applyStyle(b);
+  });
+  pW.addEventListener("input", function () {
+    var b = curBlock(); if (!b) return;
+    b.w = clamp(parseInt(pW.value, 10) || 60, 60, CANVAS_W - b.x);
+    b.el.style.width = b.w + "px";
+  });
+  pH.addEventListener("input", function () {
+    var b = curBlock(); if (!b) return;
+    b.h = clamp(parseInt(pH.value, 10) || 36, 36, CANVAS_H - b.y);
+    b.el.style.height = b.h + "px";
+  });
+  pX.addEventListener("input", function () {
+    var b = curBlock(); if (!b) return;
+    b.x = clamp(parseInt(pX.value, 10) || 0, 0, CANVAS_W - b.w);
+    b.el.style.left = b.x + "px";
+  });
+  pY.addEventListener("input", function () {
+    var b = curBlock(); if (!b) return;
+    b.y = clamp(parseInt(pY.value, 10) || 0, 0, CANVAS_H - b.h);
+    b.el.style.top = b.y + "px";
+  });
+  pFs.addEventListener("input", function () {
+    var b = curBlock(); if (!b) return;
+    b.fontScale = parseFloat(pFs.value);
+    b.el.style.fontSize = b.fontScale + "em";
+    fsVal.textContent = Number(b.fontScale).toFixed(2) + "×";
+  });
+  document.getElementById("pDelete").addEventListener("click", function () {
+    if (selectedId) deleteBlock(selectedId);
+  });
+
+  // ---------- Toolbar: base text size ----------
+  var baseFs = document.getElementById("baseFs");
+  var baseFsVal = document.getElementById("baseFsVal");
+  baseFs.addEventListener("input", function () {
+    document.documentElement.style.setProperty("--base-fs", baseFs.value + "px");
+    baseFsVal.textContent = baseFs.value + "px";
+  });
+
+  // ---------- Add box ----------
+  document.getElementById("addBtn").addEventListener("click", function () {
+    var type = document.getElementById("addType").value;
+    var scrollLeft = document.getElementById("canvasWrap").scrollLeft;
+    var scrollTop = document.getElementById("canvasWrap").scrollTop;
+    var b = makeBlock({
+      label: "New " + type,
+      type: type,
+      x: snap(clamp(scrollLeft + 400, 0, CANVAS_W - 220)),
+      y: snap(clamp(scrollTop + 120, 0, CANVAS_H - 100)),
+      w: type === "section" ? 1060 : 220,
+      h: type === "section" ? 40 : 100
+    });
+    selectBlock(b.id);
+  });
+
+  // ---------- Reset ----------
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    if (!confirm("Reset to the default seeded layout? This discards your current arrangement.")) return;
+    loadLayout(defaultLayout(), 14);
+  });
+
+  // ---------- Export ----------
+  function serialize() {
+    var arr = [];
+    Object.keys(blocks).forEach(function (id) {
+      var b = blocks[id];
+      arr.push({
+        id: b.id, label: b.label, type: b.type,
+        x: b.x, y: b.y, w: b.w, h: b.h,
+        fontScale: Number(b.fontScale)
+      });
+    });
+    return {
+      baseTextSize: parseInt(baseFs.value, 10),
+      canvas: { w: CANVAS_W, h: CANVAS_H },
+      blocks: arr
+    };
+  }
+  function toast(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { t.classList.remove("show"); }, 1600);
+  }
+  document.getElementById("exportBtn").addEventListener("click", function () {
+    var json = JSON.stringify(serialize(), null, 2);
+    // download
+    var blob = new Blob([json], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "layout.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    // clipboard
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(json).then(
+        function () { toast("Copied & downloaded layout.json"); },
+        function () { toast("Downloaded layout.json"); }
+      );
+    } else {
+      toast("Downloaded layout.json");
+    }
+  });
+
+  // ---------- Import ----------
+  var importArea = document.getElementById("importArea");
+  document.getElementById("importBtn").addEventListener("click", function () {
+    importArea.style.display = importArea.style.display === "flex" ? "none" : "flex";
+  });
+  function applyImported(text) {
+    try {
+      var data = JSON.parse(text);
+      if (!data || !Array.isArray(data.blocks)) throw new Error("Missing blocks array");
+      loadLayout(data.blocks, data.baseTextSize || 14);
+      importArea.style.display = "none";
+      document.getElementById("importText").value = "";
+      toast("Layout imported");
+    } catch (err) {
+      alert("Import failed: " + err.message);
+    }
+  }
+  document.getElementById("importLoadBtn").addEventListener("click", function () {
+    applyImported(document.getElementById("importText").value);
+  });
+  document.getElementById("importFile").addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () { applyImported(String(reader.result)); };
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+
+  // ---------- Load / clear ----------
+  function clearBlocks() {
+    Object.keys(blocks).forEach(function (id) {
+      canvas.removeChild(blocks[id].el);
+    });
+    blocks = {};
+    selectedId = null;
+    uid = 1;
+  }
+  function loadLayout(specs, baseTextSize) {
+    clearBlocks();
+    specs.forEach(function (s) { makeBlock(s); });
+    baseFs.value = baseTextSize;
+    baseFsVal.textContent = baseTextSize + "px";
+    document.documentElement.style.setProperty("--base-fs", baseTextSize + "px");
+    renderProps();
+  }
+
+  // ---------- Default seeded layout ----------
+  function defaultLayout() {
+    var L = [];
+    function push(label, type, x, y, w, h) {
+      L.push({ label: label, type: type, x: x, y: y, w: w, h: h, fontScale: 1 });
+    }
+
+    // Top bar (full width)
+    push("Top bar: Title · Name(s) · Net worth · Income · Target age · Success rate · [Run] · [Sims] · [Settings]",
+         "control", 10, 10, 1420, 44);
+
+    // Sidebar (x 10-300)
+    var sideItems = ["About you", "Accounts", "Income", "Taxes", "Expenses",
+      "Big purchases & goals", "Savings", "Retirement goals (incl. Long-term care)",
+      "Assumptions", "Run simulation", "FAQ"];
+    var sy = 70;
+    sideItems.forEach(function (name) {
+      push(name, "sidebar", 10, sy, 290, 44);
+      sy += 52;
+    });
+
+    // Main panel starts at x=340
+    var MX = 340;      // main x
+    var MW = 1080;     // main full width (to ~1420)
+    var y = 70;
+
+    // ----- Section: Retirement -----
+    push("Retirement", "section", MX, y, MW, 40); y += 52;
+    // cards row (4)
+    var cardW = 258, cardH = 110, gap = 16;
+    ["Net worth", "Retirement accounts", "Non-retirement", "Home equity"].forEach(function (c, i) {
+      push(c, "card", MX + i * (cardW + gap), y, cardW, cardH);
+    });
+    y += cardH + gap;
+    // hero + stats row
+    push("Earliest retirement age + success (hero)", "card", MX, y, 528, 130);
+    push("Stats row", "card", MX + 528 + gap, y, MW - 528 - gap, 130);
+    y += 130 + gap;
+    // plots
+    push("By category (pie)", "plot", MX, y, 528, 300);
+    push("By account (bar)", "plot", MX + 528 + gap, y, MW - 528 - gap, 300);
+    y += 300 + gap;
+    push("Projected net worth by account", "plot", MX, y, MW, 320);
+    y += 320 + gap;
+    push("When can you retire? (success by age)", "plot", MX, y, 528, 300);
+    push("Asset allocation", "plot", MX + 528 + gap, y, MW - 528 - gap, 300);
+    y += 300 + 32;
+
+    // ----- Section: Spending -----
+    push("Spending", "section", MX, y, MW, 40); y += 52;
+    push("Projected annual spending by category (Today/Future toggle, incl. Children + 4% line)",
+         "plot", MX, y, 528, 300);
+    push("Withdrawal rate by source", "plot", MX + 528 + gap, y, MW - 528 - gap, 300);
+    y += 300 + 32;
+
+    // ----- Section: Savings -----
+    push("Savings", "section", MX, y, MW, 40); y += 52;
+    push("Projected savings by account", "plot", MX, y, MW, 300);
+    y += 300 + 32;
+
+    // ----- Section: Income -----
+    push("Income", "section", MX, y, MW, 40); y += 52;
+    push("Income over time (incl. Roth conversion line)", "plot", MX, y, MW, 300);
+    y += 300 + 32;
+
+    // ----- Section: Tax -----
+    push("Tax", "section", MX, y, MW, 40); y += 52;
+    push("Tax flow over plan horizon", "plot", MX, y, MW, 300);
+    y += 300 + 32;
+
+    // ----- Section: What if -----
+    push("What if", "section", MX, y, MW, 40); y += 52;
+    push("What-if delta pane", "control", MX, y, 528, 160);
+    push("Scenario comparison", "control", MX + 528 + gap, y, MW - 528 - gap, 160);
+    y += 160 + gap;
+    push("Deep dives: Trajectories / Withdrawal / Sensitivity (tabs)", "plot", MX, y, MW, 320);
+
+    return L;
+  }
+
+  // ---------- Init ----------
+  loadLayout(defaultLayout(), 14);
+})();
+</script>
+</body>
+</html>

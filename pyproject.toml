@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retirement-monte-carlo"
+version = "0.1.0"
+description = "Open-source Monte Carlo retirement simulator with realistic tax modeling."
+authors = [{name = "Jacob Pusheck", email = "pusheckj@gmail.com"}]
+maintainers = [{name = "Jacob Pusheck", email = "pusheckj@gmail.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.4"]
+notebook = ["jupyter>=1.0", "seaborn>=0.12"]
+
+[project.urls]
+Homepage = "https://github.com/pusheckj/RETpy"
+Issues = "https://github.com/pusheckj/RETpy/issues"
+
+[tool.setuptools.packages.find]
+include = ["retirement_sim*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+markers = ["slow: full Monte Carlo runs"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.format]

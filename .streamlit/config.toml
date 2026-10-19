@@ -1,0 +1,15 @@
+[theme]
+primaryColor = "#0d9488"
+backgroundColor = "#efe7d6"
+secondaryBackgroundColor = "#e7ddc8"
+textColor = "#0f172a"
+font = "serif"
+
+[server]
+headless = true
+port = 8501
+# Statements are small; cap uploads well below the 200 MB default.
+maxUploadSize = 25
+
+[browser]
+gatherUsageStats = false

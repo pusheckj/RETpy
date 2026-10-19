@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Distribution / packaging
+*.egg-info/
+build/
+dist/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Personal user configs (keep private — do not commit)
+my_config.py
+personal_config.py
+user_config.py
+*_personal.py
+
+# Your own "My situation" profile now lives outside the repo
+# (~/.config/retirement-sim/my_profile.json, or $RETIREMENT_SIM_PROFILE).
+# These guard the old in-repo location and any stray copies or backups.
+ui/profiles/my_situation.json
+my_profile.json
+*.backup*.json
+retirement_parameters_*.md
+retirement_parameters_*.csv
+
+# Streamlit secrets (only the .example is committed)
+.streamlit/secrets.toml
+
+# Local agent/editor state
+.claude/
+
+# One-off analysis / diagnostic scratch scripts (run ad hoc, not part of the
+# package; several read the private profile and bake its numbers into output)
+coast_probe.py
+layer_probe.py
+home_purchase_cash_analysis.py
+home_purchase_cash_analysis.png
+home_purchase_cash_analysis.json
+
+# Working notes and scratch analyses: several quote results measured on the
+# private profile
+tasks/
+
+# Design mockups: the HTML/PNG renders show the private profile's names,
+# net worth and income in the top bar
+design_mockups/
+
+# Output artifacts (uncomment to ignore generated outputs)
+# plots/*.png
+# output/
+# results/
+
+# Persisted Monte Carlo result cache (regenerates itself; engine-fingerprinted)
+.sim_cache/
