@@ -507,18 +507,29 @@ def group_averages(tx: pd.DataFrame, months: List[pd.Period]) -> pd.Series:
 # Charts
 # ---------------------------------------------------------------------------
 
-def pie_figure(avg: pd.Series, dark: bool) -> go.Figure:
+def _chart(st, build, key: str, config: dict) -> None:
+    """Draw ``build(compact)`` twice — the regular chart and a phone version —
+    and let theme.css show the one that fits the screen (the server can't know
+    a visitor's width). The regular chart keeps the original widget key."""
+    with st.container(key=f"mc-wide-{key}"):
+        st.plotly_chart(style_fig(build(False), st), width="stretch", config=config, key=key)
+    with st.container(key=f"mc-narrow-{key}"):
+        st.plotly_chart(style_fig(build(True), st), width="stretch", config=config, key=f"{key}_compact")
+
+
+def pie_figure(avg: pd.Series, dark: bool, compact: bool = False) -> go.Figure:
     """Donut of the average month, one slice per expense bucket (fixed colors).
 
     Legend on the right carries each bucket's $/month, so it fits half a row.
     The explicit domain + fixed height keep the ring inside its card.
+    ``compact`` (phones): the legend goes under the ring, which gets the width.
     """
     vals = avg.clip(lower=0)
     vals = vals[vals > 0]
     labels = [f"{g}  {money(v)}" for g, v in vals.items()]
     fig = go.Figure(go.Pie(
         labels=labels, values=list(vals.values), sort=False, direction="clockwise", hole=0.62,
-        domain=dict(x=[0.0, 0.42], y=[0.0, 1.0]),
+        domain=dict(x=[0.12, 0.88], y=[0.36, 1.0]) if compact else dict(x=[0.0, 0.42], y=[0.0, 1.0]),
         marker=dict(colors=[_SERIES[dark][GROUPS.index(g)] for g in vals.index],
                     line=dict(color=_SURFACE[dark], width=2),
                     pattern=dict(shape=[_ESTIMATE_PATTERN if g == "Partner spending" else ""
@@ -526,11 +537,15 @@ def pie_figure(avg: pd.Series, dark: bool) -> go.Figure:
                                  fgcolor=_SURFACE[dark], fgopacity=0.45, fillmode="overlay")),
         textposition="inside", texttemplate="%{percent:.0%}", insidetextorientation="horizontal",
         hovertemplate="<b>%{label}</b> per month (%{percent:.1%})<extra></extra>"))
-    fig.update_layout(height=340, showlegend=True, uniformtext=dict(minsize=10, mode="hide"),
-                      legend=dict(x=0.45, y=0.5, yanchor="middle", font=dict(size=11.5)),
+    fig.update_layout(height=460 if compact else 340, showlegend=True,
+                      uniformtext=dict(minsize=10, mode="hide"),
+                      legend=(dict(orientation="h", x=0.5, xanchor="center", y=0.32, yanchor="top",
+                                   font=dict(size=11.5)) if compact
+                              else dict(x=0.45, y=0.5, yanchor="middle", font=dict(size=11.5))),
                       margin=dict(t=10, b=10, l=10, r=_CARD_CLIP),
                       # True total (a bucket netting negative can't be a slice but still counts).
-                      annotations=[dict(text=f"<b>{money(avg.sum())}</b><br>per month", x=0.21, y=0.5,
+                      annotations=[dict(text=f"<b>{money(avg.sum())}</b><br>per month",
+                                        x=0.5 if compact else 0.21, y=0.68 if compact else 0.5,
                                         xref="paper", yref="paper", showarrow=False,
                                         font=dict(size=13, color=_INK[dark]))])
     return fig
@@ -571,7 +586,10 @@ def _shade_incomplete(fig: go.Figure, months, incomplete: List[pd.Period], dark:
 
 
 def monthly_figure(table: pd.DataFrame, incomplete: List[pd.Period], dark: bool,
-                   ma: Optional[pd.Series] = None, window: int = 0) -> go.Figure:
+                   ma: Optional[pd.Series] = None, window: int = 0,
+                   compact: bool = False) -> go.Figure:
+    """Stacked monthly spending by bucket. ``compact`` (phones): a month label
+    every third month, so the labels don't collide."""
     x = _month_x(table.index)
     fig = go.Figure()
     colors = _SERIES[dark]
@@ -604,15 +622,17 @@ def monthly_figure(table: pd.DataFrame, incomplete: List[pd.Period], dark: bool,
     _shade_incomplete(fig, list(table.index), incomplete, dark)
     fig.update_xaxes(range=[table.index[0].start_time, (table.index[-1] + 1).start_time])
     fig.update_layout(barmode="relative", barcornerradius=4, bargap=0.25, height=440,
-                      hovermode="closest", legend=dict(orientation="h", y=-0.15),
+                      hovermode="closest", legend=dict(orientation="h", y=-0.24 if compact else -0.15),
                       margin=dict(t=36, b=10, l=10, r=_CARD_CLIP),
                       yaxis=dict(tickformat="$,.0f", title=None),
-                      xaxis=dict(title=None, dtick="M1", tickformat="%b<br>%Y", ticklabelmode="period"))
+                      xaxis=dict(title=None, dtick="M3" if compact else "M1", tickformat="%b<br>%Y",
+                                 ticklabelmode="period"))
     return fig
 
 
 def category_trend_figure(tx: pd.DataFrame, category: str, start: pd.Period, end: pd.Period,
-                          incomplete: List[pd.Period], dark: bool, window: int = 3) -> go.Figure:
+                          incomplete: List[pd.Period], dark: bool, window: int = 3,
+                          compact: bool = False) -> go.Figure:
     months = pd.period_range(start, end, freq="M")
     s = counted(tx)
     s = s[(s["category"] == category) | (s["category"].map(expense_group) == category)]
@@ -640,7 +660,8 @@ def category_trend_figure(tx: pd.DataFrame, category: str, start: pd.Period, end
     fig.update_layout(height=330, barcornerradius=4, bargap=0.3, hovermode="x unified",
                       legend=dict(orientation="h", y=-0.3), margin=dict(t=36, b=10, l=10, r=_CARD_CLIP),
                       yaxis=dict(tickformat="$,.0f", title=None),
-                      xaxis=dict(title=None, dtick="M1", tickformat="%b<br>%Y", ticklabelmode="period"))
+                      xaxis=dict(title=None, dtick="M3" if compact else "M1", tickformat="%b<br>%Y",
+                                 ticklabelmode="period"))
     return fig
 
 
@@ -855,8 +876,9 @@ def render(st, **_kwargs) -> None:
         left, right = st.columns(2)
         with left:
             st.markdown("**Your average month**")
-            st.plotly_chart(style_fig(pie_figure(group_averages(view, good), dark), st), width="stretch",
-                            config={"displayModeBar": False}, key="sp_avg_donut")
+            avg = group_averages(view, good)
+            _chart(st, lambda compact: pie_figure(avg, dark, compact), "sp_avg_donut",
+                   {"displayModeBar": False})
         with right:
             st.markdown("**Plan vs. actual**")
             g = group_summary(view, start, end, complete, overrides, sel)
@@ -876,8 +898,8 @@ def render(st, **_kwargs) -> None:
         full = monthly_table(view, first, chart_end, sel)
         table = full.loc[start:chart_end]
         ma = moving_average(full["Net"], complete, window) if window else None
-        st.plotly_chart(style_fig(monthly_figure(table, incomplete, dark, ma, window), st),
-                        width="stretch", config=PLOTLY_CONFIG, key="sp_monthly")
+        _chart(st, lambda compact: monthly_figure(table, incomplete, dark, ma, window, compact),
+               "sp_monthly", PLOTLY_CONFIG)
         st.caption("Each bar is your real share: purchases minus refunds and minus what people paid "
                    "you back. The average skips shaded months (missing statements).")
 
@@ -887,9 +909,9 @@ def render(st, **_kwargs) -> None:
         first = next((c for c in choices if c != "Housing"), choices[0])
         pick = st.pills("Expense category", choices, default=first, key="sp_cat",
                         label_visibility="collapsed") or first
-        st.plotly_chart(style_fig(category_trend_figure(view, pick, start, chart_end, incomplete, dark,
-                                                        window), st),
-                        width="stretch", config=PLOTLY_CONFIG, key="sp_cat_trend")
+        _chart(st, lambda compact: category_trend_figure(view, pick, start, chart_end, incomplete,
+                                                         dark, window, compact),
+               "sp_cat_trend", PLOTLY_CONFIG)
         a, b = st.columns(2)
         with a:
             st.markdown(f"**Top merchants — {pick}**")
