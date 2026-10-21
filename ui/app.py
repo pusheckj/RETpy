@@ -432,6 +432,27 @@ def _config_locked(fn):
     return _locked
 
 
+# Sections the phone bar can jump to: (tile key suffix, chip label).
+_JUMP_SECTIONS = [("retirement", "Retirement"), ("fi", "Net worth"), ("swr", "Withdrawal"),
+                  ("bridge", "Bridge to 59½"), ("spending", "Spending"), ("savings", "Savings"),
+                  ("income", "Income"), ("tax", "Tax"), ("lifespan", "Lifespan")]
+
+
+def _phone_bar(results) -> None:
+    """Phone-only sticky bar (theme.css shows it under 640px wide): chips that
+    jump to each section, plus the headline result once the top card has
+    scrolled away. The page script (components.animations) does the jumping,
+    highlights the section in view, and hides chips for sections not shown."""
+    from components.top_bar import _resolve_success, _resolve_target_age
+    success, _hint = _resolve_success(results)
+    age = _resolve_target_age(st.session_state.user_overrides)
+    chips = "".join(f'<a role="button" data-mc-jump="{k}">{label}</a>' for k, label in _JUMP_SECTIONS)
+    with st.container(key="mc-phonebar"):
+        st.markdown(f'<div class="mc-phonebar"><span class="mc-phonebar-status"><b>{success}</b>'
+                    f' · retire at {age}</span><nav class="mc-phonebar-chips">{chips}</nav></div>',
+                    unsafe_allow_html=True)
+
+
 def _lazy_ph(key: str, min_h: int = 320) -> None:
     """Skeleton placeholder + a hidden 'load' button for a lazy section. The
     animation engine's IntersectionObserver clicks the button when this nears
@@ -698,6 +719,10 @@ def main() -> None:
         _safe_render("components.sec_assumptions")
 
         _safe_render("components.faq")
+        # Phones only (theme.css): a sticky button that closes the full-screen
+        # inputs panel, and starts the run when inputs changed (page script).
+        st.markdown('<div class="mc-show-results"><a role="button" data-mc-show-results="1">'
+                    'Show results</a></div>', unsafe_allow_html=True)
 
     # Compute everything the page shows, without waiting for button clicks.
     # Must run AFTER the sidebar has synced user_overrides (so it uses the real
@@ -746,6 +771,8 @@ def main() -> None:
     # `_run_simulation` already tracks exactly this (it's what disables the Run
     # button) — surface it, the way the FI-number and SWR sections do for their
     # own cached results.
+    _phone_bar(results)
+
     if _results_are_stale():
         st.warning("Your inputs changed since this simulation ran — the results "
                    "below (including the top-bar success rate) are from the "

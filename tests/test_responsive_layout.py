@@ -117,3 +117,43 @@ def test_touch_page_scrolls_vertically_only():
     assert "overflow-x: hidden" in main.group(1)
     assert "touch-action: pan-y pinch-zoom" in main.group(1)
     assert "overscroll-behavior-x: none" in main.group(1)
+
+
+APP = open(os.path.join(_ROOT, "ui", "app.py"), encoding="utf-8").read()
+ANIM = open(os.path.join(_ROOT, "ui", "components", "animations.py"), encoding="utf-8").read()
+
+
+def test_phone_bar_only_on_phones_and_sticky_there():
+    assert re.search(r'stLayoutWrapper"\]:has\(> \.st-key-mc-phonebar\),\s*\.mc-show-results\s*\{\s*display:\s*none', CSS)
+    phone = _media("(max-width: 640px)")
+    bar = re.search(r'stLayoutWrapper"\]:has\(> \.st-key-mc-phonebar\)\s*\{([^}]*)\}', phone)
+    assert bar and "position: sticky" in bar.group(1) and "top: 0" in bar.group(1)
+
+
+def test_every_jump_chip_targets_a_real_section():
+    import ast
+    sections = ast.literal_eval(re.search(r"_JUMP_SECTIONS = (\[.*?\])\n", APP, re.S).group(1))
+    for key, _label in sections:
+        assert f'key="mc-tile-{key}"' in APP, f"chip {key!r} has no section"
+    assert "data-mc-jump" in ANIM and "function mcJump" in ANIM
+
+
+def test_inputs_open_full_screen_with_show_results_on_phones():
+    phone = _media("(max-width: 640px)")
+    assert re.search(r'stSidebar"\]\[aria-expanded="true"\]\s*\{[^}]*width:\s*100vw', phone)
+    assert "data-mc-show-results" in APP and "function mcShowResults" in ANIM
+    # closes the panel, and starts the run only when the inputs changed
+    body = ANIM[ANIM.index("function mcShowResults"):ANIM.index("function showResultsLabel")]
+    assert "stSidebarCollapseButton" in body and "!run.disabled" in body
+
+
+def test_touch_controls_are_finger_sized():
+    touch = _media("(hover: none) and (pointer: coarse)")
+    assert re.search(r'\[data-testid\^="stBaseButton"\],[\s\S]*?min-height:\s*44px', touch)
+    assert re.search(r'stTooltipHoverTarget"\]::after\s*\{[^}]*inset:\s*-12px', touch)
+
+
+def test_long_explanations_fold_on_phones():
+    phone = _media("(max-width: 640px)")
+    assert re.search(r"\[data-mc-clamp\]\s*\{[^}]*-webkit-line-clamp:\s*3", phone)
+    assert "function foldText" in ANIM and "data-mc-clamp" in ANIM

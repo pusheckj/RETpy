@@ -419,6 +419,14 @@ _ANIM_JS = """
     D.__mcClick = true;
     D.addEventListener('click', function(ev){
       try{
+        var t0 = ev.target.closest ? ev.target : null;
+        var jump = t0 && t0.closest('[data-mc-jump]');
+        if(jump){ ev.preventDefault(); mcJump(jump.getAttribute('data-mc-jump')); return; }
+        var show = t0 && t0.closest('[data-mc-show-results]');
+        if(show){ ev.preventDefault(); mcShowResults(); return; }
+        var fold = t0 && t0.closest('[data-mc-clamp]');
+        if(fold){ if(fold.hasAttribute('data-mc-open')) fold.removeAttribute('data-mc-open');
+                  else fold.setAttribute('data-mc-open', ''); }
         // ripple
         var btn = ev.target.closest && ev.target.closest('.stButton > button, [data-testid="stFormSubmitButton"] > button, button[kind]');
         if(btn && !reduce){
@@ -588,8 +596,105 @@ _ANIM_JS = """
     }
   }
 
+  // ---------- phones: section bar, Show results, folded explanations ----------
+  function mainEl(){ return D.querySelector('section[data-testid="stMain"]'); }
+  function isPhone(){ return P.matchMedia && P.matchMedia('(max-width: 640px)').matches; }
+  // Scroll a section to just under the sticky bar. Sections passed on the way
+  // load their charts lazily and grow, moving the target, so keep correcting
+  // (instantly) until it holds still; any touch or wheel by the user stops it.
+  function mcJump(name){
+    var main = mainEl(); if(!main) return;
+    var tries = 0, calm = 0, stopped = false;
+    var stop = function(){ stopped = true; };
+    main.addEventListener('touchstart', stop, {once: true, passive: true});
+    main.addEventListener('wheel', stop, {once: true, passive: true});
+    var step = function(){
+      if(stopped) return;
+      var t = D.querySelector('.st-key-mc-tile-' + name); if(!t) return;
+      var bar = D.querySelector('.mc-phonebar');
+      var off = (bar ? bar.getBoundingClientRect().height : 0) + 8;
+      var delta = t.getBoundingClientRect().top - off;
+      if(Math.abs(delta) <= 4){ if(++calm >= 3) return; }
+      else { calm = 0; main.scrollTo({top: main.scrollTop + delta, behavior: (tries === 0 && !reduce) ? 'smooth' : 'auto'}); }
+      if(++tries < 14) P.setTimeout(step, tries === 1 ? 650 : 300);
+    };
+    step();
+  }
+  // Close the full-screen inputs panel; if the inputs changed, start the run.
+  function mcShowResults(){
+    var run = D.querySelector('.st-key-topbar_run_button button');
+    var close = D.querySelector('[data-testid="stSidebarCollapseButton"] button');
+    if(close) close.click();
+    var main = mainEl(); if(main) main.scrollTo({top: 0, behavior: 'auto'});
+    if(run && !run.disabled) P.setTimeout(function(){ run.click(); }, 60);
+  }
+  function showResultsLabel(){
+    var a = D.querySelector('[data-mc-show-results]'); if(!a) return;
+    var run = D.querySelector('.st-key-topbar_run_button button');
+    var want = (run && !run.disabled) ? 'Run & show results' : 'Show results';
+    if(a.textContent !== want) a.textContent = want;
+  }
+  function phoneBar(){
+    var bar = D.querySelector('.mc-phonebar'); if(!bar || !isPhone()) return;
+    bar.querySelectorAll('[data-mc-jump]').forEach(function(a){   // only sections on the page
+      a.hidden = !D.querySelector('.st-key-mc-tile-' + a.getAttribute('data-mc-jump')); });
+    var main = mainEl(), card = D.querySelector('.st-key-mc-topbar');
+    if(!main || !card || !P.IntersectionObserver) return;
+    // "stuck" (top card scrolled away): show the headline result in the bar.
+    bar.classList.toggle('mc-stuck', card.getBoundingClientRect().bottom <= 0);
+    if(P.__mcBarCard !== card){
+      if(P.__mcBarIO){ try{ P.__mcBarIO.disconnect(); }catch(e){} }
+      P.__mcBarCard = card;
+      P.__mcBarIO = new P.IntersectionObserver(function(es){
+        var b = D.querySelector('.mc-phonebar'); if(b) b.classList.toggle('mc-stuck', !es[0].isIntersecting);
+      }, {root: main, threshold: 0});
+      P.__mcBarIO.observe(card);
+    }
+    // Highlight the section under a fixed line 40% down the screen (checked on
+    // scroll, once per frame) and keep its chip in view in the chip row.
+    markActive();
+    if(P.__mcBarMain !== main){
+      P.__mcBarMain = main;
+      var queued = false;
+      main.addEventListener('scroll', function(){
+        if(queued) return; queued = true;
+        P.requestAnimationFrame(function(){ queued = false; markActive(); });
+      }, {passive: true});
+    }
+  }
+  function markActive(){
+    var b = D.querySelector('.mc-phonebar'); if(!b || !isPhone()) return;
+    var y = P.innerHeight * 0.4, cur = null;
+    D.querySelectorAll('[class*="st-key-mc-tile-"]').forEach(function(t){
+      var r = t.getBoundingClientRect();
+      if(r.top <= y && r.bottom > y){ var m = /st-key-mc-tile-([a-z]+)/.exec(t.className || ''); if(m) cur = m[1]; }
+    });
+    b.querySelectorAll('[data-mc-jump]').forEach(function(a){
+      var on = a.getAttribute('data-mc-jump') === cur;
+      if(on && a.getAttribute('aria-current') !== 'true'){
+        a.setAttribute('aria-current', 'true');
+        var nav = a.parentElement;   // position within the chip row, not the bar
+        var x = nav.scrollLeft + a.getBoundingClientRect().left - nav.getBoundingClientRect().left - 12;
+        nav.scrollTo({left: Math.max(0, x), behavior: reduce ? 'auto' : 'smooth'});
+      } else if(!on && a.hasAttribute('aria-current')){ a.removeAttribute('aria-current'); }
+    });
+  }
+  // Fold long explanations to three lines on phones; a tap opens/closes them.
+  // Marked with a data attribute (not a class) so React re-renders don't drop it.
+  function foldText(){
+    if(!isPhone()) return;
+    D.querySelectorAll('[class*="st-key-mc-tile"] [data-testid="stCaptionContainer"] p, ' +
+                       '[class*="st-key-mc-tile"] [data-testid="stMarkdownContainer"] > p').forEach(function(el){
+      if(el.hasAttribute('data-mc-clamp') || el.__mcFoldChecked) return;
+      el.__mcFoldChecked = true;
+      if(el.closest('[data-testid="stExpander"]')) return;
+      if((el.textContent || '').length > 220) el.setAttribute('data-mc-clamp', '');
+    });
+  }
+
   // ---------- scan (debounced, on real DOM changes only) ----------
-  function scan(){ try{ odometer(); entrance(); segAll(); checkCelebrate(); checkLazy(); drawScan(); runFan(); }catch(e){} }
+  function scan(){ try{ odometer(); entrance(); segAll(); checkCelebrate(); checkLazy(); drawScan(); runFan();
+                         phoneBar(); showResultsLabel(); foldText(); }catch(e){} }
   scan();
   if(P.__mcAnimObs){ try{ P.__mcAnimObs.disconnect(); }catch(e){} }
   if(P.__mcAnimTimer){ try{ P.clearInterval(P.__mcAnimTimer); }catch(e){} P.__mcAnimTimer=null; }
