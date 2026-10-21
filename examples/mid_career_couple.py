@@ -52,8 +52,8 @@ CURRENT_YEAR = 2026
 PLAN_UNTIL_AGE = 95
 YEARS_UNTIL_WEDDING = 0  # Already married ~10 years
 
-YOUR_BIRTH_YEAR = 1986   # Alex
-PARTNER_BIRTH_YEAR = 1988  # Riley
+YOUR_BIRTH_YEAR = CURRENT_YEAR - YOUR_AGE        # derived from age
+PARTNER_BIRTH_YEAR = CURRENT_YEAR - PARTNER_AGE
 
 # -----------------------------------------------------------------------------
 # CURRENT ASSETS

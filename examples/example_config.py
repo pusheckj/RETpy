@@ -85,14 +85,13 @@ YOUR_AGE = REPLACE_ME                 # e.g., 35
 # household modeled as one person (also zero out PARTNER_* balances/income).
 PARTNER_AGE = REPLACE_ME              # e.g., 33
 
-# Birth years — used by the SECURE 2.0 RMD start-age logic (72/73/75).
-# If YOUR_AGE is accurate these can be computed, but set them explicitly to
-# avoid off-by-one issues around birthdays.
-YOUR_BIRTH_YEAR = REPLACE_ME          # e.g., 1990
-PARTNER_BIRTH_YEAR = REPLACE_ME       # e.g., 1992
-
 # Current calendar year — the simulation's "year 0".
 CURRENT_YEAR = 2026
+
+# Birth years (SECURE 2.0 RMD start age: 72/73/75) follow from age, so there is
+# no separate input to keep in sync.
+YOUR_BIRTH_YEAR = None if YOUR_AGE is REPLACE_ME else CURRENT_YEAR - YOUR_AGE
+PARTNER_BIRTH_YEAR = None if PARTNER_AGE is REPLACE_ME else CURRENT_YEAR - PARTNER_AGE
 
 # Plan until this age (for the older partner). 90-95 is typical; ~30-40% of
 # couples have at least one partner live past 90, so plan long.

@@ -18,6 +18,10 @@ _UI_ONLY_KEYS = {
     "NEW_HOME_DOWN_PCT", "NEW_MORTGAGE_RATE", "NEW_HOME_ESCROW_PCT",
 }
 
+# Derived from age on every run (sim_runner._recompute_derived). Older saved
+# profiles may still carry them; they're ignored so they can't contradict age.
+_DERIVED_KEYS = {"YOUR_BIRTH_YEAR", "PARTNER_BIRTH_YEAR"}
+
 # Quick-income assumptions (used when the user hasn't entered a detailed
 # income breakdown and only supplies a single household income number).
 QUICK_INCOME_PRIMARY_SHARE = 0.55  # primary/partner household income split (55/45)
@@ -57,7 +61,7 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
     #    UI-only), so they flow straight through here to reach cfg and drive the
     #    engine's state-tax selection (CA / No state tax / Other flat rate).
     for k, v in user_overrides.items():
-        if k in _UI_ONLY_KEYS:
+        if k in _UI_ONLY_KEYS or k in _DERIVED_KEYS:
             continue
         out[k] = v
 

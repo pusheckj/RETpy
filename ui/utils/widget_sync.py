@@ -151,8 +151,6 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     # sec_about_you.py
     "ay_your_age":        ("YOUR_AGE", _as_int(25, 18, 100)),
     "ay_partner_age":     ("PARTNER_AGE", _as_int(25, 0, 100)),
-    "ay_your_birth_year": ("YOUR_BIRTH_YEAR", _as_int(2000, 1900, 2100)),
-    "ay_partner_birth_year": ("PARTNER_BIRTH_YEAR", _as_int(2000, 1900, 2100)),
     "ay_filing":          ("FILING_STATUS", lambda v: str(v)),
     "ay_target_age":      ("TARGET_RETIREMENT_AGE", _as_int(60, 25, 75)),
     "ay_partner_target_age": ("PARTNER_RETIREMENT_AGE", _as_int(60, 25, 75)),

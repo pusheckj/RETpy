@@ -1,8 +1,6 @@
 """Section 1: About you — household composition + planning horizon."""
 from __future__ import annotations
 
-from datetime import date
-
 try:
     from utils.coerce import safe_int, ensure_default
 except ImportError:  # pragma: no cover
@@ -15,8 +13,6 @@ except ImportError:  # pragma: no cover
 
 
 def render_body(st) -> None:
-    current_year = date.today().year
-
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**You**")
@@ -24,25 +20,12 @@ def render_body(st) -> None:
         v = st.number_input("Age", min_value=18, max_value=100, step=1, key="ay_your_age")
         set_override(st, "YOUR_AGE", safe_int(v))
 
-        ensure_default(st, "ay_your_birth_year",
-                       safe_int(get_override(st, "YOUR_BIRTH_YEAR", current_year - 30), current_year - 30))
-        v = st.number_input("Birth year", min_value=1900, max_value=current_year,
-                            step=1, key="ay_your_birth_year",
-                            help="Sets your SECURE 2.0 RMD start age (73 or 75).")
-        set_override(st, "YOUR_BIRTH_YEAR", safe_int(v))
-
     with col2:
         st.markdown("**Partner**")
         ensure_default(st, "ay_partner_age", safe_int(get_override(st, "PARTNER_AGE", 0), 0))
         v = st.number_input("Age ", min_value=0, max_value=100, step=1, key="ay_partner_age",
                             help="Set to 0 for a single household.")
         set_override(st, "PARTNER_AGE", safe_int(v))
-
-        ensure_default(st, "ay_partner_birth_year",
-                       safe_int(get_override(st, "PARTNER_BIRTH_YEAR", current_year - 30), current_year - 30))
-        v = st.number_input("Birth year ", min_value=1900, max_value=current_year,
-                            step=1, key="ay_partner_birth_year")
-        set_override(st, "PARTNER_BIRTH_YEAR", safe_int(v))
 
     # Filing status
     options = ["Married filing jointly", "Single", "Head of household"]

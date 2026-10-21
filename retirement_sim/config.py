@@ -1665,10 +1665,11 @@ def get_rmd_start_age(birth_year: int) -> int:
     else:
         return 75
 
-# Birth years for RMD age calculation (25-year-olds at CURRENT_YEAR = 2026).
-# Replace with actual birth years of the people you are modeling.
-YOUR_BIRTH_YEAR = 2001
-PARTNER_BIRTH_YEAR = 2001
+# Birth years for the RMD start age, DERIVED from age (age is the input; a
+# separate birth year could only disagree with it). Someone right at the
+# 1959/1960 cutoff could land a year off, depending on their birthday.
+YOUR_BIRTH_YEAR = CURRENT_YEAR - YOUR_AGE
+PARTNER_BIRTH_YEAR = CURRENT_YEAR - PARTNER_AGE
 
 RMD_START_AGE = get_rmd_start_age(YOUR_BIRTH_YEAR)  # 75 (for those born 1960+)
 

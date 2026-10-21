@@ -223,6 +223,8 @@ def _recompute_derived(original: dict) -> None:
         "ACA_BASE_ANNUAL_PREMIUM", "MEDICARE_ANNUAL_PREMIUM",
         # Lifecycle multiplier dict derived from the preset name (finding #11).
         "SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE",
+        # Birth years (and the primary's RMD start age) follow from age.
+        "YOUR_BIRTH_YEAR", "PARTNER_BIRTH_YEAR", "RMD_START_AGE",
     ]
     for k in derived_keys:
         if k not in original and hasattr(cfg, k):
@@ -323,6 +325,12 @@ def _recompute_derived(original: dict) -> None:
     # overrides, but calculate_child_expenses (config.py:495-504) reads the
     # *_ANNUAL_COST derived constants. Mirror config.py:468/472 so the sliders
     # actually feed the engine.
+    # config.py — YOUR_BIRTH_YEAR / PARTNER_BIRTH_YEAR = CURRENT_YEAR - age, and
+    # RMD_START_AGE = get_rmd_start_age(YOUR_BIRTH_YEAR).
+    cfg.YOUR_BIRTH_YEAR = int(cfg.CURRENT_YEAR) - int(cfg.YOUR_AGE)
+    cfg.PARTNER_BIRTH_YEAR = int(cfg.CURRENT_YEAR) - int(cfg.PARTNER_AGE)
+    cfg.RMD_START_AGE = cfg.get_rmd_start_age(cfg.YOUR_BIRTH_YEAR)
+
     if hasattr(cfg, "FIRST_CHILD_MONTHLY_COST"):
         cfg.FIRST_CHILD_ANNUAL_COST = cfg.FIRST_CHILD_MONTHLY_COST * 12
     if hasattr(cfg, "BOTH_CHILDREN_MONTHLY_COST"):

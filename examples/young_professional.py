@@ -303,8 +303,8 @@ HEALTHCARE_COSTS_BY_AGE = {
 # -----------------------------------------------------------------------------
 # BIRTH YEARS / RMD
 # -----------------------------------------------------------------------------
-YOUR_BIRTH_YEAR = 1998
-PARTNER_BIRTH_YEAR = 1998
+YOUR_BIRTH_YEAR = CURRENT_YEAR - YOUR_AGE        # derived from age
+PARTNER_BIRTH_YEAR = CURRENT_YEAR - PARTNER_AGE
 RMD_START_AGE = get_rmd_start_age(YOUR_BIRTH_YEAR)  # 75
 
 # -----------------------------------------------------------------------------

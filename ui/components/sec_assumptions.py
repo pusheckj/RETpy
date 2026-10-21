@@ -116,9 +116,9 @@ def render_body(st) -> None:
     # engine models them, then folds them into the Traditional bucket).
     try:
         from retirement_sim import config as _cfg
-        _by = safe_int(get_override(st, "YOUR_BIRTH_YEAR",
-                                    getattr(_cfg, "YOUR_BIRTH_YEAR", 1990)), 1990)
-        _rmd_age = _cfg.get_rmd_start_age(_by)
+        _age = safe_int(get_override(st, "YOUR_AGE", _cfg.YOUR_AGE), _cfg.YOUR_AGE)
+        _year = safe_int(get_override(st, "CURRENT_YEAR", _cfg.CURRENT_YEAR), _cfg.CURRENT_YEAR)
+        _rmd_age = _cfg.get_rmd_start_age(_year - _age)   # birth year follows from age
         st.caption(
             f"From age **{_rmd_age}** (your SECURE 2.0 RMD start age) the IRS forces "
             "minimum withdrawals from Traditional balances, taxed as income. "

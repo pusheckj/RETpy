@@ -31,7 +31,7 @@ All dollar values in the config are in **today's dollars** unless otherwise note
 | `YOUR_AGE` | `25` | Your current age. Drives every age-dependent calculation. |
 | `PARTNER_AGE` | `25` | Spouse/partner current age. Used for joint filing, RMDs, and SS. |
 | `CURRENT_YEAR` | `2026` | Baseline calendar year for the simulation. |
-| `YOUR_BIRTH_YEAR` | `2001` | Determines RMD start age under SECURE 2.0 (73 if 1951–1959, else 75). |
+| `YOUR_BIRTH_YEAR` | derived | `CURRENT_YEAR − YOUR_AGE` (likewise `PARTNER_BIRTH_YEAR`). Sets the SECURE 2.0 RMD start age (73 if born 1951–1959, else 75). Not an input. |
 | `PARTNER_BIRTH_YEAR` | `2001` | Same purpose for partner. |
 | `PLAN_UNTIL_AGE` | `95` | Simulation horizon. Run longer if longevity is a concern — about 30–40% of couples have one spouse living past 90. |
 | `YEARS_UNTIL_WEDDING` | `1` | Years until legal marriage. Set to `0` if already married. Triggers MFJ filing and any income-based contribution limits for the partner. |

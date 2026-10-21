@@ -6,8 +6,6 @@
   "overrides": {
     "YOUR_AGE": 34,
     "PARTNER_AGE": 33,
-    "YOUR_BIRTH_YEAR": 1992,
-    "PARTNER_BIRTH_YEAR": 1993,
     "CURRENT_YEAR": 2026,
     "PLAN_UNTIL_AGE": 95,
     "YEARS_UNTIL_WEDDING": 0,

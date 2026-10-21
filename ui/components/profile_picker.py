@@ -51,7 +51,6 @@ def _load_my_situation(path: str | None = None) -> dict | None:
 PROFILES = {
     "Median US 25-year-old household": {
         'YOUR_AGE': 25, 'PARTNER_AGE': 25,
-        'YOUR_BIRTH_YEAR': 2001, 'PARTNER_BIRTH_YEAR': 2001,
         'CURRENT_YEAR': 2026,
         'YEARS_UNTIL_WEDDING': 3, 'YEARS_UNTIL_FIRST_CHILD': 3,
         'YOUR_401K': 10_000, 'YOUR_ROTH_IRA': 3_500, 'YOUR_TRADITIONAL_IRA': 0,
@@ -70,7 +69,6 @@ PROFILES = {
     },
     "Young professional (28, single)": {
         'YOUR_AGE': 28, 'PARTNER_AGE': 0,
-        'YOUR_BIRTH_YEAR': 1998, 'PARTNER_BIRTH_YEAR': 1998,
         'YEARS_UNTIL_WEDDING': 99, 'YEARS_UNTIL_FIRST_CHILD': 99,
         'YOUR_401K': 50_000, 'YOUR_ROTH_IRA': 25_000, 'YOUR_TRADITIONAL_IRA': 0,
         'YOUR_HSA': 8_000, 'YOUR_BROKERAGE': 30_000, 'YOUR_CASH': 25_000,
@@ -88,7 +86,6 @@ PROFILES = {
     },
     "Mid-career couple (40, kids)": {
         'YOUR_AGE': 40, 'PARTNER_AGE': 38,
-        'YOUR_BIRTH_YEAR': 1986, 'PARTNER_BIRTH_YEAR': 1988,
         'YEARS_UNTIL_WEDDING': 0, 'YEARS_UNTIL_FIRST_CHILD': -5,
         'YOUR_401K': 350_000, 'YOUR_ROTH_IRA': 95_000, 'YOUR_TRADITIONAL_IRA': 20_000,
         'YOUR_HSA': 25_000, 'YOUR_BROKERAGE': 180_000, 'YOUR_CASH': 40_000,
@@ -106,7 +103,6 @@ PROFILES = {
     },
     "Near retirement (55)": {
         'YOUR_AGE': 55, 'PARTNER_AGE': 53,
-        'YOUR_BIRTH_YEAR': 1971, 'PARTNER_BIRTH_YEAR': 1973,
         'YEARS_UNTIL_WEDDING': 0, 'YEARS_UNTIL_FIRST_CHILD': -25,
         'YOUR_401K': 1_200_000, 'YOUR_ROTH_IRA': 300_000, 'YOUR_TRADITIONAL_IRA': 150_000,
         'YOUR_HSA': 80_000, 'YOUR_BROKERAGE': 600_000, 'YOUR_CASH': 75_000,
