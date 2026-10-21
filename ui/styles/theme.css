@@ -1185,3 +1185,30 @@ footer { display: none !important; }
        caption carry the axis meaning. */
     .js-plotly-plot:has(g.legend) .g-xtitle { display: none; }
 }
+
+/* =========================================================
+   Touch screens (phones, tablets): the page scrolls; charts don't steal it.
+   Keyed on the input type, not width, so a touch tablet gets it too and a
+   narrow desktop window keeps mouse zoom/pan on its charts.
+   ========================================================= */
+@media (hover: none) and (pointer: coarse) {
+    /* Plotly's drag-to-zoom layer captured every swipe that began on a chart,
+       so the chart panned instead of the page scrolling. Touches now pass
+       through to the page (pinch still zooms the whole page). */
+    .js-plotly-plot .draglayer,
+    .js-plotly-plot .draglayer * { pointer-events: none !important; }
+    .js-plotly-plot,
+    .js-plotly-plot * { touch-action: pan-y pinch-zoom !important; }
+
+    /* Lock the page to up-and-down: no sideways drift, no sideways rubber-band.
+       (Tables keep their own horizontal scroll; they are separate scrollers.) */
+    html, body, .stApp, [data-testid="stAppViewContainer"] {
+        overflow-x: hidden !important;
+        overscroll-behavior-x: none;
+    }
+    section[data-testid="stMain"] {
+        overflow-x: hidden !important;
+        overscroll-behavior-x: none;
+        touch-action: pan-y pinch-zoom;
+    }
+}

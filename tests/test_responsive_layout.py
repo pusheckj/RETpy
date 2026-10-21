@@ -100,3 +100,20 @@ def test_chart_helper_draws_both_versions_with_stable_keys(monkeypatch):
     assert built == [False, True]
     assert ("container", "mc-wide-sp_avg_donut") in calls and ("container", "mc-narrow-sp_avg_donut") in calls
     assert ("chart", "sp_avg_donut") in calls and ("chart", "sp_avg_donut_compact") in calls
+
+
+def test_touch_swipes_on_charts_scroll_the_page():
+    """Plotly's drag layer captured swipes that began on a chart (the chart
+    panned instead of the page scrolling). On touch screens touches pass
+    through; desktop (mouse) keeps drag-to-zoom."""
+    touch = _media("(hover: none) and (pointer: coarse)")
+    assert re.search(r"\.js-plotly-plot \.draglayer \*\s*\{\s*pointer-events:\s*none", touch)
+
+
+def test_touch_page_scrolls_vertically_only():
+    touch = _media("(hover: none) and (pointer: coarse)")
+    main = re.search(r'section\[data-testid="stMain"\]\s*\{([^}]*)\}', touch)
+    assert main, "no stMain rule for touch screens"
+    assert "overflow-x: hidden" in main.group(1)
+    assert "touch-action: pan-y pinch-zoom" in main.group(1)
+    assert "overscroll-behavior-x: none" in main.group(1)
