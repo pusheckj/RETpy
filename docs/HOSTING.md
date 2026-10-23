@@ -85,6 +85,6 @@ your statements folder.
 - **Streamlit version:** `ui/requirements.txt` pins Streamlit because the
   theme's CSS targets its page structure. When you upgrade, check the layout
   locally first.
-- **Results cache:** the server keeps recent simulation results on disk, keyed
-  by the numbers entered (no names, no uploaded files), so repeat runs are
-  instant. It resets whenever the app redeploys or restarts.
+- **Results cache:** when hosted, recent simulation results are cached in
+  memory only (never written to disk), keyed by the numbers entered, so repeat
+  runs are instant. It is gone whenever the app restarts or redeploys.

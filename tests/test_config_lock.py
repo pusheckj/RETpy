@@ -65,3 +65,12 @@ def test_worker_cap_from_env(monkeypatch):
     monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "1")
     assert sr._max_workers() == 2
     assert sr._available_cpus() >= 1
+
+
+def test_hosted_app_writes_no_results_to_disk(monkeypatch):
+    """Other people's inputs (and results keyed by them) must never be persisted
+    on the server: the disk cache tier is off when hosted."""
+    monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "1")
+    assert sr._disk() is None
+    monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "0")
+    assert sr._disk() is not None

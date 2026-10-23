@@ -418,6 +418,12 @@ def _hashable(overrides: dict) -> tuple:
 # ---------------------------------------------------------------------------
 
 def _disk():
+    # Hosted for other people: keep NO server-side copy of anyone's numbers.
+    # (Results still cache in memory for the life of the process, keyed by the
+    # inputs, so nothing outlives a restart and nobody can read another's.)
+    from utils.hosting import is_hosted
+    if is_hosted():
+        return None
     try:
         from utils import disk_cache
     except ImportError:  # pragma: no cover - unusual sys.path layouts

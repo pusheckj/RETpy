@@ -538,8 +538,127 @@ def _topbar_head(_st):
     return view, (run_col.empty(), sims_col.empty(), settings_col.empty())
 
 
+def _resolve_mode():
+    """'simple', 'full', or None (show the welcome screen). The owner's own
+    machine -- not hosted, with a personal profile -- goes straight to the
+    planner, so the welcome screen is for everyone else."""
+    mode = st.session_state.get("app_mode")
+    if mode in ("simple", "full"):
+        return mode
+    try:
+        from utils.hosting import is_hosted
+        from components.profile_picker import load_personal_profile
+        if not is_hosted() and load_personal_profile() is not None:
+            st.session_state.app_mode = "full"
+            return "full"
+    except Exception:
+        pass
+    return None
+
+
+def _loading_screen() -> None:
+    """Shown for the instant the browser takes to report saved data."""
+    with st.container(key="mc-loading"):
+        st.markdown('<div class="mc-loading">Loading…</div>', unsafe_allow_html=True)
+        if st.button("Continue", key="device_skip", type="tertiary"):
+            st.session_state._device_skip = True
+            st.rerun()
+
+
+def _restore_from_device(store) -> None:
+    """Once per session: bring back what the visitor chose to remember."""
+    if st.session_state.get("_device_restored") or store["status"] != "ready":
+        return
+    st.session_state._device_restored = True
+    data = store.get("data") or {}
+    if not data.get("remember"):
+        return
+    st.session_state.remember_device = True
+    if data.get("mode") in ("simple", "full"):
+        st.session_state.app_mode = data["mode"]
+    try:
+        if isinstance(data.get("simple"), dict):
+            from utils.simple_finance import normalize_inputs
+            st.session_state.simple_inputs = normalize_inputs(data["simple"])
+        if isinstance(data.get("full"), str):
+            from utils.profile_io import deserialize_overrides
+            from utils.widget_sync import sync_widgets_from_overrides
+            st.session_state.user_overrides = deserialize_overrides(data["full"])
+            sync_widgets_from_overrides(st)
+    except Exception:  # an unreadable saved copy must never break the app
+        pass
+
+
+def _save_to_device() -> None:
+    """If the visitor turned on Remember me, keep their inputs in their browser.
+    (device_store writes only when something changed.)"""
+    if not st.session_state.get("remember_device"):
+        return
+    payload = {"remember": True, "mode": st.session_state.get("app_mode")}
+    if isinstance(st.session_state.get("simple_inputs"), dict):
+        payload["simple"] = st.session_state.simple_inputs
+    if st.session_state.get("app_mode") == "full" or st.session_state.get("_full_touched"):
+        from utils.profile_io import serialize_overrides
+        payload["full"] = serialize_overrides(st.session_state.user_overrides)
+        st.session_state._full_touched = True
+    try:
+        from utils import device_store
+        device_store.save(st, payload)
+    except Exception:
+        pass
+
+
+def _privacy_controls(_st) -> None:
+    """Remember me on this device + Forget my data (both versions)."""
+    from utils import device_store
+    state = st.session_state.get(device_store.STATE_KEY_PREFIX + device_store.DEFAULT_KEY) or {}
+    unavailable = state.get("status") == "unavailable"
+    # The setting lives in a plain session key: Streamlit drops a widget's
+    # value after any run that doesn't draw it (e.g. a run cut short by the
+    # first simulation), which silently switched saving off.
+    if "remember_device_toggle" not in st.session_state:
+        st.session_state.remember_device_toggle = bool(st.session_state.get("remember_device"))
+    on = _st.toggle("Remember me on this device", key="remember_device_toggle", disabled=unavailable,
+                    help="Saves your inputs in this browser only, so they're here next time. "
+                         "They are never sent to or stored on the server.")
+    st.session_state.remember_device = bool(on)
+    if unavailable:
+        _st.caption("This browser blocks saving (private browsing?), so nothing can be remembered.")
+    elif on:
+        _st.caption("Your inputs are saved in this browser only.")
+    if _st.button("Forget my data on this device", key="device_forget", type="tertiary",
+                  icon=":material/delete:"):
+        device_store.forget(st)
+        st.session_state.remember_device = False
+        st.session_state.pop("remember_device_toggle", None)
+        st.rerun()
+
+
+def _switch_mode(mode) -> None:
+    st.session_state.app_mode = mode
+    st.rerun()
+
+
+def _render_simple() -> None:
+    """The simple money check-up (components.simple_mode), with a way across."""
+    with st.container(key="mc-simple-root"):
+        with st.container(key="mc-simple-nav", horizontal=True, horizontal_alignment="right"):
+            if st.button("Plan my retirement instead", key="to_full_mode", type="tertiary",
+                         icon=":material/arrow_forward:"):
+                _switch_mode("full")
+        _safe_render("components.simple_mode")
+        with st.container(border=True, key="mc-tile-simple-privacy"):
+            st.markdown('<div class="mc-section">Your data</div>', unsafe_allow_html=True)
+            _privacy_controls(st)
+
+
 def _topbar_settings(_st) -> None:
     """Theme / profile / save-load — lives in the top bar's Settings popover."""
+    if _st.button("Switch to the simple money check-up", key="to_simple_mode",
+                  icon=":material/swap_horiz:", width="stretch"):
+        _switch_mode("simple")
+    _privacy_controls(_st)
+    _st.divider()
     _safe_render("components.theme_toggle")
     _st.divider()
     _safe_render("components.profile_picker")
@@ -674,6 +793,32 @@ def main() -> None:
     except Exception:
         pass
 
+    # Saved inputs live only in the visitor's own browser (opt-in "Remember me").
+    # The first run of each session waits for the browser to answer, so the
+    # welcome screen doesn't flash before a remembered choice is restored.
+    from utils import device_store
+    store = device_store.sync(st)
+    if store["status"] == "loading" and not st.session_state.get("_device_skip"):
+        _loading_screen()
+        st.stop()
+    _restore_from_device(store)
+
+    # Which version: the welcome screen picks; the simple check-up and the full
+    # planner each render on their own (the simple one never touches the engine).
+    mode = _resolve_mode()
+    if mode is None:
+        with st.container(key="mc-welcome"):
+            from components import welcome
+            chosen = welcome.render(st)
+        if chosen:
+            st.session_state.app_mode = chosen
+            st.rerun()
+        return
+    if mode == "simple":
+        _render_simple()
+        _save_to_device()
+        return
+
     # Full-width slot for the Run-simulation progress bar. Created BEFORE the top
     # bar (whose Run button fires inline during its own render) so the bar has the
     # whole content width — inside the narrow top-bar column its label wrapped at
@@ -743,6 +888,11 @@ def main() -> None:
 
 
     # Spending view: statements only, no simulation.
+    # Inputs are final here (sidebar synced, top card drawn): save now, not at
+    # the end of the run -- the lazy chart sections below trigger reruns that
+    # often cut a long run short before it reaches the bottom.
+    _save_to_device()
+
     if spending_view:
         _safe_render("components.spending_dashboard")
         return

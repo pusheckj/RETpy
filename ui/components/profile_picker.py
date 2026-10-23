@@ -173,6 +173,11 @@ def render(st) -> None:
             "whatif_results", "si_comp_customized", "theme_mode",
             "font_choice", "palette_choice", "n_simulations", "pinned_scenarios",
             "_anim_epoch",
+            # On-device saving + which version is open: a profile switch must not
+            # reload from the browser or bounce the visitor to the welcome screen.
+            "_device_store_retpy", "_device_restored", "_device_skip", "remember_device",
+            "remember_device_toggle",
+            "app_mode", "simple_inputs", "_full_touched",
             # Auto-run fires ONCE per browser session, on first page open only.
             # Without preserving this, the wildcard sweep below deletes it and a
             # profile switch silently kicks off a full (~95s cold) simulation

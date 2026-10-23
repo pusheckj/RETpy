@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>device-store</title>
+</head>
+<body>
+<script>
+/*
+ * On-device storage bridge for utils/device_store.py (Streamlit custom
+ * component, plain JS, no build step).
+ *
+ * This iframe is served from the Streamlit app's own origin, so
+ * window.localStorage here IS the app origin's storage. It never makes a
+ * network request: its only channel is postMessage to its same-origin parent
+ * (the Streamlit app frame), which relays values to this browser's session.
+ *
+ * Render args (from Python):
+ *   storage_key  localStorage key
+ *   read_token   reader instance only: read once per distinct token and
+ *                post {kind:"read", token, ok, raw|error}
+ *   op           writer instance only: {kind:"set", sig, value} or
+ *                {kind:"remove", sig}; applied once per distinct sig.
+ *                Posts {kind:"write_error", sig, error} only if it throws.
+ *   scope        writer instance only: per-session id for the dedupe marker
+ *
+ * To avoid rerun loops it posts a value ONLY for a new read token or a failed
+ * write, never because of a re-render or a successful write.
+ */
+(function () {
+  "use strict";
+
+  var ORIGIN = window.location.origin;
+  // Same-origin only: the stored envelope must never be handed to a foreign
+  // embedding page. An opaque ("null") origin cannot touch localStorage at
+  // all, so in that case only error messages can ever be posted.
+  var TARGET = ORIGIN && ORIGIN !== "null" ? ORIGIN : "*";
+
+  var readTokens = {};  // tokens already answered
+  var lastSig = null;   // last op applied (or attempted)
+
+  // The last applied op is also remembered per tab, scoped to the Streamlit
+  // session (sessionStorage holds only "<scope>|<op hash>"), so if Streamlit
+  // remounts this iframe it does not replay an old write over a newer one
+  // made in another tab. A new session (page reload) never matches.
+  function marker(storageKey) { return "device_store.applied." + storageKey; }
+  function alreadyApplied(storageKey, stamp) {
+    try { return window.sessionStorage.getItem(marker(storageKey)) === stamp; } catch (e) { return false; }
+  }
+  function markApplied(storageKey, stamp) {
+    try { window.sessionStorage.setItem(marker(storageKey), stamp); } catch (e) { /* in-memory only */ }
+  }
+
+  function send(type, data) {
+    var msg = { isStreamlitMessage: true, type: type };
+    for (var k in data) {
+      if (Object.prototype.hasOwnProperty.call(data, k)) msg[k] = data[k];
+    }
+    window.parent.postMessage(msg, TARGET);
+  }
+
+  function setValue(value) {
+    send("streamlit:setComponentValue", { value: value, dataType: "json" });
+  }
+
+  function errorName(e) {
+    return String((e && (e.name || e.message)) || e || "Error");
+  }
+
+  function applyOp(storageKey, op, scope) {
+    if (!op || !op.sig || op.sig === lastSig) return;
+    lastSig = op.sig;
+    var stamp = String(scope || "") + "|" + op.sig;
+    if (alreadyApplied(storageKey, stamp)) return;
+    try {
+      if (op.kind === "set") {
+        window.localStorage.setItem(storageKey, op.value);
+      } else if (op.kind === "remove") {
+        window.localStorage.removeItem(storageKey);
+      }
+      markApplied(storageKey, stamp);
+    } catch (e) {
+      setValue({ kind: "write_error", sig: op.sig, error: errorName(e) });
+    }
+  }
+
+  function read(storageKey, token) {
+    if (!token || readTokens[token]) return;
+    readTokens[token] = true;
+    var msg = { kind: "read", token: token };
+    try {
+      msg.raw = window.localStorage.getItem(storageKey);
+      msg.ok = true;
+    } catch (e) {
+      msg.ok = false;
+      msg.error = errorName(e);
+    }
+    setValue(msg);
+  }
+
+  window.addEventListener("message", function (event) {
+    if (event.source !== window.parent) return;
+    if (TARGET !== "*" && event.origin !== ORIGIN) return;
+    var data = event.data;
+    if (!data || data.type !== "streamlit:render") return;
+    var args = data.args || {};
+    if (typeof args.storage_key !== "string" || !args.storage_key) return;
+    applyOp(args.storage_key, args.op, args.scope);
+    read(args.storage_key, args.read_token);
+  });
+
+  send("streamlit:componentReady", { apiVersion: 1 });
+  send("streamlit:setFrameHeight", { height: 0 });
+})();
+</script>
+</body>
+</html>

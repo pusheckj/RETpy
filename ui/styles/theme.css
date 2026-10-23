@@ -825,7 +825,14 @@ footer { display: none !important; }
 [data-testid="stStatusWidget"],
 [data-testid="stAppDeployButton"] { display: none !important; }
 [data-testid="stToolbar"],
-[data-testid="stAppToolbar"] { background: transparent !important; }
+[data-testid="stAppToolbar"] {
+    background: transparent !important;
+    /* Streamlit re-enables pointer events on the toolbar, so its (now empty)
+       box swallowed taps on anything in the top 60px of the page -- e.g. the
+       simple page's "Plan my retirement instead" link. Its only live control,
+       the sidebar reopen button, re-enables events for itself below. */
+    pointer-events: none !important;
+}
 
 /* Keep the header transparent and click-through (its only remaining content is
    the sidebar collapse/reopen control); lift that control above the sticky top
@@ -1363,3 +1370,179 @@ footer { display: none !important; }
         inset: -12px;
     }
 }
+
+/* =========================================================
+   Welcome screen (components.welcome) and the simple check-up page
+   ========================================================= */
+/* The same zero-height style/script blocks sit above these pages: lift them
+   out of the flow here too (see the page-frame rule at the top). */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
+  > .stElementContainer:has(~ [data-testid="stLayoutWrapper"] > :is(.st-key-mc-welcome, .st-key-mc-simple-root)):not(:has([data-testid="stProgress"])) {
+    position: absolute;
+    width: 0;
+    overflow: hidden;
+}
+.st-key-mc-welcome,
+.st-key-mc-simple-root { width: 100%; max-width: 960px; margin: 0 auto; }
+.mc-welcome-head { text-align: center; padding: 24px 0 8px; }
+.mc-welcome-kicker {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--mc-teal);
+}
+.mc-welcome-head h1 { margin: 6px 0; font-size: 34px; color: var(--mc-ink); }
+.mc-welcome-head p { margin: 0; color: var(--mc-muted); }
+[class*="st-key-mc-welcome-"] {
+    height: 100%;
+    padding: 22px !important;
+    background: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+    border-radius: var(--mc-radius-tile) !important;
+    box-shadow: var(--mc-tile-shadow) !important;
+}
+.mc-welcome-card h3 { margin: 0 0 8px; font-size: 22px; color: var(--mc-ink); }
+.mc-welcome-card p { margin: 0 0 6px; line-height: 1.5; color: var(--mc-muted); }
+.mc-welcome-privacy { margin-top: 8px; text-align: center; font-size: 14px; color: var(--mc-muted); }
+@media (max-width: 640px) {
+    .mc-welcome-head { padding-top: 8px; }
+    .mc-welcome-head h1 { font-size: 26px; }
+    [class*="st-key-mc-welcome-"] { padding: 16px !important; }
+}
+
+/* =========================================================
+   Welcome screen (components.welcome) and the simple check-up page
+   ========================================================= */
+/* The zero-height style/script blocks above these pages: out of the flow, as
+   above the planner's top card. */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
+  > .stElementContainer:has(~ [data-testid="stLayoutWrapper"] > :is(.st-key-mc-welcome, .st-key-mc-simple-root)):not(:has([data-testid="stProgress"])) {
+    position: absolute;
+    width: 0;
+    overflow: hidden;
+}
+.st-key-mc-welcome { max-width: 920px; margin: 4vh auto 0; }
+.mc-welcome-head { text-align: center; margin-bottom: 8px; }
+.mc-welcome-kicker {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--mc-teal);
+}
+.mc-welcome-head h1 { font-size: 34px; margin: 6px 0 4px; color: var(--mc-ink); }
+.mc-welcome-head p { margin: 0; color: var(--mc-muted); }
+[class*="st-key-mc-welcome-"] {
+    background: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+    border-radius: var(--mc-radius-tile) !important;
+    box-shadow: var(--mc-tile-shadow) !important;
+    padding: 22px !important;
+    height: 100%;
+}
+.mc-welcome-card h3 { margin: 0 0 6px; font-size: 22px; color: var(--mc-ink); }
+.mc-welcome-card p { margin: 0 0 6px; line-height: 1.5; color: var(--mc-muted); }
+.mc-welcome-privacy { text-align: center; font-size: 14px; color: var(--mc-muted); margin-top: 10px; }
+.st-key-mc-simple-root { max-width: 980px; margin: 0 auto; }
+@media (max-width: 640px) {
+    /* No sidebar on these pages, so no reopen button to clear at the top. */
+    .stApp:has(:is(.st-key-mc-welcome, .st-key-mc-simple-root)) [data-testid="stMainBlockContainer"] {
+        padding-top: 24px;
+    }
+    .st-key-mc-welcome { margin-top: 0; }
+    .mc-welcome-head h1 { font-size: 26px; }
+}
+
+/* ---------- Simple mode ("Get my money in order") ---------- */
+.simple-sub { color: var(--mc-muted); font-size: 15px; line-height: 1.45; margin: -8px 0 6px; }
+.simple-group { font-weight: 700; font-size: 15px; color: var(--mc-ink); margin: 6px 0 -4px; }
+.simple-kpi-value { font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em;
+    color: var(--mc-ink); margin: 6px 0 8px; }
+.simple-chip { display: inline-block; font-size: 12px; font-weight: 600; line-height: 1.5;
+    padding: 2px 10px; border-radius: 999px; white-space: nowrap;
+    background: rgba(100, 116, 139, 0.14); color: var(--mc-muted); }
+.simple-chip--good { background: rgba(13, 148, 136, 0.14); color: #0d9488; }
+.simple-chip--warn { background: rgba(217, 119, 6, 0.14); color: #b45309; }
+.simple-chip--current { background: #0d9488; color: #ffffff; }
+.simple-note { font-size: 14px; line-height: 1.45; color: var(--mc-muted); margin-top: 8px; }
+.simple-note b { color: var(--mc-ink); }
+.simple-meter { position: relative; height: 10px; border-radius: 999px; margin: 16px 0 26px;
+    background: rgba(100, 116, 139, 0.16); }
+.simple-meter-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px;
+    background: #14b8a6; }
+.simple-meter-tick { position: absolute; top: -4px; bottom: -4px; width: 2px;
+    background: var(--mc-ink); opacity: 0.45; }
+.simple-meter-tick span { position: absolute; top: 18px; left: 1px; transform: translateX(-50%);
+    font-size: 11px; color: var(--mc-muted); white-space: nowrap; }
+.simple-meter-tick--end span { left: auto; right: 0; transform: none; }
+
+.simple-steps { display: flex; flex-direction: column; gap: 10px; }
+.simple-step { border: 1px solid var(--mc-tile-border); border-radius: 14px; padding: 12px 14px; }
+.simple-step-head { display: flex; align-items: center; gap: 10px; }
+.simple-step-num { flex: 0 0 26px; height: 26px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
+    background: rgba(100, 116, 139, 0.14); color: var(--mc-muted); }
+.simple-step-title { flex: 1 1 auto; min-width: 0; font-weight: 700; font-size: 15px;
+    color: var(--mc-ink); }
+.simple-step-body { margin: 6px 0 0 36px; font-size: 14px; line-height: 1.45; color: var(--mc-muted); }
+.simple-step-target { color: var(--mc-ink); font-weight: 600; }
+.simple-step-detail { color: var(--mc-ink); margin-top: 4px; }
+.simple-step--current { border: 2px solid #14b8a6; background: rgba(20, 184, 166, 0.07);
+    box-shadow: 0 6px 16px rgba(13, 148, 136, 0.15); }
+.simple-step--current .simple-step-num { background: #0d9488; color: #ffffff; }
+.simple-step--done .simple-step-num { background: rgba(13, 148, 136, 0.16); color: #0d9488; }
+.simple-step--done .simple-step-title,
+.simple-step--skip .simple-step-title { color: var(--mc-muted); }
+
+.simple-plan { border: 1px solid var(--mc-tile-border); border-radius: 14px; padding: 14px 16px;
+    margin-bottom: 4px; }
+.simple-plan--best { border: 2px solid #14b8a6; }
+.simple-plan-head { display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; flex-wrap: wrap; }
+.simple-plan-name { font-weight: 800; font-size: 18px; color: var(--mc-ink); }
+.simple-plan-sub { color: var(--mc-muted); font-size: 13px; margin: 2px 0 10px; }
+.simple-plan-big { font-size: 22px; font-weight: 800; line-height: 1.2; color: var(--mc-ink); }
+.simple-plan-meta { font-size: 14px; color: var(--mc-muted); margin: 4px 0 10px; }
+.simple-plan-list-title { font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--mc-muted); margin-bottom: 4px; }
+.simple-plan-order { margin: 0; padding: 0; list-style: none; font-size: 14px; color: var(--mc-ink); }
+.simple-plan-order li { display: flex; justify-content: space-between; gap: 10px;
+    padding: 5px 0; border-top: 1px solid var(--mc-tile-border); }
+.simple-plan-order li span:last-child { color: var(--mc-muted); white-space: nowrap; }
+
+.simple-bar-row { margin: 0 0 18px; }
+.simple-bar-head { display: flex; justify-content: space-between; gap: 8px; font-size: 15px;
+    font-weight: 600; color: var(--mc-ink); }
+.simple-bar-head span:last-child { font-weight: 500; color: var(--mc-muted); white-space: nowrap; }
+.simple-bar { position: relative; height: 14px; border-radius: 999px; margin: 6px 0;
+    background: rgba(100, 116, 139, 0.16); }
+.simple-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+.simple-fill--on_track { background: #14b8a6; }
+.simple-fill--close { background: #f59e0b; }
+.simple-fill--off { background: #d97706; }
+.simple-bar-target { position: absolute; top: -4px; bottom: -4px; width: 3px; border-radius: 2px;
+    background: var(--mc-ink); }
+.simple-bar-note { font-size: 13.5px; line-height: 1.4; color: var(--mc-muted); }
+
+/* Debt rows: keep balance / APR / minimum side by side on a phone. */
+@media (max-width: 640px) {
+    section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important; gap: 8px !important;
+    }
+    section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        flex: 1 1 0 !important; width: auto !important; min-width: 0 !important;
+    }
+    section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(button[kind]) {
+        flex: 0 0 auto !important;
+    }
+    [class*="st-key-simple-debt-"] [data-testid="stNumberInputStepUp"],
+    [class*="st-key-simple-debt-"] [data-testid="stNumberInputStepDown"] { display: none !important; }
+    .simple-kpi-value { font-size: 34px; }
+}
+
+/* On-device storage (utils.device_store): its hidden component's wrapper would
+   still claim a row gap at the top of every page. */
+[data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-device-store"]) { display: none; }
+
+/* The instant before a remembered choice is restored (app._loading_screen). */
+.st-key-mc-loading { max-width: 420px; margin: 20vh auto 0; text-align: center; }
+.mc-loading { color: var(--mc-muted); font-size: 16px; }
+
