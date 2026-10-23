@@ -291,10 +291,11 @@ def get_hsa_limit(your_age: int, year: int, is_family: bool = True) -> float:
         base_limit += get_inflation_adjusted_limit('hsa_catchup', years_from_2024)
     return base_limit
 
-# Primary user's marginal tax rate (used for some back-of-envelope calcs).
-# At $45k income with standard deduction, federal marginal is 12% and CA is
-# ~6%; combined with FICA (7.65%) ≈ 22% effective burden on the next dollar.
-YOUR_MARGINAL_TAX_RATE = 0.22
+# Flat STATE income tax rate for STATE_CHOICE "Other" -- its only use (the
+# engine's FlatRateStateTax and derived.compute_taxes). It used to default to
+# 0.22, a federal + state + FICA "next dollar" estimate, which charged every
+# "Other" state a 22% state income tax.
+YOUR_MARGINAL_TAX_RATE = 0.05
 
 # State of residence for state income tax modeling. One of:
 #   "CA"           -> California 2024 progressive brackets (CaliforniaTaxBrackets)

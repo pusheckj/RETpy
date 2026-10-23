@@ -91,9 +91,8 @@ QUESTIONS: list[tuple[str, str]] = [
         "What's NOT modeled?",
         "Pension income, rental real estate, qualified charitable distributions, "
         "inherited IRAs, tax-loss harvesting, SEP-IRAs, sole-proprietor 401(k)s, "
-        "and state tax other than California by default. Adjust "
-        "`YOUR_MARGINAL_TAX_RATE` or the CA bracket in `config.py` to approximate "
-        "other states.",
+        "and other states' tax brackets: pick \"Other\" under Taxes and set your "
+        "state's rate, which is applied as a flat rate.",
     ),
 ]
 

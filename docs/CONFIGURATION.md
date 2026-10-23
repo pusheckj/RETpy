@@ -258,7 +258,7 @@ Social Security benefits are entered in today's dollars. Because SS is COLA-inde
 | Parameter | Default | Description |
 |---|---|---|
 | `STANDARD_DEDUCTION_MFJ_2024` | `$29,200` | MFJ standard deduction. CPI-indexed in reality, so held flat at its 2024 real value in the all-real frame. Age-65+ adds `$1,550` per spouse via `ADDITIONAL_STD_DEDUCTION_65_PLUS`. |
-| `YOUR_MARGINAL_TAX_RATE` | `0.22` | Rough marginal rate used for ESPP/RSU tax estimation during accumulation. Withdrawal taxes during retirement use the full bracket calculation. |
+| `YOUR_MARGINAL_TAX_RATE` | `0.05` | Flat **state** income tax rate, used only when `STATE_CHOICE = "Other"` (the app's *Another state (flat rate)*). It used to default to 0.22, a federal + state + payroll estimate, which charged every "Other" state 22%. |
 
 ### State tax
 

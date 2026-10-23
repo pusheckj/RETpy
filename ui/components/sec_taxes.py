@@ -16,11 +16,11 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
 
 
-_STATE_OPTIONS = ["California", "No state income tax", "Other (use marginal rate)"]
+_STATE_OPTIONS = ["California", "No state income tax", "Another state (flat rate)"]
 _STATE_TO_CODE = {
     "California": "CA",
     "No state income tax": "No state tax",
-    "Other (use marginal rate)": "Other",
+    "Another state (flat rate)": "Other",
 }
 _CODE_TO_STATE = {v: k for k, v in _STATE_TO_CODE.items()}
 
@@ -61,18 +61,18 @@ def render_body(st) -> None:
         current_label = "California"
     ensure_default(st, "st_state", current_label)
     state = st.selectbox("State", _STATE_OPTIONS, key="st_state",
-                         help="California uses 2024 progressive brackets; "
-                              "other states use a generic 5% effective rate. "
-                              "Select 'Other' to enable the marginal rate slider.")
+                         help="California uses its 2024 brackets. For another state, "
+                              "set its income tax rate below; it's applied as a flat rate.")
     set_override(st, "STATE_CHOICE", _STATE_TO_CODE[state])
 
-    if state == "Other (use marginal rate)":
+    if state == "Another state (flat rate)":
         ensure_default(st, "st_marginal",
-                       float(safe_float(get_override(st, "YOUR_MARGINAL_TAX_RATE", 0.22), 0.22)) * 100)
-        r = st.slider("Override marginal tax rate (%)",
-                      min_value=0.0, max_value=50.0, step=1.0,
+                       float(safe_float(get_override(st, "YOUR_MARGINAL_TAX_RATE", 0.05), 0.05)) * 100)
+        r = st.slider("State income tax rate (%)",
+                      min_value=0.0, max_value=15.0, step=0.5,
                       key="st_marginal",
-                      help="Used by some rough estimates.")
+                      help="A flat state tax on taxable income. Look up your state's rate; "
+                           "5% is a middle-of-the-road guess.")
         set_override(st, "YOUR_MARGINAL_TAX_RATE", r / 100)
 
     # What's modeled
@@ -80,7 +80,7 @@ def render_body(st) -> None:
         st.markdown(
             "- **Federal**: 2024 IRS brackets (MFJ if married, else Single), "
             "with standard deduction (\\$29,200 MFJ / \\$14,600 Single).\n"
-            "- **State**: California 2024 brackets / no state tax / generic 5% on taxable.\n"
+            "- **State**: California 2024 brackets / no state tax / a flat rate you set (5% to start).\n"
             "- **FICA**: 7.65% on wages up to \\$168,600, 1.45% above "
             "(Social Security + Medicare).\n"
             "- **Not modeled here**: NIIT, AMT, capital-gains tax (handled in retirement), "

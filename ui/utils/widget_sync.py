@@ -102,8 +102,9 @@ def _state_code_to_label(v):
         "California": "California",
         "No state tax": "No state income tax",
         "No state income tax": "No state income tax",
-        "Other": "Other (use marginal rate)",
-        "Other (use marginal rate)": "Other (use marginal rate)",
+        "Other": "Another state (flat rate)",
+        "Other (use marginal rate)": "Another state (flat rate)",     # earlier label
+        "Another state (flat rate)": "Another state (flat rate)",
     }.get(code, "California")
 
 
@@ -175,7 +176,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
 
     # sec_taxes.py
     "st_state":           ("STATE_CHOICE", _state_code_to_label),
-    "st_marginal":        ("YOUR_MARGINAL_TAX_RATE", _as_pct(22.0, 0.0, 50.0)),
+    "st_marginal":        ("YOUR_MARGINAL_TAX_RATE", _as_pct(5.0, 0.0, 15.0)),
 
     # sec_expenses.py
     "se_home_value":      ("HOME_VALUE", _as_int(0, 0, 10_000_000)),
