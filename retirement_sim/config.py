@@ -1390,6 +1390,16 @@ _FILING_SINGLE = "S"
 _FILING_HOH = "HOH"
 
 
+def has_partner() -> bool:
+    """Is there a second adult in the plan? (PARTNER_AGE 0 = single household.)
+    The one place this rule lives: partner accounts, income, contributions,
+    spending, Social Security and healthcare all key off it."""
+    try:
+        return int(globals().get("PARTNER_AGE", 0) or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def normalize_filing_status(status=None) -> str:
     """Collapse a filing-status string to one of "MFJ", "S", "HOH".
 
