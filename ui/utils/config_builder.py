@@ -14,8 +14,9 @@ _UI_ONLY_KEYS = {
     # House-move financing inputs. These DERIVE NEW_MORTGAGE_BALANCE and
     # NEW_MORTGAGE_MONTHLY (the real config keys the engine reads) in
     # components/sec_big_purchases.py via utils.derived.new_home_financing, so
-    # they must not be pushed onto cfg themselves.
-    "NEW_HOME_DOWN_PCT", "NEW_MORTGAGE_RATE", "NEW_HOME_ESCROW_PCT",
+    # they must not be pushed onto cfg themselves. (NEW_MORTGAGE_RATE is a real
+    # cfg key: the engine amortizes the new loan at it.)
+    "NEW_HOME_DOWN_PCT", "NEW_HOME_ESCROW_PCT",
 }
 
 # Derived from age on every run (sim_runner._recompute_derived). Older saved

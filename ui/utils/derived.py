@@ -609,6 +609,12 @@ def _payoff_rate(overrides: dict) -> float:
     return safe_float(overrides.get("MORTGAGE_RATE_FOR_PAYOFF", 0.065), 0.065)
 
 
+def _new_loan_rate(overrides: dict) -> float:
+    """The house move's new loan rate; mirrors cfg.new_mortgage_rate()."""
+    v = overrides.get("NEW_MORTGAGE_RATE")
+    return _payoff_rate(overrides) if v is None else safe_float(v, _payoff_rate(overrides))
+
+
 def extra_mortgage_for_age(overrides: dict, age) -> float:
     """Extra principal owed at ``age`` (0 when disabled or outside the window).
 
@@ -678,6 +684,8 @@ def mortgage_schedule(overrides: dict, ages) -> dict:
     by_age, payoff_age = {}, None
     for age in range(min(ages or [your_age]), max(ages or [your_age]) + 1):
         if move_on and age == move_age:
+            rate = max(0.0, _new_loan_rate(overrides))      # the new loan's own rate
+            r = rate / 12.0
             bal = safe_float(overrides.get("NEW_MORTGAGE_BALANCE", 0) or 0, 0.0)
             _ny = safe_int(overrides.get("NEW_MORTGAGE_YEARS", 30), 30)
             _nm = safe_float(overrides.get("NEW_MORTGAGE_MONTHLY", 0) or 0, 0.0)

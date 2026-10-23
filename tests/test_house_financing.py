@@ -128,19 +128,22 @@ def test_financing_inputs_do_not_leak_onto_config():
         "NEW_HOME_ESCROW_PCT": 0.0135,
     }
     out = build_config_overrides(ov)
-    for k in ("NEW_HOME_DOWN_PCT", "NEW_MORTGAGE_RATE", "NEW_HOME_ESCROW_PCT"):
+    for k in ("NEW_HOME_DOWN_PCT", "NEW_HOME_ESCROW_PCT"):
         assert k not in out, f"{k} is UI-only and must not be pushed onto cfg"
-    # the engine-facing keys still flow through
+    # the engine-facing keys still flow through -- including the new loan's
+    # rate, which the engine now amortizes the new loan at (test_mortgage_rates)
     assert out["NEW_MORTGAGE_BALANCE"] == 800_000
     assert out["NEW_MORTGAGE_MONTHLY"] == 7_923
+    assert out["NEW_MORTGAGE_RATE"] == 0.0611
 
 
 def test_sim_runner_guard_knows_the_ui_only_keys():
     """Otherwise the override-wiring audit flags them as inert controls."""
     from utils.sim_runner import UI_ONLY_KEYS
 
-    for k in ("NEW_HOME_DOWN_PCT", "NEW_MORTGAGE_RATE", "NEW_HOME_ESCROW_PCT"):
+    for k in ("NEW_HOME_DOWN_PCT", "NEW_HOME_ESCROW_PCT"):
         assert k in UI_ONLY_KEYS
+    assert "NEW_MORTGAGE_RATE" not in UI_ONLY_KEYS     # a real engine input now
 
 
 # --------------------------------------------------------------------------

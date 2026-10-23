@@ -302,7 +302,8 @@ def project_net_worth(user_overrides: dict) -> dict:
             # new mortgage starts amortizing from this age.
             _home_value = float(house["new_home_value"])
             _mort_balance = float(house["new_mortgage_balance"])
-            _mort_rate = safe_float(user_overrides.get("NEW_MORTGAGE_RATE", 0.065), 0.065)
+            _cur_rate = safe_float(user_overrides.get("MORTGAGE_RATE_FOR_PAYOFF", 0.065), 0.065)
+            _mort_rate = safe_float(user_overrides.get("NEW_MORTGAGE_RATE", _cur_rate), _cur_rate)
             _mort_pi = mortgage_payment(
                 _mort_balance, _mort_rate,
                 safe_int(user_overrides.get("NEW_MORTGAGE_YEARS", 30), 30),

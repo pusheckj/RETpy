@@ -281,7 +281,7 @@ def render_body(st) -> None:
                 _sig = tuple(_ov.get(k) for k in (
                     "MORTGAGE_BALANCE", "MORTGAGE_YEARS_REMAINING", "MORTGAGE_MONTHLY",
                     "HOUSE_MOVE_ENABLED", "HOUSE_MOVE_AGE", "NEW_MORTGAGE_BALANCE",
-                    "NEW_MORTGAGE_YEARS", "MORTGAGE_RATE_FOR_PAYOFF", "YOUR_AGE",
+                    "NEW_MORTGAGE_YEARS", "MORTGAGE_RATE_FOR_PAYOFF", "NEW_MORTGAGE_RATE", "YOUR_AGE",
                 )) + (safe_int(extra), safe_int(start))
                 _memo = st.session_state.setdefault("_bp_payoff_memo", {})
                 if _sig in _memo:

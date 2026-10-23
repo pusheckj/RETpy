@@ -2292,8 +2292,19 @@ HOUSE_MOVING_COSTS = 10_000   # Movers, buy-side closing costs, etc.
 # remaining fixed monthly payments discounted at this rate. For a standard
 # fully-amortizing fixed-rate loan this PV *is* the exact outstanding principal;
 # choosing a representative rate keeps the approximation honest. 6.5% is a
-# reasonable multi-decade average for a 30-year fixed mortgage.
+# reasonable multi-decade average for a 30-year fixed mortgage. It is the
+# CURRENT loan's rate: set it to your actual rate for accurate equity paydown.
 MORTGAGE_RATE_FOR_PAYOFF = 0.065
+
+# Rate on the NEW loan taken out at HOUSE_MOVE_AGE (lifecycle house move);
+# None = same as the current loan. The two rarely match, and the engine
+# amortizes the new loan at this rate from the move on.
+NEW_MORTGAGE_RATE = None
+
+
+def new_mortgage_rate() -> float:
+    """The new loan's rate (falls back to the current loan's)."""
+    return MORTGAGE_RATE_FOR_PAYOFF if NEW_MORTGAGE_RATE is None else float(NEW_MORTGAGE_RATE)
 
 # -----------------------------------------------------------------------------
 # EXTRA MORTGAGE PRINCIPAL (early payoff)

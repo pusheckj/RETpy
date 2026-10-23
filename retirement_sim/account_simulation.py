@@ -597,8 +597,10 @@ class AccountPortfolio:
         # read off ``mortgage_monthly`` because that figure is all-in (it bundles
         # property tax + insurance) and would overstate principal paydown.
         self.mortgage_balance = float(cfg.MORTGAGE_BALANCE)
+        # Rate of the loan currently being paid down (switches at a house move).
+        self._mortgage_rate = float(cfg.MORTGAGE_RATE_FOR_PAYOFF)
         self._mortgage_pi = _level_payment(
-            self.mortgage_balance, cfg.MORTGAGE_RATE_FOR_PAYOFF,
+            self.mortgage_balance, self._mortgage_rate,
             cfg.MORTGAGE_YEARS_REMAINING,
         )
         self._last_recorded_age = None
@@ -1108,7 +1110,7 @@ class AccountPortfolio:
         bal = max(0.0, self.mortgage_balance)
         if bal <= 0 or self._mortgage_pi <= 0:
             return bal, 0.0
-        r = max(0.0, cfg.MORTGAGE_RATE_FOR_PAYOFF) / 12.0
+        r = max(0.0, getattr(self, "_mortgage_rate", cfg.MORTGAGE_RATE_FOR_PAYOFF)) / 12.0
         extra_monthly = max(0.0, float(extra_annual or 0.0)) / 12.0
         applied = 0.0
         for _ in range(12):
@@ -1561,8 +1563,9 @@ class AccountPortfolio:
         # Re-anchor the amortization schedule on the NEW loan so equity starts
         # rebuilding from the down payment at this age.
         self.mortgage_balance = float(cfg.NEW_MORTGAGE_BALANCE)
+        self._mortgage_rate = cfg.new_mortgage_rate()   # the new loan's own rate
         self._mortgage_pi = _level_payment(
-            self.mortgage_balance, cfg.MORTGAGE_RATE_FOR_PAYOFF,
+            self.mortgage_balance, self._mortgage_rate,
             cfg.NEW_MORTGAGE_YEARS,
         )
 
@@ -3542,6 +3545,8 @@ def mortgage_payoff_projection(extra_annual: float = 0.0,
     while age <= max_age:
         if move_on and age == move_age:
             bal = float(getattr(cfg, "NEW_MORTGAGE_BALANCE", 0.0) or 0.0)
+            rate = max(0.0, cfg.new_mortgage_rate())        # the new loan's own rate
+            r = rate / 12.0
             pi = _level_payment(bal, rate,
                                 int(getattr(cfg, "NEW_MORTGAGE_YEARS", 30) or 30))
         if bal <= 0:
