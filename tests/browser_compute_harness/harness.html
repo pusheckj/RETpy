@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>browser_compute harness</title>
+</head>
+<body>
+<iframe id="frame" style="width:100%;height:40px;border:1px solid #ccc"></iframe>
+<script>
+/*
+ * Test-only host for ui/components/browser_compute/index.html. Plays
+ * Streamlit's side of the component postMessage protocol plus a minimal server:
+ *   - a component value schedules a rerun; the rerun reads only the LATEST
+ *     value (like Streamlit), so a value overwritten before a rerun is lost;
+ *   - the server acks what it read, drops a job once it read its outcome, and
+ *     stops sending engine files once it read "ready" for that hash;
+ *   - H.auto = false turns off automatic reruns (call H.rerun() / H.render()).
+ * Fake Pyodide activity arrives on BroadcastChannel("fake-pyodide") -> H.events.
+ * Driven by run_playwright.py.
+ */
+(function () {
+  "use strict";
+  const frame = document.getElementById("frame");
+  const H = window.H = {
+    values: [],          // every value the component posted, in order
+    read: [],            // values the server actually read
+    heights: [],
+    componentReady: 0,
+    renders: 0,
+    auto: true,
+    rerunDelay: 15,
+    latest: null,
+    events: [],
+    args: {
+      enabled: true,
+      pyodide_url: location.origin + "/tests/browser_compute_harness/fake_pyodide/",
+      max_workers: 4,
+      engine: null,
+      jobs: [],
+      ack: null,
+    },
+  };
+
+  H.start = function (args) {
+    Object.assign(H.args, args || {});
+    frame.src = "/ui/components/browser_compute/index.html?streamlitUrl=" + encodeURIComponent(location.origin);
+  };
+
+  H.render = function () {
+    H.renders++;
+    frame.contentWindow.postMessage({
+      type: "streamlit:render", args: JSON.parse(JSON.stringify(H.args)),
+      dfs: [], disabled: false, theme: {},
+    }, location.origin);
+  };
+
+  H.rerun = function () {
+    const v = H.latest;
+    const ack = H.args.ack;
+    const fresh = v && !(ack && ack.boot === v.boot && ack.seq >= v.seq);
+    if (fresh) {
+      H.read.push(v);
+      if (v.type === "result" || v.type === "error") H.args.jobs = H.args.jobs.filter((j) => j.id !== v.id);
+      if (v.type === "status" && v.state === "ready" && H.args.engine && H.args.engine.hash === v.engine) {
+        H.args.engine.files = null;
+      }
+      H.args.ack = { boot: v.boot, seq: v.seq };
+    }
+    H.render();
+  };
+
+  let timer = null;
+  window.addEventListener("message", (ev) => {
+    if (ev.source !== frame.contentWindow) return;
+    const d = ev.data || {};
+    if (!d.isStreamlitMessage) return;
+    if (d.type === "streamlit:componentReady") {
+      H.componentReady++;
+      H.render();
+    } else if (d.type === "streamlit:setFrameHeight") {
+      H.heights.push(d.height);
+    } else if (d.type === "streamlit:setComponentValue") {
+      H.values.push(d.value);
+      H.latest = d.value;
+      if (H.auto && !timer) timer = setTimeout(() => { timer = null; H.rerun(); }, H.rerunDelay);
+    }
+  });
+
+  const channel = new BroadcastChannel("fake-pyodide");
+  channel.onmessage = (ev) => H.events.push(ev.data);
+
+  H.ev = (type) => H.events.filter((e) => e.ev === type);
+  H.valuesOf = (pred) => H.values.filter(pred);
+})();
+</script>
+</body>
+</html>

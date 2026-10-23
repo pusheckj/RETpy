@@ -1588,6 +1588,8 @@ footer { display: none !important; }
 /* On-device storage (utils.device_store): its hidden component's wrapper would
    still claim a row gap at the top of every page. */
 [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-device-store"]) { display: none; }
+/* Browser computation (utils/browser_compute.py): a 0-height worker host, never shown. */
+[data-testid="stLayoutWrapper"]:has(> .st-key-mc-browser-compute) { display: none; }
 
 /* The instant before a remembered choice is restored (app._loading_screen). */
 .st-key-mc-loading { max-width: 420px; margin: 20vh auto 0; text-align: center; }

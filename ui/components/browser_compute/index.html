@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>browser-compute</title>
+</head>
+<body>
+<script>
+/*
+ * In-browser Monte Carlo for utils/browser_compute.py (Streamlit custom
+ * component, plain JS, no build step).
+ *
+ * Runs batches of engine calls (retirement_sim.mc_jobs) on the visitor's own
+ * CPU: Pyodide (CPython compiled to WebAssembly) inside Web Workers started
+ * from worker.js in this directory. All Python runs in the workers; this page
+ * only schedules calls and talks to the Streamlit host. It makes no network
+ * requests itself (the workers fetch Pyodide from `pyodide_url`).
+ *
+ * Render args (from Python, re-sent on every rerun = the current desired state):
+ *   enabled      false -> no workers; status "unavailable", reason "disabled"
+ *   pyodide_url  Pyodide indexURL ending in "/"
+ *   max_workers  upper bound on workers
+ *   engine       {hash, files: {"retirement_sim/x.py": source, ...} | null}
+ *   jobs         [{id, json, n}] pending jobs; each id is run once while listed
+ *   ack          {boot, seq} of the last value the server processed, or null
+ *
+ * Values posted to Python. Streamlit keeps only the latest component value, so
+ * they go out one at a time: the next only after `ack` shows the server read
+ * the previous one. Every value carries {boot, seq}:
+ *   {type:"status", state:"ready", workers, engine}      engine loaded
+ *   {type:"status", state:"loading", workers, engine}    need engine files
+ *   {type:"status", state:"loading", has_files:true}     alive, loading Pyodide (sent at start)
+ *   {type:"status", state:"unavailable", reason}
+ *   {type:"result", id, results:"<JSON array text>", ms, workers}
+ *   {type:"error", id, reason}
+ */
+(function () {
+  "use strict";
+
+  const ORIGIN = window.location.origin;
+  const TARGET = ORIGIN && ORIGIN !== "null" ? ORIGIN : "*";
+  const BOOT = randomId();          // this iframe instance
+  const MOBILE_MAX_WORKERS = 2;
+  const REASON_MAX = 2000;
+  const CAPABILITY_ERROR =
+    typeof Worker !== "function" ? "this browser has no Web Worker support" :
+    typeof WebAssembly !== "object" || !WebAssembly ? "this browser has no WebAssembly support" :
+    null;
+
+  function randomId() {
+    const a = new Uint8Array(8);
+    try { crypto.getRandomValues(a); } catch (e) {
+      for (let i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256);
+    }
+    return Array.from(a, (b) => (b < 16 ? "0" : "") + b.toString(16)).join("");
+  }
+
+  function clip(s) {
+    s = String(s);
+    return s.length > REASON_MAX ? "…" + s.slice(-REASON_MAX) : s;  // a traceback ends with the error
+  }
+
+  function errText(e) {
+    return clip((e && (e.message || e.name)) || e || "error");
+  }
+
+  // ------------------------------------------------------------ host channel
+
+  function send(type, data) {
+    const msg = { isStreamlitMessage: true, type: type };
+    for (const k in data) {
+      if (Object.prototype.hasOwnProperty.call(data, k)) msg[k] = data[k];
+    }
+    window.parent.postMessage(msg, TARGET);
+  }
+
+  function setValue(value) {
+    send("streamlit:setComponentValue", { value: value, dataType: "json" });
+  }
+
+  // ---------------------------------------------------------- acked outbox
+
+  let seqNo = 0;
+  const outbox = [];        // values not sent yet, oldest first (seq assigned on send)
+  let inflight = null;      // value sent last, until the server acknowledges it
+  let inflightAck = "";     // host ack (as a key) when `inflight` was last sent
+  let hostAck = "null";     // host ack in the latest render
+
+  function ackKey(ack) {
+    return ack && typeof ack === "object" ? String(ack.boot) + "#" + String(ack.seq) : "null";
+  }
+
+  function post(msg) {
+    outbox.push(msg);       // sent by flush() at the end of the current event
+  }
+
+  function flush() {
+    if (inflight || !outbox.length) return;
+    inflight = outbox.shift();
+    inflight.boot = BOOT;
+    inflight.seq = ++seqNo;
+    inflightAck = hostAck;
+    setValue(inflight);
+  }
+
+  function takeAck(ack) {
+    const key = ackKey(ack);
+    hostAck = key;
+    if (!inflight) return;
+    const ours = !!ack && typeof ack === "object" && ack.boot === BOOT;
+    if (ours && Number(ack.seq) >= inflight.seq) {
+      const done = inflight;
+      inflight = null;
+      onAcked(done);
+    } else if (!ours && key !== inflightAck) {
+      // The server's ack moved to something that isn't ours (e.g. a fresh server
+      // session): it never processed this value. Resend it, once per such change.
+      inflightAck = key;
+      setValue(inflight);
+    }
+  }
+
+  function onAcked(msg) {
+    if (msg.type === "status" && msg.state === "ready") {
+      readyAcked = msg.engine;
+    } else if (msg.type === "result" || msg.type === "error") {
+      const job = jobs.get(msg.id);
+      if (job && job.msg === msg) job.acked = true;
+    }
+  }
+
+  // ------------------------------------------------------------------ status
+
+  let lastStatus = "";
+  let unavailable = null;   // reason, while nothing can run
+  let readyAcked = null;    // engine hash whose "ready" the server acknowledged
+
+  function setStatus(state, fields, key, force) {
+    key = key || state + "|" + (fields.reason || fields.engine || "");
+    if (key === lastStatus && !force) return;
+    lastStatus = key;
+    for (let i = outbox.length - 1; i >= 0; i--) {
+      if (outbox[i].type === "status") outbox.splice(i, 1);   // superseded, never sent
+    }
+    post(Object.assign({ type: "status", state: state }, fields));
+  }
+
+  function setUnavailable(reason) {
+    unavailable = reason;
+    setStatus("unavailable", { reason: clip(reason) });
+    for (const job of jobs.values()) failJob(job, "browser compute unavailable: " + reason);
+    runQueue.length = 0;
+  }
+
+  // -------------------------------------------------------------------- jobs
+
+  const jobs = new Map();   // id -> job, in arrival order
+  const runQueue = [];      // active jobs that may have calls left to hand out
+  let jobKey = 0;
+
+  function reconcileJobs(list) {
+    const listed = new Map();
+    for (const j of list) {
+      if (j && typeof j.id === "string" && j.id && !listed.has(j.id)) listed.set(j.id, j);
+    }
+    for (const [id, job] of jobs) {
+      if (listed.has(id)) continue;
+      if (job.state === "active") {
+        job.state = "cancelled";          // queued calls are skipped, a running one is discarded
+        jobs.delete(id);
+        continue;
+      }
+      const i = outbox.indexOf(job.msg);
+      if (i >= 0) {                       // dropped before the server read the outcome
+        outbox.splice(i, 1);
+        jobs.delete(id);
+      } else if (job.acked) {             // delivered and the server is done with it
+        jobs.delete(id);
+      }
+    }
+    for (const [id, j] of listed) {
+      if (jobs.has(id)) continue;         // running, or finished and not yet delivered
+      const n = Number(j.n);
+      const job = {
+        id: id, key: ++jobKey, json: j.json, n: n, next: 0, got: 0, results: null,
+        t0: performance.now(), state: "active", msg: null, acked: false,
+      };
+      jobs.set(id, job);
+      if (typeof j.json !== "string" || !Number.isInteger(n) || n < 0) {
+        failJob(job, "invalid job: needs json text and an integer n >= 0");
+      } else if (unavailable) {
+        failJob(job, "browser compute unavailable: " + unavailable);
+      } else {
+        job.results = new Array(n);
+        if (n === 0) finishJob(job);
+        else runQueue.push(job);
+      }
+    }
+  }
+
+  function failJob(job, reason) {
+    if (job.state !== "active") return;
+    job.state = "failed";
+    job.results = null;
+    job.json = null;
+    job.msg = { type: "error", id: job.id, reason: clip(reason) };
+    post(job.msg);
+  }
+
+  function finishJob(job) {
+    job.state = "done";
+    job.msg = {
+      type: "result", id: job.id,
+      results: "[" + job.results.join(",") + "]",     // result texts pass through unparsed
+      ms: Math.round(performance.now() - job.t0),
+      workers: readyWorkers(),
+    };
+    job.results = null;
+    job.json = null;
+    post(job.msg);
+  }
+
+  function takeCall() {
+    while (runQueue.length) {
+      const job = runQueue[0];
+      if (job.state === "active" && job.next < job.n) return { job: job, index: job.next++ };
+      runQueue.shift();
+    }
+    return null;
+  }
+
+  // ----------------------------------------------------------------- workers
+
+  let gen = null;           // current worker pool
+  let wantHash = null;      // engine hash the server wants
+
+  function workerCount(maxWorkers) {
+    let n = Math.max(1, Math.floor(Number(navigator.hardwareConcurrency) || 2) - 1);
+    const cap = Math.floor(Number(maxWorkers));
+    if (cap >= 1) n = Math.min(n, cap);
+    if (isMobile()) n = Math.min(n, MOBILE_MAX_WORKERS);
+    return n;
+  }
+
+  function isMobile() {
+    const uad = navigator.userAgentData;
+    if (uad && uad.mobile) return true;
+    const s = window.screen || {};
+    if ((navigator.maxTouchPoints || 0) > 0 && Math.min(s.width || 0, s.height || 0) < 768) return true;
+    // Touch-first device (phone/tablet: no hover, coarse pointer) -- also what
+    // emulators report when they leave the other signals at desktop values.
+    return !!(window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches);
+  }
+
+  function readyWorkers() {
+    return gen ? gen.workers.filter((w) => w.state === "ready").length : 0;
+  }
+
+  function startGen(hash, url, files, n) {
+    gen = {
+      hash: hash, url: url, n: n, files: files, engineSent: false, workers: [],
+      restSpawned: n <= 1, ready: false, failed: null,
+    };
+    // Worker 0 first; the rest once it has downloaded Pyodide (or failed), so
+    // they load it from the HTTP cache instead of all downloading at once.
+    spawn(gen, 0);
+  }
+
+  function spawnRest(g) {
+    if (g.restSpawned) return;
+    g.restSpawned = true;
+    for (let k = 1; k < g.n && g === gen; k++) spawn(g, k);
+  }
+
+  function spawn(g, k) {
+    const w = { k: k, g: g, state: "boot", cur: null, jobs: new WeakSet(), engineSent: false, worker: null, error: null };
+    g.workers.push(w);
+    try {
+      w.worker = new Worker("worker.js", { name: "bc-" + k });
+    } catch (e) {
+      kill(w, "could not start a Web Worker: " + errText(e));
+      return;
+    }
+    w.worker.onmessage = (ev) => { onWorkerMessage(w, ev.data || {}); flush(); };
+    w.worker.onerror = (ev) => {
+      if (ev && ev.preventDefault) ev.preventDefault();
+      kill(w, "worker error: " + ((ev && ev.message) || "worker script failed to load"));
+      flush();
+    };
+    w.worker.postMessage({ type: "init", indexURL: g.url });
+    sendEngine(w);
+  }
+
+  function sendEngine(w) {
+    const g = w.g;
+    if (!g.files || w.engineSent || w.state === "dead") return;
+    w.engineSent = true;
+    g.engineSent = true;
+    w.worker.postMessage({ type: "engine", hash: g.hash, files: g.files });
+    if (g.workers.length === g.n && g.workers.every((x) => x.engineSent || x.state === "dead")) {
+      g.files = null;       // every worker has its copy
+    }
+  }
+
+  function kill(w, reason) {
+    if (w.state === "dead") return;
+    w.state = "dead";
+    w.error = reason;
+    if (w.worker) { try { w.worker.terminate(); } catch (e) { /* already gone */ } }
+    const cur = w.cur;
+    w.cur = null;
+    if (w.g !== gen) return;
+    if (cur) failJob(cur.job, reason);
+    if (w.k === 0) spawnRest(w.g);
+    checkPool(w.g);
+  }
+
+  function checkPool(g) {
+    if (g !== gen || g.failed || g.workers.length < g.n) return;
+    if (g.workers.some((w) => w.state !== "dead")) return;
+    g.failed = g.workers[0].error || "browser workers failed";
+    setUnavailable(g.failed);
+  }
+
+  function stopGen() {
+    if (!gen) return;
+    const g = gen;
+    gen = null;
+    for (const w of g.workers) {
+      if (w.worker) { try { w.worker.terminate(); } catch (e) { /* already gone */ } }
+      w.state = "dead";
+      w.cur = null;
+    }
+    // Unfinished jobs start over on the next pool: partial results came from the old engine.
+    runQueue.length = 0;
+    for (const job of jobs.values()) {
+      if (job.state !== "active") continue;
+      job.next = 0;
+      job.got = 0;
+      job.results = new Array(job.n);
+      runQueue.push(job);
+    }
+  }
+
+  function onWorkerMessage(w, m) {
+    if (w.g !== gen || w.state === "dead") return;
+    const g = w.g;
+    if (m.type === "booted") {
+      spawnRest(g);
+    } else if (m.type === "init_error") {
+      kill(w, m.error || "worker failed to initialise");
+      return;
+    } else if (m.type === "engine_ready") {
+      if (m.hash !== g.hash) { kill(w, "engine hash mismatch"); return; }
+      w.state = "ready";
+      if (!g.ready) {
+        g.ready = true;
+        setStatus("ready", { workers: g.n, engine: g.hash });
+      }
+    } else if (m.type === "done") {
+      const cur = w.cur;
+      w.cur = null;
+      const job = cur && cur.job;
+      if (job && job.key === m.key && cur.index === m.index && job.state === "active") {
+        if (!m.ok) {
+          failJob(job, m.error || "call failed");
+        } else if (m.count !== undefined && m.count !== null && Number(m.count) !== job.n) {
+          failJob(job, "job has " + m.count + " calls, expected " + job.n);
+        } else {
+          job.results[cur.index] = m.text;
+          if (++job.got === job.n) finishJob(job);
+        }
+      }
+      if (m.fatal) { kill(w, "worker stopped after an unrecoverable error: " + (m.error || "")); return; }
+    }
+    dispatch();
+  }
+
+  function dispatch() {
+    const g = gen;
+    if (!g || g.failed || unavailable || g.hash !== wantHash) return;
+    for (const w of g.workers) {
+      if (w.state !== "ready" || w.cur) continue;
+      const call = takeCall();
+      if (!call) return;
+      const msg = { type: "run", key: call.job.key, id: call.job.id, index: call.index };
+      if (!w.jobs.has(call.job)) {        // browser_load once per worker and job
+        w.jobs.add(call.job);
+        msg.json = call.job.json;
+      }
+      w.cur = call;
+      w.worker.postMessage(msg);
+    }
+  }
+
+  // ------------------------------------------------------------------ render
+
+  function applyState(args) {
+    if (args.enabled !== true) { stopGen(); setUnavailable("disabled"); return; }
+    if (CAPABILITY_ERROR) { setUnavailable(CAPABILITY_ERROR); return; }
+    const url = args.pyodide_url;
+    if (typeof url !== "string" || !url) { stopGen(); setUnavailable("no pyodide_url"); return; }
+    const engine = args.engine && typeof args.engine === "object" ? args.engine : {};
+    const files = engine.files && typeof engine.files === "object" ? engine.files : null;
+    if (typeof engine.hash === "string" && engine.hash) wantHash = engine.hash;
+    if (!wantHash) return;                              // nothing to load yet
+
+    if (gen && gen.hash !== wantHash && files) {
+      if (gen.engineSent || gen.failed) stopGen();      // a loaded engine can't be swapped in place
+      else gen.hash = wantHash;                         // still waiting for files: retarget
+    }
+    if (gen && gen.failed) return;                      // unavailable until the engine changes
+    unavailable = null;
+    if (!gen) {
+      startGen(wantHash, url, files, workerCount(args.max_workers));
+      // Say at once that the browser is alive and loading (a cold Pyodide
+      // download can take a while); the server times out a silent component.
+      if (gen && !gen.failed && files) {
+        setStatus("loading", { workers: gen.n, engine: null, has_files: true }, "booting|" + wantHash);
+      }
+    } else if (files && gen.hash === wantHash && !gen.engineSent) {
+      gen.files = files;
+      gen.workers.forEach(sendEngine);
+    }
+    if (!gen || gen.failed) return;                     // every worker failed synchronously
+
+    if (!files && !(gen.hash === wantHash && gen.engineSent)) {
+      // No files for the wanted engine, and none received: ask for them.
+      setStatus("loading", { workers: gen.n, engine: gen.ready ? gen.hash : null }, "loading|" + wantHash);
+    } else if (files && gen.ready && gen.hash === wantHash && readyAcked === wantHash) {
+      // The server read "ready" for this engine yet still sends its files: it
+      // lost that status (e.g. a fresh server session). Say it again, once.
+      readyAcked = null;
+      setStatus("ready", { workers: gen.n, engine: gen.hash }, null, true);
+    }
+  }
+
+  function onRender(args) {
+    takeAck(args.ack);
+    applyState(args);
+    reconcileJobs(Array.isArray(args.jobs) ? args.jobs : []);
+    dispatch();
+    flush();
+  }
+
+  window.addEventListener("message", function (event) {
+    if (event.source !== window.parent) return;
+    if (TARGET !== "*" && event.origin !== ORIGIN) return;
+    const data = event.data;
+    if (!data || data.type !== "streamlit:render") return;
+    onRender(data.args || {});
+  });
+
+  send("streamlit:componentReady", { apiVersion: 1 });
+  send("streamlit:setFrameHeight", { height: 0 });
+})();
+</script>
+</body>
+</html>

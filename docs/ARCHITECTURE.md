@@ -101,6 +101,33 @@ for exactly this reason. The two implementations (the module-level formula in
 kept in sync; there's no test that fails if they drift, so treat this as a
 manual invariant to check whenever `config.py`'s derived section changes.
 
+## Simulation work as plans: server, fork pool, or the visitor's browser
+
+Every heavy analysis in `utils/sim_runner.py` (`plan_full_analysis`,
+`plan_networth_analysis`, `plan_swr_analysis`, `plan_mortgage_paydown`) is a
+`Plan`: a job of independent, seeded engine calls plus a `finish` step.
+
+- The job format lives engine-side in `retirement_sim/mc_jobs.py`:
+  `{"base": config snapshot, "patches": [config diffs], "calls": [[fn, patch, args]]}`,
+  carried as JSON (`dumps`/`loads` tag tuples, int-keyed dicts and inf/nan).
+- Each call seeds its own RNG, so any mix of executors gives identical results:
+  this process, its fork pool (`_run_calls`), or the visitor's browser.
+- `retirement_sim.mc_jobs.scan_age` stops early at ages far from the target, so
+  the success-by-age curve costs about half as much. The ages near the target,
+  which decide the earliest age, always get every run.
+- `utils/browser_compute.py` hands calls to `components/browser_compute/`: a
+  hidden component running Pyodide in Web Workers, with the engine sources sent
+  from the server.
+- The main result's detailed calls (`Plan.local`) always run on the server. Its
+  age scan goes to the browser only when the workers are already loaded.
+- The follow-up analyses (what-if baseline, FI, SWR, mortgage) go to the browser
+  when it is up, or to `app._server_extras_step` (one per run, after the page
+  is drawn) when it isn't.
+- Replies are untrusted input: JSON only, size-capped, sanity-checked. Anything
+  unusable, failed or past its deadline is run by the server.
+- Messages are acknowledged (`{boot, seq}` / `ack`), because Streamlit keeps
+  only a component's latest value.
+
 ## Two-copy situation: `retirement_sim/` (here) vs. the `retirement_model/` sandbox
 
 This packaged directory is

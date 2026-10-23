@@ -13,7 +13,8 @@ import os
 import threading
 import concurrent.futures as _cf
 import multiprocessing as _mp
-from typing import Any, Dict, List, Tuple, TypedDict
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 
@@ -21,6 +22,7 @@ import numpy as np
 from retirement_sim import account_simulation as sim
 from retirement_sim import config as cfg
 from retirement_sim import mc_parallel as _mcp
+from retirement_sim import mc_jobs
 
 from utils.config_builder import build_config_overrides
 from utils.config_builder import _UI_ONLY_KEYS as _BUILDER_UI_ONLY_KEYS
@@ -477,55 +479,54 @@ def run_full_analysis(
 ) -> Dict[str, Any]:
     """Run the full simulation suite for the UI.
 
-    Scans retirement ages (lighter sim count) to build a success-by-age curve,
-    then runs the full Monte Carlo at the target age to gather trajectories
-    and detailed annual breakdowns.
+    Scans retirement ages to build a success-by-age curve, then runs the full
+    Monte Carlo at the target age to gather trajectories and detailed annual
+    breakdowns. See ``plan_full_analysis`` for the work itself.
 
     ``progress_callback`` (optional) is invoked as ``callback(fraction, message)``
     during a fresh compute. It is deliberately NOT part of the cache key: a cache
     hit returns instantly and simply skips the progress calls.
     """
-    key = (_hashable(user_overrides), n_simulations, target_retirement_age, tuple(scan_age_range))
-    return _CACHE.get_or_compute(
-        key, user_overrides, n_simulations, target_retirement_age, scan_age_range,
-        progress_callback=progress_callback,
-    )
+    return execute_plan(plan_full_analysis(user_overrides, n_simulations, target_retirement_age,
+                                           scan_age_range), progress_callback)
 
 
 # Manual LRU cache: ``functools.lru_cache`` requires all arguments hashable
 # (dicts are not), so we keep the user-facing signature ergonomic and maintain
 # our own bounded LRU keyed on a pre-flattened tuple.
 class _SimCache:
+    """Bounded LRU of full-analysis results, in front of the disk tier.
+    ``functools.lru_cache`` needs hashable arguments (dicts are not), so results
+    are keyed on a pre-flattened tuple."""
+
     def __init__(self, maxsize: int = 32):
         self.maxsize = maxsize
         self._data: Dict[tuple, Dict[str, Any]] = {}
         self._order: List[tuple] = []
 
-    def get_or_compute(self, key, overrides, n_sims, target_age, scan_range, progress_callback=None):
+    def lookup(self, key) -> Optional[Dict[str, Any]]:
         if key in self._data:
-            # Refresh LRU order. A cache hit returns instantly, so the progress
-            # callback is intentionally never invoked here (nor is it part of
-            # the cache key).
             self._order.remove(key)
             self._order.append(key)
             return self._data[key]
-
         # Disk tier: survives a process restart (Streamlit reloads the whole
         # process on any UI-file edit, which used to throw away every result).
-        dk = _disk_key("full", key)
-        result = _disk_load(dk)
-        if result is None:
-            result = _compute_full_analysis(
-                overrides, n_sims, target_age, scan_range, progress_callback=progress_callback
-            )
-            _disk_store(dk, result)
+        hit = _disk_load(_disk_key("full", key))
+        if hit is not None:
+            self._remember(key, hit)
+        return hit
 
+    def store(self, key, result: Dict[str, Any]) -> None:
+        _disk_store(_disk_key("full", key), result)
+        self._remember(key, result)
+
+    def _remember(self, key, result) -> None:
+        if key in self._data:
+            self._order.remove(key)
         self._data[key] = result
         self._order.append(key)
         if len(self._order) > self.maxsize:
-            oldest = self._order.pop(0)
-            self._data.pop(oldest, None)
-        return result
+            self._data.pop(self._order.pop(0), None)
 
     def clear(self):
         self._data.clear()
@@ -562,6 +563,118 @@ def clear_cache(include_disk: bool = True) -> None:
                 pass
 
 
+def _small_cache_lookup(cache: Dict[tuple, Any], kind: str, key: tuple):
+    if key in cache:
+        return cache[key]
+    hit = _disk_load(_disk_key(kind, key))
+    if hit is not None:
+        cache[key] = hit
+    return hit
+
+
+def _small_cache_writer(cache: Dict[tuple, Any], kind: str, key: tuple):
+    def store(result):
+        cache[key] = result
+        _disk_store(_disk_key(kind, key), result)
+        if len(cache) > 24:
+            cache.pop(next(iter(cache)))
+    return store
+
+
+def plan_networth_analysis(user_overrides: dict, n_simulations: int = 1000,
+                           max_work_age: int = 70) -> Plan:
+    """The net-worth sweep as one "networth" call per candidate target."""
+    key = (_hashable(user_overrides), int(n_simulations), int(max_work_age))
+    hit = _small_cache_lookup(_NW_CACHE, "networth", key)
+    if hit is not None:
+        return Plan("networth", key, user_overrides, result=hit)
+    original = _apply_overrides(build_config_overrides(user_overrides))
+    try:
+        target = float(getattr(cfg, "TARGET_SUCCESS_RATE", 0.80))
+        current_inv = float(sim.create_initial_portfolio().get_investable_balance())
+        exp = float(getattr(cfg, "CURRENT_ANNUAL_EXPENSES", 100_000) or 100_000)
+        your_age = float(getattr(cfg, "YOUR_AGE", 0))
+        # Sweep from "retire right now" (today's investable balance) upward. Starting
+        # at current_inv -- rather than an arbitrary 0.9*current_inv floor -- means an
+        # already-FI household is detected honestly (grid[0] = retire-now) instead of
+        # being pinned to a fabricated floor figure below their own balance.
+        lo = max(0.0, current_inv)
+        hi = max(lo * 1.5, 45.0 * exp, lo + 1_000_000.0)
+        grid = [float(v) for v in np.linspace(lo, hi, 14)]
+        # Cap the per-point sim count so the sweep stays responsive even when the
+        # main selector is set high (e.g. 25k) -- precision past ~1k/point is
+        # dwarfed by the grid spacing anyway.
+        scan_sims = max(300, min(int(n_simulations), 3000) // 3)
+        calls = [["networth", -1, [N, scan_sims, int(max_work_age), 3000 + i]]
+                 for i, N in enumerate(grid)]
+        job = {"base": mc_jobs.snapshot(), "patches": [], "calls": calls}
+    finally:
+        _restore_overrides(original)
+
+    def finish(results: List[Any]) -> Dict[str, Any]:
+        curve = [{
+            "networth": N,
+            "success": float(r["success_rate"]),
+            "median_retire_age": r["median_retire_age"],
+            "p10_retire_age": r["p10_retire_age"],
+            "p90_retire_age": r["p90_retire_age"],
+        } for N, r in zip(grid, results)]
+
+        # FI number = smallest target meeting the plan threshold. Two guards vs.
+        # naive first-crossing: (1) if retiring today already clears the target the
+        # household is already FI (don't report a target above their balance); (2)
+        # a crossing must be *confirmed* by the next grid point (or be the last),
+        # so a single upward-noisy point on a flat curve can't understate the number.
+        already_fi = bool(curve) and curve[0]["success"] >= target
+
+        def _confirmed(j: int) -> bool:
+            return curve[j]["success"] >= target and (
+                j == len(curve) - 1 or curve[j + 1]["success"] >= target
+            )
+
+        fi_number = fi_age = fi_age_low = fi_age_high = None
+        if already_fi:
+            fi_number = current_inv
+            fi_age = fi_age_low = fi_age_high = your_age
+        else:
+            for j in range(1, len(curve)):
+                if _confirmed(j):
+                    a, b = curve[j - 1], curve[j]
+                    span_ = b["success"] - a["success"]
+                    frac = ((target - a["success"]) / span_) if span_ > 1e-9 else 0.0
+                    frac = min(1.0, max(0.0, frac))
+                    fi_number = a["networth"] + frac * (b["networth"] - a["networth"])
+                    aa, ba = (a["median_retire_age"] or 0), (b["median_retire_age"] or 0)
+                    fi_age = aa + frac * (ba - aa)
+
+                    # Blend the p10/p90 range with the SAME frac as the median, so the
+                    # displayed "usually X-Y" range and the headline age come from one
+                    # consistent interpolation (median stays inside the range).
+                    def _blend(k):
+                        av, bv = a.get(k), b.get(k)
+                        if av is None or bv is None:
+                            return bv if bv is not None else av
+                        return av + frac * (bv - av)
+                    fi_age_low = _blend("p10_retire_age")
+                    fi_age_high = _blend("p90_retire_age")
+                    break
+
+        return {
+            "fi_number": fi_number,
+            "fi_median_retire_age": fi_age,
+            "fi_age_low": fi_age_low,
+            "fi_age_high": fi_age_high,
+            "already_fi": already_fi,
+            "target_success": target,
+            "current_investable": current_inv,
+            "success_by_networth": curve,
+            "max_work_age": int(max_work_age),
+        }
+
+    return Plan("networth", key, user_overrides, job, finish,
+                store=_small_cache_writer(_NW_CACHE, "networth", key))
+
+
 def run_networth_analysis(
     user_overrides: dict,
     n_simulations: int = 1000,
@@ -576,152 +689,15 @@ def run_networth_analysis(
     ``TARGET_SUCCESS_RATE``, interpolated between grid points), the typical age it
     is reached, the success-vs-net-worth curve, and today's investable balance.
     """
-    key = (_hashable(user_overrides), int(n_simulations), int(max_work_age))
-    if key in _NW_CACHE:
-        return _NW_CACHE[key]
-    _dk = _disk_key("networth", key)
-    _hit = _disk_load(_dk)
-    if _hit is not None:
-        _NW_CACHE[key] = _hit
-        return _hit
-
-    original = _apply_overrides(build_config_overrides(user_overrides))
-    try:
-        target = float(getattr(cfg, "TARGET_SUCCESS_RATE", 0.80))
-        current_inv = float(sim.create_initial_portfolio().get_investable_balance())
-        exp = float(getattr(cfg, "CURRENT_ANNUAL_EXPENSES", 100_000) or 100_000)
-        # Sweep from "retire right now" (today's investable balance) upward. Starting
-        # at current_inv — rather than an arbitrary 0.9*current_inv floor — means an
-        # already-FI household is detected honestly (grid[0] = retire-now) instead of
-        # being pinned to a fabricated floor figure below their own balance.
-        lo = max(0.0, current_inv)
-        hi = max(lo * 1.5, 45.0 * exp, lo + 1_000_000.0)
-        grid = list(np.linspace(lo, hi, 14))
-        # Cap the per-point sim count so the (serial) sweep stays responsive even
-        # when the main selector is set high (e.g. 25k) — precision past ~1k/point
-        # is dwarfed by the grid spacing anyway.
-        scan_sims = max(300, min(int(n_simulations), 3000) // 3)
-
-        curve: List[dict] = []
-        for i, N in enumerate(grid):
-            r = sim.run_monte_carlo_networth(N, n_simulations=scan_sims,
-                                             max_work_age=max_work_age, random_seed=3000 + i)
-            curve.append({
-                "networth": float(N),
-                "success": float(r["success_rate"]),
-                "median_retire_age": r["median_retire_age"],
-                "p10_retire_age": r["p10_retire_age"],
-                "p90_retire_age": r["p90_retire_age"],
-            })
-            if progress_callback:
-                progress_callback((i + 1) / len(grid), f"Net-worth target ${N/1e6:.1f}M")
-
-        # FI number = smallest target meeting the plan threshold. Two guards vs.
-        # naive first-crossing: (1) if retiring today already clears the target the
-        # household is already FI (don't report a target above their balance); (2)
-        # a crossing must be *confirmed* by the next grid point (or be the last),
-        # so a single upward-noisy point on a flat curve can't understate the number.
-        already_fi = bool(curve) and curve[0]["success"] >= target
-
-        def _confirmed(j: int) -> bool:
-            return curve[j]["success"] >= target and (
-                j == len(curve) - 1 or curve[j + 1]["success"] >= target
-            )
-
-        fi_number = None
-        fi_age = None
-        fi_age_low = None
-        fi_age_high = None
-        if already_fi:
-            fi_number = current_inv
-            fi_age = float(getattr(cfg, "YOUR_AGE", 0))
-            fi_age_low = fi_age
-            fi_age_high = fi_age
-        else:
-            for j in range(1, len(curve)):
-                if _confirmed(j):
-                    a, b = curve[j - 1], curve[j]
-                    span = b["success"] - a["success"]
-                    frac = ((target - a["success"]) / span) if span > 1e-9 else 0.0
-                    frac = min(1.0, max(0.0, frac))
-                    fi_number = a["networth"] + frac * (b["networth"] - a["networth"])
-                    aa, ba = (a["median_retire_age"] or 0), (b["median_retire_age"] or 0)
-                    fi_age = aa + frac * (ba - aa)
-
-                    # Blend the p10/p90 range with the SAME frac as the median, so the
-                    # displayed "usually X–Y" range and the headline age come from one
-                    # consistent interpolation (median stays inside the range).
-                    def _blend(key):
-                        av, bv = a.get(key), b.get(key)
-                        if av is None or bv is None:
-                            return bv if bv is not None else av
-                        return av + frac * (bv - av)
-                    fi_age_low = _blend("p10_retire_age")
-                    fi_age_high = _blend("p90_retire_age")
-                    break
-
-        result = {
-            "fi_number": fi_number,
-            "fi_median_retire_age": fi_age,
-            "fi_age_low": fi_age_low,
-            "fi_age_high": fi_age_high,
-            "already_fi": already_fi,
-            "target_success": target,
-            "current_investable": current_inv,
-            "success_by_networth": curve,
-            "max_work_age": int(max_work_age),
-        }
-        _NW_CACHE[key] = result
-        _disk_store(_dk, result)
-        if len(_NW_CACHE) > 24:
-            _NW_CACHE.pop(next(iter(_NW_CACHE)))
-        return result
-    finally:
-        _restore_overrides(original)
+    return execute_plan(plan_networth_analysis(user_overrides, n_simulations, max_work_age),
+                        progress_callback)
 
 
-def _investable_at_retirement(retirement_age: int, n: int = 40, seed: int = 98765) -> float:
-    """Median investable balance AT the retirement year across n detailed sims
-    (accumulation-only, independent of retirement spending). Excludes 529.
-    Seeded so the SWR anchor is reproducible run-to-run."""
-    import random as _random
-    np.random.seed(seed)
-    _random.seed(seed)
-    vals = []
-    for _ in range(n):
-        try:
-            _ok, pf = sim.run_detailed_simulation(retirement_age, verbose=False)
-        except Exception:
-            continue
-        rec = next((r for r in (getattr(pf, "yearly_history", None) or [])
-                    if int(r.get("age", -1)) == retirement_age), None)
-        if rec:
-            total = float(rec.get("total", 0.0) or 0.0)
-            c529 = float((rec.get("by_type") or {}).get("college_529", 0.0) or 0.0)
-            vals.append(max(0.0, total - c529))
-    return float(np.median(vals)) if vals else 0.0
+# Moved to the engine side (retirement_sim/mc_jobs.py) so the browser can run them.
+_investable_at_retirement = mc_jobs.investable_at_retirement
 
 
-def _median_year1_withdrawal(retirement_age: int, n: int = 20, seed: int = 13579) -> float:
-    """Median first-retirement-year total portfolio withdrawal across n sims,
-    at the CURRENT cfg spending settings. Seeded so the same accumulation paths
-    are reused across the SWR grid (realized rate then moves monotonically with
-    the swept spending, not with RNG noise)."""
-    import random as _random
-    np.random.seed(seed)
-    _random.seed(seed)
-    vals = []
-    for _ in range(n):
-        try:
-            _ok, pf = sim.run_detailed_simulation(retirement_age, verbose=False)
-        except Exception:
-            continue
-        log = getattr(pf, "withdrawal_log", None) or []
-        row = next((r for r in log if int(r.get("age", -1)) == retirement_age),
-                   (log[0] if log else None))
-        if row:
-            vals.append(float(row.get("total", 0.0) or 0.0))
-    return float(np.median(vals)) if vals else 0.0
+_median_year1_withdrawal = mc_jobs.median_year1_withdrawal
 
 
 def _swr_crossing(curve: List[dict], target: float):
@@ -743,30 +719,16 @@ def _swr_crossing(curve: List[dict], target: float):
     return curve[-1]["realized_rate"]
 
 
-def run_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
-                     target_retirement_age: int = 55, progress_callback=None) -> Dict[str, Any]:
-    """Personalized safe-withdrawal-rate sweep.
-
-    Sweeps the initial retirement spending from ~3%–6% of the investable balance
-    AT retirement, runs the Monte Carlo at each, and returns success rate vs the
-    REALIZED initial total-withdrawal rate (so the curve shares an axis with the
-    user's actual plan). ``swr_rate`` is the highest rate still meeting
-    TARGET_SUCCESS_RATE. NOTE: RETIREMENT_SPENDING_ABSOLUTE sets the non-housing
-    living base; housing/healthcare/kids are layered on top by the engine, which
-    is exactly why we plot the REALIZED total rate rather than the input rate.
-    """
+def plan_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
+                      target_retirement_age: int = 55) -> Plan:
+    """The SWR sweep as calls: per spending level (a config patch), its realized
+    year-1 withdrawal ("w1") and its success rate ("mc")."""
     key = (_hashable(user_overrides), int(n_simulations), int(target_retirement_age))
-    if key in _SWR_CACHE:
-        return _SWR_CACHE[key]
-    _dk = _disk_key("swr", key)
-    _hit = _disk_load(_dk)
-    if _hit is not None:
-        _SWR_CACHE[key] = _hit
-        return _hit
-
+    hit = _small_cache_lookup(_SWR_CACHE, "swr", key)
+    if hit is not None:
+        return Plan("swr", key, user_overrides, result=hit)
+    store = _small_cache_writer(_SWR_CACHE, "swr", key)
     original = _apply_overrides(build_config_overrides(user_overrides))
-    _spend_keys = ("RETIREMENT_SPENDING_MODE", "RETIREMENT_SPENDING_ABSOLUTE", "RETIREMENT_SPENDING_PCT")
-    spend_snap = {k: getattr(cfg, k, None) for k in _spend_keys}
     try:
         target = float(getattr(cfg, "TARGET_SUCCESS_RATE", 0.80))
         ra = int(target_retirement_age)
@@ -775,8 +737,8 @@ def run_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
             result = {"error": "no-investable", "investable_at_retirement": 0.0,
                       "success_by_rate": [], "swr_rate": None, "target_success": target,
                       "retirement_age": ra}
-            _SWR_CACHE[key] = result
-            return result
+            store(result)
+            return Plan("swr", key, user_overrides, result=result)
 
         # Anchor the sweep on the user's ACTUAL plan, not an arbitrary % band.
         # Total year-1 withdrawal W0 = living base (the knob) + fixed costs
@@ -789,48 +751,55 @@ def run_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
             w0 = 0.04 * inv0  # fallback anchor if the baseline draw is unavailable
         fixed = max(0.0, w0 - living_0)
         actual_rate = w0 / inv0
-
-        m_grid = list(np.linspace(0.6, 1.6, 13))
+        m_grid = [float(m) for m in np.linspace(0.6, 1.6, 13)]
         scan_sims = max(300, min(int(n_simulations), 3000))
-        curve: List[dict] = []
-        for i, m in enumerate(m_grid):
-            living = max(0.0, m * w0 - fixed)
-            setattr(cfg, "RETIREMENT_SPENDING_MODE", "Absolute amount ($/yr)")
-            setattr(cfg, "RETIREMENT_SPENDING_ABSOLUTE", float(living))
-            realized = _median_year1_withdrawal(ra) / inv0 if inv0 > 0 else float(m * actual_rate)
-            r = sim.run_monte_carlo_detailed(ra, n_simulations=scan_sims, random_seed=5000 + i)
-            curve.append({
-                "realized_rate": float(realized),
-                "spending": float(m * w0),
-                "success": float(r.get("success_rate", 0.0)),
-            })
-            if progress_callback:
-                progress_callback((i + 1) / len(m_grid), f"Withdrawal {realized * 100:.1f}%")
+        patches = [{"RETIREMENT_SPENDING_MODE": "Absolute amount ($/yr)",
+                    "RETIREMENT_SPENDING_ABSOLUTE": float(max(0.0, m * w0 - fixed))}
+                   for m in m_grid]
+        calls = []
+        for i in range(len(m_grid)):
+            calls += [["w1", i, [ra]], ["mc", i, [ra, scan_sims, 5000 + i]]]
+        job = {"base": mc_jobs.snapshot(), "patches": patches, "calls": calls}
+    finally:
+        _restore_overrides(original)
 
+    def finish(results: List[Any]) -> Dict[str, Any]:
+        curve = []
+        for i, m in enumerate(m_grid):
+            w1, mc = results[2 * i], results[2 * i + 1]
+            curve.append({
+                "realized_rate": float(w1 / inv0) if inv0 > 0 else float(m * actual_rate),
+                "spending": float(m * w0),
+                "success": float(mc.get("success_rate", 0.0)),
+            })
         # Order by realized rate for a monotone x-axis; success DESCENDS with rate.
         curve.sort(key=lambda c: c["realized_rate"])
-        swr_rate = _swr_crossing(curve, target)
-
-        result = {
+        return {
             "success_by_rate": curve,
-            "swr_rate": swr_rate,
+            "swr_rate": _swr_crossing(curve, target),
             "actual_rate": float(actual_rate),
             "target_success": target,
             "investable_at_retirement": inv0,
             "retirement_age": ra,
         }
-        _SWR_CACHE[key] = result
-        _disk_store(_dk, result)
-        if len(_SWR_CACHE) > 24:
-            _SWR_CACHE.pop(next(iter(_SWR_CACHE)))
-        return result
-    finally:
-        for k, v in spend_snap.items():
-            try:
-                setattr(cfg, k, v)
-            except Exception:
-                pass
-        _restore_overrides(original)
+
+    return Plan("swr", key, user_overrides, job, finish, store=store)
+
+
+def run_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
+                     target_retirement_age: int = 55, progress_callback=None) -> Dict[str, Any]:
+    """Personalized safe-withdrawal-rate sweep.
+
+    Sweeps the initial retirement spending from ~3%-6% of the investable balance
+    AT retirement, runs the Monte Carlo at each, and returns success rate vs the
+    REALIZED initial total-withdrawal rate (so the curve shares an axis with the
+    user's actual plan). ``swr_rate`` is the highest rate still meeting
+    TARGET_SUCCESS_RATE. NOTE: RETIREMENT_SPENDING_ABSOLUTE sets the non-housing
+    living base; housing/healthcare/kids are layered on top by the engine, which
+    is exactly why we plot the REALIZED total rate rather than the input rate.
+    """
+    return execute_plan(plan_swr_analysis(user_overrides, n_simulations, target_retirement_age),
+                        progress_callback)
 
 
 #: Lifecycle toggle flags that gate one-off/recurring life events in the engine.
@@ -885,8 +854,6 @@ def run_whatif_delta(
           },
         }
     """
-    active_toggles = active_lifecycle_toggles(user_overrides)
-
     # Two full analyses run here, so split the progress bar in half: the
     # scenario drives the first 50%, the baseline the second 50%. Only forward
     # the callback when one was actually provided (keeps the no-progress path —
@@ -909,13 +876,23 @@ def run_whatif_delta(
         **scenario_kwargs,
     )
 
-    baseline_overrides = {**user_overrides, **{key: False for key in LIFECYCLE_TOGGLE_KEYS}}
+    baseline_overrides = whatif_baseline_overrides(user_overrides)
     baseline = run_full_analysis(
         baseline_overrides, n_simulations=n_simulations,
         target_retirement_age=target_retirement_age, scan_age_range=scan_age_range,
         **baseline_kwargs,
     )
 
+    return whatif_from(user_overrides, scenario, baseline)
+
+def whatif_baseline_overrides(user_overrides: dict) -> dict:
+    """The same plan with every lifecycle toggle off."""
+    return {**user_overrides, **{key: False for key in LIFECYCLE_TOGGLE_KEYS}}
+
+
+def whatif_from(user_overrides: dict, scenario: Dict[str, Any], baseline: Dict[str, Any]) -> Dict[str, Any]:
+    """``run_whatif_delta``'s result from the two full analyses."""
+    active_toggles = active_lifecycle_toggles(user_overrides)
     scenario_earliest = scenario.get("earliest_retirement_age")
     baseline_earliest = baseline.get("earliest_retirement_age")
     if scenario_earliest is None or baseline_earliest is None:
@@ -1062,15 +1039,66 @@ def _max_workers() -> int:
         return default
 
 
-def _run_sim_tasks(tasks: List[Tuple[str, tuple]], progress_callback=None) -> List[Tuple[str, dict]]:
-    """Run ``mc_parallel.sim_task`` over ``[(kind, task_tuple), ...]``.
+@dataclass
+class Plan:
+    """An analysis as independent, seeded engine calls (``job``, see
+    retirement_sim/mc_jobs.py) plus ``finish``, which turns their results into
+    the analysis result. Any mix of executors can fill the results -- this
+    process, its fork pool, or the visitor's browser (utils/browser_compute.py)
+    -- because every call seeds itself. ``result`` is set instead when nothing
+    needs computing (cache hit, or an analysis that doesn't apply)."""
+    kind: str
+    key: tuple
+    overrides: dict
+    job: Optional[Dict[str, Any]] = None
+    finish: Optional[Callable[[List[Any]], Dict[str, Any]]] = None
+    local: Tuple[int, ...] = ()                 # calls the server runs itself even with a browser
+    store: Optional[Callable[[Dict[str, Any]], None]] = None
+    result: Optional[Dict[str, Any]] = None
+
+
+def run_plan_calls(plan: Plan, indices: Optional[List[int]] = None,
+                   progress_callback=None) -> List[Any]:
+    """Run some (default: all) of a plan's calls here, under its overrides."""
+    idx = list(range(len(plan.job["calls"]))) if indices is None else list(indices)
+    if not idx:
+        return []
+    original = _apply_overrides(build_config_overrides(plan.overrides))
+    try:
+        return _run_calls(plan.job, idx, progress_callback)
+    finally:
+        _restore_overrides(original)
+
+
+def finish_plan(plan: Plan, results: List[Any]) -> Dict[str, Any]:
+    """Results of all calls -> the analysis result (cached)."""
+    original = _apply_overrides(build_config_overrides(plan.overrides))
+    try:
+        result = plan.finish(results)
+    finally:
+        _restore_overrides(original)
+    if plan.store is not None:
+        plan.store(result)
+    return result
+
+
+def execute_plan(plan: Plan, progress_callback=None) -> Dict[str, Any]:
+    """Run a whole plan on the server."""
+    if plan.result is not None:
+        return plan.result
+    return finish_plan(plan, run_plan_calls(plan, None, progress_callback))
+
+
+def _run_calls(job: Dict[str, Any], indices: List[int], progress_callback=None) -> List[Any]:
+    """Run ``job``'s calls at ``indices`` (cfg already configured by the caller).
 
     Tries a fork ``ProcessPoolExecutor`` first (workers inherit the parent's
     fully-configured ``cfg``); on ANY failure falls back to running the same
-    tasks in-process. Because each task carries its own seed, both paths yield
-    identical results — the pool is a pure speed optimization.
+    calls in-process. Because each call carries its own seed, both paths yield
+    identical results -- the pool is a pure speed optimization.
     """
-    total = len(tasks)
+    calls, patches = job["calls"], job.get("patches", [])
+    total = len(indices)
     n_cores = _available_cpus()
     max_workers = _max_workers()
     if (total >= _PARALLEL_MIN_TASKS and n_cores > 1 and max_workers > 1
@@ -1078,31 +1106,25 @@ def _run_sim_tasks(tasks: List[Tuple[str, tuple]], progress_callback=None) -> Li
         try:
             ctx = _mp.get_context("fork")
             n_workers = max(2, min(n_cores - 1, max_workers))
-            # Key each future by its task index so results can be re-sorted back
-            # into submit order. Aggregates are order-invariant, but sample_paths /
-            # the representative path depend on task order, so completion order
-            # (as_completed) would make which paths display non-deterministic.
-            results_by_idx: Dict[int, Tuple[str, dict]] = {}
+            results_by_pos: Dict[int, Any] = {}
             done = 0
             with _cf.ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as ex:
-                fut_meta = {ex.submit(_mcp.sim_task, t): (idx, kind)
-                            for idx, (kind, t) in enumerate(tasks)}
+                futs = {ex.submit(mc_jobs.run_call, calls[i], patches): pos
+                        for pos, i in enumerate(indices)}
                 # Generous overall timeout: a real fork deadlock (rare) raises
                 # TimeoutError -> caught below -> clean serial fallback, instead
                 # of freezing the UI forever.
-                for fut in _cf.as_completed(fut_meta, timeout=300):
-                    idx, kind = fut_meta[fut]
-                    results_by_idx[idx] = (kind, fut.result())
+                for fut in _cf.as_completed(futs, timeout=300):
+                    results_by_pos[futs[fut]] = fut.result()
                     done += 1
                     _emit_progress(progress_callback, done, total)
-            return [results_by_idx[i] for i in range(len(tasks))]
-        except Exception as e:  # BrokenProcessPool, fork/pickle issues, …
+            return [results_by_pos[pos] for pos in range(total)]
+        except Exception as e:  # BrokenProcessPool, fork/pickle issues, ...
             logger.warning("parallel MC pool unavailable (%s); running serially in-process", e)
-    # Serial fallback — identical results (same per-task seeds).
     out = []
-    for idx, (kind, t) in enumerate(tasks, 1):
-        out.append((kind, _mcp.sim_task(t)))
-        _emit_progress(progress_callback, idx, total)
+    for pos, i in enumerate(indices, 1):
+        out.append(mc_jobs.run_call(calls[i], patches))
+        _emit_progress(progress_callback, pos, total)
     return out
 
 
@@ -1249,71 +1271,63 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
     }
 
 
-def _compute_full_analysis(
+def plan_full_analysis(
     user_overrides: dict,
-    n_simulations: int,
-    target_retirement_age: int,
-    scan_age_range: tuple,
-    progress_callback=None,
-) -> Dict[str, Any]:
+    n_simulations: int = 1000,
+    target_retirement_age: int = 55,
+    scan_age_range: tuple = (25, 76, 1),
+) -> "Plan":
+    """The full analysis as engine calls: the target age's N simulations in
+    per-core chunks WITH trajectory/log detail ("batch", the first calls --
+    ``Plan.local``, so the server runs them even when a browser helps), then one
+    "scan" per retirement age for the success-by-age curve. Each scan stops early
+    once its age is plainly far from the target (mc_jobs.scan_age), so the
+    earliest age keeps full precision at a fraction of the cost."""
+    key = (_hashable(user_overrides), n_simulations, target_retirement_age, tuple(scan_age_range))
+    hit = _CACHE.lookup(key)
+    if hit is not None:
+        return Plan("full", key, user_overrides, result=hit)
     original = _apply_overrides(build_config_overrides(user_overrides))
     try:
         your_age = int(getattr(cfg, "YOUR_AGE", 25))
         if target_retirement_age < your_age:
             target_retirement_age = your_age  # silently clamp; UI slider should prevent this
-
         scan_sims = max(200, n_simulations // 4)
         start = max(scan_age_range[0], your_age)
         stop = max(scan_age_range[1], your_age + 5)
-        step = scan_age_range[2]
-        scan_ages = list(range(start, stop, step))
+        scan_ages = list(range(start, stop, scan_age_range[2]))
         target_success = float(getattr(cfg, "TARGET_SUCCESS_RATE", 0.80))
         detail_cap = min(300, max(50, n_simulations // 3))
-
-        # Work list: one batch per scan age (no per-path detail) + the target's
-        # N sims split into per-core chunks (WITH trajectory/log detail). Each
-        # task carries a deterministic seed so parallel == serial fallback.
-        tasks: List[Tuple[str, tuple]] = [
-            ("scan", (age, scan_sims, 0, 1000 + i)) for i, age in enumerate(scan_ages)
-        ]
-        n_chunks = max(1, min(_PRIMARY_CHUNKS, n_simulations))
-        chunk_sizes = _split_count(n_simulations, n_chunks)
+        chunk_sizes = _split_count(n_simulations, max(1, min(_PRIMARY_CHUNKS, n_simulations)))
         detail_per = max(1, -(-detail_cap // max(1, len(chunk_sizes))))  # ceil-divide
-        tasks += [
-            ("primary", (target_retirement_age, size, detail_per, 2000 + j))
-            for j, size in enumerate(chunk_sizes)
-        ]
-
-        results = _run_sim_tasks(tasks, progress_callback=progress_callback)
-
-        success_by_age: Dict[int, float] = {}
-        primary_chunks: List[dict] = []
-        for kind, r in results:
-            if kind == "scan":
-                success_by_age[r["age"]] = (r["successes"] / r["n"]) if r["n"] else 0.0
-            else:
-                primary_chunks.append(r)
-
-        earliest = next(
-            (age for age in sorted(success_by_age) if success_by_age[age] >= target_success),
-            None,
-        )
-        primary = _assemble_primary_from_chunks(target_retirement_age, primary_chunks)
-
+        calls = [["batch", -1, [target_retirement_age, size, detail_per, 2000 + j]]
+                 for j, size in enumerate(chunk_sizes)]
+        calls += [["scan", -1, [age, scan_sims, 1000 + i, target_success]]
+                  for i, age in enumerate(scan_ages)]
+        job = {"base": mc_jobs.snapshot(), "patches": [], "calls": calls}
         # Record the count ACTUALLY run (the UI's n_simulations), not cfg's
-        # NUM_SIMULATIONS default — otherwise "out of N simulations" in the UI
+        # NUM_SIMULATIONS default -- otherwise "out of N simulations" in the UI
         # would show the config default (10,000) regardless of the real run.
         snap = _snapshot_config()
         snap["NUM_SIMULATIONS"] = int(n_simulations)
+    finally:
+        _restore_overrides(original)
+    n_primary = len(chunk_sizes)
 
+    def finish(results: List[Any]) -> Dict[str, Any]:
+        success_by_age = {int(r["age"]): (r["successes"] / r["n"]) if r["n"] else 0.0
+                          for r in results[n_primary:]}
+        earliest = next((age for age in sorted(success_by_age)
+                         if success_by_age[age] >= target_success), None)
         return {
             "earliest_retirement_age": earliest,
             "success_rate_by_age": success_by_age,
-            "primary_result": primary,
+            "primary_result": _assemble_primary_from_chunks(target_retirement_age, results[:n_primary]),
             "config_snapshot": snap,
         }
-    finally:
-        _restore_overrides(original)
+
+    return Plan("full", key, user_overrides, job, finish, local=tuple(range(n_primary)),
+                store=lambda r: _CACHE.store(key, r))
 
 
 def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
@@ -2107,6 +2121,122 @@ def _payoff_projection_for(overrides: dict, extra: float) -> dict:
         _restore_overrides(original)
 
 
+_MORTGAGE_CACHE: Dict[tuple, Any] = {}
+
+
+def has_mortgage_to_prepay() -> bool:
+    """Is there a loan for extra principal to pay down (cfg must be configured)?
+    Today's mortgage, or the new one from a planned house move; and the engine
+    must be tracking the balance (TRACK_HOME_EQUITY_PAYDOWN), or extra payments
+    change nothing."""
+    if not getattr(cfg, "TRACK_HOME_EQUITY_PAYDOWN", False):
+        return False
+    if float(getattr(cfg, "MORTGAGE_BALANCE", 0) or 0) > 0:
+        return True
+    return bool(getattr(cfg, "HOUSE_MOVE_ENABLED", False)) and \
+        float(getattr(cfg, "NEW_MORTGAGE_BALANCE", 0) or 0) > 0
+
+
+def plan_mortgage_paydown(
+    user_overrides: dict,
+    n_simulations: int = 500,
+    target_retirement_age: int = 55,
+    extra_grid: "List[float] | None" = None,
+) -> Plan:
+    """The paydown sweep as calls: the target age's simulations at each extra
+    payment (a config patch). Only the success rate and final balances are used,
+    so no age scan -- it used to run a whole full analysis per grid point and
+    throw the scan away, which made this sweep ~90% of the first run's time.
+    Same seeds as the full analysis's main run, so point 0 equals the plan's own
+    success rate. Without a loan to prepay it doesn't run at all."""
+    if extra_grid is None:
+        extra_grid = [0.0, 6_000.0, 12_000.0, 24_000.0, 36_000.0, 60_000.0]
+    grid = sorted({float(max(0.0, v)) for v in extra_grid} | {0.0})   # baseline on the curve
+    key = (_hashable(user_overrides), int(n_simulations), int(target_retirement_age), tuple(grid))
+    hit = _small_cache_lookup(_MORTGAGE_CACHE, "mortgage_paydown", key)
+    if hit is not None:
+        return Plan("mortgage", key, user_overrides, result=hit)
+    store = _small_cache_writer(_MORTGAGE_CACHE, "mortgage_paydown", key)
+    n = max(1, int(n_simulations))
+    original = _apply_overrides(build_config_overrides(user_overrides))
+    try:
+        if not has_mortgage_to_prepay():
+            result = {"curve": [], "no_mortgage": True, "baseline_success": 0.0,
+                      "baseline_payoff_age": None, "best_extra": None, "best_delta": 0.0,
+                      "helps": False, "helps_significantly": False, "noise_floor_pp": 0.0,
+                      "n_simulations": n}
+            store(result)
+            return Plan("mortgage", key, user_overrides, result=result)
+        target_age = max(int(target_retirement_age), int(getattr(cfg, "YOUR_AGE", 25)))
+        base = mc_jobs.snapshot()
+    finally:
+        _restore_overrides(original)
+    patches = []
+    for extra in grid:
+        o = _apply_overrides(build_config_overrides({**user_overrides,
+                                                     "EXTRA_MORTGAGE_PAYMENT_ANNUAL": extra}))
+        try:
+            patches.append(mc_jobs.diff(base, mc_jobs.snapshot()))
+        finally:
+            _restore_overrides(o)
+    chunk_sizes = _split_count(n, max(1, min(_PRIMARY_CHUNKS, n)))
+    calls = [["batch", g, [target_age, size, 0, 2000 + j]]
+             for g in range(len(grid)) for j, size in enumerate(chunk_sizes)]
+    job = {"base": base, "patches": patches, "calls": calls}
+    per = len(chunk_sizes)
+
+    def finish(results: List[Any]) -> Dict[str, Any]:
+        curve: List[Dict[str, Any]] = []
+        for g, extra in enumerate(grid):
+            chunks = results[g * per:(g + 1) * per]
+            runs = sum(int(c["n"]) for c in chunks)
+            finals = [f for c in chunks for f in c["finals"]]
+            sr_ = (sum(int(c["successes"]) for c in chunks) / runs) if runs else 0.0
+            # Payoff age + interest come from the DETERMINISTIC amortisation
+            # projection, not from Monte Carlo output: the schedule depends only on
+            # (balance, rate, payment, extra), so it is exact and free.
+            proj = _payoff_projection_for({**user_overrides, "EXTRA_MORTGAGE_PAYMENT_ANNUAL": extra},
+                                          extra)
+            curve.append({
+                "extra": extra,
+                "success_rate": sr_,
+                # Binomial standard error, so the UI can say plainly which
+                # differences are inside the noise instead of implying precision
+                # the sample size doesn't support.
+                "success_se": (sr_ * (1.0 - sr_) / n) ** 0.5,
+                "median_final": float(np.median(finals)) if finals else 0.0,
+                "p10_final": float(np.percentile(finals, 10)) if finals else 0.0,
+                "payoff_age": proj.get("payoff_age"),
+                "total_interest": proj.get("total_interest"),
+                "years_saved": proj.get("years_saved_vs_scheduled"),
+            })
+        base_pt = next((c for c in curve if c["extra"] == 0.0), curve[0])
+        for c in curve:
+            c["delta_success"] = c["success_rate"] - base_pt["success_rate"]
+        # Noise floor for a DIFFERENCE of two independent rates.
+        base_se = base_pt.get("success_se", 0.0)
+        for c in curve:
+            se_diff = ((base_se ** 2) + (c.get("success_se", 0.0) ** 2)) ** 0.5
+            c["delta_se"] = se_diff
+            c["significant"] = abs(c["delta_success"]) > 2.0 * se_diff
+        best = max(curve, key=lambda c: c["success_rate"])
+        return {
+            "curve": curve,
+            "baseline_success": base_pt["success_rate"],
+            "baseline_payoff_age": base_pt.get("payoff_age"),
+            "best_extra": best["extra"] if best["extra"] != 0.0 else None,
+            "best_delta": best["success_rate"] - base_pt["success_rate"],
+            "helps": best["success_rate"] > base_pt["success_rate"],
+            # Only claim prepayment helps if the best point clears the noise floor.
+            "helps_significantly": bool(best.get("significant"))
+            and best["success_rate"] > base_pt["success_rate"],
+            "noise_floor_pp": 2.0 * base_se * 100.0,
+            "n_simulations": n,
+        }
+
+    return Plan("mortgage", key, user_overrides, job, finish, store=store)
+
+
 def run_mortgage_paydown_analysis(
     user_overrides: dict,
     n_simulations: int = 500,
@@ -2142,86 +2272,6 @@ def run_mortgage_paydown_analysis(
       "n_simulations": int,
     }
     """
-    if extra_grid is None:
-        extra_grid = [0.0, 6_000.0, 12_000.0, 24_000.0, 36_000.0, 60_000.0]
-    grid = [float(max(0.0, v)) for v in extra_grid]
-    if 0.0 not in grid:
-        grid = [0.0] + grid          # the baseline must be on the curve
-    grid = sorted(set(grid))
-
-    key = (_hashable(user_overrides), int(n_simulations),
-           int(target_retirement_age), tuple(grid))
-    dk = _disk_key("mortgage_paydown", key)
-    hit = _disk_load(dk)
-    if hit is not None:
-        return hit
-
-    curve: List[Dict[str, Any]] = []
-    for i, extra in enumerate(grid):
-        if progress_callback:
-            progress_callback(i / len(grid), f"Extra ${extra:,.0f}/yr")
-        merged = dict(user_overrides)
-        merged["EXTRA_MORTGAGE_PAYMENT_ANNUAL"] = extra
-        try:
-            res = run_full_analysis(
-                merged, n_simulations=n_simulations,
-                target_retirement_age=target_retirement_age,
-            )
-        except Exception:
-            continue
-        pr = res.get("primary_result", {}) or {}
-        # Payoff age + interest come from the DETERMINISTIC amortisation
-        # projection, not from Monte Carlo output: the schedule depends only on
-        # (balance, rate, payment, extra), so it is exact and free -- and the
-        # per-year loan state isn't surfaced in the result dict anyway.
-        proj = _payoff_projection_for(merged, extra)
-        sr_ = float(pr.get("success_rate", 0.0))
-        n = max(1, int(n_simulations))
-        curve.append({
-            "extra": extra,
-            "success_rate": sr_,
-            # Binomial standard error, so the UI can say plainly which
-            # differences are inside the noise instead of implying precision
-            # the sample size doesn't support.
-            "success_se": (sr_ * (1.0 - sr_) / n) ** 0.5,
-            "median_final": float(pr.get("median_final", 0.0)),
-            "p10_final": float(pr.get("p10_final", 0.0)),
-            "payoff_age": proj.get("payoff_age"),
-            "total_interest": proj.get("total_interest"),
-            "years_saved": proj.get("years_saved_vs_scheduled"),
-        })
-
-    if not curve:
-        return {"curve": [], "baseline_success": 0.0, "baseline_payoff_age": None,
-                "best_extra": None, "best_delta": 0.0, "helps": False,
-                "n_simulations": int(n_simulations)}
-
-    base = next((c for c in curve if c["extra"] == 0.0), curve[0])
-    for c in curve:
-        c["delta_success"] = c["success_rate"] - base["success_rate"]
-
-    # Noise floor for a DIFFERENCE of two independent rates.
-    base_se = base.get("success_se", 0.0)
-    for c in curve:
-        se_diff = ((base_se ** 2) + (c.get("success_se", 0.0) ** 2)) ** 0.5
-        c["delta_se"] = se_diff
-        c["significant"] = abs(c["delta_success"]) > 2.0 * se_diff
-
-    best = max(curve, key=lambda c: c["success_rate"])
-    result = {
-        "curve": curve,
-        "baseline_success": base["success_rate"],
-        "baseline_payoff_age": base.get("payoff_age"),
-        "best_extra": best["extra"] if best["extra"] != 0.0 else None,
-        "best_delta": best["success_rate"] - base["success_rate"],
-        "helps": best["success_rate"] > base["success_rate"],
-        # Only claim prepayment helps if the best point clears the noise floor.
-        "helps_significantly": bool(best.get("significant"))
-        and best["success_rate"] > base["success_rate"],
-        "noise_floor_pp": 2.0 * base_se * 100.0,
-        "n_simulations": int(n_simulations),
-    }
-    if progress_callback:
-        progress_callback(1.0, "Mortgage sweep complete")
-    _disk_store(dk, result)
-    return result
+    return execute_plan(plan_mortgage_paydown(user_overrides, n_simulations,
+                                              target_retirement_age, extra_grid),
+                        progress_callback)

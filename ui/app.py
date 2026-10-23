@@ -161,11 +161,9 @@ def _autorun_all(progress_container=None) -> None:
     seeing anything -- every single reload, because Streamlit's session state
     dies with the browser session.
 
-    Warms, in order of how soon the page needs it:
-      1. the main Monte Carlo  (hero metric, success-by-age, every chart)
-      2. the what-if baseline  (only when a lifecycle toggle is on)
-      3. the FI-number sweep   (net-worth-to-retire section)
-      4. the SWR sweep         (safe-withdrawal-rate section)
+    Starts the main Monte Carlo (hero metric, success-by-age, every chart);
+    when it is in, the what-if baseline (only when a lifecycle toggle is on), the
+    FI-number, SWR and mortgage-paydown sweeps follow (see ``_begin_run``).
 
     Results are persisted by ``utils.disk_cache``, so this whole sequence is a
     ONE-TIME cost: later loads (and app restarts, which is when the in-memory
@@ -214,9 +212,6 @@ def _autorun_all(progress_container=None) -> None:
     _pc = progress_container if progress_container is not None else st
     prog = _pc.progress(0.0, text="Preparing your plan… starting simulations")
 
-    # Phase weights: (label, share of the bar). The SWR sweep genuinely
-    # dominates wall-clock on a cold cache, so give it most of the bar rather
-    # than letting it sit at "95%" for a minute.
     def _seg(lo, hi, label):
         def _cb(frac, _msg=None):
             try:
@@ -227,67 +222,9 @@ def _autorun_all(progress_container=None) -> None:
         return _cb
 
     try:
-        from utils.sim_runner import (run_full_analysis, run_whatif_delta,
-                                      run_networth_analysis, run_swr_analysis,
-                                      active_lifecycle_toggles)
-
-        will_whatif = bool(active_lifecycle_toggles(overrides))
-
-        st.session_state.results = run_full_analysis(
-            user_overrides=overrides, n_simulations=n_sims,
-            target_retirement_age=target_age,
-            progress_callback=_seg(0.00, 0.12, "Running the main simulation"),
-        )
-
-        if will_whatif:
-            st.session_state.whatif_results = run_whatif_delta(
-                user_overrides=overrides, n_simulations=n_sims,
-                target_retirement_age=target_age,
-                progress_callback=_seg(0.12, 0.25, "Comparing your what-if baseline"),
-            )
-        else:
-            st.session_state.whatif_results = None
-
-        st.session_state.last_run_inputs_hash = _inputs_fingerprint(overrides, n_sims)
-
-        # FI + SWR are stamped with the same fingerprint their own sections
-        # compute, so each renders as "up to date" and its button starts
-        # inactive rather than inviting a redundant recompute.
-        stamp = _inputs_fingerprint(overrides, n_sims)
-
-        fi = run_networth_analysis(
-            overrides, n_simulations=n_sims,
-            progress_callback=_seg(0.25, 0.45, "Finding your net-worth number"),
-        )
-        if isinstance(fi, dict):
-            fi["_inputs_hash"] = stamp
-            st.session_state["fi_result"] = fi
-
-        swr = run_swr_analysis(
-            overrides, n_simulations=n_sims, target_retirement_age=target_age,
-            progress_callback=_seg(0.45, 0.80, "Finding your safe withdrawal rate"),
-        )
-        if isinstance(swr, dict):
-            swr["_inputs_hash"] = stamp
-            st.session_state["swr_result"] = swr
-
-        # Mortgage-paydown sweep. Uses a higher sim count than the other sweeps
-        # because it reports DIFFERENCES between grid points, and at 1k runs the
-        # binomial noise (~1.5pp) swamps the effect being measured.
-        from utils.sim_runner import run_mortgage_paydown_analysis
-        mp = run_mortgage_paydown_analysis(
-            overrides, n_simulations=max(2000, n_sims),
-            target_retirement_age=target_age,
-            progress_callback=_seg(0.80, 1.00, "Testing extra mortgage payments"),
-        )
-        if isinstance(mp, dict):
-            st.session_state["mortgage_paydown_result"] = mp
-
-        # Let the results render progressively as the user scrolls, matching a
-        # manual run.
-        for _k in [k for k in st.session_state.keys()
-                   if isinstance(k, str) and k.startswith("_lz_")]:
-            st.session_state[_k] = False
+        # The main result first; the what-if baseline and the net-worth, safe-
+        # withdrawal and mortgage sweeps fill in after it (_queue_extras).
+        _begin_run(overrides, n_sims, target_age, _seg(0.0, 1.0, "Running the main simulation"))
     except Exception as e:
         import logging
         logging.getLogger("retirement_ui").exception("Auto-run failed")
@@ -297,6 +234,110 @@ def _autorun_all(progress_container=None) -> None:
         )
     finally:
         prog.empty()
+
+
+def _begin_run(overrides: dict, n_sims: int, target_age: int, progress_callback=None) -> None:
+    """Start a run. The main result's detailed part (trajectories, logs) runs
+    here right away; its success-by-age scan goes to the visitor's browser if
+    its workers are ready (utils/browser_compute.py) -- never waiting for a
+    Pyodide download -- else runs here too. When the main
+    result is in, ``_finish_main`` stores it and queues the other analyses."""
+    from utils import sim_runner as sr
+    from utils import browser_compute as bc
+    bc.cancel(st)                                   # a new run supersedes pending work
+    st.session_state.pop("_extras_pending", None)
+    st.session_state.pop("_main_pending", None)
+    overrides = dict(overrides)
+    plan = sr.plan_full_analysis(overrides, int(n_sims), int(target_age))
+    done = functools.partial(_finish_main, overrides, int(n_sims), int(target_age))
+    if plan.result is not None:
+        done(plan.result)
+    elif bc.ready(st):
+        st.session_state["_main_pending"] = True
+        bc.submit(st, "main", plan, done, run_here=plan.local, progress_callback=progress_callback)
+    else:
+        done(sr.execute_plan(plan, progress_callback))
+
+
+def _finish_main(overrides: dict, n_sims: int, target_age: int, result: dict) -> None:
+    st.session_state.results = result
+    st.session_state.whatif_results = None
+    # The input fingerprint lets the page flag results as stale after a later
+    # sidebar edit (mirrors the FI section's staleness guard).
+    st.session_state.last_run_inputs_hash = _inputs_fingerprint(overrides, n_sims)
+    st.session_state.pop("_main_pending", None)
+    # Reset lazy-load flags so fresh results render PROGRESSIVELY (only the
+    # above-fold charts in the burst; the rest load on scroll).
+    for _k in [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith("_lz_")]:
+        st.session_state[_k] = False
+    _queue_extras(overrides, n_sims, target_age, result)
+
+
+def _queue_extras(overrides: dict, n_sims: int, target_age: int, main_result: dict) -> None:
+    """The analyses that follow the main result: what-if baseline (lifecycle
+    toggles on), FI number, safe withdrawal rate, mortgage paydown. Each goes
+    to the browser, or -- without one -- to ``_server_extras_step``, which runs
+    them here one per script run after the page is drawn, so the main result
+    never waits for them."""
+    from utils import sim_runner as sr
+    from utils import browser_compute as bc
+    # FI + SWR carry the fingerprint their own sections compute, so each renders
+    # as "up to date" and its button starts inactive.
+    stamp = _inputs_fingerprint(overrides, n_sims)
+
+    def keep(key, stamped):
+        def store(res):
+            if stamped and isinstance(res, dict):
+                res = {**res, "_inputs_hash": stamp}
+            st.session_state[key] = res
+        return store
+
+    def whatif(baseline):
+        st.session_state.whatif_results = sr.whatif_from(overrides, main_result, baseline)
+
+    plans = []
+    if sr.active_lifecycle_toggles(overrides):
+        plans.append(("whatif", sr.plan_full_analysis(sr.whatif_baseline_overrides(overrides),
+                                                      n_sims, target_age), whatif))
+    plans.append(("fi", sr.plan_networth_analysis(overrides, n_simulations=n_sims), keep("fi_result", True)))
+    plans.append(("swr", sr.plan_swr_analysis(overrides, n_sims, target_age), keep("swr_result", True)))
+    # Higher sim count: this sweep reports DIFFERENCES between grid points, and
+    # at 1k runs the binomial noise (~1.5pp) swamps the effect being measured.
+    plans.append(("mortgage", sr.plan_mortgage_paydown(overrides, max(2000, n_sims), target_age),
+                  keep("mortgage_paydown_result", False)))
+    server = []
+    for kind, plan, store in plans:
+        if plan.result is not None:
+            store(plan.result)
+        elif bc.usable(st):
+            bc.submit(st, kind, plan, store)
+        else:
+            server.append((kind, plan, store))
+    st.session_state["_extras_pending"] = server
+
+
+def _server_extras_step() -> None:
+    """Without a browser to help: one queued analysis per script run, after the
+    page is drawn, then rerun to show it."""
+    queue = st.session_state.get("_extras_pending") or []
+    if not queue:
+        return
+    kind, plan, store = queue.pop(0)
+    from utils import sim_runner as sr
+    try:
+        store(sr.execute_plan(plan))
+    except Exception:
+        import logging
+        logging.getLogger("retirement_ui").exception("Background analysis %s failed", kind)
+    st.rerun()
+
+
+def _bc_poll_body() -> None:
+    """While browser jobs are pending: every few seconds, let the server take
+    over any the browser can't finish (unavailable, or past its deadline)."""
+    from utils import browser_compute as bc
+    if bc.take_over_one(st):
+        st.rerun()
 
 
 def _run_simulation(progress_container=None) -> None:
@@ -333,55 +374,17 @@ def _run_simulation(progress_container=None) -> None:
     prog = _pc.progress(0.0, text="Running Monte Carlo… 0%")
 
     try:
-        from utils.sim_runner import run_full_analysis, run_whatif_delta, active_lifecycle_toggles
-        target_age = st.session_state.user_overrides.get("TARGET_RETIREMENT_AGE", 55)
-        n_sims = st.session_state.get("n_simulations", SIM_COUNT_DEFAULT)
-        overrides = st.session_state.user_overrides
-
-        # Decide the phase split up front so the bar is monotonic: when a what-if
-        # baseline will also run, the main analysis fills 0→60% and the baseline
-        # 60→100%; otherwise the main analysis fills the whole bar.
-        will_whatif = bool(active_lifecycle_toggles(overrides))
-        main_hi = 0.6 if will_whatif else 1.0
-
-        def _show(f):
-            f = min(1.0, max(0.0, float(f)))
-            prog.progress(f, text=f"Running Monte Carlo… {int(round(f * 100))}%")
+        target_age = int(st.session_state.user_overrides.get("TARGET_RETIREMENT_AGE", 55))
+        n_sims = int(st.session_state.get("n_simulations", SIM_COUNT_DEFAULT))
 
         def _cb(frac, msg):
             try:
-                _show(min(1.0, max(0.0, float(frac))) * main_hi)
+                f = min(1.0, max(0.0, float(frac)))
+                prog.progress(f, text=f"Running Monte Carlo… {int(round(f * 100))}%")
             except Exception:
                 pass
 
-        st.session_state.results = run_full_analysis(
-            user_overrides=overrides,
-            n_simulations=int(n_sims),
-            target_retirement_age=int(target_age),
-            progress_callback=_cb,
-        )
-        if will_whatif:
-            def _cb2(frac, msg):
-                try:
-                    _show(main_hi + min(1.0, max(0.0, float(frac))) * (1.0 - main_hi))
-                except Exception:
-                    pass
-            st.session_state.whatif_results = run_whatif_delta(
-                user_overrides=overrides,
-                n_simulations=int(n_sims),
-                target_retirement_age=int(target_age),
-                progress_callback=_cb2,
-            )
-        else:
-            st.session_state.whatif_results = None
-        # Record the input fingerprint so the main panel can flag stale results
-        # after any later sidebar edit (mirrors the FI section's staleness guard).
-        st.session_state.last_run_inputs_hash = _inputs_fingerprint(overrides, int(n_sims))
-        # Reset lazy-load flags so the fresh results render PROGRESSIVELY every
-        # run (only the above-fold charts in the burst; the rest load on scroll)
-        # — otherwise sticky flags would re-render all loaded sections at once.
-        for _k in [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith("_lz_")]:
-            st.session_state[_k] = False
+        _begin_run(st.session_state.user_overrides, n_sims, target_age, _cb)
     except Exception as e:
         # Report to the user and the server log, then CLEAR the run state — the
         # same cleanup the validation-failure branch above does, so the top bar
@@ -430,6 +433,9 @@ def _config_locked(fn):
         with CONFIG_LOCK:
             return fn(*args, **kwargs)
     return _locked
+
+
+_bc_poll = st.fragment(run_every=3)(_config_locked(_bc_poll_body)) if hasattr(st, "fragment") else None
 
 
 # Sections the phone bar can jump to: (tile key suffix, chip label).
@@ -843,6 +849,14 @@ def main() -> None:
         _save_to_device()
         return
 
+    # Browser computation: drawn first on every full-mode run (hidden) so its
+    # workers stay alive across reruns -- including during the guided setup,
+    # which gives them time to download Pyodide before the first run.
+    from utils import browser_compute
+    browser_compute.render(st)
+    if browser_compute.pending(st) and _bc_poll is not None:
+        _bc_poll()
+
     # New planner visitors get the guided setup first, starting from their
     # check-up answers if they used it. It replaces the planner and its side
     # panel until they finish or skip.
@@ -912,6 +926,8 @@ def main() -> None:
     # inputs) and BEFORE the top bar / main panel paint (so they see results).
     if not spending_view:
         _autorun_all(progress_container=progress_slot)
+    if st.session_state.get("_main_pending"):
+        progress_slot.progress(0.9, text="Finishing in your browser…")
 
     # Now that the sidebar has synced user_overrides, paint the top bar.
     with topbar_body:
@@ -1113,6 +1129,14 @@ def main() -> None:
 
     # Arrow-key navigation for the sidebar sections (injected once).
     _inject_keyboard_nav()
+
+    # After the page is drawn: a browser job the server must take over, then
+    # the analyses queued for the server (one per run, each followed by a rerun).
+    if browser_compute.take_over_one(st):
+        st.rerun()
+    if browser_compute.unsent(st):
+        st.rerun()                      # hand the new jobs to the browser
+    _server_extras_step()
 
 
 if __name__ == "__main__":

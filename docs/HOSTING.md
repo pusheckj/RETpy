@@ -84,6 +84,9 @@ your statements folder.
 |---|---|---|
 | `RETIREMENT_SIM_HOSTED` | off locally; on automatically on Streamlit Cloud | Spending tab takes uploads only; no server folders; 500 simulations by default |
 | `RETIREMENT_SIM_MAX_WORKERS` | 8 locally, 2 hosted | Cap on parallel simulation processes (`1` = never fork) |
+| `RETIREMENT_SIM_BROWSER_COMPUTE` | on when hosted, off locally | `0`/`1`: run simulation batches in visitors' browsers |
+| `RETIREMENT_SIM_PYODIDE_URL` | jsDelivr, Pyodide 0.27.7 | Where browsers load Pyodide from (must end in `/full/`-style folder with `pyodide.js`) |
+| `RETIREMENT_SIM_BC_VERIFY` | off | `1`: the server recomputes every browser batch and logs whether it matches (diagnostics; doubles the work) |
 | `RETIREMENT_SIM_PROFILE` | `~/.config/retirement-sim/my_profile.json` | Your private profile (local only) |
 | `SPENDING_DATA_DIR` | from `~/.config/retirement-sim/spending.json` | Your statements folder (local only; ignored when hosted) |
 
@@ -91,6 +94,15 @@ your statements folder.
 
 - **Sleeping:** free apps sleep after a period without visitors; the first
   visit afterwards wakes it in about 30 seconds.
+- **Computation in visitors' browsers:** the hosted app runs most of the
+  simulation work in each visitor's own browser, using the same Python engine
+  compiled to WebAssembly (Pyodide, loaded once from cdn.jsdelivr.net, about
+  12 MB, then cached) in parallel Web Workers. The server keeps the quick,
+  detailed part of each result. Same code and same random seeds, so the numbers
+  match the server's (checked: identical, or within 2 parts in 10^15 for dollar
+  medians). The visitor's inputs never leave their browser for this. If a
+  browser can't help (old browser, blocked CDN, too slow), the server does the
+  work instead; the main result never waits for the download.
 - **Speed:** the free tier has little CPU. 500 simulations is the hosted
   default; visitors can pick more and wait longer.
 - **Streamlit version:** `ui/requirements.txt` pins Streamlit because the
