@@ -5,9 +5,19 @@ the first time; after that, every `git push` redeploys the app.
 
 ## What visitors get
 
-- The retirement planner, starting from the built-in sample household. Their
-  inputs live in their own browser session; *Settings → Save* downloads them
-  to their computer.
+- A first screen that asks what they want: the simple **money check-up**
+  (savings rate, emergency fund, which debt to pay first, where the next
+  dollar goes) or the **retirement planner**. A *Money check-up | Retirement
+  planner* switch at the top right of every page flips between them; each
+  keeps its own answers.
+- The retirement planner opens with a short guided setup (10 screens, a few
+  questions each, with a "how to answer" line under every question). Anyone
+  coming from the check-up starts with those answers filled in. *Skip for now*
+  goes straight to the planner; a banner offers to finish later.
+- Their inputs live in their own browser session. *Remember me on this device*
+  keeps them (and how far they got in the setup) in that browser only, so
+  they're back after a reload or an app update; *Settings → Save* downloads
+  them to their computer.
 - A Spending tab that analyses statements **they upload** (CSV, PDF, optional
   rules JSON). Files are parsed in memory for that session only and never
   saved. The hosted app never reads the server's folders. *Use my actual

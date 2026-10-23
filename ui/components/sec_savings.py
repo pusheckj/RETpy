@@ -6,14 +6,14 @@ try:
     from utils.formatting import money, money_md
     from utils.derived import (
         compute_total_income, compute_taxes, compute_expenses_today,
-        compute_disposable, auto_allocate_savings, get_limit,
+        compute_disposable, auto_allocate_savings, get_limit, KEEP_AMOUNTS_MODE,
     )
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.derived import (  # type: ignore
         compute_total_income, compute_taxes, compute_expenses_today,
-        compute_disposable, auto_allocate_savings, get_limit,
+        compute_disposable, auto_allocate_savings, get_limit, KEEP_AMOUNTS_MODE,
     )
 
 try:
@@ -63,7 +63,7 @@ def render_body(st) -> None:
         )
 
     # ---- Mode selector ----
-    modes = ["Auto-allocate (recommended)", "Custom %", "Manual amounts"]
+    modes = ["Auto-allocate (recommended)", KEEP_AMOUNTS_MODE, "Custom %", "Manual amounts"]
     current_mode = str(get_override(st, "SAVINGS_MODE", modes[0]))
     if current_mode not in modes:
         current_mode = modes[0]
@@ -73,6 +73,8 @@ def render_body(st) -> None:
 
     if mode == "Auto-allocate (recommended)":
         _render_auto(st, disposable, overrides)
+    elif mode == KEEP_AMOUNTS_MODE:
+        _render_keep_amounts(st, overrides)
     elif mode == "Custom %":
         _render_custom_pct(st, disposable, overrides)
     else:
@@ -285,6 +287,35 @@ def _manual_amount(st, widget_key: str, cfg_key: str, label: str,
 # bound rather than an age-derived one so an age edit can never push an already
 # stored widget value above the max (which would crash the section).
 _MANUAL_401K_MAX = 40_000
+
+
+def _render_keep_amounts(st, overrides: dict) -> None:
+    """Your own 401(k) / HSA / IRA amounts, and everything else you don't
+    spend invested in a brokerage account. The engine sweeps the un-spent
+    residual for any SAVINGS_MODE starting with "Auto"; the brokerage floor is
+    set to 0 so it gets exactly what's left."""
+    st.caption("Your 401(k), HSA and IRA stay at these amounts. Whatever else you don't "
+               "spend is invested in a regular brokerage account each year.")
+    has_partner = safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0
+    c1, c2 = st.columns(2)
+    with c1:
+        _manual_amount(st, "sv_manual_your_401k", "YOUR_401K_CONTRIBUTION",
+                       "Your 401(k) ($/yr)", _MANUAL_401K_MAX, 500)
+        _manual_amount(st, "sv_manual_your_hsa", "YOUR_HSA_CONTRIBUTION",
+                       "Your HSA ($/yr)", 10_000, 250)
+        _manual_amount(st, "sv_manual_your_roth", "YOUR_BACKDOOR_ROTH",
+                       "Your Roth IRA / backdoor ($/yr)", 10_000, 500)
+    with c2:
+        if has_partner:
+            _manual_amount(st, "sv_manual_partner_401k", "PARTNER_401K_CONTRIBUTION",
+                           "Partner 401(k) ($/yr)", _MANUAL_401K_MAX, 500)
+            _manual_amount(st, "sv_manual_partner_roth", "PARTNER_ROTH_CONTRIBUTION",
+                           "Partner Roth IRA ($/yr)", 10_000, 500)
+    if not has_partner:
+        set_override(st, "PARTNER_401K_CONTRIBUTION", 0)
+        set_override(st, "PARTNER_ROTH_CONTRIBUTION", 0)
+    set_override(st, "YOUR_BROKERAGE_CONTRIBUTION", 0)
+    set_override(st, "PARTNER_BROKERAGE_CONTRIBUTION", 0)
 
 
 def _render_manual(st, disposable: int, overrides: dict) -> None:

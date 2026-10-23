@@ -44,7 +44,7 @@ CATEGORIES = [
     Category("Other / miscellaneous", "SPEND_OTHER_MONTHLY",
              ("Insurance", "Home & garden", "Pets", "Fees & interest", "Cash & ATM",
               "People & shared", "Other"),
-             "se_other", 300, 5_000, 25),
+             "se_other", 300, 20_000, 25),
     # The engine spends PARTNER_OTHER_MONTHLY; the partner-savings math nets
     # PARTNER_MONTHLY_SPENDING out of the partner's pay (config.py: the two are
     # independent knobs that must agree). Not in your own statements, so the

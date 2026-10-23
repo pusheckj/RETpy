@@ -279,6 +279,13 @@ def get_limit(name: str, age: int = 30, family: bool = True) -> int:
     return 0
 
 
+# Savings modes (components/sec_savings.py). The engine sweeps un-spent income
+# into the brokerage for any mode starting with "Auto"; this one keeps the
+# user's own 401(k) / HSA / IRA amounts instead of auto_allocate_savings'.
+AUTO_ALLOCATE_MODE = "Auto-allocate (recommended)"
+KEEP_AMOUNTS_MODE = "Auto-invest what's left (keep my amounts)"
+
+
 def auto_allocate_savings(disposable: int, overrides: dict) -> Dict[str, int]:
     """Default allocation rule: max tax-advantaged first, residual to brokerage.
 

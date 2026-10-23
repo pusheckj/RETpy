@@ -550,6 +550,9 @@ def _resolve_mode():
         from components.profile_picker import load_personal_profile
         if not is_hosted() and load_personal_profile() is not None:
             st.session_state.app_mode = "full"
+            from components import guided_setup
+            if not guided_setup.started(st):
+                guided_setup.mark_done(st)       # the owner's planner is already set up
             return "full"
     except Exception:
         pass
@@ -585,6 +588,12 @@ def _restore_from_device(store) -> None:
             from utils.widget_sync import sync_widgets_from_overrides
             st.session_state.user_overrides = deserialize_overrides(data["full"])
             sync_widgets_from_overrides(st)
+        from components import guided_setup
+        setup = guided_setup.restore(data.get("setup"))
+        if setup:
+            st.session_state[guided_setup.STATE] = setup
+        elif isinstance(data.get("full"), str):
+            guided_setup.mark_done(st)           # saved before the walkthrough existed
     except Exception:  # an unreadable saved copy must never break the app
         pass
 
@@ -601,6 +610,9 @@ def _save_to_device() -> None:
         from utils.profile_io import serialize_overrides
         payload["full"] = serialize_overrides(st.session_state.user_overrides)
         st.session_state._full_touched = True
+    setup = st.session_state.get("setup")
+    if isinstance(setup, dict):
+        payload["setup"] = {k: setup.get(k) for k in ("status", "step", "seen", "checkup")}
     try:
         from utils import device_store
         device_store.save(st, payload)
@@ -634,18 +646,33 @@ def _privacy_controls(_st) -> None:
         st.rerun()
 
 
-def _switch_mode(mode) -> None:
-    st.session_state.app_mode = mode
-    st.rerun()
+MODES = {"simple": "Money check-up", "full": "Retirement planner"}
+
+
+def _on_mode_switch(key: str) -> None:
+    picked = st.session_state.get(key)
+    st.session_state.app_mode = next(m for m, label in MODES.items() if label == picked)
+
+
+def _mode_switch(current: str, in_gutter: bool = False) -> None:
+    """Money check-up | Retirement planner: the same switch, top right, on the
+    check-up, the setup walkthrough and the planner. Each version keeps its own
+    answers; switching never loses them. A horizontal radio styled as a
+    segmented toggle (it always has a choice, unlike st.segmented_control, and
+    Streamlit's AppTest can rerun it). ``in_gutter``: the planner's sits in the
+    page's top gutter (theme.css), so its top card keeps the side panel's top edge."""
+    key = f"mode_switch_{current}"
+    st.session_state[key] = MODES[current]
+    with st.container(key="mc-mode-switch-gutter" if in_gutter else "mc-mode-switch",
+                      horizontal=True, horizontal_alignment="right"):
+        st.radio("Version", list(MODES.values()), key=key, horizontal=True,
+                 label_visibility="collapsed", on_change=_on_mode_switch, args=(key,))
 
 
 def _render_simple() -> None:
     """The simple money check-up (components.simple_mode), with a way across."""
     with st.container(key="mc-simple-root"):
-        with st.container(key="mc-simple-nav", horizontal=True, horizontal_alignment="right"):
-            if st.button("Plan my retirement instead", key="to_full_mode", type="tertiary",
-                         icon=":material/arrow_forward:"):
-                _switch_mode("full")
+        _mode_switch("simple")
         _safe_render("components.simple_mode")
         with st.container(border=True, key="mc-tile-simple-privacy"):
             st.markdown('<div class="mc-section">Your data</div>', unsafe_allow_html=True)
@@ -654,9 +681,6 @@ def _render_simple() -> None:
 
 def _topbar_settings(_st) -> None:
     """Theme / profile / save-load — lives in the top bar's Settings popover."""
-    if _st.button("Switch to the simple money check-up", key="to_simple_mode",
-                  icon=":material/swap_horiz:", width="stretch"):
-        _switch_mode("simple")
     _privacy_controls(_st)
     _st.divider()
     _safe_render("components.theme_toggle")
@@ -819,6 +843,20 @@ def main() -> None:
         _save_to_device()
         return
 
+    # New planner visitors get the guided setup first, starting from their
+    # check-up answers if they used it. It replaces the planner and its side
+    # panel until they finish or skip.
+    from components import guided_setup
+    if not guided_setup.started(st):
+        guided_setup.begin(st, st.session_state.get("simple_inputs"))
+    if guided_setup.active(st):
+        with st.container(key="mc-setup-root"):
+            _mode_switch("full")
+            _safe_render("components.guided_setup")
+        _save_to_device()
+        return
+    _mode_switch("full", in_gutter=True)
+
     # Full-width slot for the Run-simulation progress bar. Created BEFORE the top
     # bar (whose Run button fires inline during its own render) so the bar has the
     # whole content width — inside the narrow top-bar column its label wrapped at
@@ -896,6 +934,9 @@ def main() -> None:
     if spending_view:
         _safe_render("components.spending_dashboard")
         return
+
+    if guided_setup.skipped(st):
+        guided_setup.render_banner(st)
 
     # -------- Main panel — organized into topic sections --------
     # Deterministic charts auto-update from sidebar inputs; results-dependent

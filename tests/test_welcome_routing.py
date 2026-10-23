@@ -23,7 +23,9 @@ def test_hosted_visitor_sees_the_welcome_screen_then_the_simple_page(monkeypatch
     next(b for b in at.button if b.label == "Start the money check-up").click().run()
     assert not at.exception
     assert at.session_state["app_mode"] == "simple"
-    assert "Plan my retirement instead" in [b.label for b in at.button]
+    # the version switch replaces the old one-way link
+    assert at.radio(key="mode_switch_simple").value == "Money check-up"
+    assert at.radio(key="mode_switch_simple").options == ["Money check-up", "Retirement planner"]
 
 
 def test_welcome_paths_cover_both_versions():

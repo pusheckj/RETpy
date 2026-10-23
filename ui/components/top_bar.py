@@ -63,12 +63,14 @@ def _num(value) -> float:
 def _resolve_names(profile: Optional[str]) -> str:
     """Parse a display name from the profile label.
 
-    "My situation (You & Partner)" -> "You & Partner"; else the profile as-is;
-    else "Household". The personal profile's label comes from its JSON file.
+    "My situation (You & Partner)" -> "You & Partner"; "Custom (...)" -> "Your
+    plan"; else the profile as-is; else "Household". The personal profile's label comes from its JSON file.
     """
     try:
         if profile:
             s = str(profile)
+            if s.startswith("Custom"):      # values the visitor entered (setup, JSON load)
+                return "Your plan"
             if "(" in s and ")" in s:
                 inner = s[s.index("(") + 1:s.rindex(")")].strip()
                 if inner:

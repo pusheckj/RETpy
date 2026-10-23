@@ -1000,7 +1000,7 @@ footer { display: none !important; }
    White pill container; active segment = soft teal tint. The
    radio circle is hidden; the whole segment is the click target.
    ========================================================= */
-[role="radiogroup"].mc-seg {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) {
     display: inline-flex !important;
     background: var(--mc-tile);
     border: 1px solid var(--mc-tile-border);
@@ -1009,27 +1009,27 @@ footer { display: none !important; }
     gap: 2px;
     box-shadow: 0 2px 8px rgba(120, 96, 52, 0.08);
 }
-[role="radiogroup"].mc-seg label {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label {
     margin: 0 !important;
     padding: 7px 16px !important;
     border-radius: 9px;
     cursor: pointer;
     transition: background-color .15s ease, color .15s ease;
 }
-[role="radiogroup"].mc-seg label > div:first-child { display: none !important; }  /* radio circle */
-[role="radiogroup"].mc-seg label input { position: absolute; opacity: 0; width: 0; height: 0; }
-[role="radiogroup"].mc-seg label,
-[role="radiogroup"].mc-seg label div,
-[role="radiogroup"].mc-seg label p {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label > div:first-child { display: none !important; }  /* radio circle */
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label input { position: absolute; opacity: 0; width: 0; height: 0; }
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label,
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label div,
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label p {
     color: #64748b !important;
     font-weight: 600 !important;
 }
-[role="radiogroup"].mc-seg label:has(input:checked) {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label:has(input:checked) {
     background: rgba(13, 148, 136, 0.14);
 }
-[role="radiogroup"].mc-seg label:has(input:checked),
-[role="radiogroup"].mc-seg label:has(input:checked) div,
-[role="radiogroup"].mc-seg label:has(input:checked) p {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label:has(input:checked),
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label:has(input:checked) div,
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label:has(input:checked) p {
     color: #0d9488 !important;
 }
 
@@ -1377,7 +1377,7 @@ footer { display: none !important; }
 /* The same zero-height style/script blocks sit above these pages: lift them
    out of the flow here too (see the page-frame rule at the top). */
 [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
-  > .stElementContainer:has(~ [data-testid="stLayoutWrapper"] > :is(.st-key-mc-welcome, .st-key-mc-simple-root)):not(:has([data-testid="stProgress"])) {
+  > .stElementContainer:has(~ [data-testid="stLayoutWrapper"] > :is(.st-key-mc-welcome, .st-key-mc-simple-root, .st-key-mc-setup-root)):not(:has([data-testid="stProgress"])) {
     position: absolute;
     width: 0;
     overflow: hidden;
@@ -1417,7 +1417,7 @@ footer { display: none !important; }
 /* The zero-height style/script blocks above these pages: out of the flow, as
    above the planner's top card. */
 [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]
-  > .stElementContainer:has(~ [data-testid="stLayoutWrapper"] > :is(.st-key-mc-welcome, .st-key-mc-simple-root)):not(:has([data-testid="stProgress"])) {
+  > .stElementContainer:has(~ [data-testid="stLayoutWrapper"] > :is(.st-key-mc-welcome, .st-key-mc-simple-root, .st-key-mc-setup-root)):not(:has([data-testid="stProgress"])) {
     position: absolute;
     width: 0;
     overflow: hidden;
@@ -1444,11 +1444,58 @@ footer { display: none !important; }
 .st-key-mc-simple-root { max-width: 980px; margin: 0 auto; }
 @media (max-width: 640px) {
     /* No sidebar on these pages, so no reopen button to clear at the top. */
-    .stApp:has(:is(.st-key-mc-welcome, .st-key-mc-simple-root)) [data-testid="stMainBlockContainer"] {
+    .stApp:has(:is(.st-key-mc-welcome, .st-key-mc-simple-root, .st-key-mc-setup-root)) [data-testid="stMainBlockContainer"] {
         padding-top: 24px;
     }
     .st-key-mc-welcome { margin-top: 0; }
     .mc-welcome-head h1 { font-size: 26px; }
+}
+
+/* ---------- Version switch + guided setup (app._mode_switch, components.guided_setup) ---------- */
+.st-key-mc-mode-switch { margin-bottom: 4px; }
+/* Planner: in the 48px top gutter (out of the flow), so the top card keeps the
+   side panel's top edge. */
+[data-testid="stMainBlockContainer"] { position: relative; }
+[data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-gutter) {
+    position: absolute; top: 2px; right: 48px; z-index: 6; width: auto;
+}
+[class*="st-key-mc-mode-switch"] [role="radiogroup"] label { padding: 5px 14px !important; }
+.st-key-mc-mode-switch-gutter [role="radiogroup"] { padding: 2px !important; }
+.st-key-mc-mode-switch-gutter [role="radiogroup"] label { padding: 3px 12px !important; }
+.mc-setup-bar { height: 6px; border-radius: 999px; background: var(--mc-tile-border); overflow: hidden; margin: 14px 0 4px; }
+.mc-setup-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--mc-teal); }
+.st-key-mc-setup-root { max-width: 720px; margin: 0 auto; }
+.st-key-mc-setup {
+    background: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+    border-radius: var(--mc-radius-tile) !important;
+    box-shadow: var(--mc-tile-shadow) !important;
+    padding: 22px 28px 24px !important;
+}
+.mc-setup-count {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--mc-teal); margin-bottom: -8px;
+}
+.mc-setup-intro { color: var(--mc-muted); font-size: 15px; line-height: 1.45; margin: -6px 0 4px; }
+.st-key-mc-setup [data-testid="stCaptionContainer"] { margin-top: -10px; }
+.st-key-mc-setup-nav { margin-top: 8px; gap: 8px; }
+.st-key-mc-setup-nav > :last-child { margin-left: auto; }          /* Next sits on the right */
+.st-key-mc-setup-banner {
+    background: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+    border-left: 4px solid var(--mc-teal) !important;
+    border-radius: var(--mc-radius-tile) !important;
+    padding: 14px 22px !important;
+    margin-bottom: 24px;
+}
+@media (max-width: 640px) {
+    .st-key-mc-setup { padding: 16px !important; }
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-gutter) { top: 8px; right: 12px; }
+    [class*="st-key-mc-mode-switch"] [role="radiogroup"] label { padding: 5px 10px !important; }
+    [class*="st-key-mc-mode-switch"] [role="radiogroup"] p { font-size: 14px !important; }
+}
+@media (max-height: 500px) and (min-width: 641px) {
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-gutter) { top: 8px; right: 20px; }
 }
 
 /* ---------- Simple mode ("Get my money in order") ---------- */
