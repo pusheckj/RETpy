@@ -10,8 +10,10 @@ except ImportError:  # pragma: no cover
 
 try:
     from utils.overrides import get_override, set_override
+    from utils.expense_categories import CATEGORIES
 except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
+    from ui.utils.expense_categories import CATEGORIES  # type: ignore
 
 
 def _section_label(st, txt):
@@ -32,7 +34,26 @@ def _money_input(st, label, widget_key, override_key, default, max_value, step,
     return safe_int(v)
 
 
+def _statement_sync(st, slot) -> None:
+    """Do the monthly inputs match your statements? Drawn into ``slot`` at the
+    top of the section, but only after the inputs below have stored this run's
+    values, so the answer is never one edit behind."""
+    try:
+        from components.spending_dashboard import statement_data, sync_control
+    except ImportError:  # pragma: no cover
+        from ui.components.spending_dashboard import statement_data, sync_control  # type: ignore
+    data = statement_data(st)
+    with slot:
+        if data is None:
+            st.caption("Add your statements in the Spending tab to fill these in from "
+                       "what you actually spend.")
+        else:
+            sync_control(st, data, "se_use_actual")
+
+
 def render_body(st) -> None:
+    sync_slot = st.container()
+
     # ----- Housing -----
     _section_label(st, "Housing")
     owns_default = safe_int(get_override(st, "HOME_VALUE", 0), 0) > 0
@@ -64,22 +85,26 @@ def render_body(st) -> None:
                      1_500, 20_000, 50)
 
     # ----- Spending categories -----
+    # One input per category in utils/expense_categories.py -- the same list
+    # the Spending tab groups your statements by.
     _section_label(st, "Monthly spending")
-    c3, c4 = st.columns(2)
-    with c3:
-        _money_input(st, "Utilities", "se_utilities", "SPEND_UTILITIES_MONTHLY",
-                     200, 2_000, 25, mirror_key="UTILITIES_MONTHLY")
-        _money_input(st, "Food & groceries", "se_food", "SPEND_FOOD_MONTHLY",
-                     900, 10_000, 50)
-        _money_input(st, "Transportation", "se_transport", "SPEND_TRANSPORT_MONTHLY",
-                     500, 5_000, 50)
-    with c4:
-        _money_input(st, "Healthcare premiums", "se_health", "SPEND_HEALTH_MONTHLY",
-                     400, 5_000, 25)
-        _money_input(st, "Entertainment / discretionary", "se_discretionary",
-                     "SPEND_DISCRETIONARY_MONTHLY", 600, 10_000, 50)
-        _money_input(st, "Other / miscellaneous", "se_other", "SPEND_OTHER_MONTHLY",
-                     300, 5_000, 25)
+    has_partner = safe_int(get_override(st, "PARTNER_AGE", 0), 0) > 0
+    shown = [c for c in CATEGORIES if has_partner or not c.partner_only]
+    half = (len(shown) + 1) // 2
+    for col, cats in zip(st.columns(2), (shown[:half], shown[half:])):
+        with col:
+            for c in cats:
+                _money_input(st, c.label, c.widget, c.key, c.default, c.max_value, c.step,
+                             help_text=c.help, mirror_key=c.mirror or None)
+    if not has_partner:
+        # Single household: no partner spending. The engine adds this key to
+        # every year's expenses, so leaving its $1,500 default would spend
+        # money for a partner who doesn't exist.
+        for c in CATEGORIES:
+            if c.partner_only:
+                for key in filter(None, (c.key, c.mirror)):
+                    set_override(st, key, 0)
+    _statement_sync(st, sync_slot)
 
     # ----- Children -----
     _section_label(st, "Children")
@@ -163,11 +188,8 @@ def render_body(st) -> None:
     total_monthly = total_annual / 12.0
 
     # Breakdown, so the total is auditable rather than a mystery figure.
-    monthly_categories = sum(safe_int(overrides.get(k, 0), 0) for k in (
-        "SPEND_UTILITIES_MONTHLY", "SPEND_FOOD_MONTHLY",
-        "SPEND_TRANSPORT_MONTHLY", "SPEND_HEALTH_MONTHLY",
-        "SPEND_DISCRETIONARY_MONTHLY", "SPEND_OTHER_MONTHLY",
-    ))
+    monthly_categories = sum(safe_int(overrides.get(c.key, 0), 0)
+                             for c in CATEGORIES if not c.partner_only)
     monthly_housing = (safe_int(overrides.get("MORTGAGE_MONTHLY", 0), 0)
                        if owns else safe_int(overrides.get("SPEND_RENT_MONTHLY", 0), 0))
     monthly_partner = safe_int(
@@ -190,8 +212,9 @@ def render_body(st) -> None:
         st.metric("Total per month", f"${total_monthly:,.0f}")
 
     parts = [f"housing {money_md(monthly_housing * 12)}",
-             f"living {money_md(monthly_categories * 12)}",
-             f"partner {money_md(monthly_partner * 12)}"]
+             f"living {money_md(monthly_categories * 12)}"]
+    if monthly_partner > 0:
+        parts.append(f"partner {money_md(monthly_partner * 12)}")
     if monthly_kids > 1:
         parts.append(f"children {money_md(monthly_kids * 12)}")
     st.caption("Per year: " + " · ".join(parts)

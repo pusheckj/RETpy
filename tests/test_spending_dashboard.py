@@ -465,24 +465,73 @@ def test_every_category_maps_to_an_expense_bucket():
     assert set(sr.CATEGORIES) <= mapped
 
 
-def test_bucket_labels_match_the_expenses_section():
-    """If the Expenses section renames an input, this tab must follow."""
+def test_buckets_and_inputs_come_from_one_list():
+    """The tab's buckets, the Expenses inputs and the widget sync share one list,
+    so a category can't exist on one screen and not the other."""
+    from utils import expense_categories as ec
+    from utils.widget_sync import DIRECT_MAPPINGS
+    assert [g for g, _, _ in sd.EXPENSE_GROUPS] == [ec.HOUSING] + [c.label for c in ec.CATEGORIES]
+    for c in ec.CATEGORIES:
+        assert DIRECT_MAPPINGS[c.widget][0] == c.key
+    for key, (widget, _max) in ec.INPUTS.items():
+        assert DIRECT_MAPPINGS[widget][0] == key
     src = open(os.path.join(UI, "components", "sec_expenses.py"), encoding="utf-8").read()
-    for label, keys, _ in sd.EXPENSE_GROUPS:
-        assert all(k in src for k in keys), keys
-        if label != "Partner spending":          # no sidebar input; tied by its plan key only
-            assert f'"{label}"' in src, label
+    assert "for c in CATEGORIES" in src
 
 
-def test_plan_vs_actual_per_bucket():
+def test_actual_plan_per_input():
     tx = _dash_tx()
     jul = pd.Period("2026-07", "M")
-    ov = {"MORTGAGE_MONTHLY": 2100, "SPEND_FOOD_MONTHLY": 100, "SPEND_UTILITIES_MONTHLY": 30}
-    g = sd.group_summary(tx, jul, jul, [jul], ov).set_index("Expense category")
-    assert (g.loc["Housing", "Your plan"], g.loc["Housing", "Actual"]) == (2100.0, 2000.0)
-    assert g.loc["Food & groceries", "Actual"] == pytest.approx(39.0)
-    assert g.loc["Food & groceries", "Difference"] == pytest.approx(-61.0)
+    a = sd.actual_plan(tx, [jul])
+    assert a["MORTGAGE_MONTHLY"] == 2000 and "SPEND_RENT_MONTHLY" not in a
+    assert a["SPEND_FOOD_MONTHLY"] == 39 and a["SPEND_DISCRETIONARY_MONTHLY"] == 50
+    assert a["SPEND_UTILITIES_MONTHLY"] == 0              # paybacks beat bills: inputs can't go negative
+    assert "PARTNER_OTHER_MONTHLY" not in a               # no estimate in the statements
+    renter = sd.actual_plan(tx, [jul], owns=False)
+    assert renter["SPEND_RENT_MONTHLY"] == 2000 and "MORTGAGE_MONTHLY" not in renter
     assert sd.plan_monthly({"SPEND_RENT_MONTHLY": 1800}, "Housing") == 1800.0
+
+
+def test_actual_plan_uses_every_complete_month_not_the_period():
+    rows = [{"date": "2026-06-05", "source": "Card", "description": "CAFE ONE", "mcc": "05814", "amount": -100},
+            {"date": "2026-07-05", "source": "Card", "description": "CAFE ONE", "mcc": "05814", "amount": -300}]
+    tx = sr.classify(_frame(rows), sr.load_rules(None))
+    tx["month"] = tx["eff_date"].dt.to_period("M"); tx["merchant"] = tx["description"]
+    jun, jul = pd.Period("2026-06", "M"), pd.Period("2026-07", "M")
+    assert sd.actual_plan(tx, [jun, jul])["SPEND_FOOD_MONTHLY"] == 200
+
+
+def test_plan_vs_actual_and_what_differs():
+    tx = _dash_tx()
+    jul = pd.Period("2026-07", "M")
+    a = sd.actual_plan(tx, [jul])
+    ov = {"MORTGAGE_MONTHLY": 2100, "SPEND_FOOD_MONTHLY": 100, "PARTNER_OTHER_MONTHLY": 1500}
+    g = sd.plan_vs_actual(ov, a).set_index("Expense category")
+    assert (g.loc["Housing", "Your plan"], g.loc["Housing", "Actual"]) == (2100.0, 2000.0)
+    assert g.loc["Food & groceries", "Difference"] == pytest.approx(-61.0)
+    assert pd.isna(g.loc["Partner spending", "Actual"])   # not in statements: never "differs"
+    assert sd.differing(ov, a) == ["Housing", "Food & groceries", "Entertainment / discretionary"]
+    assert sd.differing({**ov, **a}, a) == []
+    assert list(sd.plan_vs_actual(ov, a, ["Housing"])["Expense category"]) == ["Housing"]
+
+
+def test_use_actual_sets_plan_mirrors_and_inputs():
+    class _St:
+        session_state = {"user_overrides": {"SPEND_FOOD_MONTHLY": 1}}
+    a = {"MORTGAGE_MONTHLY": 2000, "SPEND_UTILITIES_MONTHLY": 120, "PARTNER_OTHER_MONTHLY": 1900}
+    sd.use_actual(_St, a)
+    ov, ss = _St.session_state["user_overrides"], _St.session_state
+    assert ov["MORTGAGE_MONTHLY"] == 2000 and ss["se_mortgage_monthly"] == 2000
+    assert ov["UTILITIES_MONTHLY"] == 120 and ss["se_utilities"] == 120
+    assert ov["PARTNER_MONTHLY_SPENDING"] == 1900 and ss["se_partner"] == 1900
+    assert ov["SPEND_FOOD_MONTHLY"] == 1                  # untouched: not in ``actual``
+
+
+def test_actual_plan_keeps_each_input_in_range():
+    tx = _dash_tx()
+    jul = pd.Period("2026-07", "M")
+    big = tx.assign(spend=tx["spend"] * 100, amount=tx["amount"] * 100)
+    assert sd.actual_plan(big, [jul])["MORTGAGE_MONTHLY"] == 20_000
 
 
 # ---------------------------------------------------------------- gap & trip-day guards
@@ -827,8 +876,6 @@ def test_every_headline_number_follows_the_period():
     only_jul = sd.kpis(tx, jul, jul, [jun, jul])["per_month"]
     assert (both, only_jul) == (200.0, 300.0)
     assert sd.group_averages(tx, [jul])["Food & groceries"] == 300.0
-    assert sd.group_summary(tx, jul, jul, [jun, jul], {}).set_index("Expense category").loc[
-        "Food & groceries", "Actual"] == 300.0
 
 
 def test_category_table_counts_and_orders():
@@ -878,9 +925,12 @@ def test_estimate_survives_hide_one_offs_and_follows_include():
 
 def test_partner_bucket_compares_to_the_plan_input():
     jul = pd.Period("2026-07", "M")
-    g = sd.group_summary(_with_estimate(), jul, jul, [jul], {"PARTNER_OTHER_MONTHLY": 2000})
+    a = sd.actual_plan(_with_estimate(), [jul])
+    g = sd.plan_vs_actual({"PARTNER_OTHER_MONTHLY": 2000}, a)
     row = g.set_index("Expense category").loc["Partner spending"]
     assert (row["Your plan"], row["Actual"]) == (2000.0, 2000.0)
+    # a single household has no partner spending to copy, estimate or not
+    assert "PARTNER_OTHER_MONTHLY" not in sd.actual_plan(_with_estimate(), [jul], partner=False)
 
 
 def test_estimate_is_drawn_hatched():

@@ -14,6 +14,11 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+try:
+    from utils.expense_categories import CATEGORIES
+except ImportError:  # pragma: no cover
+    from ui.utils.expense_categories import CATEGORIES  # type: ignore
+
 
 # Each entry maps a widget-key (as used by the component's render()) to a
 # rule for deriving the widget's value from ``user_overrides``:
@@ -178,12 +183,8 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "se_mortgage_monthly":("MORTGAGE_MONTHLY", _as_int(0, 0, 20_000)),
     "se_mortgage_years":  ("MORTGAGE_YEARS_REMAINING", _as_int(0, 0, 40)),
     "se_rent_monthly":    ("SPEND_RENT_MONTHLY", _as_int(1_500, 0, 20_000)),
-    "se_utilities":       ("SPEND_UTILITIES_MONTHLY", _as_int(200, 0, 2_000)),
-    "se_food":            ("SPEND_FOOD_MONTHLY", _as_int(900, 0, 10_000)),
-    "se_transport":       ("SPEND_TRANSPORT_MONTHLY", _as_int(500, 0, 5_000)),
-    "se_health":          ("SPEND_HEALTH_MONTHLY", _as_int(400, 0, 5_000)),
-    "se_discretionary":   ("SPEND_DISCRETIONARY_MONTHLY", _as_int(600, 0, 10_000)),
-    "se_other":           ("SPEND_OTHER_MONTHLY", _as_int(300, 0, 5_000)),
+    # the monthly spending inputs, one per expense category (incl. se_partner)
+    **{c.widget: (c.key, _as_int(c.default, 0, c.max_value)) for c in CATEGORIES},
     "se_yufc":            ("YEARS_UNTIL_FIRST_CHILD", _as_int(3, -25, 20)),
     "se_ybc":             ("YEARS_BETWEEN_CHILDREN", _as_int(3, 1, 10)),
     "se_fcmc":            ("FIRST_CHILD_MONTHLY_COST", _as_int(2_100, 0, 10_000)),

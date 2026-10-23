@@ -142,7 +142,7 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 | `MORTGAGE_YEARS_REMAINING` | `0` | Years until payoff. When reached, mortgage drops from expenses. |
 | `UTILITIES_MONTHLY` | `$150` | Water, gas, electric, internet, etc. |
 | `YOUR_OTHER_MONTHLY` | `$2,000` | Your personal non-housing spending (food, transportation, hobbies). |
-| `PARTNER_OTHER_MONTHLY` | `$1,500` | Partner's equivalent. Also captured via `PARTNER_ANNUAL_SPENDING`. |
+| `PARTNER_OTHER_MONTHLY` | `$1,500` | Partner's own spending, added to household expenses every year. The app's *Partner spending* input sets it and `PARTNER_MONTHLY_SPENDING` (the partner-savings math) together, and sets both to $0 for a single household (partner age 0). |
 
 ### Children
 

@@ -42,6 +42,8 @@ try:
     from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
     from utils.formatting import money, money_md
     from utils.derived import compute_expenses_today
+    from utils.expense_categories import (CATEGORIES, HOUSING, HOUSING_KEYS, HOUSING_STATEMENT,
+                                          INPUTS, MIRRORS)
 except ImportError:  # pragma: no cover
     from ui.utils.spending_parsers import load_files, load_folder, statement_files, coverage  # type: ignore
     from ui.utils.spending_rules import (load_rules, parse_rules, classify, merchant_key,  # type: ignore
@@ -51,6 +53,8 @@ except ImportError:  # pragma: no cover
     from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.derived import compute_expenses_today  # type: ignore
+    from ui.utils.expense_categories import (CATEGORIES, HOUSING, HOUSING_KEYS,  # type: ignore
+                                             HOUSING_STATEMENT, INPUTS, MIRRORS)
 
 SETTINGS_PATH = os.path.expanduser("~/.config/retirement-sim/spending.json")
 RULES_FILENAME = "spending_rules.json"
@@ -59,24 +63,10 @@ PRIVACY_NOTE = "Your files are processed in memory for this session only and nev
 FORMATS_NOTE = ("Recognised: Ally Bank statements (PDF), Fidelity / Elan card statements "
                 "(CSV export or PDF), Venmo monthly statements (CSV) and Apple Card exports "
                 "(CSV). Anything else is skipped and listed under Data.")
-# The Expenses section's own buckets (components/sec_expenses.py), so each
-# actual lines up with the plan input it informs: (label, plan keys, categories).
-EXPENSE_GROUPS = [
-    ("Housing", ("MORTGAGE_MONTHLY", "SPEND_RENT_MONTHLY"), ("Housing",)),
-    ("Utilities", ("SPEND_UTILITIES_MONTHLY",), ("Utilities",)),
-    ("Food & groceries", ("SPEND_FOOD_MONTHLY",), ("Groceries", "Dining")),
-    ("Transportation", ("SPEND_TRANSPORT_MONTHLY",), ("Auto & transport",)),
-    ("Healthcare premiums", ("SPEND_HEALTH_MONTHLY",), ("Health & fitness",)),
-    ("Entertainment / discretionary", ("SPEND_DISCRETIONARY_MONTHLY",),
-     ("Travel", "Entertainment", "Jewelry & watches", "Shopping", "Subscriptions",
-      "Personal care", "Gifts & giving")),
-    ("Other / miscellaneous", ("SPEND_OTHER_MONTHLY",),
-     ("Insurance", "Home & garden", "Pets", "Fees & interest", "Cash & ATM",
-      "People & shared", "Other")),
-    # A partner's own spending: the plan's PARTNER_OTHER_MONTHLY. Not in your
-    # statements, so it comes from a fixed monthly estimate (rules "fixed_monthly").
-    ("Partner spending", ("PARTNER_OTHER_MONTHLY",), ("Partner spending",)),
-]
+# The Expenses section's own buckets, from the list both screens are built on
+# (utils/expense_categories.py): (label, plan keys, statement categories).
+EXPENSE_GROUPS = [(HOUSING, HOUSING_KEYS, HOUSING_STATEMENT)] + [
+    (c.label, (c.key,), c.statement) for c in CATEGORIES]
 ESTIMATE_SOURCE = "Estimate"     # rows added from fixed monthly estimates, not statements
 GROUPS = [g for g, _, _ in EXPENSE_GROUPS]
 _GROUP_OF = {c: g for g, _, cats in EXPENSE_GROUPS for c in cats}
@@ -364,25 +354,49 @@ def monthly_table(tx: pd.DataFrame, start: pd.Period, end: pd.Period,
     return table.fillna(0.0)
 
 
-def group_summary(tx: pd.DataFrame, start: pd.Period, end: pd.Period, complete: List[pd.Period],
-                  overrides: Dict, groups: Optional[List[str]] = None) -> pd.DataFrame:
-    """Plan input vs actual per Expenses-section bucket, $/month.
+def actual_plan(tx: pd.DataFrame, complete: List[pd.Period], owns: bool = True,
+                partner: bool = True) -> Dict[str, int]:
+    """The plan's monthly inputs as your statements have them: {config key: $/month}.
 
-    Actual = average per COMPLETE month in the period, after paybacks, for every
-    bucket (Housing included), so the whole table follows the period picker.
+    The one definition of "actual" behind both the Plan vs. actual table and
+    "Use my actual spending", so after a click the two always agree. Each
+    category is its average over ALL complete months, after paybacks, one-offs
+    included. Housing is today's payment plus separately paid housing costs
+    (``current_housing``): the mortgage input for an owner, rent for a renter.
+    Partner spending only when the statements carry an estimate for it and
+    there is a partner; otherwise there is nothing to copy and the plan's own
+    figure stands. Whole dollars, within each input's range.
     """
-    s = counted(tx)
-    good = [m for m in complete if start <= m <= end]
-    on_good = s[s["month"].isin(good)].assign(group=lambda d: d["category"].map(expense_group))
-    actual = on_good.groupby("group")["spend"].sum() / max(len(good), 1)
-    rows = [{"Expense category": g, "Your plan": plan_monthly(overrides, g),
-             "Actual": float(actual.get(g, 0.0))}
-            for g in GROUPS if groups is None or g in groups]
+    avg = group_averages(tx, complete)
+    housing_key = HOUSING_KEYS[0] if owns else HOUSING_KEYS[1]
+    out = {housing_key: current_housing(tx, complete)}
+    for c in CATEGORIES:
+        if c.partner_only and not (partner and avg[c.label] > 0):
+            continue
+        out[c.key] = avg[c.label]
+    return {k: int(min(max(round(v), 0), INPUTS[k][1])) for k, v in out.items()}
+
+
+def plan_vs_actual(overrides: Dict, actual: Dict[str, int],
+                   groups: Optional[List[str]] = None) -> pd.DataFrame:
+    """Plan input vs ``actual_plan`` per expense category, $/month. Actual is
+    NaN for a category the statements don't have (partner, without an estimate)."""
+    rows = []
+    for g, keys, _ in EXPENSE_GROUPS:
+        if groups is not None and g not in groups:
+            continue
+        a = next((actual[k] for k in keys if k in actual), None)
+        rows.append({"Expense category": g, "Your plan": plan_monthly(overrides, g),
+                     "Actual": float("nan") if a is None else float(a)})
     out = pd.DataFrame(rows, columns=["Expense category", "Your plan", "Actual"])
     out["Difference"] = out["Actual"] - out["Your plan"]
-    pos = out["Actual"].clip(lower=0).sum()
-    out["Share"] = out["Actual"].clip(lower=0) / pos if pos else 0.0
     return out
+
+
+def differing(overrides: Dict, actual: Dict[str, int]) -> List[str]:
+    """Categories whose plan input isn't what ``actual_plan`` would set."""
+    g = plan_vs_actual(overrides, actual)
+    return list(g.loc[g["Difference"].abs() >= 0.5, "Expense category"])
 
 
 def category_table(tx: pd.DataFrame, start: pd.Period, end: pd.Period) -> pd.DataFrame:
@@ -501,6 +515,68 @@ def group_averages(tx: pd.DataFrame, months: List[pd.Period]) -> pd.Series:
     s = s[s["month"].isin(months)]
     avg = s.groupby(s["category"].map(expense_group))["spend"].sum() / max(len(months), 1)
     return avg.reindex(GROUPS, fill_value=0.0)
+
+
+# ---------------------------------------------------------------------------
+# "Use my actual spending": shared by this tab and the Expenses section
+# ---------------------------------------------------------------------------
+
+def statement_data(st) -> Optional[Dict]:
+    """This session's statements without drawing the tab; None if there are none."""
+    data_dir = configured_data_dir()                 # always "" when hosted
+    try:
+        if data_dir and os.path.isdir(data_dir):
+            data = load(data_dir)
+        elif (st.session_state.get(UPLOAD_STATE) or {}).get("files"):
+            data = _uploaded_data(st)
+        else:
+            return None
+    except Exception:  # unreadable files: the tab itself says why
+        return None
+    return data if data["complete"] and not data["tx"].empty else None
+
+
+def session_actual(st, data: Dict) -> Dict[str, int]:
+    """``actual_plan`` for this session's household (owner or renter, partner or not)."""
+    ov = st.session_state.get("user_overrides", {}) or {}
+    rent_own = st.session_state.get("se_rent_own")
+    owns = rent_own == "Own home" if rent_own else float(ov.get("HOME_VALUE", 0) or 0) > 0
+    partner = float(ov.get("PARTNER_AGE", 0) or 0) > 0
+    return actual_plan(data["tx"], data["complete"], owns, partner)
+
+
+def use_actual(st, actual: Dict[str, int]) -> None:
+    """Button callback: copy ``actual`` into the plan and the inputs that show it.
+    Runs before the next run draws any widget, so the inputs may be set here."""
+    ov = st.session_state["user_overrides"]
+    for key, value in actual.items():
+        ov[key] = value
+        if key in MIRRORS:
+            ov[MIRRORS[key]] = value
+        st.session_state[INPUTS[key][0]] = value
+
+
+def _and(names: List[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def sync_control(st, data: Dict, key: str) -> None:
+    """Whether the plan's monthly inputs match your statements, and the button
+    that makes them match."""
+    actual = session_actual(st, data)
+    off = differing(st.session_state.get("user_overrides", {}) or {}, actual)
+    complete = data["complete"]
+    span = f"all {len(complete)} complete months, {_mon(complete[0])} – {_mon(complete[-1])}"
+    if not off:
+        st.caption(f"✓ Matches your statements ({span}).")
+    else:
+        names = _and(off) if len(off) <= 3 else f"{len(off)} categories"
+        st.caption(f"{names} {'differs' if len(off) == 1 else 'differ'} from your statements ({span}).")
+    st.button("Use my actual spending", key=key, on_click=use_actual, args=(st, actual),
+              disabled=not off, icon=":material/sync:",
+              help="Sets each monthly amount to its average over all complete months, and "
+                   "housing to your current payment. Partner spending changes only if your "
+                   "statements include an estimate for it.")
 
 
 # ---------------------------------------------------------------------------
@@ -841,7 +917,7 @@ def render(st, **_kwargs) -> None:
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Housing", money(housing) if "Housing" in sel else "—",
               help=f"Average per complete month, {_mon(start)} – {_mon(end)}. Your current "
-                   f"payment is {money_md(housing_now)}/month — use that for the plan.")
+                   f"payment is {money_md(housing_now)}/month; Plan vs. actual uses that.")
     m2.metric("Everything else", money(k["per_month_ex_housing"]),
               help=f"Average per complete month, {_mon(start)} – {_mon(end)}, after paybacks.")
     m3.metric("Total per month", money(k["per_month"]))
@@ -881,18 +957,26 @@ def render(st, **_kwargs) -> None:
                    {"displayModeBar": False})
         with right:
             st.markdown("**Plan vs. actual**")
-            g = group_summary(view, start, end, complete, overrides, sel)
+            # Not the period picker's window: the same figures "Use my actual
+            # spending" copies, so after a click every difference is zero.
+            g = plan_vs_actual(overrides, session_actual(st, data), sel)
+
+            def _or_dash(fmt):
+                return lambda v: "—" if pd.isna(v) else fmt(v)
             st.dataframe(pd.DataFrame({
                 "Expense category": g["Expense category"],
                 "Your plan": g["Your plan"].map(money),
-                "Actual": g["Actual"].map(money),
-                "Difference": g["Difference"].map(lambda v: ("+" if v > 0 else "") + money(v)),
+                "Actual": g["Actual"].map(_or_dash(money)),
+                "Difference": g["Difference"].map(_or_dash(lambda v: ("+" if v > 0 else "") + money(v))),
             }), hide_index=True, width="stretch")
-            partner = float(overrides.get("PARTNER_OTHER_MONTHLY", 0) or 0)
-            st.caption("Plan = the Expenses section's monthly inputs; actual = your accounts, "
-                       "averaged over the period, after paybacks."
-                       + (f" The plan also has {money_md(partner)}/mo of your partner's own spending, "
-                          "not in these statements." if partner and not est_month else ""))
+            no_partner = ((g["Expense category"] == "Partner spending") & g["Actual"].isna()
+                          & (g["Your plan"] > 0)).any()
+            st.caption("Plan = the Expenses section's monthly inputs. Actual = your accounts averaged "
+                       "over every complete month (not just the period above), after paybacks; "
+                       "housing is your current payment."
+                       + (" Partner spending isn't in your statements, so the plan keeps its own "
+                          "figure." if no_partner else ""))
+            sync_control(st, data, "sp_use_actual")
         st.markdown("**Spending by month**")
         first = min(complete[0], start) if complete else start
         full = monthly_table(view, first, chart_end, sel)

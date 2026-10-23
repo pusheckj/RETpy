@@ -10,7 +10,8 @@ the first time; after that, every `git push` redeploys the app.
   to their computer.
 - A Spending tab that analyses statements **they upload** (CSV, PDF, optional
   rules JSON). Files are parsed in memory for that session only and never
-  saved. The hosted app never reads the server's folders.
+  saved. The hosted app never reads the server's folders. *Use my actual
+  spending* copies those averages into the plan's monthly expenses.
 - Runs take turns: if two people start a fresh simulation at once, the second
   waits for the first (usually a few seconds; longer on the free tier).
 
