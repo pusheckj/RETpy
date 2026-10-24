@@ -313,3 +313,17 @@ def test_single_parent_files_head_of_household(wizard):
     at.number_input(key="gs_kids_plan").set_value(0)
     _next(at)
     assert at.session_state["user_overrides"]["FILING_STATUS"] == "Head of household"
+
+
+def test_an_unanswered_question_opens_blank_after_skip_and_continue(wizard):
+    """Skipping step 1 without answering, then "Continue setup", must not show
+    the sample household's age as if it were the visitor's."""
+    at = wizard()
+    assert at.number_input(key="gs_age").value is None
+    at.button(key="gs_skip").click().run()
+    at.button(key="gs_resume").click().run()
+    assert at.number_input(key="gs_age").value is None
+    at.number_input(key="gs_age").set_value(41).run()     # an answered one does come back
+    at.button(key="gs_skip").click().run()
+    at.button(key="gs_resume").click().run()
+    assert at.number_input(key="gs_age").value == 41

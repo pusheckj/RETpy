@@ -142,13 +142,17 @@ def _num(x: Any, default: float = 0.0) -> float:
 
 
 def _seed(st, key: str, saved: Any, first: Any) -> None:
-    """Open a question on its saved answer if it was shown before, else on ``first``."""
+    """Open a question on its saved answer if it was answered before, else on
+    ``first``. (``seen`` holds answered questions: render() drops any shown this
+    run that is still blank, so skipping a required question and coming back
+    later doesn't show the sample household's value as if it were yours.)"""
     ss = st.session_state
     seen = ss[STATE]["seen"]
     if key not in ss:
         ss[key] = saved if key in seen else first
     if key not in seen:
         seen.append(key)
+    ss.setdefault("_gs_drawn", []).append(key)
 
 
 def _from_checkup(st, *keys: str) -> bool:
@@ -754,7 +758,17 @@ def _sync_planner(st) -> None:
     st.session_state.pop("_autorun_done", None)
 
 
+def _mark_answered(st) -> None:
+    """Questions on this step that have a value now count as answered (a value
+    typed in the same click as Next/Back/Skip never reached render())."""
+    s = st.session_state[STATE]
+    for k in st.session_state.get("_gs_drawn", []):
+        if st.session_state.get(k) is not None and k not in s["seen"]:
+            s["seen"].append(k)
+
+
 def _go(st, delta: int) -> None:
+    _mark_answered(st)
     s = st.session_state[STATE]
     step = STEPS[s["step"]]
     step.commit(st)
@@ -772,6 +786,7 @@ def _go(st, delta: int) -> None:
 
 
 def _skip(st) -> None:
+    _mark_answered(st)
     s = st.session_state[STATE]
     STEPS[s["step"]].commit(st)
     s.update(status="skipped", error=None)
@@ -794,8 +809,11 @@ def render(st) -> None:
         st.markdown(f'<div class="mc-section">{step.title}</div>', unsafe_allow_html=True)
         if step.intro:
             st.markdown(f'<div class="mc-setup-intro">{step.intro}</div>', unsafe_allow_html=True)
+        st.session_state["_gs_drawn"] = []
         step.draw(st)
         step.commit(st)
+        blank = {k for k in st.session_state.get("_gs_drawn", []) if st.session_state.get(k) is None}
+        s["seen"] = [k for k in s["seen"] if k not in blank]
         if s.get("error"):
             st.warning(s["error"], icon=":material/info:")
         with st.container(key="mc-setup-nav", horizontal=True, vertical_alignment="center"):

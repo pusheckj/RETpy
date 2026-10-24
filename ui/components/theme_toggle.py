@@ -472,6 +472,16 @@ hr {
 :root button[data-testid="stBaseButton-secondary"]:hover p,
 :root button[data-testid="stBaseButton-tertiary"]:hover p { color: var(--mc-ink) !important; }
 
+/* ...except link-style tertiaries, which stay plain links as in light mode. */
+:root .st-key-gs_skip button[data-testid="stBaseButton-tertiary"],
+:root .st-key-gs_skip button[data-testid="stBaseButton-tertiary"]:hover {
+    background: transparent !important; border: none !important;
+}
+:root .st-key-gs_skip button[data-testid="stBaseButton-tertiary"] p { color: var(--mc-muted) !important; }
+:root .st-key-gs_skip button[data-testid="stBaseButton-tertiary"]:hover p { color: var(--mc-ink) !important; }
+/* Placeholders ("Required") were dark on the dark field. */
+input::placeholder, textarea::placeholder { color: var(--mc-muted) !important; opacity: .85 !important; }
+
 /* File uploader text + icon */
 [data-testid="stFileUploaderDropzone"] span,
 [data-testid="stFileUploaderDropzone"] p,
