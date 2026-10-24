@@ -100,7 +100,7 @@ your statements folder.
   12 MB, then cached) in parallel Web Workers. The server keeps the quick,
   detailed part of each result. Same code and same random seeds, so the numbers
   match the server's (checked: identical, or within 2 parts in 10^15 for dollar
-  medians). The visitor's inputs never leave their browser for this. If a
+  medians). Nothing is stored on the server; saved data stays on the visitor's device only if they turn on *Remember me*. If a
   browser can't help (old browser, blocked CDN, too slow), the server does the
   work instead; the main result never waits for the download.
 - **Speed:** the free tier has little CPU. 500 simulations is the hosted

@@ -422,7 +422,8 @@ def render_body(st) -> None:
     vacation_on = st.toggle("Plan extra travel spending early in retirement",
                               key="bp_vacation_enable",
                               help="Extra annual spending from retirement until a "
-                                   "chosen slow-down age.")
+                                   "chosen slow-down age. It is on top of the "
+                                   "\"Extra for travel and hobbies\" in Retirement goals.")
     set_override(st, "RETIREMENT_VACATION_ENABLED", bool(vacation_on))
     if vacation_on:
         c8, c9 = st.columns(2)

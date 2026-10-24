@@ -34,7 +34,8 @@ def render_body(st) -> None:
     current_label = scen_map.get(current_scen, "Historical")
     ensure_default(st, "sa_scenario", current_label)
     scen = st.radio("Return scenario", scen_options, horizontal=True, key="sa_scenario",
-                    help="Real stock/bond returns — Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%.")
+                    help="Real stock/bond returns. Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%. "
+                         "Historical (the default) is the more optimistic choice; Conservative gives a planner-style result.")
     set_override(st, "ACTIVE_RETURN_SCENARIO", scen.lower())
 
     c1, c2 = st.columns(2)

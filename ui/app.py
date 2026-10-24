@@ -638,7 +638,7 @@ def _privacy_controls(_st) -> None:
         st.session_state.remember_device_toggle = bool(st.session_state.get("remember_device"))
     on = _st.toggle("Remember me on this device", key="remember_device_toggle", disabled=unavailable,
                     help="Saves your inputs in this browser only, so they're here next time. "
-                         "They are never sent to or stored on the server.")
+                         "The saved copy lives in this browser only; the server does not store it.")
     st.session_state.remember_device = bool(on)
     if unavailable:
         _st.caption("This browser blocks saving (private browsing?), so nothing can be remembered.")
