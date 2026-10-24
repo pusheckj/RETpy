@@ -392,12 +392,10 @@ def style_fig(fig, st, compact: bool = False):
             # row count - and so the bottom margin we reserve - does not depend on
             # the unknown rendered width. Compact (phone): one column, because
             # half of a ~300px chart is too narrow for names like "Partner taxable
-            # brokerage" (they truncated or overprinted); a vertical legend sizes to its text.
-            **(dict(entrywidthmode="fraction", entrywidth=0.5)
-               if len(_legend_entries(fig)) >= 4 and not compact else {}),
+            # brokerage" (they truncated or overprinted).
+            **(dict(entrywidthmode="fraction", entrywidth=1.0 if compact else 0.5)
+               if len(_legend_entries(fig)) >= 4 or compact else {}),
         )
-        if compact:
-            layout_kwargs["legend"]["orientation"] = "v"
     fig.update_layout(**layout_kwargs)
 
     # Give the below-plot legend room, and drop the old right-hand gutter so the
@@ -409,6 +407,8 @@ def style_fig(fig, st, compact: bool = False):
         except Exception:
             cur_r = cur_b = None
         new_r = 30 if (cur_r is None or cur_r >= 150) else cur_r
+        if compact:  # the legend is clipped to the plot width: don't waste it on a gutter
+            new_r = min(new_r, 60)
         # Room for tick labels (+ the x-axis title if any) and then the legend rows.
         rows = _legend_rows(fig, compact)
         if compact and rows:
