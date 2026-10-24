@@ -48,7 +48,7 @@ Sample output (illustrative example values only — not real financial advice):
 ===== Retirement Model: Financial Summary (EXAMPLE DATA) =====
 Household:          Partner A (age 35), Partner B (age 33)
 Current year:       2026
-Plan until age:     90
+Plan until age:     95
 
 Account balances (starting):
   401(k)            $ 200,000

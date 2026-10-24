@@ -128,8 +128,9 @@ def render_body(st) -> None:
                    safe_int(get_override(st, "PLAN_UNTIL_AGE", 95), 95))
     plan_until = st.slider("Plan until age", min_value=75, max_value=100,
                            step=1, key="ay_plan_until",
-                           help="Model your finances through this age. About 30-40% of couples "
-                                "have one partner live past 90.")
+                           help="Model your finances through this age."
+                                + ("" if household == JUST_ME else
+                                   " About 30-40% of couples have one partner live past 90."))
     set_override(st, "PLAN_UNTIL_AGE", safe_int(plan_until))
     if household != JUST_ME:
         ensure_default(st, "ay_partner_plan_until",

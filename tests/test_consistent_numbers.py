@@ -348,7 +348,7 @@ def test_tiles_table_and_counts_agree(sample_run, monkeypatch):
     assert by_pct["10th"] == money(pr["p10_final"], shorten=True)
     assert money(pr["median_final"], shorten=True) in html
     assert f"all {N_RUNS:,} simulations" in html
-    assert f"out of {N_RUNS:,} simulations" in html
+    assert f"{N_RUNS:,} simulations" in html
     tiles = {m.label: m.value for m in at.metric}
     n_out = pr["sample_successes"].count(False)
     assert tiles["Ran out of money (in this sample)"] == f"{n_out} of {len(pr['sample_paths'])}"

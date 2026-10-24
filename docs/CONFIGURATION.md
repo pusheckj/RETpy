@@ -33,7 +33,7 @@ All dollar values in the config are in **today's dollars** unless otherwise note
 | `CURRENT_YEAR` | this year | Read from the clock (`datetime.date.today().year`). A `CURRENT_YEAR` saved in an older profile is ignored. |
 | `YOUR_BIRTH_YEAR` | derived | `CURRENT_YEAR − YOUR_AGE` (likewise `PARTNER_BIRTH_YEAR`). Sets the SECURE 2.0 RMD start age (73 if born 1951–1959, else 75). Not an input. |
 | `PARTNER_BIRTH_YEAR` | `2001` | Same purpose for partner. |
-| `PLAN_UNTIL_AGE` | `95` | Your plan-until age. Run longer if longevity is a concern — about 30–40% of couples have one spouse living past 90. |
+| `PLAN_UNTIL_AGE` | `95` | Your plan-until age. Run longer if longevity is a concern — for a couple, about 30–40% have one spouse living past 90. |
 | `PARTNER_PLAN_UNTIL_AGE` | `None` | Your partner's plan-until age, in their own age (`None` = same as yours). The plan runs until the **later** of the two (`plan_end_age()`), so a younger partner is covered to their own age. |
 | `FILING_STATUS` | `"Married filing jointly"` | Married couples file jointly; a single person or an unmarried couple files `"Single"` or `"Head of household"`. Marriage is read from this (there is no separate wedding year). |
 
