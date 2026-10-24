@@ -269,7 +269,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
 
     with cols[0]: st.markdown(_stat_card("Net worth", money(net_worth, shorten=True), "total assets minus debt", "#0d9488", tooltip=net_worth_tip, cls="mc-teal", delta_html=d_nw, idx=0), unsafe_allow_html=True)
     with cols[1]: st.markdown(_stat_card("Retirement accounts", money(retirement_sum, shorten=True), "401(k), Roth, Trad IRA, HSA", tooltip=retirement_tip, delta_html=d_ret, idx=1), unsafe_allow_html=True)
-    with cols[2]: st.markdown(_stat_card("Non-retirement", money(taxable_sum + cash_sum, shorten=True), "brokerage + cash", tooltip=non_retirement_tip, delta_html=d_nonret, idx=2), unsafe_allow_html=True)
+    with cols[2]: st.markdown(_stat_card("Non&#8209;retirement", money(taxable_sum + cash_sum, shorten=True), "brokerage + cash", tooltip=non_retirement_tip, delta_html=d_nonret, idx=2), unsafe_allow_html=True)
     with cols[3]: st.markdown(_stat_card("Home equity", money(home_equity, shorten=True), ("projected equity" if projected else f"value {money(home_value, shorten=True)}"), tooltip=home_equity_tip, delta_html=d_home, idx=3), unsafe_allow_html=True)
 
     st.markdown('<div style="height: 24px;"></div>', unsafe_allow_html=True)

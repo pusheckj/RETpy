@@ -46,7 +46,10 @@ def render_body(st) -> None:
         set_override(st, "STOCK_ALLOCATION", v / 100)
     with c2:
         bond_pct = 100 - st.session_state.get("sa_stock_alloc", 80)
-        st.metric("Bond allocation", f"{bond_pct:.0f}%")
+        # Drawn like a widget label + value so it matches "Stock allocation (%)".
+        st.markdown(f'<div style="font-size:14px;line-height:1.4;margin-bottom:6px;">Bond allocation (%)</div>'
+                    f'<div style="font-size:22px;font-weight:700;padding-top:4px;">{bond_pct:.0f}</div>',
+                    unsafe_allow_html=True)
 
     # Interpret INVESTMENT_FEE_RATE as fraction. bps = fee_rate * 10_000.
     cur_fee_bps = max(0, min(100, int(round(safe_float(get_override(st, "INVESTMENT_FEE_RATE", 0.0), 0.0) * 10_000))))
