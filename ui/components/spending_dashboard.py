@@ -593,6 +593,14 @@ def _chart(st, build, key: str, config: dict) -> None:
         st.plotly_chart(style_fig(build(True), st), width="stretch", config=config, key=f"{key}_compact")
 
 
+def _label_color(hex_color: str) -> str:
+    """White or near-black slice label, whichever contrasts more (WCAG luminance)."""
+    c = [int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    c = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in c]
+    lum = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    return "#ffffff" if 1.05 / (lum + 0.05) >= (lum + 0.05) / 0.05 else "#111827"
+
+
 def pie_figure(avg: pd.Series, dark: bool, compact: bool = False) -> go.Figure:
     """Donut of the average month, one slice per expense bucket (fixed colors).
 
@@ -612,6 +620,8 @@ def pie_figure(avg: pd.Series, dark: bool, compact: bool = False) -> go.Figure:
                                         for g in vals.index],
                                  fgcolor=_SURFACE[dark], fgopacity=0.45, fillmode="overlay")),
         textposition="inside", texttemplate="%{percent:.0%}", insidetextorientation="horizontal",
+        insidetextfont=dict(color=["#111827" if dark else _label_color(_SERIES[dark][GROUPS.index(g)])
+                                    for g in vals.index]),   # dark: every mid-tone slice takes the same dark label
         hovertemplate="<b>%{label}</b> per month (%{percent:.1%})<extra></extra>"))
     fig.update_layout(height=460 if compact else 340, showlegend=True,
                       uniformtext=dict(minsize=10, mode="hide"),

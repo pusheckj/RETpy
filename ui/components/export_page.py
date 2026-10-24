@@ -43,10 +43,10 @@ def render(st) -> None:
 
     components.html(
         """
-        <div id="mc-export-wrap" style="font-family: Inter, -apple-system, sans-serif;">
+        <div id="mc-export-wrap" style="font-family: Lora, Georgia, serif;">
           <button id="mc-export-btn" style="
-            width: 100%; padding: 8px 14px; border-radius: 8px; border: 1px solid #0d9488;
-            background: #0d9488; color: #ffffff; font-size: 14px; font-weight: 600;
+            width: 100%; padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1;
+            background: transparent; color: #1f2937; font-size: 14px; font-weight: 600;
             cursor: pointer; font-family: inherit;
           ">Export current page (HTML)</button>
           <div id="mc-export-status" style="font-size: 12px; color: #64748b; margin-top: 6px;"></div>
@@ -57,6 +57,18 @@ def render(st) -> None:
           const doc = P.document;
           const btn = document.getElementById('mc-export-btn');
           const status = document.getElementById('mc-export-status');
+
+          // Outlined like the other Settings buttons, in the app's own font and
+          // theme colours (this iframe can't see the page's CSS, so read it).
+          try {
+            const cs = P.getComputedStyle(doc.documentElement);
+            const ink = cs.getPropertyValue('--mc-ink').trim();
+            const bd = cs.getPropertyValue('--mc-tile-border').trim();
+            if (ink) btn.style.color = ink;
+            if (bd) btn.style.borderColor = bd;
+            const fam = P.getComputedStyle(doc.body).fontFamily;
+            if (fam) { btn.style.fontFamily = fam; btn.parentElement.style.fontFamily = fam; }
+          } catch (e) {}
 
           // Serialize a CSSStyleDeclaration to a "prop:value;" string,
           // skipping properties whose value is empty (some CSS custom

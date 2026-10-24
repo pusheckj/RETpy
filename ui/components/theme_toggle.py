@@ -453,24 +453,24 @@ hr {
 /* Secondary / tertiary buttons (Remove, Browse files, Forget my data...) used the
    light cream surface; give them the dark tile with ink text and a tile border.
    Tertiary stays an outlined, non-primary button. */
-.stApp button[data-testid="stBaseButton-secondary"],
-.stApp button[data-testid="stBaseButton-tertiary"] {
+:root button[data-testid="stBaseButton-secondary"],
+:root button[data-testid="stBaseButton-tertiary"] {
     background: var(--mc-tile) !important;
     border: 1px solid var(--mc-tile-border) !important;
     box-shadow: none !important;
     filter: none !important;
 }
-.stApp button[data-testid="stBaseButton-tertiary"] { background: transparent !important; }
-.stApp button[data-testid="stBaseButton-secondary"],
-.stApp button[data-testid="stBaseButton-secondary"] p,
-.stApp button[data-testid="stBaseButton-secondary"] span,
-.stApp button[data-testid="stBaseButton-tertiary"],
-.stApp button[data-testid="stBaseButton-tertiary"] p,
-.stApp button[data-testid="stBaseButton-tertiary"] span { color: var(--mc-ink) !important; }
-.stApp button[data-testid="stBaseButton-secondary"]:hover,
-.stApp button[data-testid="stBaseButton-tertiary"]:hover { background: #3d3947 !important; }
-.stApp button[data-testid="stBaseButton-secondary"]:hover p,
-.stApp button[data-testid="stBaseButton-tertiary"]:hover p { color: var(--mc-ink) !important; }
+:root button[data-testid="stBaseButton-tertiary"] { background: transparent !important; }
+:root button[data-testid="stBaseButton-secondary"],
+:root button[data-testid="stBaseButton-secondary"] p,
+:root button[data-testid="stBaseButton-secondary"] span,
+:root button[data-testid="stBaseButton-tertiary"],
+:root button[data-testid="stBaseButton-tertiary"] p,
+:root button[data-testid="stBaseButton-tertiary"] span { color: var(--mc-ink) !important; }
+:root button[data-testid="stBaseButton-secondary"]:hover,
+:root button[data-testid="stBaseButton-tertiary"]:hover { background: #3d3947 !important; }
+:root button[data-testid="stBaseButton-secondary"]:hover p,
+:root button[data-testid="stBaseButton-tertiary"]:hover p { color: var(--mc-ink) !important; }
 
 /* File uploader text + icon */
 [data-testid="stFileUploaderDropzone"] span,
@@ -490,8 +490,7 @@ hr {
 .stApp [class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"] { border-color: var(--mc-tile-border) !important; }
 
 /* Toggle: a visible "off" track */
-[data-testid="stToggle"] label:has(input:not(:checked)) [data-baseweb="checkbox"] > div:first-child,
-[data-testid="stCheckbox"] label:has(input[role="switch"]:not(:checked)) > span:first-of-type {
+label[data-baseweb="checkbox"]:has(input:not(:checked)) > div:first-child {
     background-color: #6b6577 !important;
 }
 

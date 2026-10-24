@@ -1706,3 +1706,25 @@ section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidget
     min-height: 2.6em; display: flex; align-items: flex-end;
 }
 section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidgetLabel"] p { font-size: 14px; line-height: 1.25; }
+
+/* ---------- Round 3 ---------- */
+/* Welcome cards stay two-up on tablets (the <=1100px stacking rule is for chart rows). */
+@media (min-width: 700px) and (max-width: 1100px) {
+    section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [class*="st-key-mc-welcome-"]) {
+        flex-wrap: nowrap !important; gap: 16px !important;
+    }
+    section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [class*="st-key-mc-welcome-"]) > [data-testid="stColumn"] {
+        flex: 1 1 0 !important; width: auto !important; min-width: 0 !important;
+    }
+}
+/* Help tooltips: a readable column, not a 670px slab that covers the sidebar. */
+[data-testid="stTooltipContent"] { max-width: 320px; }
+[data-baseweb="popover"]:has(> div > [data-testid="stTooltipContent"]),
+[data-baseweb="tooltip"] { max-width: 320px !important; }
+/* Spending view: air between the category chips and the one-offs toggle. */
+.st-key-sp_oneoffs { margin-top: 8px; }
+/* Guided setup: a field's helper caption hugs its field (the extra 16px flex gap
+   above it made fields with a caption sit ~15px further from the next one). */
+.st-key-mc-setup-root [data-testid="stElementContainer"]:has([data-testid="stCaptionContainer"]) { margin-top: -10px; }
+/* Brand eyebrow reads "RETpy" (not RET.PY). */
+.mc-welcome-kicker { text-transform: none !important; }
