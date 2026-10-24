@@ -31,7 +31,7 @@ def render(st) -> Optional[str]:
             st.markdown(f'<div class="mc-welcome-card"><h3>{title}</h3><p>{blurb}</p></div>',
                         unsafe_allow_html=True)
             if st.button(cta, key=f"welcome_{mode}", width="stretch",
-                         type="primary" if mode == "simple" else "secondary"):
+                         type="primary"):
                 chosen = mode
     st.markdown(
         '<p class="mc-welcome-privacy">Private by design: your numbers stay on your '

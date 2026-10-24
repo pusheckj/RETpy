@@ -938,7 +938,8 @@ def main() -> None:
                      run_render=functools.partial(_topbar_run, progress_container=progress_slot),
                      sims_render=_topbar_sims,
                      settings_render=_topbar_settings,
-                     in_card=True, control_slots=control_slots)
+                     in_card=True, control_slots=control_slots,
+                     title="Spending" if spending_view else "Retirement Monte Carlo")
 
 
     # Spending view: statements only, no simulation.
