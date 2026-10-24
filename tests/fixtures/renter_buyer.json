@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "app": "retirement-monte-carlo",
+  "label": "Renter couple who buys at 30",
+  "overrides": {
+    "CURRENT_YEAR": 2026,
+    "STATE_CHOICE": "No state tax",
+    "YEARS_UNTIL_WEDDING": 0,
+    "YEARS_UNTIL_FIRST_CHILD": 99,
+    "FIRST_CHILD_MONTHLY_COST": 0,
+    "BOTH_CHILDREN_MONTHLY_COST": 0,
+    "SPEND_LIFECYCLE_PRESET": "Flat (no change)",
+    "RETIREMENT_SPENDING_MODE": "Same as today's expenses",
+    "INCLUDE_SOCIAL_SECURITY": true,
+    "SS_CLAIM_AGE": 67,
+    "SAVINGS_MODE": "Auto-allocate (recommended)",
+    "NEW_HOME_ESCROW_PCT": 0.0135,
+    "YOUR_AGE": 27,
+    "PARTNER_AGE": 27,
+    "FILING_STATUS": "Married filing jointly",
+    "TARGET_RETIREMENT_AGE": 60,
+    "PLAN_UNTIL_AGE": 92,
+    "HOUSEHOLD_INCOME_QUICK": 150000,
+    "TOTAL_SAVINGS_QUICK": 90000,
+    "HOME_VALUE": 0,
+    "MORTGAGE_BALANCE": 0,
+    "MORTGAGE_MONTHLY": 0,
+    "MORTGAGE_YEARS_REMAINING": 0,
+    "SPEND_RENT_MONTHLY": 2000,
+    "SPEND_UTILITIES_MONTHLY": 250,
+    "SPEND_FOOD_MONTHLY": 900,
+    "SPEND_TRANSPORT_MONTHLY": 600,
+    "SPEND_HEALTH_MONTHLY": 300,
+    "SPEND_DISCRETIONARY_MONTHLY": 800,
+    "SPEND_OTHER_MONTHLY": 300,
+    "PARTNER_OTHER_MONTHLY": 600,
+    "PARTNER_MONTHLY_SPENDING": 600,
+    "YOUR_SS_MONTHLY_FRA": 2400,
+    "PARTNER_SS_MONTHLY_FRA": 2100,
+    "HOME_EVENTS": [
+      {
+        "age": 30,
+        "action": "buy",
+        "price": 450000,
+        "down_pct": 0.2,
+        "rate": 0.065,
+        "years": 30,
+        "costs": 10000
+      }
+    ]
+  }
+}

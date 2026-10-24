@@ -1,8 +1,6 @@
 """Section 7: Assumptions (advanced) — returns, inflation, strategies, healthcare."""
 from __future__ import annotations
 
-import copy
-
 try:
     from utils.coerce import safe_int, safe_float, as_fraction, ensure_default
 except ImportError:  # pragma: no cover
@@ -23,16 +21,6 @@ def _section_label(st, txt):
     st.markdown(f'<div style="font-size: 13px; color: #64748b; text-transform: uppercase; '
                 f'letter-spacing: 0.05em; margin: 14px 0 6px 0;">{txt}</div>',
                 unsafe_allow_html=True)
-
-
-def _get_hc(overrides: dict) -> dict:
-    """Return the HEALTHCARE_COSTS_BY_AGE dict (override > cfg default)."""
-    o = overrides.get("HEALTHCARE_COSTS_BY_AGE")
-    if isinstance(o, dict):
-        return dict(o)
-    if cfg is not None:
-        return dict(getattr(cfg, "HEALTHCARE_COSTS_BY_AGE", {}))
-    return {}
 
 
 def render_body(st) -> None:
@@ -178,13 +166,28 @@ def render_body(st) -> None:
     v = st.toggle("ACA subsidy modeling (pre-Medicare years)", key="sa_aca")
     set_override(st, "ACA_ENABLED", bool(v))
 
-    hc = _get_hc(overrides)
-    ensure_default(st, "sa_hc_early", safe_int(hc.get("early_retirement", 24_000), 24_000))
-    v = st.number_input("Pre-Medicare healthcare cost ($/yr)",
-                        min_value=0, max_value=50_000, step=500, key="sa_hc_early")
-    new_hc = copy.deepcopy(hc) if hc else {}
-    new_hc["early_retirement"] = safe_int(v)
-    set_override(st, "HEALTHCARE_COSTS_BY_AGE", new_hc)
+    # Marketplace prices before age 65. These replace a "Pre-Medicare healthcare
+    # cost" box that fed a flat band the default age-rated model never reads.
+    c7, c8 = st.columns(2)
+    with c7:
+        ensure_default(st, "sa_aca_benchmark",
+                       safe_int(get_override(st, "ACA_BENCHMARK_MONTHLY_AT_40",
+                                             getattr(cfg, "ACA_BENCHMARK_MONTHLY_AT_40", 650)), 650))
+        v = st.number_input("Marketplace plan, age 40 ($/mo)", min_value=0, max_value=5_000,
+                            step=25, key="sa_aca_benchmark",
+                            help="Before age 65 without a work plan you buy insurance on the "
+                                 "marketplace. Enter the price of the second-cheapest Silver "
+                                 "plan for one 40-year-old where you live, before any "
+                                 "subsidy (healthcare.gov, by ZIP code). Other ages are "
+                                 "priced from it; subsidies are worked out for you.")
+        set_override(st, "ACA_BENCHMARK_MONTHLY_AT_40", safe_int(v))
+    with c8:
+        ensure_default(st, "sa_aca_child",
+                       safe_int(get_override(st, "ACA_CHILD_MONTHLY",
+                                             getattr(cfg, "ACA_CHILD_MONTHLY", 390)), 390))
+        v = st.number_input("Same plan, per child ($/mo)", min_value=0, max_value=3_000,
+                            step=25, key="sa_aca_child")
+        set_override(st, "ACA_CHILD_MONTHLY", safe_int(v))
 
     # Long-term care lives in the "Retirement goals" section (single source of
     # truth — enable + start age + annual cost + per-year probability). It was

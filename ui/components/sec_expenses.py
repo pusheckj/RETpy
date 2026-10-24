@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 try:
-    from utils.coerce import safe_int, ensure_default
+    from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money, money_md
 except ImportError:  # pragma: no cover
-    from ui.utils.coerce import safe_int, ensure_default  # type: ignore
+    from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
 
 try:
@@ -76,6 +76,14 @@ def render_body(st) -> None:
             v = st.slider("Years remaining on mortgage", min_value=0, max_value=40,
                           step=1, key="se_mortgage_years")
             set_override(st, "MORTGAGE_YEARS_REMAINING", safe_int(v))
+        if safe_int(get_override(st, "MORTGAGE_BALANCE", 0), 0) > 0:
+            ensure_default(st, "se_mortgage_rate",
+                           safe_float(get_override(st, "MORTGAGE_RATE_FOR_PAYOFF", 0.065), 0.065) * 100)
+            v = st.number_input("Mortgage interest rate (%)", min_value=0.0, max_value=20.0,
+                                step=0.125, format="%.3f", key="se_mortgage_rate",
+                                help="On your mortgage statement. Sets how fast you pay down "
+                                     "the loan, so how much you'd keep if you sold.")
+            set_override(st, "MORTGAGE_RATE_FOR_PAYOFF", round(v / 100, 6))
         # Clear rent if owning
         set_override(st, "SPEND_RENT_MONTHLY", 0)
     else:
@@ -165,9 +173,11 @@ def render_body(st) -> None:
     }
     preset = st.selectbox("How does spending evolve?", presets, key="se_lifecycle",
         format_func=lambda p: _preset_short.get(p, p),
-        help="Flat: inflation only. Travel boom: discretionary +50% ages 55–70, "
-             "-20% after 75. Conservative senior: discretionary -30% after 75. "
-             "Empty-nest: food/discretionary +30% while kids at home, -25% after.")
+        help="Flat: inflation only. Travel boom: discretionary +50% early in "
+             "retirement, -20% in later years. Conservative senior: discretionary "
+             "-30% in later years. Empty-nest: food/discretionary +30% while any "
+             "child is at home, -25% once all have left. Early and later years are "
+             "set in Retirement goals.")
     set_override(st, "SPEND_LIFECYCLE_PRESET", preset)
 
     # ----- Live total -----
@@ -218,8 +228,8 @@ def render_body(st) -> None:
     if monthly_kids > 1:
         parts.append(f"children {money_md(monthly_kids * 12)}")
     st.caption("Per year: " + " · ".join(parts)
-               + ".  This is the figure the simulation spends today; it grows "
-                 "with children, the house move, and healthcare in retirement.")
+               + ".  This is the figure the simulation spends today; it changes "
+                 "with children, any planned move, and healthcare in retirement.")
 
 
 def render(st) -> None:

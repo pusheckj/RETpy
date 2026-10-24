@@ -47,9 +47,8 @@ MEDICAL_EXPENSE_PORTION_POST_MEDICARE = 0.10
 # Assumes 50% of balance is unrealized gains (conservative)
 DEFAULT_COST_BASIS_RATIO = 0.5
 
-# Age thresholds for retirement lifestyle adjustments
-EARLY_RETIREMENT_LEISURE_END_AGE = 70
-LATE_RETIREMENT_SPENDING_REDUCTION_AGE = 75
+# Retirement lifestyle ages (go-go years, later-years reduction) live in config:
+# cfg.retirement_leisure_end_age / cfg.late_retirement_start_age.
 
 # Minimum portfolio value to continue simulation (avoid floating point issues)
 MINIMUM_PORTFOLIO_VALUE = 100.0
@@ -580,17 +579,27 @@ class AccountPortfolio:
         self.yearly_history: List[Dict] = []
         self.home_equity = cfg.HOME_EQUITY * cfg.HOME_EQUITY_ACCESSIBLE_PCT
         self.home_equity_used = 0.0
-        # --- Mortgage / home state for the optional house-move feature --------
-        # These mirror the config's mortgage representation so that, while
-        # HOUSE_MOVE_ENABLED is False, the engine reads mortgage payment + payoff
-        # from config exactly as before (byte-identical). When a house move
-        # fires, execute_house_move() mutates this state to the new loan and the
-        # retirement expense path reads the engine values instead of config.
+        # --- Home state for the housing timeline (cfg.housing_events) --------
+        # These mirror the config's housing representation so that, with no
+        # timeline (no HOME_EVENTS, no legacy house move), the engine reads
+        # mortgage payment + payoff from config exactly as before
+        # (byte-identical). When an event fires, apply_housing_events() mutates
+        # this state (sell, buy, start renting) and the expense paths read the
+        # engine values instead of config.
         self.mortgage_annual = float(cfg.MORTGAGE_ANNUAL)
         self.mortgage_payoff_age = cfg.YOUR_AGE + cfg.MORTGAGE_YEARS_REMAINING
         self.mortgage_monthly = float(cfg.MORTGAGE_MONTHLY)
         self.home_value = float(cfg.HOME_VALUE)
-        self.house_moved = False
+        # Monthly rent while renting (0 once a home is bought).
+        self.rent_monthly = (float(getattr(cfg, "SPEND_RENT_MONTHLY", 0) or 0)
+                             if cfg.is_renter() else 0.0)
+        # What today's home cost, for tax on its sale. None = no taxable gain
+        # (basis = its value when sold); a purchased home's basis is its price.
+        basis = getattr(cfg, "HOME_COST_BASIS", None)
+        self.home_cost_basis = None if basis is None else float(basis)
+        self.house_moved = False          # True once any housing event has fired
+        self._home_events = None          # normalized timeline, read on first use
+        self._home_events_done = set()
         # Loan balance, tracked so principal repayment can be credited to the
         # accessible-equity reserve (see refresh_home_equity). Anchored at the
         # KNOWN starting balance; the P&I payment is derived from it rather than
@@ -1304,10 +1313,15 @@ class AccountPortfolio:
           * 65+, the 'medicare_*' bands are premium PLUS care, and out-of-pocket
             is charged nowhere else in the engine, so the band acts as an ALL-IN
             floor. max() rather than sum() avoids double-counting the premium,
-            and IRMAA still wins where it exceeds the band.
+            and IRMAA still wins where it exceeds the band. The bands are for a
+            couple: each Medicare adult is charged half the band for their OWN
+            age (cfg.healthcare_cost_per_adult), so a single person pays one share.
+
+        Covered adults = you plus a partner whenever there is one
+        (cfg.has_partner), married or not: an unmarried partner needs coverage
+        too.
         """
-        married = cfg.normalize_filing_status() == cfg._FILING_MFJ
-        ages = [your_age] + ([self.current_partner_age] if married else [])
+        ages = [your_age] + ([self.current_partner_age] if cfg.has_partner() else [])
         n_adults = len(ages)
         if n_adults == 0:
             return 0.0
@@ -1323,12 +1337,12 @@ class AccountPortfolio:
                 modified_agi, inflation_factor, enrollees=on_medicare
             )
             # All-in (premium + care) floor on the Medicare members only -- see
-            # docstring. Scaled by the Medicare-covered share, and applied BEFORE
-            # a pre-65 spouse's marketplace cost is added so that cost can't mask it.
+            # docstring. One per-adult share per Medicare member, each by their
+            # own age, applied BEFORE a pre-65 spouse's marketplace cost is added
+            # so that cost can't mask it.
             if getattr(cfg, "MODEL_HEALTHCARE_COST_FLOOR", False):
-                all_in = cfg.calculate_healthcare_cost(
-                    your_age, is_retired=True, inflation_factor=inflation_factor
-                ) * (on_medicare / n_adults)
+                all_in = sum(cfg.healthcare_cost_per_adult(a, inflation_factor)
+                             for a in ages if a >= cfg.MEDICARE_AGE)
                 total = max(total, all_in)
         if self.employer_health_coverage:
             pass  # the working partner's employer plan covers the pre-Medicare household
@@ -1419,18 +1433,23 @@ class AccountPortfolio:
         return total_withdrawn
 
     # ------------------------------------------------------------------
-    # Lifecycle big-purchase helpers (car purchase, house move)
+    # Lifecycle big-purchase helpers (car purchase, housing timeline)
     # ------------------------------------------------------------------
+    def owns_home(self) -> bool:
+        """Whether the household owns its home now (else it rents). The rule of
+        ``cfg.is_renter``: a home value or a mortgage payment means owning."""
+        return self.home_value > 0 or self.mortgage_annual > 0
+
     def has_mortgage_for_age(self, your_age: int) -> bool:
         """
         Whether a mortgage payment is still owed at ``your_age``.
 
-        When the house-move feature is OFF this defers to config
-        (``cfg.has_mortgage``) so behavior is byte-identical to before. When ON,
-        it reads the engine's mortgage state, which execute_house_move() may have
-        switched to the new loan (new payoff age).
+        Without a housing timeline this defers to config (``cfg.has_mortgage``)
+        so behavior is byte-identical to before. With one, it reads the engine's
+        mortgage state, which apply_housing_events() may have switched to a new
+        loan (new payoff age) or ended by a sale.
         """
-        if not cfg.HOUSE_MOVE_ENABLED:
+        if not _housing_timeline_on():
             return cfg.has_mortgage(your_age)
         return your_age < self.mortgage_payoff_age
 
@@ -1438,8 +1457,9 @@ class AccountPortfolio:
         """
         Annual housing loan outflow owed at ``your_age`` (0 once paid off).
 
-        OFF path uses config (byte-identical). ON path uses engine state so the
-        payment amount and payoff timing reflect any executed house move.
+        Without a housing timeline this uses config (byte-identical). With one
+        it uses engine state, so the payment amount and payoff timing reflect
+        every purchase and sale so far.
 
         When extra principal is configured, two things change -- and both are
         required for a prepayment sweep to be meaningful:
@@ -1456,11 +1476,12 @@ class AccountPortfolio:
         """
         extra_on = (hasattr(cfg, "extra_mortgage_payment_enabled")
                     and cfg.extra_mortgage_payment_enabled())
+        timeline = _housing_timeline_on()
 
         if extra_on and getattr(cfg, "TRACK_HOME_EQUITY_PAYDOWN", False):
             if self.mortgage_balance <= 0:
                 return 0.0
-            scheduled = (self.mortgage_annual if cfg.HOUSE_MOVE_ENABLED
+            scheduled = (self.mortgage_annual if timeline
                          else float(cfg.MORTGAGE_ANNUAL))
             # Never bill more principal than the loan can absorb this year. The
             # cap must account for the scheduled payments too, not just the
@@ -1471,18 +1492,20 @@ class AccountPortfolio:
                 cfg.extra_mortgage_payment_for_age(your_age))
             return scheduled + extra
 
-        if not cfg.HOUSE_MOVE_ENABLED:
+        if not timeline:
             return cfg.MORTGAGE_ANNUAL if cfg.has_mortgage(your_age) else 0.0
         return self.mortgage_annual if your_age < self.mortgage_payoff_age else 0.0
 
     def housing_expense_for_age(self, your_age: int) -> float:
         """
-        Owner housing outflow at ``your_age``: the mortgage outflow while one is
-        owed, else property tax + insurance on the home currently held
-        (``self.home_value`` -- NEW_HOME_VALUE after a move). Engine twin of
-        ``cfg.owner_housing_annual``. The all-in payment already includes
-        escrow, so the carrying cost is only added once no payment is owed.
+        Housing outflow at ``your_age``: rent while renting; for an owner the
+        mortgage outflow while one is owed, else property tax + insurance on the
+        home currently held (``self.home_value``). Engine twin of
+        ``cfg.housing_annual``. The all-in payment already includes escrow, so
+        the carrying cost is only added once no payment is owed.
         """
+        if not self.owns_home():
+            return self.rent_monthly * 12.0
         mortgage = self.mortgage_expense_for_age(your_age)
         if mortgage > 0:
             return mortgage
@@ -1499,38 +1522,47 @@ class AccountPortfolio:
             return 0.0, 0.0
         return self.withdraw_tax_efficient(amount, is_medical=False, your_age=your_age)
 
-    def maybe_execute_house_move(self, your_age: int) -> bool:
+    def apply_housing_events(self, your_age: int) -> bool:
         """
-        Execute the one-time house move at cfg.HOUSE_MOVE_AGE, if enabled and not
-        already done. Returns True if a move was executed this call.
+        Apply the housing timeline's events at ``your_age`` (cfg.housing_events:
+        HOME_EVENTS plus the legacy single house move), each once. Returns True
+        if any fired. Runs before the year's expenses so that year already pays
+        the new housing cost.
 
-        Sequence:
-          1. Sell the current home. Net proceeds =
-                current_home_value
-                - remaining_mortgage_principal (estimated, see below)
-                - current_home_value * HOME_SELLING_COST_PCT
-             The estimate of remaining principal uses
-             cfg.estimate_remaining_mortgage_principal() -- the PV of the
-             remaining level payments, since the engine carries no amortization
-             schedule (APPROXIMATION documented in config). Net proceeds are
-             deposited into cash (fully liquid, no tax modeled on the primary-
-             residence gain -- the $500k MFJ exclusion typically covers it).
-          2. Buy the new home. Pay
-                down_payment = NEW_HOME_VALUE - NEW_MORTGAGE_BALANCE
-                + HOUSE_MOVING_COSTS
-             from the portfolio (tax-efficient order, after the proceeds land so
-             cash is used first).
-          3. Switch the ongoing mortgage: payment -> NEW_MORTGAGE_MONTHLY,
-             payoff age -> HOUSE_MOVE_AGE + NEW_MORTGAGE_YEARS, home value ->
-             NEW_HOME_VALUE, and reset the accessible home-equity backup pool to
-             the new home's equity * HOME_EQUITY_ACCESSIBLE_PCT.
+        Each event:
+          1. sells the home if one is owned (_sell_home): net proceeds = value -
+             remaining principal - selling costs - tax on the gain above the
+             exclusion, into cash;
+          2. then either buys (_buy_home): down payment (price - loan) + costs
+             from the portfolio, and the new loan, value and accessible equity
+             replace the old; or starts renting (_start_renting): costs from the
+             portfolio, no home, the new rent from now on.
         """
-        if not cfg.HOUSE_MOVE_ENABLED or self.house_moved:
+        if not _housing_timeline_on():
             return False
-        if your_age != cfg.HOUSE_MOVE_AGE:
-            return False
+        if self._home_events is None:
+            self._home_events = cfg.housing_events()
+        fired = False
+        for i, event in enumerate(self._home_events):
+            if event["age"] != your_age or i in self._home_events_done:
+                continue
+            self._home_events_done.add(i)
+            if self.owns_home():
+                self._sell_home(your_age, event["selling_cost_pct"])
+            if event["action"] == cfg.HOME_SELL_RENT:
+                self._start_renting(your_age, event)
+            else:
+                self._buy_home(your_age, event)
+            fired = True
+        if fired:
+            self.house_moved = True
+        return fired
 
-        # --- 1. Sell current home -> net proceeds into cash ---
+    # The single-move name, kept for callers and tests that predate the timeline.
+    maybe_execute_house_move = apply_housing_events
+
+    def _sell_home(self, your_age: int, selling_cost_pct: float) -> None:
+        """Sell the home held now; net proceeds land in cash."""
         # Prefer the TRACKED loan balance: it is anchored to the balance the user
         # entered and amortized forward, whereas the fallback estimator has to
         # reconstruct principal from the payment — and that payment is all-in (it
@@ -1544,33 +1576,70 @@ class AccountPortfolio:
             remaining_principal = cfg.estimate_remaining_mortgage_principal(
                 self.mortgage_monthly, months_remaining
             )
-        selling_costs = self.home_value * cfg.HOME_SELLING_COST_PCT
+        selling_costs = self.home_value * selling_cost_pct
         net_proceeds = max(0.0, self.home_value - remaining_principal - selling_costs)
-        self._deposit_cash(net_proceeds)
+        # Main-home gain above the exclusion ($250k per owner, $500k joint) is a
+        # long-term capital gain. Paid from the proceeds, any rest from savings.
+        basis = self.home_value if self.home_cost_basis is None else self.home_cost_basis
+        taxable_gain = self.home_value - selling_costs - basis - cfg.home_sale_exclusion()
+        tax = self._tax_home_sale_gain(taxable_gain) if taxable_gain > 0 else 0.0
+        self._deposit_cash(net_proceeds - min(tax, net_proceeds))
+        if tax > net_proceeds:
+            self.pay_lump_sum(tax - net_proceeds, your_age)
 
-        # --- 2. Buy new home: down payment + moving/closing costs from portfolio ---
-        down_payment = max(0.0, cfg.NEW_HOME_VALUE - cfg.NEW_MORTGAGE_BALANCE)
-        cash_outlay = down_payment + cfg.HOUSE_MOVING_COSTS
-        self.pay_lump_sum(cash_outlay, your_age)
+    def _tax_home_sale_gain(self, gain: float) -> float:
+        """Tax on the taxable part of a home-sale gain, stacked on this year's
+        income: the same three pieces as a taxable-account sale in
+        _withdraw_single_pass (federal LTCG, state as ordinary income, NIIT)."""
+        prior_gains = self.year_investment_income
+        fed_taxable_ordinary = max(
+            0, self.year_ordinary_income + prior_gains - self.get_standard_deduction()
+        )
+        federal = calculate_ltcg_tax(gain, fed_taxable_ordinary)
+        ca_std_deduction = cfg.CA_STANDARD_DEDUCTION_MFJ_2024
+        ca_base = self._state_taxable_base() + prior_gains
+        state = (self.ca_tax_brackets.calculate_tax(max(0, ca_base + gain - ca_std_deduction))
+                 - self.ca_tax_brackets.calculate_tax(max(0, ca_base - ca_std_deduction)))
+        self.year_investment_income += gain
+        niit = cfg.calculate_niit(
+            self.year_ordinary_income + self.year_investment_income, gain,
+            years_from_start=max(0, (self.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
+        )
+        self.total_niit_paid += niit
+        tax = federal + state + niit
+        self.total_taxes_paid += tax
+        return tax
 
-        # --- 3. Switch ongoing mortgage + home equity to the new loan ---
-        self.home_value = float(cfg.NEW_HOME_VALUE)
-        self.mortgage_monthly = float(cfg.NEW_MORTGAGE_MONTHLY)
-        self.mortgage_annual = float(cfg.NEW_MORTGAGE_MONTHLY) * 12.0
-        self.mortgage_payoff_age = cfg.HOUSE_MOVE_AGE + cfg.NEW_MORTGAGE_YEARS
-        new_equity = max(0.0, cfg.NEW_HOME_VALUE - cfg.NEW_MORTGAGE_BALANCE)
-        self.home_equity = new_equity * cfg.HOME_EQUITY_ACCESSIBLE_PCT
+    def _buy_home(self, your_age: int, event: dict) -> None:
+        """Buy ``event``'s home: down payment + costs from the portfolio (after
+        any sale proceeds landed, so cash is used first), then switch the loan,
+        value and accessible-equity reserve to it."""
+        down_payment = max(0.0, event["price"] - event["loan"])
+        self.pay_lump_sum(down_payment + event["costs"], your_age)
+        self.home_value = float(event["price"])
+        self.home_cost_basis = self.home_value
+        self.mortgage_monthly = float(event["monthly"])
+        self.mortgage_annual = float(event["monthly"]) * 12.0
+        self.mortgage_payoff_age = your_age + event["years"]
+        self.home_equity = down_payment * cfg.HOME_EQUITY_ACCESSIBLE_PCT
+        self.rent_monthly = 0.0
         # Re-anchor the amortization schedule on the NEW loan so equity starts
         # rebuilding from the down payment at this age.
-        self.mortgage_balance = float(cfg.NEW_MORTGAGE_BALANCE)
-        self._mortgage_rate = cfg.new_mortgage_rate()   # the new loan's own rate
+        self.mortgage_balance = float(event["loan"])
+        self._mortgage_rate = event["rate"]          # the new loan's own rate
         self._mortgage_pi = _level_payment(
-            self.mortgage_balance, self._mortgage_rate,
-            cfg.NEW_MORTGAGE_YEARS,
+            self.mortgage_balance, self._mortgage_rate, event["years"],
         )
 
-        self.house_moved = True
-        return True
+    def _start_renting(self, your_age: int, event: dict) -> None:
+        """Rent from now on: moving costs from the portfolio, no home or loan."""
+        self.pay_lump_sum(event["costs"], your_age)
+        self.home_value = self.home_cost_basis = 0.0
+        self.mortgage_monthly = self.mortgage_annual = 0.0
+        self.mortgage_payoff_age = your_age
+        self.mortgage_balance = self._mortgage_pi = 0.0
+        self.home_equity = 0.0
+        self.rent_monthly = float(event["rent"])
 
     def _deposit_cash(self, amount: float) -> None:
         """Deposit a lump sum of liquid cash into the portfolio (into 'your_cash'
@@ -1815,12 +1884,12 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     )
 
     # ------------------------------------------------------------------
-    # Lifecycle house move (accumulation phase). Executed BEFORE computing
-    # living expenses so that a working-year move at HOUSE_MOVE_AGE uses the
-    # NEW mortgage payment for this year's living cost. Default OFF -> no-op.
-    # (Sale proceeds land in cash before the down payment + car are drawn.)
+    # Housing timeline (accumulation phase). Executed BEFORE computing living
+    # expenses so that a working-year purchase, move or sale already pays the
+    # NEW housing cost this year. No timeline -> no-op. (Sale proceeds land in
+    # cash before the down payment + car are drawn.)
     # ------------------------------------------------------------------
-    portfolio.maybe_execute_house_move(your_age)
+    portfolio.apply_housing_events(your_age)
 
     # ------------------------------------------------------------------
     # Household after-tax income for the year.
@@ -1846,15 +1915,13 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     # already includes mortgage (has_mortgage), the granular household base
     # (SPEND_* incl. PARTNER_OTHER_MONTHLY), and child costs.
     living = cfg.calculate_annual_expenses(your_age, 1.0, childcare_factor=1.0)
-    # After a house move the config mortgage no longer reflects reality; swap in
-    # the engine's (post-move) mortgage using the SAME delta as
-    # calculate_retirement_expenses. Guarded so the feature-OFF path is
-    # byte-identical (no change when HOUSE_MOVE_ENABLED is False). Housing, not
-    # just mortgage, so the post-payoff carrying cost follows the engine's home.
+    # With a housing timeline the config housing term (today's home for the
+    # whole plan) no longer reflects reality; swap in the engine's using the
+    # SAME delta as calculate_retirement_expenses. Guarded so the no-timeline
+    # path is byte-identical. Housing, not just mortgage, so rent stops once you
+    # buy and the post-payoff carrying cost follows the engine's home.
     if _mortgage_swap_active(portfolio):
-        config_housing = cfg.owner_housing_annual(your_age)
-        engine_housing = portfolio.housing_expense_for_age(your_age)
-        living += engine_housing - config_housing
+        living += _housing_swap_delta(portfolio, your_age)
 
     # Record working-year spending too (deterministic, so no cross-scenario
     # spread — it anchors the spending-range chart before retirement). Living
@@ -2068,17 +2135,24 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     return True
 
 
-def _mortgage_swap_active(portfolio) -> bool:
-    """Whether the ENGINE's mortgage figure should replace the config one.
+def _housing_timeline_on() -> bool:
+    """Is there a housing timeline (HOME_EVENTS or the legacy house move)? Then
+    the engine's own home state, not config, decides housing costs."""
+    return bool(getattr(cfg, "HOUSE_MOVE_ENABLED", False)) or bool(getattr(cfg, "HOME_EVENTS", None))
 
-    True for a lifecycle house move (the original reason this swap exists) and
-    ALSO whenever extra principal is configured -- otherwise the extra payment
-    never reaches the expense total on the no-house-move path, and the tracked
-    early payoff would be invisible to the expense side.
+
+def _mortgage_swap_active(portfolio) -> bool:
+    """Whether the ENGINE's housing figure should replace the config one.
+
+    True with a housing timeline (purchases, moves and sales change what the
+    household pays) and ALSO whenever extra principal is configured --
+    otherwise the extra payment never reaches the expense total on the
+    no-timeline path, and the tracked early payoff would be invisible to the
+    expense side.
     """
     if portfolio is None:
         return False
-    if cfg.HOUSE_MOVE_ENABLED:
+    if _housing_timeline_on():
         return True
     return (hasattr(cfg, "extra_mortgage_payment_enabled")
             and cfg.extra_mortgage_payment_enabled()
@@ -2086,15 +2160,16 @@ def _mortgage_swap_active(portfolio) -> bool:
 
 
 def _housing_swap_delta(portfolio, your_age: int) -> float:
-    """Engine-minus-config owner housing at ``your_age`` (today's dollars).
+    """Engine-minus-config housing at ``your_age`` (today's dollars).
 
     0 unless ``_mortgage_swap_active``; otherwise the amount that replaces the
-    config mortgage / carrying cost with the engine's (post-move, extra-principal
-    aware) figure.
+    config housing term (``cfg.housing_annual``: today's mortgage, rent or
+    carrying cost) with the engine's (timeline- and extra-principal-aware)
+    figure. Rent is part of both, so a renter who buys stops paying it.
     """
     if portfolio is None or not _mortgage_swap_active(portfolio):
         return 0.0
-    return portfolio.housing_expense_for_age(your_age) - cfg.owner_housing_annual(your_age)
+    return portfolio.housing_expense_for_age(your_age) - cfg.housing_annual(your_age)
 
 
 def _retirement_housing_expense(
@@ -2104,15 +2179,11 @@ def _retirement_housing_expense(
 
     Built from the SAME pieces that put housing into that total: the config term
     (``cfg.housing_annual``: mortgage / rent / post-payoff carrying cost), the
-    engine swap (``_housing_swap_delta``), the general inflation factor, and the
-    75+ late-retirement scaling that ``calculate_retirement_expenses`` applies to
-    its whole base (housing included).
+    engine swap (``_housing_swap_delta``) and the general inflation factor. The
+    later-years spending reduction leaves housing alone.
     """
-    housing = (cfg.housing_annual(current_age)
-               + _housing_swap_delta(portfolio, current_age)) * general_factor
-    if current_age >= LATE_RETIREMENT_SPENDING_REDUCTION_AGE:
-        housing *= (1 - cfg.LATE_RETIREMENT_LEISURE_DECREASE)
-    return housing
+    return (cfg.housing_annual(current_age)
+            + _housing_swap_delta(portfolio, current_age)) * general_factor
 
 
 def calculate_retirement_expenses(
@@ -2134,12 +2205,12 @@ def calculate_retirement_expenses(
     Args:
         current_age: Person's current age
         inflation_factors: Dict with inflation factors by category
-        retirement_age: Age retirement began (needed for the optional
-            "go-go years" vacation add-on). Defaults to current_age when not
-            supplied, which is a no-op unless the vacation feature is enabled.
-        portfolio: Portfolio whose engine mortgage state overrides the config
-            mortgage AFTER a house move. Only consulted when the house-move
-            feature is enabled; None / OFF keeps the exact prior behavior.
+        retirement_age: Age retirement began. Places the go-go years, the
+            later-years reduction and the lifecycle preset's retirement-relative
+            ages, and the optional vacation add-on. None = the plain age rules.
+        portfolio: Portfolio whose engine housing state replaces the config
+            housing term once a housing timeline exists (purchases, moves,
+            sales). None / no timeline keeps the exact prior behavior.
 
     Returns:
         Total annual retirement expenses (adjusted for age, leisure, college)
@@ -2150,11 +2221,12 @@ def calculate_retirement_expenses(
         inflation_factors['general'],
         childcare_factor=inflation_factors['childcare'],
         retirement=True,
+        retirement_age=retirement_age,
     )
 
-    # House move: replace the config mortgage component with the engine's
-    # (post-move) mortgage. Only when the feature is enabled AND a portfolio is
-    # supplied, so the default path is byte-identical.
+    # Housing timeline: replace the config housing term with the engine's.
+    # Only when a portfolio is supplied and the swap is active, so the default
+    # path is byte-identical.
     if portfolio is not None and _mortgage_swap_active(portfolio):
         base_expenses += _housing_swap_delta(portfolio, current_age) * inflation_factors['general']
 
@@ -2162,14 +2234,18 @@ def calculate_retirement_expenses(
     # via portfolio.calculate_health_insurance_cost() which calculates ACA or Medicare premiums.
     # We do NOT add HEALTHCARE_INCREASE_PRE_MEDICARE here to avoid double-counting.
 
-    # Early retirement leisure increase (ages 50-70)
-    if current_age < EARLY_RETIREMENT_LEISURE_END_AGE:
-        base_expenses += cfg.EARLY_RETIREMENT_LEISURE_INCREASE * inflation_factors['general']
+    # Go-go years: extra travel/hobby spending from retirement until
+    # retirement_leisure_end_age (70, or 5 years after a late retirement).
+    if (current_age < cfg.retirement_leisure_end_age(retirement_age)
+            and (retirement_age is None or current_age >= retirement_age)):
+        base_expenses += cfg.retirement_leisure_increase() * inflation_factors['general']
 
-    # Late retirement spending reduction (ages 75+). Scales the whole base,
-    # housing included -- mirrored in _retirement_housing_expense.
-    if current_age >= LATE_RETIREMENT_SPENDING_REDUCTION_AGE:
-        base_expenses *= (1 - cfg.LATE_RETIREMENT_LEISURE_DECREASE)
+    # Later years (75, or 10 years after a late retirement): living spending
+    # drops. Housing is held out -- the payment or rent doesn't shrink -- and
+    # mirrored in _retirement_housing_expense.
+    if current_age >= cfg.late_retirement_start_age(retirement_age):
+        housing = _retirement_housing_expense(current_age, inflation_factors['general'], portfolio)
+        base_expenses = housing + (base_expenses - housing) * (1 - cfg.LATE_RETIREMENT_LEISURE_DECREASE)
 
     # Add college expenses (ages 18-22 for each child)
     college_costs = cfg.calculate_college_expenses(current_age)
@@ -2871,10 +2947,10 @@ def _run_retirement_phase(portfolio, retirement_age, inflation_factors,
         current_age = retirement_age + year
         current_year = cfg.CURRENT_YEAR + years_until_retirement + year
 
-        # House move (if it lands in retirement) must run BEFORE expenses are
-        # computed so this year's mortgage reflects the switched loan. No-op
-        # unless the feature is enabled and this is HOUSE_MOVE_AGE.
-        portfolio.maybe_execute_house_move(current_age)
+        # Housing events landing in retirement must run BEFORE expenses are
+        # computed so this year's housing reflects the purchase or sale. No-op
+        # without a housing timeline.
+        portfolio.apply_housing_events(current_age)
 
         base_expenses = calculate_retirement_expenses(
             current_age, inflation_factors, retirement_age=retirement_age,
@@ -3359,7 +3435,7 @@ def run_monte_carlo_with_scenario(
             current_age = retirement_age + year
             current_year = cfg.CURRENT_YEAR + (retirement_age - cfg.YOUR_AGE) + year
 
-            portfolio.maybe_execute_house_move(current_age)
+            portfolio.apply_housing_events(current_age)
 
             base_expenses = calculate_retirement_expenses(
                 current_age, inflation_factors, retirement_age=retirement_age,
@@ -3522,9 +3598,10 @@ def mortgage_payoff_projection(extra_annual: float = 0.0,
     Monte Carlo output (where per-year loan state isn't even surfaced).
 
     Mirrors the engine's own schedule: ``_level_payment`` at
-    ``MORTGAGE_RATE_FOR_PAYOFF``, and the lifecycle house move replacing the loan
-    at ``HOUSE_MOVE_AGE``. Kept next to ``_amortize_mortgage_year`` so the two
-    stay consistent.
+    ``MORTGAGE_RATE_FOR_PAYOFF`` for today's loan, then the housing timeline
+    (cfg.housing_events): a purchase replaces the loan with its own, a sale to
+    rent ends it. Kept next to ``_amortize_mortgage_year`` so the two stay
+    consistent.
 
     Returns ``{payoff_age, total_interest, years_saved_vs_scheduled}``;
     ``payoff_age`` is None when the loan outlives ``max_age``.
@@ -3536,22 +3613,26 @@ def mortgage_payoff_projection(extra_annual: float = 0.0,
     pi = _level_payment(bal, rate, int(cfg.MORTGAGE_YEARS_REMAINING or 0))
     extra_annual = max(0.0, float(extra_annual or 0.0))
 
-    move_on = bool(getattr(cfg, "HOUSE_MOVE_ENABLED", False))
-    move_age = int(getattr(cfg, "HOUSE_MOVE_AGE", 10 ** 6))
+    events = cfg.housing_events()
+    last_purchase = max((e["age"] for e in events if e["action"] != cfg.HOME_SELL_RENT),
+                        default=None)
 
     interest = 0.0
     payoff_age = None
     age = start_age
     while age <= max_age:
-        if move_on and age == move_age:
-            bal = float(getattr(cfg, "NEW_MORTGAGE_BALANCE", 0.0) or 0.0)
-            rate = max(0.0, cfg.new_mortgage_rate())        # the new loan's own rate
-            r = rate / 12.0
-            pi = _level_payment(bal, rate,
-                                int(getattr(cfg, "NEW_MORTGAGE_YEARS", 30) or 30))
+        for e in events:
+            if e["age"] != age:
+                continue
+            if e["action"] == cfg.HOME_SELL_RENT:
+                bal, pi = 0.0, 0.0                      # sold: the loan is repaid
+            else:
+                bal, rate = e["loan"], e["rate"]        # the new loan's own rate
+                r = rate / 12.0
+                pi = _level_payment(bal, rate, e["years"])
         if bal <= 0:
-            # Only conclude "paid off" once no future move can revive the loan.
-            if payoff_age is None and not (move_on and age < move_age):
+            # Only conclude "paid off" once no future purchase can revive the loan.
+            if payoff_age is None and not (last_purchase is not None and age < last_purchase):
                 payoff_age = age
                 break
         else:

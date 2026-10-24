@@ -5,13 +5,13 @@
    ``render_body()`` UI is superseded by ``sec_expenses.py`` and is no longer
    called from ``app.py``, but its *compute helpers* are load-bearing:
 
-     * ``utils/sim_runner.py`` imports ``compute_lifecycle_multipliers``
-       (the engine seam itself).
      * ``components/spending_chart.py`` imports ``SPENDING_CATEGORIES`` and
-       ``compute_lifecycle_multipliers``.
+       ``compute_lifecycle_multipliers`` (a per-age view of the engine's own
+       ``cfg.lifecycle_multiplier``, which the simulation reads directly).
 
-   Removing the file breaks the simulator. Safe cleanup = drop only the unused
-   ``render``/``render_body`` functions, or move the helpers into ``utils/``.
+   Removing the file breaks the spending chart. Safe cleanup = drop only the
+   unused ``render``/``render_body`` functions, or move the helpers into
+   ``utils/``.
 
 Provides a monthly-spending-by-category breakdown plus a lifecycle preset that
 describes how spending evolves over time (e.g., mortgage pay-off, travel boom,
@@ -72,40 +72,31 @@ def compute_lifecycle_multipliers(
     Multipliers are applied on top of inflation in the spending chart. A value
     of 1.0 means "no change from today's spending in real terms." Only the
     non-1.0 entries are stored; callers should default missing ages to 1.0.
+
+    The mapping itself is the engine's (``cfg.lifecycle_multiplier``), so the
+    chart shows exactly what the simulation spends: the go-go and later-years
+    ages follow ``retirement_age``, and empty-nest follows every child at home
+    (``cfg.children_at_home_ages``). Children come from the ENGINE config, so a
+    caller drawing a plan from overrides must patch the children inputs onto it
+    first (spending_chart does). ``years_until_first_child`` and
+    ``child_leaves_home_age`` are accepted for older callers and ignored.
     """
+    from retirement_sim import config as cfg
+
     ages = list(range(int(current_age), int(plan_until_age) + 1))
     # Every category maps to a {age: multiplier} dict (default 1.0).
-    categories = [c[1] for c in SPENDING_CATEGORIES]
-    out: dict = {c: {} for c in categories}
-
-    if preset == "Early-retirement travel boom, quieter later":
-        for a in ages:
-            if 55 <= a <= 70:
-                out["SPEND_DISCRETIONARY_MONTHLY"][a] = 1.50
-            elif a >= 75:
-                out["SPEND_DISCRETIONARY_MONTHLY"][a] = 0.80
-
-    elif preset == "Conservative senior years":
-        for a in ages:
-            if a >= 75:
-                out["SPEND_DISCRETIONARY_MONTHLY"][a] = 0.70
-
-    elif preset == "Children then empty-nest":
-        # Child-at-home window: from first-child arrival until child_leaves_home_age
-        # years after arrival for the oldest. Use current_age + years_until_first_child
-        # as the start, +child_leaves_home_age as the end.
-        if years_until_first_child < 99:
-            child_arrival_age = current_age + years_until_first_child
-            empty_nest_age = child_arrival_age + child_leaves_home_age
-            for a in ages:
-                if child_arrival_age <= a < empty_nest_age:
-                    out["SPEND_FOOD_MONTHLY"][a] = 1.30
-                    out["SPEND_DISCRETIONARY_MONTHLY"][a] = 1.30
-                elif a >= empty_nest_age:
-                    out["SPEND_FOOD_MONTHLY"][a] = 0.75
-                    out["SPEND_DISCRETIONARY_MONTHLY"][a] = 0.75
-
-    # "Flat (no change)" and unknown presets: all multipliers stay 1.0.
+    out: dict = {c[1]: {} for c in SPENDING_CATEGORIES}
+    if preset not in LIFECYCLE_PRESETS[1:]:
+        return out   # "Flat (no change)" and unknown presets: all multipliers stay 1.0.
+    nest = cfg.empty_nest_age(current_age, plan_until_age)
+    for a in ages:
+        kids = bool(cfg.children_at_home_ages(a))
+        for category in out:
+            m = cfg.lifecycle_multiplier(category, a, retirement_age, preset,
+                                         retired=a >= int(retirement_age),
+                                         kids_at_home=kids, empty_nest_from=nest)
+            if m != 1.0:
+                out[category][a] = m
     return out
 
 
@@ -168,8 +159,8 @@ def render_body(st) -> None:
         key="sp_lifecycle",
         help=(
             "Flat: expenses only inflate.  |  "
-            "Travel boom: discretionary +50% ages 55–70, -20% after 75.  |  "
-            "Conservative senior: discretionary -30% after 75.  |  "
+            "Travel boom: discretionary +50% early in retirement, -20% later.  |  "
+            "Conservative senior: discretionary -30% in later years.  |  "
             "Empty-nest: food/discretionary +30% while kids at home, "
             "-25% after they leave.  |  "
             "(Mortgage drop-off at payoff is automatic.)"

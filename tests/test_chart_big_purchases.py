@@ -13,6 +13,7 @@ The two charts (net_worth_projection_chart, spending_chart) read directly from
 The chart modules live under ``ui/``; add both ROOT and ROOT/ui to sys.path so
 their internal ``from components...`` / ``from utils...`` imports resolve.
 """
+import pytest
 import os
 import sys
 
@@ -156,7 +157,12 @@ def test_spending_house_move_recomputes_payoff_age_bug():
     # New mortgage payment used from the move age onward.
     assert series[ages.index(34)] == 4_500 * 12
     assert series[ages.index(63)] == 4_500 * 12
-    assert series[ages.index(64)] == 0
+    # After payoff the new home's property tax + insurance remain. This plan
+    # sets no NEW_HOME_VALUE, so -- like the engine -- the schedule uses the
+    # config default (it used to read the missing key as $0 and show nothing,
+    # disagreeing with what the simulation charges).
+    from retirement_sim import config as cfg
+    assert series[ages.index(64)] == pytest.approx(cfg.NEW_HOME_VALUE * 0.0135)
 
 
 def test_spending_house_move_switches_payment_midstream():

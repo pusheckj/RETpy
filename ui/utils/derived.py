@@ -224,14 +224,14 @@ def compute_expenses_today(overrides: dict) -> int:
     # Extra mortgage principal is REAL CASH the engine charges on top of the
     # scheduled payment (see cfg.EXTRA_MORTGAGE_PAYMENT_ANNUAL), so it belongs in
     # "what we spend this year". Added once, here, and only while a loan actually
-    # exists -- the mortgage term above already contributes the scheduled payment,
+    # exists this year (the schedule knows; a renter planning to buy has none
+    # yet) -- the mortgage term above already contributes the scheduled payment,
     # so this cannot double-count it. Without this the sidebar total and
     # compute_disposable both ignored it, overstating investable surplus by the
     # prepayment amount.
-    if safe_float(overrides.get("MORTGAGE_BALANCE", 0) or 0, 0.0) > 0 or bool(
-            overrides.get("HOUSE_MOVE_ENABLED", False)):
-        annual += extra_mortgage_for_age(
-            overrides, safe_int(overrides.get("YOUR_AGE", 25), 25))
+    if extra_mortgage_for_age(overrides, safe_int(overrides.get("YOUR_AGE", 25), 25)) > 0:
+        today = safe_int(overrides.get("YOUR_AGE", 25), 25)
+        annual += mortgage_schedule(overrides, [today])["by_age"][today]["extra"]
 
     return int(annual)
 
@@ -542,7 +542,9 @@ def current_mortgage_terms(overrides: dict) -> Dict[str, float]:
 
     ``MORTGAGE_MONTHLY`` is an all-in figure, so escrow (estimated from
     ``NEW_HOME_ESCROW_PCT`` applied to today's home value) is removed before
-    inverting the payment for a rate. Returns ``{balance, pi_payment, rate,
+    inverting the payment for a rate. When the loan's rate was entered
+    (``MORTGAGE_RATE_FOR_PAYOFF``) it is used instead, with the engine's level
+    payment for the balance and term. Returns ``{balance, pi_payment, rate,
     years}``; a zero balance yields zeros so callers can skip the amortization.
     """
     balance = max(0.0, safe_float(overrides.get("MORTGAGE_BALANCE", 0), 0.0))
@@ -550,6 +552,10 @@ def current_mortgage_terms(overrides: dict) -> Dict[str, float]:
     monthly = max(0.0, safe_float(overrides.get("MORTGAGE_MONTHLY", 0), 0.0))
     if balance <= 0 or years <= 0 or monthly <= 0:
         return {"balance": balance, "pi_payment": 0.0, "rate": 0.0, "years": years}
+    if overrides.get("MORTGAGE_RATE_FOR_PAYOFF") is not None:
+        rate = max(0.0, _payoff_rate(overrides))
+        return {"balance": balance, "pi_payment": mortgage_payment(balance, rate, years),
+                "rate": rate, "years": years}
     home_value = max(0.0, safe_float(overrides.get("HOME_VALUE", 0), 0.0))
     escrow_pct = safe_float(overrides.get("NEW_HOME_ESCROW_PCT", 0.0135), 0.0135)
     pi = max(0.0, monthly - home_value * max(0.0, escrow_pct) / 12.0)
@@ -616,10 +622,16 @@ def _payoff_rate(overrides: dict) -> float:
     return safe_float(overrides.get("MORTGAGE_RATE_FOR_PAYOFF", 0.065), 0.065)
 
 
-def _new_loan_rate(overrides: dict) -> float:
-    """The house move's new loan rate; mirrors cfg.new_mortgage_rate()."""
-    v = overrides.get("NEW_MORTGAGE_RATE")
-    return _payoff_rate(overrides) if v is None else safe_float(v, _payoff_rate(overrides))
+def housing_timeline(overrides: dict) -> list:
+    """The plan's housing events (buy / sell and buy / sell and rent), resolved
+    exactly as the engine resolves them (``cfg.housing_events``, legacy house
+    move included) from ``overrides`` over the config defaults. The escrow %
+    follows the one input config_builder maps onto HOME_CARRYING_COST_PCT."""
+    from retirement_sim import config as cfg
+    src = dict(overrides or {})
+    if src.get("HOME_CARRYING_COST_PCT") is None and src.get("NEW_HOME_ESCROW_PCT") is not None:
+        src["HOME_CARRYING_COST_PCT"] = src["NEW_HOME_ESCROW_PCT"]
+    return cfg.housing_events(src)
 
 
 def extra_mortgage_for_age(overrides: dict, age) -> float:
@@ -642,20 +654,26 @@ def extra_mortgage_for_age(overrides: dict, age) -> float:
 
 
 def mortgage_schedule(overrides: dict, ages) -> dict:
-    """Per-age loan state, honouring extra principal and the house move.
+    """Per-age housing state, honouring extra principal and the housing timeline.
 
-    Returns ``{"by_age": {age: {"balance", "scheduled", "extra", "housing"}},
-    "payoff_age": int|None, "owns": bool}`` where
+    Returns ``{"by_age": {age: {"balance", "scheduled", "extra", "housing",
+    "owns"}}, "payoff_age": int|None, "owns": bool}`` where
 
       * ``scheduled`` is the all-in annual payment (0 once the loan is gone),
+        or the year's rent while renting,
       * ``extra``     is the extra principal actually paid that year (never more
                       than the balance left),
       * ``housing``   is scheduled + extra, i.e. the real cash going to housing;
                       for an owner with no loan outstanding (paid off, or never
                       had one) it is the property tax + insurance carrying cost
-                      instead -- the engine's ``home_carrying_cost_annual`` rule.
+                      instead -- the engine's ``home_carrying_cost_annual`` rule,
+      * ``owns``      is whether a home is owned that year.
 
-    ``balance`` is the principal at the START of the year.
+    ``balance`` is the principal at the START of the year. Events apply at the
+    start of their year, like the engine (``AccountPortfolio.apply_housing_events``):
+    a renter pays rent until a purchase and the owner's costs after it; a sale
+    to rent switches to the new rent. The top-level ``owns`` is True if a home
+    is owned in any year.
     """
     ages = [safe_int(a, 0) for a in ages]
     your_age = safe_int(overrides.get("YOUR_AGE", 25), 25)
@@ -665,52 +683,56 @@ def mortgage_schedule(overrides: dict, ages) -> dict:
     bal = safe_float(overrides.get("MORTGAGE_BALANCE", 0) or 0, 0.0)
     years = safe_int(overrides.get("MORTGAGE_YEARS_REMAINING", 0), 0)
     monthly = safe_float(overrides.get("MORTGAGE_MONTHLY", 0) or 0, 0.0)
+    home_value = safe_float(overrides.get("HOME_VALUE", 0) or 0, 0.0)
     if bal > 0 and years > 0:
         pi = mortgage_payment(bal, rate, years)
     elif monthly > 0 and years > 0:
         # Loan given as payment + term with no balance: recover the principal so
         # there is something to amortize (otherwise this reports no loan at all).
-        pi = _pi_from_all_in(monthly, overrides.get("HOME_VALUE", 0), overrides)
+        pi = _pi_from_all_in(monthly, home_value, overrides)
         bal = _balance_from_payment(pi, rate, years)
     else:
         pi = 0.0
     scheduled_annual = monthly * 12.0
-
-    move_on = bool(overrides.get("HOUSE_MOVE_ENABLED", False))
-    move_age = safe_int(overrides.get("HOUSE_MOVE_AGE", 10 ** 6), 10 ** 6)
     rent_annual = safe_float(overrides.get("SPEND_RENT_MONTHLY", 0) or 0, 0.0) * 12.0
-    owns = bal > 0 or monthly > 0 or safe_float(overrides.get("HOME_VALUE", 0) or 0, 0.0) > 0 \
-        or move_on
+    owns = bal > 0 or monthly > 0 or home_value > 0      # the engine's is_renter rule
+    events = housing_timeline(overrides)
+    purchases = [e["age"] for e in events if e["action"] != "sell_rent"]
     # Post-payoff carrying cost (mirrors cfg.home_carrying_cost_annual; the pct
     # resolves exactly as config_builder translates it onto the engine).
     carry_on = bool(overrides.get("MODEL_HOME_CARRYING_COST_AFTER_PAYOFF", True))
     carry_pct = safe_float(overrides.get(
         "HOME_CARRYING_COST_PCT", overrides.get("NEW_HOME_ESCROW_PCT", 0.0135)), 0.0135)
-    home_value = safe_float(overrides.get("HOME_VALUE", 0) or 0, 0.0)
 
-    by_age, payoff_age = {}, None
+    by_age, payoff_age, ever_owns = {}, None, owns
     for age in range(min(ages or [your_age]), max(ages or [your_age]) + 1):
-        if move_on and age == move_age:
-            rate = max(0.0, _new_loan_rate(overrides))      # the new loan's own rate
+        for e in events:
+            if e["age"] != age:
+                continue
+            if e["action"] == "sell_rent":
+                if owns and bal > 0 and not any(a > age for a in purchases):
+                    payoff_age = age                         # repaid from the sale
+                owns, bal, pi, scheduled_annual, home_value = False, 0.0, 0.0, 0.0, 0.0
+                rent_annual = e["rent"] * 12.0
+                continue
+            rate = e["rate"]                                 # the new loan's own rate
             r = rate / 12.0
-            bal = safe_float(overrides.get("NEW_MORTGAGE_BALANCE", 0) or 0, 0.0)
-            _ny = safe_int(overrides.get("NEW_MORTGAGE_YEARS", 30), 30)
-            _nm = safe_float(overrides.get("NEW_MORTGAGE_MONTHLY", 0) or 0, 0.0)
+            bal = e["loan"]
             if bal > 0:
-                pi = mortgage_payment(bal, rate, _ny)
+                pi = mortgage_payment(bal, rate, e["years"])
             else:
                 # Specified by payment + term instead of balance: strip escrow
                 # off the all-in monthly (same convention as
                 # current_mortgage_terms) and invert the annuity for principal.
-                _nhv = safe_float(overrides.get("NEW_HOME_VALUE", 0) or 0, 0.0)
-                pi = _pi_from_all_in(_nm, _nhv, overrides)
-                bal = _balance_from_payment(pi, rate, _ny)
-            scheduled_annual = _nm * 12.0
-            home_value = safe_float(overrides.get("NEW_HOME_VALUE", 0) or 0, 0.0)
-            owns = True
+                pi = _pi_from_all_in(e["monthly"], e["price"], overrides)
+                bal = _balance_from_payment(pi, rate, e["years"])
+            scheduled_annual = e["monthly"] * 12.0
+            home_value = e["price"]
+            owns = ever_owns = True
+            payoff_age = None                                # a new loan to retire
 
         start_balance = bal
-        if bal > 0 and age >= your_age:
+        if owns and bal > 0 and age >= your_age:
             extra = min(extra_mortgage_for_age(overrides, age), bal)
             sched = scheduled_annual
             # Advance 12 months, applying the extra monthly the way the engine
@@ -735,10 +757,11 @@ def mortgage_schedule(overrides: dict, ages) -> dict:
                  if (owns and carry_on and start_balance <= 0) else 0.0)
 
         by_age[age] = {"balance": start_balance, "scheduled": sched,
-                       "extra": extra, "housing": sched + extra + carry}
+                       "extra": extra, "housing": sched + extra + carry, "owns": owns}
 
-    # A renter never "pays off"; an owner with no loan is already paid off.
-    if payoff_age is None and owns and safe_float(
-            overrides.get("MORTGAGE_BALANCE", 0) or 0, 0.0) <= 0 and not move_on:
+    # A renter never "pays off"; an owner with no loan (and no purchase ahead)
+    # is already paid off.
+    if payoff_age is None and owns and not events and safe_float(
+            overrides.get("MORTGAGE_BALANCE", 0) or 0, 0.0) <= 0:
         payoff_age = your_age
-    return {"by_age": by_age, "payoff_age": payoff_age, "owns": owns}
+    return {"by_age": by_age, "payoff_age": payoff_age, "owns": ever_owns}

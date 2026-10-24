@@ -221,6 +221,8 @@ def test_old_gen_input_modules_are_still_load_bearing():
         project_savings,
     )
 
-    # sim_runner (the engine seam) must keep using the lifecycle helper.
-    import utils.sim_runner as sim_runner
-    assert hasattr(sim_runner, "_compute_lifecycle_multipliers")
+    # The spending chart must keep using the lifecycle helper. (sim_runner used
+    # to as well; the engine now reads the preset itself, cfg.lifecycle_multiplier,
+    # and the helper is a per-age view of that same function.)
+    import components.spending_chart as spending_chart
+    assert spending_chart.compute_lifecycle_multipliers is compute_lifecycle_multipliers

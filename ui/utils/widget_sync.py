@@ -183,6 +183,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "se_mortgage_balance":("MORTGAGE_BALANCE", _as_int(0, 0, 5_000_000)),
     "se_mortgage_monthly":("MORTGAGE_MONTHLY", _as_int(0, 0, 20_000)),
     "se_mortgage_years":  ("MORTGAGE_YEARS_REMAINING", _as_int(0, 0, 40)),
+    "se_mortgage_rate":   ("MORTGAGE_RATE_FOR_PAYOFF", _as_pct(6.5, 0.0, 20.0)),
     "se_rent_monthly":    ("SPEND_RENT_MONTHLY", _as_int(1_500, 0, 20_000)),
     # the monthly spending inputs, one per expense category (incl. se_partner)
     **{c.widget: (c.key, _as_int(c.default, 0, c.max_value)) for c in CATEGORIES},
@@ -206,7 +207,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sv_manual_partner_roth":("PARTNER_ROTH_CONTRIBUTION", _as_int(0, 0, 10_000)),
     "sv_manual_partner_brk": ("PARTNER_BROKERAGE_CONTRIBUTION", _as_int(0, 0, 500_000)),
 
-    # sec_big_purchases.py — car / house move / retirement vacation. These MUST
+    # sec_big_purchases.py — car / home moves / retirement vacation. These MUST
     # be listed so a profile switch or JSON load clears them (else a big-purchase
     # plan opted into on one profile bleeds into the next).
     "bp_car_onetime_enable":   ("CAR_ONETIME_ENABLED", lambda v: bool(v)),
@@ -216,14 +217,8 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "bp_car_recurring_start":  ("CAR_RECURRING_START_AGE", _as_int(40, 18, 100)),
     "bp_car_recurring_every":  ("CAR_RECURRING_EVERY_YEARS", _as_int(8, 1, 30)),
     "bp_car_recurring_amount": ("CAR_RECURRING_AMOUNT", _as_int(40_000, 0, 500_000)),
-    "bp_house_move_enable":    ("HOUSE_MOVE_ENABLED", lambda v: bool(v)),
-    "bp_house_move_age":       ("HOUSE_MOVE_AGE", _as_int(45, 18, 100)),
-    "bp_new_home_value":       ("NEW_HOME_VALUE", _as_int(1_000_000, 0, 20_000_000)),
-    "bp_new_mortgage_balance": ("NEW_MORTGAGE_BALANCE", _as_int(700_000, 0, 20_000_000)),
-    "bp_new_mortgage_monthly": ("NEW_MORTGAGE_MONTHLY", _as_int(4_500, 0, 100_000)),
-    "bp_new_mortgage_years":   ("NEW_MORTGAGE_YEARS", _as_int(30, 1, 40)),
-    "bp_home_selling_cost_pct":("HOME_SELLING_COST_PCT", _as_pct(6.0, 0.0, 20.0)),
-    "bp_house_moving_costs":   ("HOUSE_MOVING_COSTS", _as_int(10_000, 0, 200_000)),
+    # Home moves (HOME_EVENTS) are a dynamic list: their bp_ev* widgets reseed
+    # from the overrides after the bp_ prefix reset below.
     # Extra mortgage principal (early payoff). Mapped so a profile switch or
     # JSON load resets the widget instead of leaving the previous plan's
     # prepayment amount stuck on the new profile.
@@ -240,6 +235,12 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "rg_your_fra":        ("YOUR_SS_MONTHLY_FRA", _as_int(2_000, 0, 5_000)),
     "rg_partner_fra":     ("PARTNER_SS_MONTHLY_FRA", _as_int(1_800, 0, 5_000)),
     "rg_target_success":  ("TARGET_SUCCESS_RATE", _as_pct_int(80, 70, 95)),
+    # Retirement lifestyle (go-go extra and later-years drop). An unset extra
+    # (None) is skipped here and the widget follows household size.
+    "rg_leisure_amount":  ("EARLY_RETIREMENT_LEISURE_INCREASE", _as_int(10_000, 0, 200_000)),
+    "rg_leisure_until":   ("EARLY_RETIREMENT_LEISURE_UNTIL_AGE", _as_int(70, 50, 100)),
+    "rg_late_pct":        ("LATE_RETIREMENT_LEISURE_DECREASE", _as_pct_int(15, 0, 50)),
+    "rg_late_from":       ("LATE_RETIREMENT_START_AGE", _as_int(75, 55, 100)),
 
     # sec_assumptions.py
     "sa_scenario":        ("ACTIVE_RETURN_SCENARIO", _scenario_cast),
@@ -257,6 +258,8 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sa_dyn_enable":      ("DYNAMIC_SPENDING_ENABLED", lambda v: bool(v)),
     "sa_ret_spend":       ("RETURN_BASED_SPENDING_ENABLED", lambda v: bool(v)),
     "sa_aca":             ("ACA_ENABLED", lambda v: bool(v)),
+    "sa_aca_benchmark":   ("ACA_BENCHMARK_MONTHLY_AT_40", _as_int(650, 0, 5_000)),
+    "sa_aca_child":       ("ACA_CHILD_MONTHLY", _as_int(390, 0, 3_000)),
     # Long-term care widgets live in sec_retirement_goals (rg_ltc_*). The
     # probability is stored as a fraction (0-1) but the slider shows a percent.
     "rg_ltc_enabled":     ("LTC_ENABLED", lambda v: bool(v)),
@@ -363,7 +366,6 @@ DERIVED_MAPPINGS: Dict[str, Any] = {
     # New sec_*.py derived widgets
     "se_rent_own": _derive_rent_own,
     "se_kids":     _derive_kids,
-    "sa_hc_early": _derive_hc_early,
 }
 
 
@@ -398,10 +400,10 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age")
 #   ea_       sec_early_access (Rule of 55 / 72(t) / Roth ladder / Coast FIRE).
 #             Every one of these is pushed to cfg via set_override each rerun,
 #             so a stale toggle re-enables a strategy the loaded plan disabled.
-#   bp_       sec_big_purchases. The down-payment %, rate and escrow % are not
-#             in DIRECT_MAPPINGS and the engine-facing NEW_MORTGAGE_BALANCE /
-#             NEW_MORTGAGE_MONTHLY are re-derived FROM them, so a stale pair
-#             silently rewrites the loaded profile's loan and payment.
+#   bp_       sec_big_purchases. The home-moves list (bp_ev<i>_*, one set per
+#             move) and the escrow % are not in DIRECT_MAPPINGS and are written
+#             back into HOME_EVENTS / NEW_HOME_ESCROW_PCT every rerun, so stale
+#             ones would silently rewrite the loaded profile's moves.
 #   wifc_     the what-if levers (plus the cached ``wifc_result`` plot data,
 #             which is stale the moment the inputs change).
 #   le_       life-expectancy card inputs (age / sex / conditions).

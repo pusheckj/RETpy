@@ -96,6 +96,21 @@ def test_a_fresh_interpreter_with_only_the_job_matches_the_server():
     assert json.loads(out.stdout) == server
 
 
+def test_a_two_move_housing_timeline_matches_the_server():
+    """HOME_EVENTS (a list of dicts) is plain data: a renter who buys at 35 and
+    sells to rent at 70 runs identically in a fresh interpreter."""
+    ov = {**SINGLE, "SPEND_RENT_MONTHLY": 1_800, "HOME_EVENTS": [
+        {"age": 35, "action": "buy", "price": 400_000, "down_pct": 0.2, "rate": 0.06,
+         "years": 30, "costs": 10_000},
+        {"age": 70, "action": "sell_rent", "rent": 2_200, "costs": 5_000}]}
+    plan = sr.plan_mortgage_paydown(ov, 40, 55, extra_grid=[0, 12_000])
+    assert plan.job["base"]["HOME_EVENTS"] == ov["HOME_EVENTS"]
+    server = [mc_jobs.dumps(r) for r in sr.run_plan_calls(plan)]
+    out = subprocess.run([sys.executable, "-c", _CHILD, _ROOT], input=mc_jobs.dumps(plan.job),
+                         capture_output=True, text=True, check=True)
+    assert json.loads(out.stdout) == server
+
+
 def test_split_plan_equals_the_all_server_run():
     plan = sr.plan_full_analysis(SINGLE, 120, 55)
     assert plan.local and all(plan.job["calls"][i][0] == "batch" for i in plan.local)

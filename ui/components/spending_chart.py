@@ -116,6 +116,25 @@ _CHILD_CFG_KEYS = (
 )
 
 
+# Retirement lifestyle ages the lifecycle preset is placed by.
+_LIFESTYLE_CFG_KEYS = (
+    "EARLY_RETIREMENT_LEISURE_UNTIL_AGE", "RETIREMENT_LEISURE_MIN_YEARS",
+    "LATE_RETIREMENT_START_AGE", "LATE_RETIREMENT_MIN_YEARS",
+)
+
+
+def _go_go_extra(overrides: dict, age: int, retirement_age: int) -> float:
+    """The engine's extra early-retirement spending at ``age`` (travel and
+    hobbies, Retirement goals), from cfg's own helpers."""
+    if cfg is None or age < int(retirement_age):  # pragma: no cover
+        return 0.0
+    with _cfg_patched(overrides, _LIFESTYLE_CFG_KEYS + ("EARLY_RETIREMENT_LEISURE_INCREASE",
+                                                       "PARTNER_AGE")):
+        if age >= cfg.retirement_leisure_end_age(int(retirement_age)):
+            return 0.0
+        return float(cfg.retirement_leisure_increase())
+
+
 def _child_expense(overrides: dict, age: int) -> float:
     """Annual child-related expense at ``age`` via ``cfg.calculate_child_expenses``.
 
@@ -179,21 +198,6 @@ def _ltc_expected(overrides: dict, age: int) -> float:
     return full * prob
 
 
-def _house_move_params(overrides: dict) -> dict | None:
-    """House-move parameters if enabled, else None (from overrides, cfg fallback)."""
-    if not bool(overrides.get("HOUSE_MOVE_ENABLED",
-                              _cfg_default("HOUSE_MOVE_ENABLED", False))):
-        return None
-    return {
-        "age": safe_int(overrides.get("HOUSE_MOVE_AGE",
-                                      _cfg_default("HOUSE_MOVE_AGE", 45)), 45),
-        "new_mortgage_monthly": safe_int(overrides.get("NEW_MORTGAGE_MONTHLY",
-                                                       _cfg_default("NEW_MORTGAGE_MONTHLY", 4_500)), 4_500),
-        "new_mortgage_years": safe_int(overrides.get("NEW_MORTGAGE_YEARS",
-                                                     _cfg_default("NEW_MORTGAGE_YEARS", 30)), 30),
-    }
-
-
 def _any_category_set(overrides: dict) -> bool:
     """True if the user has set at least one spending category explicitly,
     OR set a mortgage / rent."""
@@ -211,8 +215,8 @@ def _compute_housing_series(overrides: dict, ages: list) -> tuple:
     """Return (annual_housing_per_age_list, owns_now: bool, mortgage_payoff_age: int|None).
 
     Delegates entirely to ``utils.derived.mortgage_schedule``, which mirrors the
-    ENGINE's amortisation (level payment at MORTGAGE_RATE_FOR_PAYOFF, house move
-    replacing the loan) and honours EXTRA principal.
+    ENGINE's amortisation (level payment at MORTGAGE_RATE_FOR_PAYOFF, the housing
+    timeline's purchases and sales) and honours EXTRA principal.
 
     This used to compute the payoff from TERM LENGTHS alone
     (``HOUSE_MOVE_AGE + NEW_MORTGAGE_YEARS``), which had two consequences once
@@ -236,6 +240,17 @@ def _compute_housing_series(overrides: dict, ages: list) -> tuple:
     return out, sched["owns"], sched["payoff_age"]
 
 
+def _owns_by_age(overrides: dict, ages: list) -> list:
+    """Whether a home is owned in each year (rent before a planned purchase,
+    after a sale to rent), from the same schedule as the housing series."""
+    try:
+        from utils.derived import mortgage_schedule
+    except ImportError:  # pragma: no cover
+        from ui.utils.derived import mortgage_schedule  # type: ignore
+    by_age = mortgage_schedule(overrides, ages)["by_age"]
+    return [bool(by_age.get(safe_int(a, 0), {}).get("owns", False)) for a in ages]
+
+
 def build_category_series(ages, overrides, multipliers, retirement_age,
                           *, inflation_factors=None, st=None):
     """Ordered ``[(label, color, values-per-age)]`` for the spending stack over
@@ -257,15 +272,18 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
         return [v * f for v, f in zip(ys, inflation_factors)]
 
     series = []
-    housing_series, owns_now, payoff_age = _compute_housing_series(overrides, ages)
+    housing_series, _, payoff_age = _compute_housing_series(overrides, ages)
+    owns = _owns_by_age(overrides, ages)
     # A fixed-rate mortgage is a FIXED NOMINAL payment, so it must NOT be
     # inflated in the future-dollars view — it stays flat in nominal terms year
     # to year. Rent, by contrast, is a real cost that rises with inflation, so
     # it IS scaled. (In today's-dollars mode ``_apply`` is a no-op for both.)
-    if not owns_now:
-        housing_series = _apply(housing_series)
+    # A housing timeline can mix the two (rent, then a purchase), so per year.
+    scaled = _apply(housing_series)
+    housing_series = [v if o else sv for v, sv, o in zip(housing_series, scaled, owns)]
     if any(v > 0 for v in housing_series):
-        housing_label = "Housing (mortgage)" if owns_now else "Housing (rent)"
+        housing_label = ("Housing (mortgage)" if all(owns) else
+                         "Housing (rent)" if not any(owns) else "Housing")
         series.append((housing_label, category_colors["_AUTO_HOUSING"], housing_series))
 
     for _, okey, label, default in SPENDING_CATEGORIES:
@@ -286,6 +304,10 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
     vac_series = _apply([_vacation_outlay(overrides, a, retirement_age) for a in ages])
     if any(v > 0 for v in vac_series):
         series.append(("Retirement vacation", series_color(len(_CATEGORY_KEYS) + 1, st), vac_series))
+
+    gogo_series = _apply([_go_go_extra(overrides, a, retirement_age) for a in ages])
+    if any(v > 0 for v in gogo_series):
+        series.append(("Early-retirement extra", series_color(len(_CATEGORY_KEYS) + 4, st), gogo_series))
 
     car_series = _apply([_car_outlay(overrides, a) for a in ages])
     if any(v > 0 for v in car_series):
@@ -456,14 +478,17 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
         st.info("No plan horizon to display (check current age and plan end age).")
         return
 
-    multipliers = compute_lifecycle_multipliers(
-        preset=preset,
-        current_age=current_age,
-        retirement_age=retirement_age,
-        plan_until_age=plan_until,
-        years_until_first_child=yufc,
-        child_leaves_home_age=leave_age,
-    )
+    # The engine's own preset mapping, with this plan's children and lifestyle
+    # ages patched on (empty-nest follows every child at home).
+    with _cfg_patched(overrides, _CHILD_CFG_KEYS + _LIFESTYLE_CFG_KEYS):
+        multipliers = compute_lifecycle_multipliers(
+            preset=preset,
+            current_age=current_age,
+            retirement_age=retirement_age,
+            plan_until_age=plan_until,
+            years_until_first_child=yufc,
+            child_leaves_home_age=leave_age,
+        )
 
     # 4% rule overlay (BOTH charts): 4% of the MEDIAN projected portfolio each
     # year (median_trajectory now spans the full horizon) = a per-year gauge of
