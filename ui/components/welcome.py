@@ -6,11 +6,11 @@ from __future__ import annotations
 from typing import Optional
 
 PATHS = [
-    ("simple", "Get my money in order",
+    ("simple", "Money check-up",
      "Your savings rate, emergency fund, where your next dollar should go, a debt "
      "payoff plan and a 50/30/20 budget check. About three minutes.",
      "Start the money check-up"),
-    ("full", "Plan my retirement",
+    ("full", "Retirement planner",
      "When can you retire? Thousands of market simulations of your accounts, "
      "taxes, Social Security and spending.",
      "Open the retirement planner"),
@@ -20,7 +20,7 @@ PATHS = [
 def render(st) -> Optional[str]:
     """Draw the welcome screen; return the chosen mode once a path is picked."""
     st.markdown(
-        '<div class="mc-welcome-head"><div class="mc-welcome-kicker">RET.py</div>'
+        '<div class="mc-welcome-head"><div class="mc-welcome-kicker">RETpy</div>'
         "<h1>What would you like to do?</h1>"
         "<p>Pick a starting point. You can switch any time.</p></div>",
         unsafe_allow_html=True,

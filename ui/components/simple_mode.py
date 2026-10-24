@@ -26,11 +26,11 @@ import plotly.graph_objects as go
 try:
     from utils import simple_finance as sf
     from utils.formatting import money, money_md
-    from utils.plot_theme import style_fig
+    from utils.plot_theme import is_dark, style_fig
 except ImportError:  # pragma: no cover
     from ui.utils import simple_finance as sf  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
-    from ui.utils.plot_theme import style_fig  # type: ignore
+    from ui.utils.plot_theme import is_dark, style_fig  # type: ignore
 
 STATE_KEY = "simple_inputs"
 _SYNC_KEY = "_simple_inputs_synced"   # copy of what this page last wrote
@@ -124,8 +124,9 @@ SIMPLE_CSS = """
 .st-key-mc-tile-simple-rate, .st-key-mc-tile-simple-fund { height: 100%; }
 .simple-meter-tick span { font-size: 12px; }
 
-/* Debt rows: keep balance / APR / minimum side by side on a phone. */
-@media (max-width: 640px) {
+/* Debt rows: Name + Remove on one row, balance / APR / minimum on the next, on
+   tablets and phones (the global <=1100px rule would stack all five fields). */
+@media (max-width: 1100px) {
     section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important; gap: 8px !important;
     }
@@ -135,9 +136,16 @@ SIMPLE_CSS = """
     section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(button[kind]) {
         flex: 0 0 auto !important;
     }
+}
+@media (max-width: 640px) {
     [class*="st-key-simple-debt-"] [data-testid="stNumberInputStepUp"],
     [class*="st-key-simple-debt-"] [data-testid="stNumberInputStepDown"] { display: none !important; }
     .simple-kpi-value { font-size: 34px; }
+}
+/* Stacked plan cards (Avalanche / Snowball): Streamlit's markdown container has a
+   -16px bottom margin that eats the 12px row gap, leaving the cards touching. */
+@media (max-width: 1100px) {
+    .simple-plan { margin-bottom: 20px; }
 }
 """
 
@@ -438,7 +446,15 @@ def _payoff_chart(st, av: sf.PayoffResult, sb: sf.PayoffResult, start: date) -> 
     fig.update_layout(height=300, margin=dict(l=8, r=8, t=8, b=40), dragmode=False,
                       hovermode="x unified")
     style_fig(fig, st)
-    fig.update_xaxes(fixedrange=True, hoverformat="%b %Y")
+    # Readable at tablet width, one font, a neutral hover label and a thin guide.
+    fig.update_layout(font=dict(size=12), legend=dict(font=dict(size=12)),
+                      hoverlabel=dict(font=dict(size=12),
+                                      **(dict(bgcolor="#37343f", bordercolor="#47434f")
+                                         if is_dark(st) else {})))
+    fig.update_xaxes(fixedrange=True, hoverformat="%b %Y", showspikes=True,
+                     spikethickness=1, spikedash="dot", spikecolor="#94a3b8",
+                     spikemode="across")
+    fig.update_yaxes(showspikes=False)
     fig.update_yaxes(fixedrange=True, tickprefix="$", tickformat="~s", rangemode="tozero",
                      title_text=None)
     st.plotly_chart(fig, width="stretch",
@@ -511,7 +527,7 @@ def _render_budget(st, buckets: List[sf.BudgetBucket]) -> None:
                 f'style="left:{b.target * 100:.0f}%" title="{b.target:.0%} guide"></div></div>'
                 f'<div class="simple-bar-note">{_h(b.message)}</div></div>')
         st.markdown("".join(rows), unsafe_allow_html=True)
-        st.caption("The dark tick on each bar marks the guide. Minimum debt payments count as "
+        st.caption("The tick on each bar marks the guide. Minimum debt payments count as "
                    "needs; extra debt payments count as savings.")
 
 
@@ -524,7 +540,7 @@ def render(st) -> None:
     inputs = sf.normalize_inputs(ss.get(STATE_KEY))
     _seed(ss, inputs, force=ss.get(_SYNC_KEY) != inputs)
 
-    st.markdown('<div class="mc-section">Get my money in order</div>', unsafe_allow_html=True)
+    st.markdown('<div class="mc-section">Money check-up</div>', unsafe_allow_html=True)
     st.markdown('<div class="simple-sub">Four quick checks: how much you save, your safety '
                 'cushion, where your next dollar should go, and the fastest way out of '
                 'debt.</div>', unsafe_allow_html=True)

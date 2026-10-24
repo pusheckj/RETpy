@@ -50,7 +50,7 @@ def inject_font_css(st) -> None:
     # Material icon ligature font (else icons render as literal words).
     css += f"html, body, .stApp, .stApp * {{ font-family: {stack} !important; }}"
     css += (
-        '[data-testid="stIconMaterial"], [data-testid="stExpanderIcon"], '
+        '[data-testid="stIconMaterial"], [data-testid="stAlertDynamicIcon"], [data-testid="stExpanderIcon"], '
         'span[class*="material-symbols"], span[class*="material-icons"], '
         '.material-icons, .material-symbols-rounded '
         '{ font-family: "Material Symbols Rounded","Material Symbols Outlined","Material Icons" !important; }'
@@ -448,8 +448,80 @@ hr {
     color: #e8e3da !important;
 }
 [data-testid="stAlert"] svg { color: #2dd4bf !important; fill: #2dd4bf !important; }
+
+/* ---- Round 3 ---- */
+/* Secondary / tertiary buttons (Remove, Browse files, Forget my data...) used the
+   light cream surface; give them the dark tile with ink text and a tile border.
+   Tertiary stays an outlined, non-primary button. */
+.stApp button[data-testid="stBaseButton-secondary"],
+.stApp button[data-testid="stBaseButton-tertiary"] {
+    background: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+.stApp button[data-testid="stBaseButton-tertiary"] { background: transparent !important; }
+.stApp button[data-testid="stBaseButton-secondary"],
+.stApp button[data-testid="stBaseButton-secondary"] p,
+.stApp button[data-testid="stBaseButton-secondary"] span,
+.stApp button[data-testid="stBaseButton-tertiary"],
+.stApp button[data-testid="stBaseButton-tertiary"] p,
+.stApp button[data-testid="stBaseButton-tertiary"] span { color: var(--mc-ink) !important; }
+.stApp button[data-testid="stBaseButton-secondary"]:hover,
+.stApp button[data-testid="stBaseButton-tertiary"]:hover { background: #3d3947 !important; }
+.stApp button[data-testid="stBaseButton-secondary"]:hover p,
+.stApp button[data-testid="stBaseButton-tertiary"]:hover p { color: var(--mc-ink) !important; }
+
+/* File uploader text + icon */
+[data-testid="stFileUploaderDropzone"] span,
+[data-testid="stFileUploaderDropzone"] p,
+[data-testid="stFileUploaderDropzone"] div { color: var(--mc-ink) !important; }
+[data-testid="stFileUploaderDropzone"] small,
+[data-testid="stFileUploaderDropzone"] small span { color: var(--mc-muted) !important; }
+[data-testid="stFileUploaderDropzone"] svg,
+[data-testid="stFileUploaderDropzoneInstructions"] svg { color: var(--mc-muted) !important; fill: var(--mc-muted) !important; }
+
+/* Text-input wrapper draws its own (light) outline + fill */
+[data-testid="stTextInputRootElement"],
+[data-testid="stNumberInputContainer"] {
+    background-color: #26232f !important;
+    border-color: var(--mc-tile-border) !important;
+}
+.stApp [class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"] { border-color: var(--mc-tile-border) !important; }
+
+/* Toggle: a visible "off" track */
+[data-testid="stToggle"] label:has(input:not(:checked)) [data-baseweb="checkbox"] > div:first-child,
+[data-testid="stCheckbox"] label:has(input[role="switch"]:not(:checked)) > span:first-of-type {
+    background-color: #6b6577 !important;
+}
+
+/* Alert icons keep their glyphs readable */
+[data-testid="stAlert"] [data-testid="stIconMaterial"],
+[data-testid="stAlert"] [data-testid="stAlertDynamicIcon"] { color: #2dd4bf !important; }
 </style>
 """
+
+
+_APPEARANCE_KEYS = ("theme_mode", "font_choice", "palette_choice")
+_SAVED_KEY = "_appearance_saved"
+
+
+def persist_appearance(st) -> None:
+    """Keep theme/font/palette across runs that don't render their widgets.
+
+    Streamlit drops a widget's session value after any run that doesn't render
+    that widget (e.g. the welcome, check-up and guided-setup screens, which
+    return before the Settings popover). So mirror the choices into a plain
+    key each run and restore them when the widget key has vanished (same
+    pattern as ``remember_device`` / ``remember_device_toggle``).
+    """
+    saved = dict(st.session_state.get(_SAVED_KEY) or {})
+    for key in _APPEARANCE_KEYS:
+        if key in st.session_state:
+            saved[key] = st.session_state[key]
+        elif key in saved:
+            st.session_state[key] = saved[key]
+    st.session_state[_SAVED_KEY] = saved
 
 
 def inject_theme_css(st) -> None:
@@ -460,6 +532,7 @@ def inject_theme_css(st) -> None:
     the top-bar Settings popover, whose body would otherwise only guarantee the
     override while open. Call this once near the top of the app, always.
     """
+    persist_appearance(st)
     if "Dark" in str(st.session_state.get("theme_mode", "")):
         st.markdown(_DARK_CSS, unsafe_allow_html=True)
 
