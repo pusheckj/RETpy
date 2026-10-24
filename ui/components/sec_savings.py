@@ -31,7 +31,7 @@ _ACCOUNT_LABELS = [
     ("Your 401(k)",          "YOUR_401K_CONTRIBUTION",        "#0d9488"),
     ("Partner 401(k)",       "PARTNER_401K_CONTRIBUTION",     "#d97706"),
     ("Your HSA",             "YOUR_HSA_CONTRIBUTION",         "#7c3aed"),
-    ("Your Roth (backdoor)", "YOUR_BACKDOOR_ROTH",            "#059669"),
+    ("Your Roth IRA",        "YOUR_BACKDOOR_ROTH",            "#059669"),
     ("Partner Roth IRA",     "PARTNER_ROTH_CONTRIBUTION",     "#f59e0b"),
     ("Your taxable brokerage", "YOUR_BROKERAGE_CONTRIBUTION",   "#475569"),
     ("Partner taxable brokerage", "PARTNER_BROKERAGE_CONTRIBUTION","#94a3b8"),
@@ -133,11 +133,11 @@ def render_body(st) -> None:
         pph = st.toggle(
             "I pay the full mortgage; we split the rest evenly",
             key="sv_primary_housing",
-            help="How leftover savings split between your two brokerage accounts. "
+            help="How leftover savings split between your two taxable brokerage accounts. "
                  "Off = split all expenses evenly. On = you cover the whole "
                  "mortgage and the rest splits 50/50, so more leftover lands in "
-                 "your brokerage. (Car purchases stay a shared outflow. This only "
-                 "re-labels which brokerage gets the savings; both are taxable.)",
+                 "your taxable brokerage. (Car purchases stay a shared outflow. This only "
+                 "re-labels which taxable brokerage gets the savings; both are taxable.)",
         )
         set_override(st, "PRIMARY_PAYS_HOUSING", bool(pph))
     else:
@@ -219,8 +219,8 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
         set_override(st, key, 0 if "BROKERAGE" in key else int(amount))
 
     st.caption(
-        "Fills accounts in order: **401(k) → HSA → IRA/Roth → Brokerage "
-        "residual**, each capped at 2024 IRS limits. "
+        "Fills accounts in order: **401(k) → HSA → IRA/Roth → Taxable brokerage "
+        "residual**, each capped at the 2024 limits (2024 values, in today's dollars). "
         "Switch to Custom % or Manual for different splits."
     )
 
@@ -279,7 +279,7 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
 def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
     """Custom %: user provides allocation percentages."""
     st.caption("Set what share of what's left to save goes to each account. "
-               "Each gets that share, capped at 2024 IRS limits.")
+               "Each gets that share, capped at the 2024 limits (2024 values, in today's dollars).")
 
     # Defaults (100% either way) and amounts come from utils.derived, which
     # also uses them to work out what's left to save (sidebar_savings_budget).
@@ -341,11 +341,11 @@ _MANUAL_401K_MAX = 40_000
 
 def _render_keep_amounts(st, overrides: dict) -> None:
     """Your own 401(k) / HSA / IRA amounts, and everything else you don't
-    spend invested in a brokerage account. The engine sweeps the un-spent
+    spend invested in a taxable brokerage account. The engine sweeps the un-spent
     residual for any SAVINGS_MODE starting with "Auto"; the brokerage floor is
     set to 0 so it gets exactly what's left."""
     st.caption("Your 401(k), HSA and IRA stay at these amounts. Whatever else you don't "
-               "spend is invested in a regular brokerage account each year.")
+               "spend is invested in a taxable brokerage account each year.")
     c1, c2 = st.columns(2)
     with c1:
         _manual_amount(st, "sv_manual_your_401k", "YOUR_401K_CONTRIBUTION",
@@ -353,7 +353,7 @@ def _render_keep_amounts(st, overrides: dict) -> None:
         _manual_amount(st, "sv_manual_your_hsa", "YOUR_HSA_CONTRIBUTION",
                        "Your HSA ($/yr)", 10_000, 250)
         _manual_amount(st, "sv_manual_your_roth", "YOUR_BACKDOOR_ROTH",
-                       "Your Roth IRA / backdoor ($/yr)", 10_000, 500)
+                       "Your Roth IRA ($/yr)", 10_000, 500)
     with c2:
         if _has_partner(overrides):
             _manual_amount(st, "sv_manual_partner_401k", "PARTNER_401K_CONTRIBUTION",
@@ -377,7 +377,7 @@ def _render_manual(st, disposable: int, overrides: dict) -> None:
         _manual_amount(st, "sv_manual_your_hsa", "YOUR_HSA_CONTRIBUTION",
                        "Your HSA ($/yr)", 10_000, 250)
         _manual_amount(st, "sv_manual_your_roth", "YOUR_BACKDOOR_ROTH",
-                       "Your Roth IRA / backdoor ($/yr)", 10_000, 500)
+                       "Your Roth IRA ($/yr)", 10_000, 500)
         _manual_amount(st, "sv_manual_your_brk", "YOUR_BROKERAGE_CONTRIBUTION",
                        "Your taxable brokerage ($/yr)", 500_000, 1_000)
 

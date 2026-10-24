@@ -169,11 +169,11 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         "Your Traditional IRA": _get_value(user_overrides, "YOUR_TRADITIONAL_IRA"),
         "Your HSA": _get_value(user_overrides, "YOUR_HSA"),
         "Your taxable brokerage": _get_value(user_overrides, "YOUR_BROKERAGE"),
-        "Your Cash": _get_value(user_overrides, "YOUR_CASH"),
+        "Your cash": _get_value(user_overrides, "YOUR_CASH"),
         "Partner 401(k)": _get_value(user_overrides, "PARTNER_401K"),
         "Partner Roth IRA": _get_value(user_overrides, "PARTNER_ROTH_IRA"),
         "Partner taxable brokerage": _get_value(user_overrides, "PARTNER_BROKERAGE"),
-        "Partner Cash": _get_value(user_overrides, "PARTNER_CASH"),
+        "Partner cash": _get_value(user_overrides, "PARTNER_CASH"),
     }
     home_value = _get_value(user_overrides, "HOME_VALUE")
     mortgage_balance = _get_value(user_overrides, "MORTGAGE_BALANCE")
@@ -187,7 +187,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
     )
     _today_nonret = (
         accounts["Your taxable brokerage"] + accounts["Partner taxable brokerage"]
-        + accounts["Your Cash"] + accounts["Partner Cash"]
+        + accounts["Your cash"] + accounts["Partner cash"]
     )
     _today_net_worth = sum(accounts.values()) + _today_home_equity
 
@@ -224,7 +224,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         accounts["Partner 401(k)"], accounts["Partner Roth IRA"],
     ])
     taxable_sum = accounts["Your taxable brokerage"] + accounts["Partner taxable brokerage"]
-    cash_sum = accounts["Your Cash"] + accounts["Partner Cash"]
+    cash_sum = accounts["Your cash"] + accounts["Partner cash"]
     net_worth = sum(accounts.values()) + home_equity
 
     # #5/#14: emit the hover-popup CSS once before the cards (theme-aware).
@@ -242,15 +242,15 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
     retirement_tip = (
         "Retirement = 401(k) + Roth + Traditional IRA + HSA\n"
         f"Your 401(k) {money(accounts['Your 401(k)'], shorten=True)}  |  "
-        f"Your Roth {money(accounts['Your Roth IRA'], shorten=True)}  |  "
-        f"Your Trad IRA {money(accounts['Your Traditional IRA'], shorten=True)}  |  "
+        f"Your Roth IRA {money(accounts['Your Roth IRA'], shorten=True)}  |  "
+        f"Your Traditional IRA {money(accounts['Your Traditional IRA'], shorten=True)}  |  "
         f"Your HSA {money(accounts['Your HSA'], shorten=True)}\n"
         f"Partner 401(k) {money(accounts['Partner 401(k)'], shorten=True)}  |  "
-        f"Partner Roth {money(accounts['Partner Roth IRA'], shorten=True)}"
+        f"Partner Roth IRA {money(accounts['Partner Roth IRA'], shorten=True)}"
     )
     non_retirement_tip = (
-        "Non-retirement = brokerage + cash\n"
-        f"Brokerage {money(taxable_sum, shorten=True)}  |  "
+        "Non-retirement = taxable brokerage + cash\n"
+        f"Taxable brokerage {money(taxable_sum, shorten=True)}  |  "
         f"Cash {money(cash_sum, shorten=True)}"
     )
     home_equity_tip = (
@@ -268,8 +268,8 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         d_nw = d_ret = d_nonret = d_home = ""
 
     with cols[0]: st.markdown(_stat_card("Net worth", money(net_worth, shorten=True), "total assets minus debt", "#0d9488", tooltip=net_worth_tip, cls="mc-teal", delta_html=d_nw, idx=0), unsafe_allow_html=True)
-    with cols[1]: st.markdown(_stat_card("Retirement accounts", money(retirement_sum, shorten=True), "401(k), Roth, Trad IRA, HSA", tooltip=retirement_tip, delta_html=d_ret, idx=1), unsafe_allow_html=True)
-    with cols[2]: st.markdown(_stat_card("Non&#8209;retirement", money(taxable_sum + cash_sum, shorten=True), "brokerage + cash", tooltip=non_retirement_tip, delta_html=d_nonret, idx=2), unsafe_allow_html=True)
+    with cols[1]: st.markdown(_stat_card("Retirement accounts", money(retirement_sum, shorten=True), "401(k), Roth IRA, Traditional IRA, HSA", tooltip=retirement_tip, delta_html=d_ret, idx=1), unsafe_allow_html=True)
+    with cols[2]: st.markdown(_stat_card("Non&#8209;retirement", money(taxable_sum + cash_sum, shorten=True), "taxable brokerage + cash", tooltip=non_retirement_tip, delta_html=d_nonret, idx=2), unsafe_allow_html=True)
     with cols[3]: st.markdown(_stat_card("Home equity", money(home_equity, shorten=True), ("projected equity" if projected else f"value {money(home_value, shorten=True)}"), tooltip=home_equity_tip, delta_html=d_home, idx=3), unsafe_allow_html=True)
 
     st.markdown('<div style="height: 24px;"></div>', unsafe_allow_html=True)

@@ -100,7 +100,7 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
     )
     st.caption(
         "Share of household income saved each working year — the same savings as the "
-        "bars above: 401(k) (incl. employer match), HSA, Roth, and taxable-brokerage "
+        "bars above: 401(k) (incl. employer match), HSA, Roth IRA, and taxable-brokerage "
         "contributions, divided by " + tail
         + " The dashed line is the working-years average."
     )

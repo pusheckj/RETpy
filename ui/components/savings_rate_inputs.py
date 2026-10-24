@@ -27,7 +27,7 @@ ALLOCATION_ORDER = [
     ("Your 401(k)",             "your_401k",              "you"),
     ("Your 401(k) match",       "your_employer_match",    "you"),
     ("Your HSA",                "your_hsa",               "you"),
-    ("Your Roth (backdoor)",    "your_roth",              "you"),
+    ("Your Roth IRA",           "your_roth",              "you"),
     ("After-tax 401(k) → Roth", "your_aftertax_roth",     "you"),
     ("Your taxable brokerage",  "your_brokerage",         "you"),
     ("Partner 401(k)",          "partner_401k",           "partner"),
