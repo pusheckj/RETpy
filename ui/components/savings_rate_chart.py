@@ -14,31 +14,24 @@ import plotly.graph_objects as go
 
 try:
     from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from components.savings_rate_inputs import year_savings
 except ImportError:  # pragma: no cover
     from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
-
-
-# Contribution fields summed into the savings numerator. Employer match is
-# INCLUDED — this is the standard "total savings rate" (how Fidelity/Vanguard
-# report it): everything flowing into your accounts, not just what leaves the
-# paycheck.
-_CONTRIB_KEYS = [
-    "your_401k", "your_employer_match", "your_hsa", "your_roth", "your_aftertax_roth",
-    "your_brokerage",
-    "partner_401k", "partner_employer_match", "partner_roth", "partner_brokerage",
-]
+    from ui.components.savings_rate_inputs import year_savings  # type: ignore
 
 
 def _rate_series(rows: list, post_tax: bool) -> tuple:
-    """(ages, rates%) for each working year with positive income."""
+    """(ages, rates%) for each working year with positive income. The numerator
+    is savings_rate_inputs.year_savings -- the same sum as the "Projected
+    savings by account" bars and its "Year 1 savings" tile (employer match
+    included, the standard "total savings rate")."""
     ages, rates = [], []
     for r in rows:
-        total = sum(float(r.get(k, 0.0)) for k in _CONTRIB_KEYS)
         denom = float(r.get("after_tax_income" if post_tax else "gross_income", 0.0))
         if denom <= 0:
             continue
         ages.append(int(r["age"]))
-        rates.append(100.0 * total / denom)
+        rates.append(100.0 * year_savings(r) / denom)
     return ages, rates
 
 
@@ -105,7 +98,8 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
         "gross (pre-tax) income."
     )
     st.caption(
-        "Share of household income saved each working year — 401(k) (incl. employer "
-        "match), HSA, Roth, and taxable-brokerage contributions divided by " + tail
+        "Share of household income saved each working year — the same savings as the "
+        "bars above: 401(k) (incl. employer match), HSA, Roth, and taxable-brokerage "
+        "contributions, divided by " + tail
         + " The dashed line is the working-years average."
     )

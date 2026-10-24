@@ -155,3 +155,62 @@ def test_sidebar_shows_one_tax_figure(monkeypatch):
     assert any(f"Total tax: {shown}" in c.value.replace("\\$", "$") for c in at.caption)
     labels = [m.label for m in at.metric]
     assert "= Left to save" in labels and "= Disposable" not in labels
+
+
+# ---------------------------------------------------------------------------
+# #6 Savings tiles, stacked bars and savings-rate bars: one sum, the engine's
+# ---------------------------------------------------------------------------
+def _savings_charts_script():
+    import os
+    import sys
+    sys.path.insert(0, os.environ["CONSISTENT_TEST_UI_DIR"])
+    import streamlit as st
+    from components import savings_projection_chart, savings_rate_chart
+    results = st.session_state["_results"]
+    savings_projection_chart.render(st, results=results)
+    savings_rate_chart.render(st, results=results)
+
+
+def _chart_spec(element) -> dict:
+    import json
+    return json.loads(element.proto.spec)
+
+
+def test_savings_tiles_bars_and_rate_are_one_sum(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from components.savings_rate_inputs import year_savings
+    from utils.formatting import money
+    monkeypatch.setenv("CONSISTENT_TEST_UI_DIR", _UI)
+    ov = _ui_shaped("sample_household")
+    ov.update(derived.savings_budget(ov)["amounts"])
+    _, rows, _, _ = _engine_year_one(ov)
+
+    at = AppTest.from_function(_savings_charts_script, default_timeout=60)
+    at.session_state["_results"] = {"primary_result": {"savings_contributions_by_year": rows}}
+    at.session_state["user_overrides"] = dict(ov, SAVINGS_INFLATION_ADJUST=False)
+    at.run()
+    assert not at.exception, at.exception
+    tiles = {m.label: m.value for m in at.metric}
+    first_rate = 100.0 * year_savings(rows[0]) / rows[0]["gross_income"]
+    assert tiles["Year 1 savings"] == money(year_savings(rows[0]), shorten=True)
+    assert tiles["Year 1 savings rate"] == f"{first_rate:.1f}%"
+    assert "Mode" not in tiles
+
+    bars, rate = (_chart_spec(c) for c in at.get("plotly_chart"))
+    assert rate["data"][0]["y"][0] == pytest.approx(first_rate)
+    stacked = {t["name"]: t["y"] for t in bars["data"] if t.get("type") == "bar"}
+    assert sum(ys[0] for ys in stacked.values()) == pytest.approx(year_savings(rows[0]))
+    # The employer match is the engine's: dollar for dollar up to the match %
+    # of base pay (here 5% of $180k), not a share of household income.
+    match = min(ov["YOUR_401K_CONTRIBUTION"], ov["YOUR_BASE_SALARY"] * ov["YOUR_401K_MATCH_PCT"])
+    assert stacked["Your 401(k) match"][0] == pytest.approx(match)
+    assert rows[0]["your_employer_match"] == pytest.approx(match)
+
+
+def test_savings_charts_wait_for_a_run():
+    """Without a run there are no engine contributions to show (no stand-in)."""
+    import inspect
+    from components import savings_projection_chart
+    src = inspect.getsource(savings_projection_chart)
+    assert "project_savings" not in src and "user_overrides" in src
+    assert savings_projection_chart.savings_rows(None) == []

@@ -1,91 +1,92 @@
 """Savings projection chart — stacked-bar visualization of year-by-year
 contributions broken out by destination account, plus a cumulative line
-overlay. Reads directly from st.session_state.user_overrides via the
-``project_savings`` helper.
+overlay.
+
+Reads ``results['primary_result']['savings_contributions_by_year']``: the
+simulation's own contributions each working year (deferrals, employer match,
+Roth, and the brokerage sweep), the same rows the savings-rate chart below
+divides by income. Accounts and their sum come from ``savings_rate_inputs``,
+so "Year 1 savings" here is the numerator of that chart's first bar.
 """
 from __future__ import annotations
 
 import plotly.graph_objects as go
 
 try:
-    from utils.coerce import safe_int
+    from utils.coerce import as_fraction
     from utils.formatting import money
     from utils.plot_theme import is_dark
     from components.savings_rate_inputs import (
-        project_savings,
         ALLOCATION_ORDER,
         get_allocation_colors,
+        year_savings,
     )
 except ImportError:  # pragma: no cover
-    from ui.utils.coerce import safe_int  # type: ignore
+    from ui.utils.coerce import as_fraction  # type: ignore
     from ui.utils.formatting import money  # type: ignore
     from ui.utils.plot_theme import is_dark  # type: ignore
     from ui.components.savings_rate_inputs import (  # type: ignore
-        project_savings,
         ALLOCATION_ORDER,
         get_allocation_colors,
+        year_savings,
     )
+
+
+def savings_rows(results: dict) -> list:
+    """The simulation's per-year contributions (working years only)."""
+    return list(((results or {}).get("primary_result", {}) or {})
+                .get("savings_contributions_by_year", []) or [])
 
 
 def render(st, results: dict = None, chart_key: str = "savings_projection_main") -> None:
-    overrides = st.session_state.get("user_overrides", {}) or {}
-    start_age = safe_int(overrides.get("YOUR_AGE", 25), 25)
-    retirement_age = safe_int(overrides.get("TARGET_RETIREMENT_AGE", 60), 60)
-
-    if retirement_age <= start_age:
-        st.info(
-            "Set your target retirement age above your current age in the Quick inputs "
-            "to see a savings projection."
-        )
-        return
-
-    rows = project_savings(overrides, start_age, retirement_age)
+    rows = savings_rows(results)
     if not rows:
+        st.info("No working years before the target retirement age, so there are "
+                "no contributions to show.")
         return
+    overrides = st.session_state.get("user_overrides", {}) or {}
 
-    ages = [r["age"] for r in rows]
-    cumulative = [r["cumulative"] for r in rows]
-    total_at_retire = cumulative[-1]
+    # Display option only (sec_savings "Show contributions in future dollars"):
+    # the simulation works in today's dollars.
+    nominal = bool(overrides.get("SAVINGS_INFLATION_ADJUST", True))
+    inflation = as_fraction(overrides.get("EXPECTED_INFLATION", 0.0275), 0.0275)
+    first_age = int(rows[0]["age"])
+
+    def scale(age: int) -> float:
+        return (1.0 + inflation) ** (age - first_age) if nominal else 1.0
+
+    dollars = "future dollars" if nominal else "today's dollars"
+    ages = [int(r["age"]) for r in rows]
+    totals = [year_savings(r) * scale(a) for r, a in zip(rows, ages)]
+    cumulative, running = [], 0.0
+    for t in totals:
+        running += t
+        cumulative.append(running)
     years = len(rows)
 
-    # Account categories: order matters for the stack. Labels must match
-    # _allocation_for_year() output keys EXACTLY (this list was previously
-    # stale — "Brokerage (residual)" was a leftover from an older model and
-    # caused brokerage contributions to silently drop from the stacked bars
-    # while still appearing in the cumulative line).
-    account_keys = [
-        "Your 401(k)",
-        "Your 401(k) match",
-        "Your HSA",
-        "Your Roth (backdoor)",
-        "Your brokerage",
-        "Partner 401(k)",
-        "Partner Roth IRA",
-        "Partner brokerage",
-    ]
-
-    # KPI strip
+    # KPI strip. "Year 1 savings rate" is the savings-rate chart's first bar.
+    first = rows[0]
+    gross = float(first.get("gross_income", 0.0) or 0.0)
     cols = st.columns(4)
-    first_breakdown = rows[0]["by_account"]
-    today_total = sum(first_breakdown.values())
-    today_tax_adv = sum(
-        v for k, v in first_breakdown.items()
-        if k not in ("Your brokerage", "Partner brokerage", "Your 401(k) match")
-    )
     with cols[0]:
-        st.metric("Mode", str(overrides.get("SAVINGS_RATE_MODE", "percent")).title())
-    with cols[1]:
         st.metric("Years saving", f"{years}")
+    with cols[1]:
+        st.metric("Year 1 savings", money(year_savings(first), shorten=True),
+                  help="Everything that goes into your accounts this year, "
+                       "employer match included.")
     with cols[2]:
-        st.metric("Year 1 savings", money(today_total, shorten=True))
+        st.metric("Year 1 savings rate",
+                  f"{100.0 * year_savings(first) / gross:.1f}%" if gross > 0 else "—",
+                  help="Year 1 savings as a share of pre-tax pay.")
     with cols[3]:
-        st.metric("Total contributed", money(total_at_retire, shorten=True))
+        st.metric("Total contributed", money(cumulative[-1], shorten=True),
+                  help=f"In {dollars}.")
 
     # Stacked bars + cumulative line
     fig = go.Figure()
     allocation_colors = get_allocation_colors(st)
-    for label in account_keys:
-        values = [r["by_account"].get(label, 0.0) for r in rows]
+    for label, field, _owner in ALLOCATION_ORDER:
+        values = [float(r.get(field, 0.0) or 0.0) * scale(a) for r, a in zip(rows, ages)]
         if not any(v > 0 for v in values):
             continue
         fig.add_trace(go.Bar(
@@ -117,6 +118,7 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
             text="<b>Projected savings by account</b><br>"
                  "<span style='font-size:13px;color:#64748b;'>"
                  "Annual contributions stacked by destination · "
+                 f"{dollars} · "
                  "<em>before</em> investment returns</span>",
             x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
         ),
@@ -166,7 +168,9 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
     )
 
     st.caption(
-        "Stacked bars show **where each year's savings goes**. The dotted line is "
+        "Stacked bars show **where each year's savings goes**, as the simulation "
+        "makes it: your contributions, your employer's match, and everything else "
+        "you don't spend invested in a brokerage account. The dotted line is "
         "cumulative contributions (no investment growth yet). Investment returns "
         "compound on top of these contributions in the Monte Carlo simulation."
     )

@@ -1049,11 +1049,13 @@ def main() -> None:
         with st.container(border=True, key="mc-tile-savings"):
             st.markdown('<div class="mc-section">Savings</div>', unsafe_allow_html=True)
             if st.session_state.get("_lz_savings"):
-                _safe_render("components.savings_projection_chart", results=results)
+                # Both charts show the simulation's own contributions, so they
+                # need a run (as the savings-rate chart always did).
                 if results:
+                    _safe_render("components.savings_projection_chart", results=results)
                     _safe_render("components.savings_rate_chart", results=results)
                 else:
-                    _run_hint("your savings rate over time (pre-tax vs post-tax)")
+                    _run_hint("your savings by account and savings rate over time")
             else:
                 _lazy_ph("savings", 440)
     _tile_savings()
