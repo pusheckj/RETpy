@@ -4,12 +4,12 @@ from __future__ import annotations
 try:
     from utils.coerce import safe_float, ensure_default
     from utils.formatting import money, money_md, pct
-    from utils.derived import compute_taxes, compute_total_income, files_two_returns
+    from utils.derived import sidebar_savings_budget, files_two_returns
     from utils import state_choice
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md, pct  # type: ignore
-    from ui.utils.derived import compute_taxes, compute_total_income, files_two_returns  # type: ignore
+    from ui.utils.derived import sidebar_savings_budget, files_two_returns  # type: ignore
     from ui.utils import state_choice  # type: ignore
 
 try:
@@ -49,10 +49,13 @@ def render_body(st) -> None:
                            "deduction. 5% is a middle-of-the-road guess.")
         set_override(st, "YOUR_MARGINAL_TAX_RATE", r / 100)
 
-    # This year's tax on your pay -- the same function the simulation uses.
+    # This year's tax on your pay -- the same function the simulation uses, on
+    # the 401(k)/HSA amounts the Savings section puts in (so the Savings
+    # section's "Taxes" is this same figure).
     overrides = st.session_state.get("user_overrides", {}) or {}
-    income = compute_total_income(overrides)
-    taxes = compute_taxes(overrides)
+    budget = sidebar_savings_budget(st.session_state)
+    income = budget["income"]
+    taxes = budget["taxes"]
 
     # 2x2, not 4-across: four columns in the fixed 328px sidebar leaves ~52px
     # each, which is not enough for either "$111.4K" or the label "Effective

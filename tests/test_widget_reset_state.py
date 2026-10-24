@@ -218,7 +218,7 @@ def test_old_gen_input_modules_are_still_load_bearing():
     from components.savings_rate_inputs import (  # noqa: F401
         ALLOCATION_ORDER,
         get_allocation_colors,
-        project_savings,
+        year_savings,
     )
 
     # The spending chart must keep using the lifecycle helper. (sim_runner used

@@ -11,10 +11,12 @@ import plotly.graph_objects as go
 
 try:
     from utils.coerce import safe_int
+    from utils.household import plan_end_ages
     from utils.mortality import life_distribution, RISK_FACTORS, CONDITIONS
     from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
+    from ui.utils.household import plan_end_ages  # type: ignore
     from ui.utils.mortality import life_distribution, RISK_FACTORS, CONDITIONS  # type: ignore
     from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
 
@@ -59,7 +61,9 @@ def render(st) -> None:
 
     # ---- Compute (instant) ----
     dist = life_distribution(int(current_age), sex, selections, conditions)
-    plan_until = safe_int(overrides.get("PLAN_UNTIL_AGE", 90), 90)
+    # Your age when the plan ends -- the horizon every screen shows
+    # (cfg.plan_end_age: with a younger partner it runs past your own plan-until age).
+    plan_until = plan_end_ages(overrides)[0]
     reach_plan = float(dist["reach_fn"].get(plan_until, 0.0)) if plan_until > current_age else 1.0
 
     # ---- Headline metrics ----
@@ -78,7 +82,7 @@ def render(st) -> None:
         st.metric("Outlive your plan", f"{reach_plan:.0%}",
                   delta="risk" if reach_plan >= 0.25 else "low",
                   delta_color=("inverse" if reach_plan >= 0.25 else "normal"),
-                  help=f"Chance you're still alive at your plan-until age ({plan_until}). "
+                  help=f"Chance you're still alive when the plan ends (you're {plan_until}). "
                        "If high, your plan may end while you're still spending.")
 
     # ---- Distribution plot ----
@@ -131,8 +135,8 @@ def render(st) -> None:
 
     # ---- Plan tie-in ----
     reach90 = dist["reach"][90]
-    lead = (f"There's a **{reach_plan:.0%}** chance you're still alive at your plan-until age "
-            f"(**{plan_until}**). ") if plan_until > current_age else ""
+    lead = (f"There's a **{reach_plan:.0%}** chance you're still alive when the plan ends "
+            f"(you're **{plan_until}**). ") if plan_until > current_age else ""
     if plan_until > current_age and reach_plan >= 0.25:
         lead += (f"That's a meaningful longevity risk — consider extending the plan toward your "
                  f"1-in-10 age (**{dist['p90']}**) so the money doesn't run out while you're still here.")

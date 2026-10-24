@@ -163,7 +163,7 @@ class TestUiShowsWhatTheEngineSimulates:
         assert shown["state"] == pytest.approx(cf["state"], rel=1e-9)
         assert shown["fica"] == pytest.approx(cf["fica"], rel=1e-9)
 
-    def test_disposable_uses_tax_before_pretax_savings(self):
+    def test_pretax_savings_lower_the_tax(self):
         from utils import derived
         ov = {"YOUR_BASE_SALARY": 100_000, "YOUR_401K_CONTRIBUTION": 20_000,
               "FILING_STATUS": "Single", "PARTNER_AGE": 0, "STATE_CHOICE": "TX"}

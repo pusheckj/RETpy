@@ -4,7 +4,7 @@ outcomes flex the spending guardrails.
 
 Reads ``results['primary_result']['spending_by_year']`` = per-age percentiles
 (p10/p25/p50/p75/p90) of the GUARDRAIL-ADJUSTED living spending, collected from
-``portfolio.spending_log`` across the Monte Carlo detail paths. Pre-retirement
+``portfolio.spending_log`` across every Monte Carlo run. Pre-retirement
 spending is deterministic (the guardrails act only in retirement), so those
 boxes are flat; the retirement boxes fan out with the market/guardrail spread.
 """
@@ -14,9 +14,11 @@ import plotly.graph_objects as go
 
 try:
     from utils.coerce import safe_int, as_fraction
+    from utils.household import plan_end_ages
     from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark, beeswarm_xy
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, as_fraction  # type: ignore
+    from ui.utils.household import plan_end_ages  # type: ignore
     from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark, beeswarm_xy  # type: ignore
 
 
@@ -30,7 +32,7 @@ def render(st, results: dict = None, chart_key: str = "spending_range_main") -> 
     overrides = st.session_state.get("user_overrides", {}) or {}
     current_age = safe_int(overrides.get("YOUR_AGE", 25), 25)
     retirement_age = safe_int(overrides.get("TARGET_RETIREMENT_AGE", 55), 55)
-    plan_until = safe_int(overrides.get("PLAN_UNTIL_AGE", 90), 90)
+    plan_until = plan_end_ages(overrides)[0]  # when the plan ends (cfg.plan_end_age)
     inflation_rate = as_fraction(overrides.get("EXPECTED_INFLATION", 0.0275), 0.0275)
 
     def _body() -> None:
@@ -136,12 +138,15 @@ def render(st, results: dict = None, chart_key: str = "spending_range_main") -> 
         # SURVIVING paths (the minimum n on the chart). rows[-1] reported "~800
         # simulated paths" for a 1,000-sim run at 80% success.
         n = max((r.get("n", 0) or 0 for r in rows), default=0) if rows else 0
+        runs = int((results.get("primary_result", {}) or {}).get("n_simulations") or n)
+        based_on = (f"Based on all {n:,} simulated runs (the same runs as the success rate)"
+                    if n >= runs else f"Based on {n:,} of the {runs:,} simulated runs")
         st.caption(
             "Each box is the spread of **annual spending across all simulated market paths** at that age: "
             "the box spans the middle 50% (25th–75th percentile), the whiskers reach the 10th–90th, and the "
             "line is the median. Spending is flat while you're working, then **fans out in retirement** as the "
             "**spending guardrails** raise or cut discretionary spending in response to how markets treated the "
-            f"portfolio. Based on ~{n:,} simulated paths · guardrail-adjusted living spending "
+            f"portfolio. {based_on} · guardrail-adjusted living spending "
             "(healthcare and long-term care are modeled separately and excluded here)."
         )
 

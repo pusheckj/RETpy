@@ -20,10 +20,12 @@ import plotly.graph_objects as go
 
 try:
     from utils.formatting import pct
+    from utils.household import plan_end_ages, plan_end_text
     from utils.plot_theme import style_fig
     from components import bridge_years_gauge, first_decade_stress
 except ImportError:  # pragma: no cover
     from ui.utils.formatting import pct  # type: ignore
+    from ui.utils.household import plan_end_ages, plan_end_text  # type: ignore
     from ui.utils.plot_theme import style_fig  # type: ignore
     from ui.components import bridge_years_gauge, first_decade_stress  # type: ignore
 
@@ -77,7 +79,7 @@ def _assumptions_html(overrides: dict) -> str:
     rows = [
         ("Your age", overrides.get("YOUR_AGE", "—")),
         ("Target retirement age", overrides.get("TARGET_RETIREMENT_AGE", "—")),
-        ("Plan until age", overrides.get("PLAN_UNTIL_AGE", "—")),
+        ("Plan runs until", plan_end_text(overrides)),
         ("Return scenario", overrides.get("ACTIVE_RETURN_SCENARIO", "—")),
         ("State", overrides.get("STATE_CHOICE", "—")),
         ("Filing status", overrides.get("FILING_STATUS", "—")),
@@ -90,7 +92,7 @@ def _narrative_html(results: dict, overrides: dict) -> str:
     """Reuses decision_narrative's underlying data sources so the report's
     prose can't disagree with the live dashboard's."""
     retire_age = int(overrides.get("TARGET_RETIREMENT_AGE", 55) or 55)
-    plan_until = int(overrides.get("PLAN_UNTIL_AGE", 90) or 90)
+    plan_until = plan_end_ages(overrides)[0]  # when the plan ends (cfg.plan_end_age)
     parts = []
 
     verdict = bridge_years_gauge.compute_verdict(results, retire_age)

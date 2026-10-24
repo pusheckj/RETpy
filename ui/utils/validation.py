@@ -21,7 +21,9 @@ def validate_run_inputs(overrides: dict, target_age=None) -> list:
     errs: list = []
     try:
         your_age = int(overrides.get("YOUR_AGE", getattr(cfg, "YOUR_AGE", 30)))
-        plan_until = int(overrides.get("PLAN_UNTIL_AGE", getattr(cfg, "PLAN_UNTIL_AGE", 90)))
+        # Your age when the plan ends: the simulation's horizon (cfg.plan_end_age,
+        # which a younger partner's plan-until age can extend past your own).
+        plan_until = int(cfg.plan_end_age(overrides))
     except Exception:
         return errs  # unparseable ages -> skip validation rather than crash
 
@@ -35,13 +37,15 @@ def validate_run_inputs(overrides: dict, target_age=None) -> list:
             )
         if plan_until <= target_age:
             errs.append(
-                f"Plan-until age ({plan_until}) must be after your target retirement age "
-                f"({target_age}). Increase it in **About you** so there's a retirement period to model."
+                f"The plan ends when you're {plan_until}, which must be after your target "
+                f"retirement age ({target_age}). Raise the plan-until age in **About you** so "
+                "there's a retirement period to model."
             )
     else:
         if plan_until <= your_age:
             errs.append(
-                f"Plan-until age ({plan_until}) must be after your current age ({your_age}). "
-                "Increase it in **About you** so there's a horizon to model."
+                f"The plan ends when you're {plan_until}, which must be after your current age "
+                f"({your_age}). Raise the plan-until age in **About you** so there's a horizon "
+                "to model."
             )
     return errs

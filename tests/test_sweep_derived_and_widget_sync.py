@@ -220,12 +220,15 @@ class TestComputeExpensesToday:
 
 class TestComputeDisposable:
     def test_identity_income_minus_taxes_minus_expenses(self):
+        """Left to save = income - the tax on the 401(k)/HSA amounts it funds - expenses."""
         o = {"YOUR_BASE_SALARY": 300_000, "PARTNER_MONTHLY_SPENDING": 0,
              "YEARS_UNTIL_FIRST_CHILD": 99, "SPEND_FOOD_MONTHLY": 1_000}
+        left = derived.compute_disposable(o)
+        saved = derived.auto_allocate_savings(left, o)
         expected = (derived.compute_total_income(o)
-                    - derived.compute_taxes(o)["total"]
+                    - derived.compute_taxes({**o, **saved})["total"]
                     - derived.compute_expenses_today(o))
-        assert derived.compute_disposable(o) == int(max(0, expected))
+        assert left == int(max(0, expected))
 
     def test_floored_at_zero_when_expenses_swamp_income(self):
         o = {"YOUR_BASE_SALARY": 30_000, "SPEND_FOOD_MONTHLY": 10_000}

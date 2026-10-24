@@ -35,11 +35,17 @@ def render(st, results: dict) -> None:
     success = pr.get("success_rate", 0.0)
     retire_age = pr.get("retirement_age", 0)
 
-    # Derive plan horizon from config snapshot
+    # Plan horizon from the run's config snapshot: PLAN_END_AGE is the age the
+    # simulation actually ran to (cfg.plan_end_age -- the later of your and your
+    # partner's plan-until ages), the one horizon every screen shows.
     snap = results.get("config_snapshot", {}) or {}
-    plan_until = snap.get("PLAN_END_AGE") or snap.get("PLAN_UNTIL_AGE", 95)
+    plan_until = int(snap.get("PLAN_END_AGE") or snap.get("PLAN_UNTIL_AGE", 95))
     years_in_ret = max(0, plan_until - retire_age)
     num_sims = snap.get("NUM_SIMULATIONS", 1000)
+    partner_age = int(snap.get("PARTNER_AGE") or 0)
+    horizon = f"until you're {plan_until}"
+    if partner_age > 0 and snap.get("YOUR_AGE") is not None:
+        horizon += f", partner {plan_until - (int(snap['YOUR_AGE']) - partner_age)}"
 
     # Colors. Semantic (risk) values carry a utility class (mc-good/warn/bad) so
     # dark mode recolors them to a bright, still-meaningful variant; the inline
@@ -64,7 +70,7 @@ def render(st, results: dict) -> None:
             _stat_card(
                 "Median final portfolio",
                 money(median_final, shorten=True),
-                "at plan end age",
+                f"at plan end (age {plan_until})",
             ),
             unsafe_allow_html=True,
         )
@@ -73,7 +79,8 @@ def render(st, results: dict) -> None:
             _stat_card(
                 "10th percentile",
                 money(p10, shorten=True),
-                f"worst-case outcome · {p10_tag}" if p10_tag else "worst-case outcome",
+                (f"1 in 10 runs end lower · {p10_tag}" if p10_tag
+                 else "1 in 10 runs end lower"),
                 color=p10_color,
                 cls=p10_cls,
             ),
@@ -95,7 +102,7 @@ def render(st, results: dict) -> None:
             _stat_card(
                 "Years in retirement",
                 f"{years_in_ret}",
-                f"through age {plan_until}",
+                horizon,
             ),
             unsafe_allow_html=True,
         )

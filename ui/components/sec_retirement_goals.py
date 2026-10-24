@@ -9,9 +9,11 @@ except ImportError:  # pragma: no cover
 try:
     from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money, money_md, pct
+    from utils.household import plan_end_ages
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md, pct  # type: ignore
+    from ui.utils.household import plan_end_ages  # type: ignore
 
 try:
     from utils.overrides import get_override, set_override
@@ -248,7 +250,7 @@ def render_body(st) -> None:
         set_override(st, "LTC_PROBABILITY", prob / 100)
 
         # Rough exposure preview (before inflation / age scaling).
-        plan_until = safe_int(get_override(st, "PLAN_UNTIL_AGE", 90), 90)
+        plan_until = plan_end_ages(st.session_state.get("user_overrides", {}) or {})[0]
         exp_years = max(0, plan_until - safe_int(start) + 1) * (prob / 100)
         st.caption(
             f"≈ **{exp_years:.1f}** expected care-years over the plan at "

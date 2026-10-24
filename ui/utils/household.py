@@ -47,3 +47,39 @@ def clear_partner(overrides: dict) -> None:
     for key in PARTNER_OPTIONAL_KEYS:
         overrides[key] = None
     overrides["PRIMARY_PAYS_HOUSING"] = False
+
+
+def _value(values: dict, key: str):
+    """``values[key]``, else the active config's (what the simulation would use)."""
+    from retirement_sim import config as cfg
+    v = (values or {}).get(key)
+    return getattr(cfg, key, None) if v is None else v
+
+
+def has_partner(values: dict) -> bool:
+    """cfg.has_partner() for an overrides dict (or a run's config snapshot):
+    PARTNER_AGE > 0, falling back to the config's when the dict has none."""
+    return safe_int(_value(values, "PARTNER_AGE"), 0) > 0
+
+
+def plan_end_ages(values: dict) -> tuple:
+    """(your age, partner's age or None) when the plan ends.
+
+    The one horizon every screen shows: the simulation runs until the later of
+    your plan-until age and your partner's (cfg.plan_end_age), so with a
+    younger partner it runs past your own plan-until age.
+    """
+    from retirement_sim import config as cfg
+    end = int(cfg.plan_end_age(values or {}))
+    if not has_partner(values):
+        return end, None
+    gap = safe_int(_value(values, "YOUR_AGE"), 0) - safe_int(_value(values, "PARTNER_AGE"), 0)
+    return end, end - gap
+
+
+def plan_end_text(values: dict) -> str:
+    """'you're 100 and your partner is 95' / 'you're 95'."""
+    end, partner_end = plan_end_ages(values)
+    if partner_end is None:
+        return f"you're {end}"
+    return f"you're {end} and your partner is {partner_end}"
