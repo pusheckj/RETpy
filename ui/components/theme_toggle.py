@@ -368,7 +368,7 @@ button[data-testid="stNumberInputStepDown"] {
    header and text follow the dark theme. */
 [data-testid="stDataFrame"] [data-testid="stDataFrameResizable"],
 [data-testid="stDataEditor"] [data-testid="stDataFrameResizable"] {
-    filter: invert(0.88) hue-rotate(180deg) brightness(1.2);
+    filter: invert(0.9) hue-rotate(180deg) saturate(0.25) brightness(1.1);   /* neutral dark grey, like the tiles */
 }
 
 /* Divider */
