@@ -214,3 +214,76 @@ def test_savings_charts_wait_for_a_run():
     src = inspect.getsource(savings_projection_chart)
     assert "project_savings" not in src and "user_overrides" in src
     assert savings_projection_chart.savings_rows(None) == []
+
+
+# ---------------------------------------------------------------------------
+# #7 final-balance tiles vs the trajectories table; #16 spending-range counts
+# ---------------------------------------------------------------------------
+N_RUNS = 200
+
+
+@pytest.fixture(scope="module")
+def sample_run():
+    from tests.conftest import load_sample_household
+    ov = load_sample_household()
+    age = int(ov["TARGET_RETIREMENT_AGE"])
+    return ov, sr.run_full_analysis(ov, n_simulations=N_RUNS, target_retirement_age=age,
+                                    scan_age_range=(age, age + 1, 1))
+
+
+def test_primary_result_describes_every_run(sample_run):
+    _, res = sample_run
+    pr = res["primary_result"]
+    assert pr["n_simulations"] == N_RUNS
+    assert pr["p10_final"] <= pr["p25_final"] <= pr["median_final"] <= pr["p75_final"] <= pr["p90_final"]
+    # The spending range covers every run, not the ~1/3 detail sample.
+    assert max(r["n"] for r in pr["spending_by_year"]) == N_RUNS
+    assert len(pr["sample_successes"]) == len(pr["sample_paths"])
+
+
+def _results_script():
+    import os
+    import sys
+    sys.path.insert(0, os.environ["CONSISTENT_TEST_UI_DIR"])
+    import streamlit as st
+    from components import spending_range_chart, stats_row, trajectories_tab
+    results = st.session_state["_results"]
+    stats_row.render(st, results=results)
+    trajectories_tab.render(st, results=results)
+    spending_range_chart.render(st, results=results)
+
+
+def test_tiles_table_and_counts_agree(sample_run, monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from utils.formatting import money
+    monkeypatch.setenv("CONSISTENT_TEST_UI_DIR", _UI)
+    ov, res = sample_run
+    pr = res["primary_result"]
+    at = AppTest.from_function(_results_script, default_timeout=60)
+    at.session_state["_results"] = res
+    at.session_state["user_overrides"] = dict(ov)
+    at.run()
+    assert not at.exception, at.exception
+    html = " ".join(m.value for m in at.markdown)
+    table = at.dataframe[0].value
+    by_pct = dict(zip(table["Percentile"], table["Final balance"]))
+    # The table's median and 10th percentile are the tiles' figures.
+    assert by_pct["50th (median)"] == money(pr["median_final"], shorten=True)
+    assert by_pct["10th"] == money(pr["p10_final"], shorten=True)
+    assert money(pr["median_final"], shorten=True) in html
+    assert f"all {N_RUNS:,} simulations" in html
+    assert f"out of {N_RUNS:,} simulations" in html
+    tiles = {m.label: m.value for m in at.metric}
+    n_out = pr["sample_successes"].count(False)
+    assert tiles["Ran out of money (in this sample)"] == f"{n_out} of {len(pr['sample_paths'])}"
+    assert "Median final (this sample)" not in tiles
+    captions = " ".join(c.value for c in at.caption)
+    assert f"Based on all {N_RUNS:,} simulated runs" in captions
+
+
+def test_a_sample_path_that_ran_out_is_drawn_red():
+    from components.trajectories_tab import sample_outcomes
+    pr = {"sample_paths": [[(60, 5e5), (61, 4e4)], [(60, 5e5), (61, 6e5)]],
+          "sample_successes": [False, True]}
+    # The failed path's last recorded balance is $40k, not $0: the flag decides.
+    assert [bad for _, bad in sample_outcomes(pr)] == [True, False]

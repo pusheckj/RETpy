@@ -76,6 +76,10 @@ def sim_task(args) -> Dict[str, Any]:
     sims plus full per-path detail (trajectory + withdrawal_log as plain dicts)
     for up to ``detail_k`` of them — everything picklable, no portfolio objects.
 
+    ``spending_by_age`` is every sim's guardrail-adjusted living spending by age
+    (``{age: [dollars, ...]}``), so the spending-range chart covers the same
+    runs as the success rate rather than only the ``detail_k`` sample.
+
     A simulation that RAISES is dropped from both ``successes`` and ``finals``,
     which silently shrinks the denominator the caller divides by — a config that
     made 30% of paths crash would report a confident success rate over the
@@ -93,6 +97,7 @@ def sim_task(args) -> Dict[str, Any]:
     first_error = None
     finals: List[float] = []
     details: List[dict] = []
+    spending_by_age: Dict[int, List[float]] = {}
     for _ in range(int(n_sims)):
         try:
             success, portfolio = sim.run_detailed_simulation(age, verbose=False)
@@ -105,6 +110,8 @@ def sim_task(args) -> Dict[str, Any]:
             successes += 1
         fb = float(portfolio.get_total_balance())
         finals.append(fb)
+        for row in (getattr(portfolio, "spending_log", None) or []):
+            spending_by_age.setdefault(int(row["age"]), []).append(float(row.get("living", 0.0)))
         if len(details) < detail_k:
             traj = _trajectory_from_portfolio(portfolio)
             if traj:
@@ -114,7 +121,7 @@ def sim_task(args) -> Dict[str, Any]:
                     "trajectory": traj,
                     "bytype": _bytype_from_portfolio(portfolio),
                     "withdrawal_log": [dict(r) for r in (getattr(portfolio, "withdrawal_log", None) or [])],
-                    "spending_log": [dict(r) for r in (getattr(portfolio, "spending_log", None) or [])],
                 })
     return {"age": age, "n": len(finals), "successes": successes, "finals": finals,
-            "details": details, "errors": errors, "first_error": first_error}
+            "details": details, "spending_by_age": spending_by_age,
+            "errors": errors, "first_error": first_error}

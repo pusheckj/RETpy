@@ -1147,16 +1147,8 @@ def _median_withdrawal_log_from_data(paths, logs, successes=None) -> List[dict]:
     return rows
 
 
-def _spending_percentiles(spending_logs, field: str = "living") -> List[dict]:
-    """Per-age spending percentiles across MC paths, for the spending-range boxplot.
-
-    ``spending_logs`` is a list of per-path logs (each a list of
-    ``{'age','living','total'}`` rows from ``portfolio.spending_log``). Returns
-    ``[{age, p10, p25, p50, p75, p90, n}, ...]`` sorted by age, using ``field``
-    ('living' = guardrail-adjusted base spending, the market/guardrail-driven
-    quantity; 'total' also includes healthcare/LTC/car). Values are today's
-    (real) dollars — the chart may inflate them for a nominal view.
-    """
+def _spending_by_age(spending_logs, field: str = "living") -> Dict[int, List[float]]:
+    """``{age: [dollars, ...]}`` from per-path ``portfolio.spending_log`` rows."""
     from collections import defaultdict
     by_age = defaultdict(list)
     for log in spending_logs or []:
@@ -1167,6 +1159,24 @@ def _spending_percentiles(spending_logs, field: str = "living") -> List[dict]:
             except (TypeError, ValueError):
                 continue
             by_age[a].append(v)
+    return by_age
+
+
+def _spending_percentiles(spending_logs, field: str = "living") -> List[dict]:
+    """Per-age spending percentiles across MC paths, for the spending-range boxplot.
+
+    ``spending_logs`` is a list of per-path logs (each a list of
+    ``{'age','living','total'}`` rows from ``portfolio.spending_log``). Returns
+    ``[{age, p10, p25, p50, p75, p90, n}, ...]`` sorted by age, using ``field``
+    ('living' = guardrail-adjusted base spending, the market/guardrail-driven
+    quantity; 'total' also includes healthcare/LTC/car). Values are today's
+    (real) dollars — the chart may inflate them for a nominal view.
+    """
+    return _percentiles_by_age(_spending_by_age(spending_logs, field))
+
+
+def _percentiles_by_age(by_age: Dict[int, List[float]]) -> List[dict]:
+    """``_spending_percentiles`` rows from ``{age: [dollars, ...]}``."""
     out: List[dict] = []
     for a in sorted(by_age):
         vals = by_age[a]
@@ -1200,19 +1210,26 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
     successes = 0
     n = 0
     details: List[dict] = []
+    spending_by_age: Dict[int, List[float]] = {}
     for r in chunks:
         finals.extend(r.get("finals", []))
         successes += int(r.get("successes", 0))
         n += int(r.get("n", 0))
         details.extend(r.get("details", []))
+        for age, vals in (r.get("spending_by_age") or {}).items():
+            spending_by_age.setdefault(int(age), []).extend(vals)
 
     if n == 0:
         # Nothing ran (all errored) — defer to the legacy serial path.
         return _run_primary_at_age(retirement_age, 200)
 
     success_rate = successes / n
+    # Final-balance percentiles over ALL n runs (the stat tiles and the
+    # trajectories table both read these, so they describe one population).
     median_final = float(np.median(finals)) if finals else 0.0
     p10_final = float(np.percentile(finals, 10)) if finals else 0.0
+    p25_final = float(np.percentile(finals, 25)) if finals else 0.0
+    p75_final = float(np.percentile(finals, 75)) if finals else 0.0
     p90_final = float(np.percentile(finals, 90)) if finals else 0.0
 
     paths = [d["trajectory"] for d in details if d.get("trajectory")]
@@ -1230,8 +1247,9 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
     withdrawals_by_year = _median_withdrawal_log_from_data(paths, logs, det_successes)
     income_sources_by_year = _approximate_income_sources(withdrawals_by_year, retirement_age)
     taxes_by_year = _approximate_taxes(withdrawals_by_year, retirement_age)
-    spending_logs = [d.get("spending_log", []) for d in details if d.get("trajectory")]
-    spending_by_year = _spending_percentiles(spending_logs)
+    # Every run's spending (sim_task.spending_by_age), not just the detail
+    # sample, so the spending-range chart covers the same runs as the success rate.
+    spending_by_year = _percentiles_by_age(spending_by_age)
     bytype_logs = [d.get("bytype", []) for d in details if d.get("trajectory")]
 
     return {
@@ -1239,11 +1257,15 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
         "success_rate": success_rate,
         "median_final": median_final,
         "p10_final": p10_final,
+        "p25_final": p25_final,
+        "p75_final": p75_final,
         "p90_final": p90_final,
+        "n_simulations": n,
         "median_trajectory": median_traj,
         "p10_trajectory": p10_traj,
         "p90_trajectory": p90_traj,
         "sample_paths": sample_paths,
+        "sample_successes": det_successes[: len(sample_paths)],
         "income_sources_by_year": income_sources_by_year,
         "allocation_by_year": allocation_by_year,
         "taxes_by_year": taxes_by_year,
@@ -1330,9 +1352,11 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
         success_rate = float(overall.get("success_rate", 0.0))
         median_final = float(overall.get("median_final", 0.0))
         p10_final = float(overall.get("percentile_10", overall.get("p10_final", 0.0)))
+        p25_final = float(overall.get("percentile_25", 0.0))
+        p75_final = float(overall.get("percentile_75", 0.0))
         p90_final = float(overall.get("percentile_90", overall.get("p90_final", 0.0)))
     else:
-        success_rate = median_final = p10_final = p90_final = 0.0
+        success_rate = median_final = p10_final = p25_final = p75_final = p90_final = 0.0
 
     # Collect per-year trajectories by running N individual sims and reading
     # portfolio.yearly_history. This is the ACTUAL model output — no fallback
@@ -1371,11 +1395,15 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
         "success_rate": success_rate,
         "median_final": median_final,
         "p10_final": p10_final,
+        "p25_final": p25_final,
+        "p75_final": p75_final,
         "p90_final": p90_final,
+        "n_simulations": int(n_simulations),
         "median_trajectory": median_traj,
         "p10_trajectory": p10_traj,
         "p90_trajectory": p90_traj,
         "sample_paths": sample_paths,
+        "sample_successes": successes[: len(sample_paths)],
         "income_sources_by_year": income_sources_by_year,
         "allocation_by_year": allocation_by_year,
         "taxes_by_year": taxes_by_year,
