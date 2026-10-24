@@ -240,7 +240,7 @@ def _home_moves(st) -> None:
                             step=0.05, key="bp_new_home_escrow_pct",
                             help="Percent of the home's value per year, added to the "
                                  "monthly payment and kept once the loan is paid off. "
-                                 "CA is roughly 1.1% tax + 0.25% insurance.")
+                                 "Varies by state (California is about 1.1% tax + 0.25% insurance).")
         set_override(st, "NEW_HOME_ESCROW_PCT", v / 100)
     if owns_today and stored:
         value = safe_int(ov.get("HOME_VALUE", 0), 0)

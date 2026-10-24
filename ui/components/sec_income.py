@@ -129,7 +129,7 @@ def render_body(st) -> None:
     with cols[2]: st.metric("Total", money(household_total, shorten=True))
 
     # Comp table editor (advanced)
-    with st.expander("Edit compensation table", expanded=False):
+    with st.expander("Your pay by year (advanced)", expanded=False):
         st.caption("Year-by-year base/bonus/RSU, auto-derived from your inputs above. "
                    "Edit any cell to customize a year, or click 🔄 to resync.")
 
