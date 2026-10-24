@@ -157,3 +157,18 @@ def test_long_explanations_fold_on_phones():
     phone = _media("(max-width: 640px)")
     assert re.search(r"\[data-mc-clamp\]\s*\{[^}]*-webkit-line-clamp:\s*3", phone)
     assert "function foldText" in ANIM and "data-mc-clamp" in ANIM
+
+
+def test_dark_mode_covers_segmented_controls_tooltips_and_tables():
+    from components.theme_toggle import _DARK_CSS
+    assert 'stBaseButton-segmented_control"]' in _DARK_CSS
+    assert '[data-baseweb="tooltip"] > div' in _DARK_CSS
+    assert "invert(" in _DARK_CSS and "stDataFrameResizable" in _DARK_CSS
+    # hover looks must not stick after a tap on touch screens
+    assert "@media (hover: hover)" in _DARK_CSS
+
+
+def test_tooltip_animation_never_touches_the_popper_positioned_element():
+    from components import animations
+    src = open(animations.__file__).read()
+    assert '[data-baseweb="tooltip"], [data-testid="stTooltipContent"]' not in src
