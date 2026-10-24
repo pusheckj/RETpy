@@ -103,10 +103,16 @@ def render(st) -> None:
                   annotation_font=dict(size=11, color=line))
     fig.add_vline(x=dist["p90"], line_dash="dot", line_color="#d97706" if not dark else "#fbbf24",
                   annotation_text=f"1-in-10 reach {dist['p90']}", annotation_position="top right",
-                  annotation_font=dict(size=10, color="#d97706" if not dark else "#fbbf24"))
+                  annotation_font=dict(size=10, color="#d97706" if not dark else "#fbbf24"),
+                  # Opaque chip: the "plan ends" line sits just right of this
+                  # label and used to strike through the text.
+                  annotation_bgcolor=("rgba(15,23,42,0.92)" if dark else "rgba(255,255,255,0.92)"))
     if current_age < plan_until <= hi:
         fig.add_vline(x=plan_until, line_dash="dash", line_color="#64748b",
-                      annotation_text=f"plan ends {plan_until}", annotation_position="bottom right",
+                      annotation_text=f"plan ends {plan_until}",
+                      # Label on the side AWAY from the nearby 1-in-10 line, which
+                      # otherwise strikes through it.
+                      annotation_position=("bottom left" if plan_until < dist["p90"] else "bottom right"),
                       annotation_font=dict(size=10, color="#64748b"))
     fig.update_layout(
         title=dict(

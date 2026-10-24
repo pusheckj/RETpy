@@ -4,9 +4,9 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 try:
-    from utils.plot_theme import PLOTLY_CONFIG, active_palette, series_color
+    from utils.plot_theme import PLOTLY_CONFIG, active_palette, series_color, is_dark
 except ImportError:
-    from ui.utils.plot_theme import PLOTLY_CONFIG, active_palette, series_color  # type: ignore
+    from ui.utils.plot_theme import PLOTLY_CONFIG, active_palette, series_color, is_dark  # type: ignore
 
 
 def _color(rate: float, target: float, st=None) -> str:
@@ -51,8 +51,10 @@ def render(st, results: dict, chart_key: str = "success_by_age_main") -> None:
 
     # Target line at the user's configured target success rate
     fig.add_hline(y=target_success_rate * 100, line_dash="dash", line_color="#94a3b8",
-                  annotation_text=f"{target_success_rate * 100:.0f}% target", annotation_position="top right",
-                  annotation_font=dict(size=11, color="#64748b"))
+                  annotation_text=f"{target_success_rate * 100:.0f}% target", annotation_position="top left",
+                  annotation_font=dict(size=11, color="#64748b"),
+                  # Opaque chip so the label stays legible where it crosses bars.
+                  annotation_bgcolor=("rgba(15,23,42,0.9)" if is_dark(st) else "rgba(255,255,255,0.9)"))
 
     earliest = results.get("earliest_retirement_age")
     if earliest is not None:

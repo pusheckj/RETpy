@@ -117,8 +117,11 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
                 x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
             ),
             height=420, margin=dict(l=50, r=40, t=80, b=50),
+            # Clamp to the data: on narrow charts Plotly autoranged the box
+            # axis down to age 0 (a big empty left third on a phone).
             xaxis=dict(title="Age", gridcolor="#f1f5f9", zeroline=False,
-                       tickfont=dict(color="#64748b"), fixedrange=False),
+                       tickfont=dict(color="#64748b"), fixedrange=False,
+                       range=[min(ages) - 1, max(ages) + 1]),
             yaxis=dict(title=f"Investable net worth ({unit})", gridcolor="#f1f5f9", zeroline=False,
                        rangemode="tozero", tickformat="$,.3~s", tickfont=dict(color="#64748b"),
                        range=([0, y_cap] if points_mode else None)),

@@ -4,9 +4,9 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 try:
-    from utils.plot_theme import assign_colors, PLOTLY_CONFIG
+    from utils.plot_theme import concept_color, PLOTLY_CONFIG
 except ImportError:
-    from ui.utils.plot_theme import assign_colors, PLOTLY_CONFIG
+    from ui.utils.plot_theme import concept_color, PLOTLY_CONFIG
 
 
 def render(st, results: dict, chart_key: str = "income_sources_main") -> None:
@@ -31,7 +31,7 @@ def render(st, results: dict, chart_key: str = "income_sources_main") -> None:
     roth_conversion = [r.get("roth_conversion", 0) for r in rows]
 
     labels = ["Social Security", "Traditional 401(k)/IRA", "Roth", "Taxable brokerage", "HSA"]
-    series_colors = assign_colors(labels, st)
+    series_colors = {l: concept_color(l, st) for l in labels}
 
     fig = go.Figure()
     for label, values in [
@@ -49,7 +49,7 @@ def render(st, results: dict, chart_key: str = "income_sources_main") -> None:
 
     if any(roth_conversion):
         fig.add_trace(go.Scatter(
-            x=ages, y=roth_conversion, name="Roth conversion (transfer, not income)",
+            x=ages, y=roth_conversion, name="Roth conversion (transfer)",
             mode="lines+markers", line=dict(color="#7c3aed", dash="dot", width=2),
             marker=dict(size=5, symbol="diamond"),
             hovertemplate="Roth conversion (transfer)<br>Age %{x}<br>$%{y:,.0f}<extra></extra>",

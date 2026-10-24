@@ -114,12 +114,11 @@ def render(st, results: dict = None, chart_key: str = "first_decade_stress") -> 
 
     fig.update_layout(
         title=dict(
-            # Subtitle broken across TWO lines: as one long span it measured
-            # ~778px inside a 732px chart at 1280 and the SVG clipped it
-            # mid-word ("...below the media").
+            # Long subtitle: style_fig wraps title lines at a safe width (Plotly
+            # never wraps titles; one long span used to clip mid-word).
             text="<b>First-decade stress: median vs unlucky path</b><br>"
                  "<span style='font-size:13px;color:#64748b;'>The shaded wedge is your "
-                 "sequence-of-returns risk —<br>"
+                 "sequence-of-returns risk — "
                  "how far a bad early market pulls you below the median "
                  "(today's dollars)</span>",
             x=0.0, xanchor="left", font=dict(size=16),
@@ -145,8 +144,10 @@ def render(st, results: dict = None, chart_key: str = "first_decade_stress") -> 
         gap = med - low
         gap_pct = (gap / med) if med > 0 else None
         table.append({
-            "Retirement year": yr,
-            "Age": retire_age + yr,
+            # All-text columns: a numeric int column right-aligns while the
+            # money strings left-align, which mixed alignment across the table.
+            "Retirement year": f"Year {yr}",
+            "Age": str(retire_age + yr),
             "Median": money(med, shorten=True),
             "Unlucky (P10)": money(low, shorten=True),
             "Gap": money(gap, shorten=True),

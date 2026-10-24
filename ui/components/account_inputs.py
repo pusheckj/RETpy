@@ -33,7 +33,7 @@ def render(st) -> None:
             v = st.number_input("HSA ($)", min_value=0, max_value=10_000_000, step=500, key="ai_your_hsa")
             set_override(st, "YOUR_HSA", safe_int(v))
             ensure_default(st, "ai_your_brk", safe_int(get_override(st, "YOUR_BROKERAGE", 2_500), 2_500))
-            v = st.number_input("Brokerage ($)", min_value=0, max_value=10_000_000, step=1_000, key="ai_your_brk")
+            v = st.number_input("Taxable brokerage ($)", min_value=0, max_value=10_000_000, step=1_000, key="ai_your_brk")
             set_override(st, "YOUR_BROKERAGE", safe_int(v))
             ensure_default(st, "ai_your_cash", safe_int(get_override(st, "YOUR_CASH", 4_000), 4_000))
             v = st.number_input("Cash / savings ($)", min_value=0, max_value=10_000_000, step=500, key="ai_your_cash")
@@ -56,7 +56,7 @@ def render(st) -> None:
             set_override(st, "PARTNER_ROTH_IRA", safe_int(v))
         with col4:
             ensure_default(st, "ai_partner_brk", safe_int(get_override(st, "PARTNER_BROKERAGE", 1_000), 1_000))
-            v = st.number_input("Brokerage ($)", min_value=0, max_value=10_000_000, step=1_000, key="ai_partner_brk")
+            v = st.number_input("Taxable brokerage ($)", min_value=0, max_value=10_000_000, step=1_000, key="ai_partner_brk")
             set_override(st, "PARTNER_BROKERAGE", safe_int(v))
             ensure_default(st, "ai_partner_cash", safe_int(get_override(st, "PARTNER_CASH", 3_000), 3_000))
             v = st.number_input("Cash / savings ($)", min_value=0, max_value=10_000_000, step=500, key="ai_partner_cash")
