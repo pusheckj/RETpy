@@ -260,3 +260,13 @@ def test_main_result_only_waits_for_a_ready_browser(fake_st):
     assert bc.usable(fake_st) and not bc.ready(fake_st)           # extras may queue; main runs here
     bc._receive(fake_st, {"type": "status", "state": "ready", "engine": "x", "boot": "b", "seq": 2})
     assert bc.ready(fake_st)
+
+
+def test_curve_uses_the_main_run_at_the_target_age():
+    """The earliest age and the headline success rate come from one estimate at
+    the target age, so they can't contradict each other."""
+    r = sr.execute_plan(sr.plan_full_analysis(SINGLE, 160, 55))
+    assert r["success_rate_by_age"][55] == r["primary_result"]["success_rate"]
+    target = r["config_snapshot"]["TARGET_SUCCESS_RATE"]
+    if r["primary_result"]["success_rate"] < target:
+        assert r["earliest_retirement_age"] is None or r["earliest_retirement_age"] != 55

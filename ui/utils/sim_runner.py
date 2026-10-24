@@ -1299,14 +1299,21 @@ def plan_full_analysis(
     n_primary = len(chunk_sizes)
 
     def finish(results: List[Any]) -> Dict[str, Any]:
+        primary = _assemble_primary_from_chunks(target_retirement_age, results[:n_primary])
         success_by_age = {int(r["age"]): (r["successes"] / r["n"]) if r["n"] else 0.0
                           for r in results[n_primary:]}
+        # At the target age the main run is the better estimate (more runs), and
+        # the page shows it as THE success rate: use it on the curve too, so the
+        # earliest age can never contradict it (e.g. "earliest age 40" next to
+        # "78% at 40" when the target is 80%).
+        if target_retirement_age in success_by_age:
+            success_by_age[target_retirement_age] = float(primary["success_rate"])
         earliest = next((age for age in sorted(success_by_age)
                          if success_by_age[age] >= target_success), None)
         return {
             "earliest_retirement_age": earliest,
             "success_rate_by_age": success_by_age,
-            "primary_result": _assemble_primary_from_chunks(target_retirement_age, results[:n_primary]),
+            "primary_result": primary,
             "config_snapshot": snap,
         }
 
