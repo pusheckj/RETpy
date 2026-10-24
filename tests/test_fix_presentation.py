@@ -468,9 +468,9 @@ def test_no_double_percent_in_plotly_hovertemplates():
 # ==========================================================================
 def test_net_worth_box_chart_says_investable():
     src = _read("ui", "components", "net_worth_box_chart.py")
-    assert "Investable net worth range over time" in src
-    assert re.search(r'yaxis=dict\(title=f"Investable net worth', src)
-    assert 'name="Investable net worth"' in src
+    assert "Investable portfolio range over time" in src
+    assert re.search(r'yaxis=dict\(title=f"Investable portfolio', src)
+    assert 'name="Investable portfolio"' in src
     # No bare "Net worth ($, today)" axis label left behind.
     assert 'title=f"Net worth (' not in src
 

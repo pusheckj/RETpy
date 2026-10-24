@@ -112,7 +112,7 @@ Each working year's pay, pre-tax savings and taxes come from one deterministic f
 - **Pay**: your comp-table wages (base + bonus + RSU) plus `YOUR_OTHER_INCOME`; the partner's base + bonus + RSU (grown at their growth rate) plus `PARTNER_OTHER_INCOME`.
 - **Pre-tax deferrals**: 401(k) and HSA, capped at the IRS limits and at the pay itself.
 - **Taxes** (`config.working_year_taxes`): 2024 federal brackets and standard deduction for the filing status; the state's table; FICA per earner (Social Security to the wage base, Medicare, Additional Medicare above $200k/$250k per return). A married couple files one joint return, an unmarried couple two (each taxed on their own pay), and a joint return's income tax is shared between the two in proportion to their taxable income.
-- **Take-home** = pay − deferrals − taxes. A comp row that sets `after_tax` overrides your computed take-home.
+- **Take-home** = pay − deferrals − taxes. A comp row that sets `after_tax` overrides your computed take-home (advanced; the app never sets it).
 
 The year's taxable pay is also the base that any same-year portfolio draw (a car, a house down payment) stacks on.
 
@@ -270,7 +270,7 @@ is one (`PARTNER_AGE > 0`), married or not.
 
 **Pre-65 marketplace years** (`MODEL_ACA_AGE_RATED = True`, default) are priced per member rather than from the flat band: each pre-Medicare adult pays the benchmark Silver premium for their age (federal 3:1 age curve, `ACA_BENCHMARK_MONTHLY_AT_40` at 40, an input because prices vary widely by region), each child at home pays `ACA_CHILD_MONTHLY`, and the premium tax credit caps the household's cost at MAGI × the 2026 applicable percentage (2.10%–9.96%), with no credit at or above 400% of the household-size FPL. Each member also carries `ACA_OOP_PER_PERSON_ANNUAL` out-of-pocket, net of the living base's `SPEND_HEALTH_MONTHLY`. While a partner is still working after the primary retires, their employer plan covers the household and no marketplace cost is charged. In years when one spouse is on Medicare and the other is not, the Medicare all-in floor applies to the Medicare spouse's share before the other's marketplace cost is added.
 
-**IRMAA surcharges** are added on top for years in which MAGI (from 2 years prior) exceeds the $206,000 MFJ threshold. See `TAX_MODEL.md` §7 for the IRMAA bracket table.
+**IRMAA surcharges** are added on top for years in which MAGI (from 2 years prior) exceeds the first MFJ threshold ($212,000 in the 2025 CMS tiers; see `MEDICARE_IRMAA_BRACKETS_MFJ`). See `TAX_MODEL.md` §7 for the IRMAA bracket table.
 
 If `LTC_ENABLED = True`, an additional long-term-care shock is modeled in late-life years. See `config.py` for the LTC parameters.
 
@@ -342,7 +342,7 @@ A simulation path is marked a **failure** when, in any year, the portfolio canno
 
 ### 15.1 Home equity backstop
 
-When `USE_HOME_EQUITY_BACKUP = True`, accessible home equity (default **85%** of current equity, accounting for selling costs and a residual housing need) is treated as a last-resort cash source before declaring failure. This is modeled as a one-time lump sum that flows into the taxable brokerage; it is not a HELOC or reverse mortgage simulation.
+When `USE_HOME_AS_BACKUP = True`, accessible home equity (`HOME_EQUITY_ACCESSIBLE_PCT`, default **85%** of current equity, accounting for selling costs and a residual housing need) is treated as a last-resort cash source before declaring failure. This is modeled as a one-time lump sum that flows into the taxable brokerage; it is not a HELOC or reverse mortgage simulation.
 
 ---
 

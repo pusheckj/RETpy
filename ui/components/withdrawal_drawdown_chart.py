@@ -120,7 +120,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> No
 
     # Add a reference line at 4% withdrawal rate
     fig.add_hline(y=4.0, line_dash="dash", line_color="#94a3b8",
-                  annotation_text="4% safe withdrawal rate", annotation_position="top right",
+                  annotation_text="4% rule", annotation_position="top right",
                   annotation_font=dict(size=11))
 
     fig.update_layout(

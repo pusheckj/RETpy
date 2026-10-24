@@ -34,7 +34,8 @@ def render_body(st) -> None:
     current_label = scen_map.get(current_scen, "Historical")
     ensure_default(st, "sa_scenario", current_label)
     scen = st.radio("Return scenario", scen_options, horizontal=True, key="sa_scenario",
-                    help="Real stock/bond returns — Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%.")
+                    help="Real stock/bond returns. Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%. "
+                         "Historical (the default) is the more optimistic choice; Conservative gives a planner-style result.")
     set_override(st, "ACTIVE_RETURN_SCENARIO", scen.lower())
 
     c1, c2 = st.columns(2)
@@ -165,9 +166,11 @@ def render_body(st) -> None:
     _g = {**cfg.SPENDING_GUARDRAILS, **(overrides.get("SPENDING_GUARDRAILS") or {})}
     _cut = float(_g["floor_reduction"]); _drop = 1 - float(_g["floor_trigger"])
     _share = float(overrides.get("DISCRETIONARY_EXPENSE_RATIO", cfg.DISCRETIONARY_EXPENSE_RATIO))
-    v = st.toggle(f"Enable spending guardrails (cut {_cut:.0%} of the cuttable {_share:.0%} of "
-                  f"non-housing spending if the portfolio drops {_drop:.0%})",
-                    key="sa_dyn_enable")
+    v = st.toggle(f"Guardrails: cut {_cut:.0%} of discretionary spending when the portfolio "
+                  f"is {_drop:.0%} below target",
+                    key="sa_dyn_enable",
+                    help=f"Discretionary is about {_share:.0%} of non-housing spending; "
+                         "housing is never cut.")
     set_override(st, "DYNAMIC_SPENDING_ENABLED", bool(v))
 
     ensure_default(st, "sa_ret_spend", bool(get_override(st, "RETURN_BASED_SPENDING_ENABLED", True)))
@@ -178,7 +181,7 @@ def render_body(st) -> None:
     st.divider()
 
     # ===== Healthcare / LTC =====
-    _section_label(st, "Healthcare / LTC")
+    _section_label(st, "Healthcare (before Medicare)")
     ensure_default(st, "sa_aca", bool(get_override(st, "ACA_ENABLED", True)))
     v = st.toggle("ACA subsidy modeling (pre-Medicare years)", key="sa_aca")
     set_override(st, "ACA_ENABLED", bool(v))

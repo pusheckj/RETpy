@@ -1,5 +1,5 @@
 """WHAT-IF delta pane: compares the plan WITH active lifecycle toggles
-(car purchase, house move, retirement vacation, etc.) vs a BASELINE with
+(car purchase, home move, retirement vacation, etc.) vs a BASELINE with
 those toggles forced off.
 
 Purely a display component — all numbers come from
@@ -15,7 +15,7 @@ from utils.formatting import money, pct
 TOGGLE_LABELS = {
     "CAR_ONETIME_ENABLED": "One-time car purchase",
     "CAR_RECURRING_ENABLED": "Recurring car purchases",
-    "HOUSE_MOVE_ENABLED": "House move",
+    "HOUSE_MOVE_ENABLED": "Home move (older plan)",
     "HOME_EVENTS": "Home moves",
     "RETIREMENT_VACATION_ENABLED": "Retirement vacation spending",
 }

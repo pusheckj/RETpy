@@ -1,4 +1,4 @@
-"""Simple mode: "Get my money in order", a phone-first everyday-money page.
+"""Simple mode: "Money check-up", a phone-first everyday-money page.
 
 No Monte Carlo and no engine calls: everything comes from
 ``utils.simple_finance`` and renders instantly.
@@ -41,7 +41,7 @@ _PCT = ":material/percent:"
 _TEAL, _SLATE = "#0d9488", "#7a8db3"
 
 SIMPLE_CSS = """
-/* ---------- Simple mode ("Get my money in order") ---------- */
+/* ---------- Simple mode ("Money check-up") ---------- */
 .simple-sub { color: var(--mc-muted); font-size: 15px; line-height: 1.45; margin: -8px 0 18px; }
 .simple-group { font-weight: 700; font-size: 15px; color: var(--mc-ink); margin: 6px 0 -4px; }
 .simple-kpi-value { font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em;
@@ -541,9 +541,9 @@ def render(st) -> None:
     _seed(ss, inputs, force=ss.get(_SYNC_KEY) != inputs)
 
     st.markdown('<div class="mc-section">Money check-up</div>', unsafe_allow_html=True)
-    st.markdown('<div class="simple-sub">Four quick checks: how much you save, your safety '
-                'cushion, where your next dollar should go, and the fastest way out of '
-                'debt.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="simple-sub">Five quick checks: how much you save, your safety '
+                'cushion, where your next dollar should go, the fastest way out of '
+                'debt, and a 50/30/20 budget check.</div>', unsafe_allow_html=True)
 
     with st.container(border=True, key="mc-tile-simple-inputs"):
         _render_inputs(st, inputs)

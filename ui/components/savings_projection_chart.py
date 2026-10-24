@@ -164,7 +164,7 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
     st.caption(
         "Stacked bars show **where each year's savings goes**, as the simulation "
         "makes it: your contributions, your employer's match, and everything else "
-        "you don't spend invested in a brokerage account. The dotted line is "
+        "you don't spend invested in a taxable brokerage account. The dotted line is "
         "cumulative contributions (no investment growth yet). Investment returns "
         "compound on top of these contributions in the Monte Carlo simulation."
     )

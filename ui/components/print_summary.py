@@ -130,9 +130,9 @@ _PRINT_TEMPLATE = """<!DOCTYPE html>
   <div class="muted">Generated {today} — today's dollars unless noted</div>
 
   <div class="card">
-    <div class="muted">Earliest retirement age at your target success probability</div>
+    <div class="muted">Earliest retirement age at your target success rate</div>
     <div class="headline">{earliest}</div>
-    <div class="muted">Target age {target_age}: {success_str} success probability</div>
+    <div class="muted">Target age {target_age}: {success_str} success rate</div>
   </div>
 
   <div class="card">

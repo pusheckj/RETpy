@@ -4,34 +4,28 @@
 
 ## Overview
 
-A simple, elegant UI for the retirement Monte Carlo simulator, built with Streamlit and styled after modern personal-finance dashboards like Personal Capital and Wealthfront. The sidebar walks you through a single linear flow of expandable sections (about you, accounts, income, taxes, expenses, savings, retirement goals, assumptions) so the interface stays uncluttered. The main panel leads with charts that auto-update as you edit sidebar inputs, then a hero metric (earliest retirement age at your target success rate) and deep-dive tabs for trajectories, income, taxes, withdrawals, and sensitivity analysis once you click Run.
+A simple, elegant UI for the retirement Monte Carlo simulator, built with Streamlit and styled after modern personal-finance dashboards. New visitors land on a welcome screen with two starting points, the **Money check-up** (a quick savings, emergency-fund and budget review) and the **Retirement planner**. The planner opens with a short guided setup, then shows a single page: a top bar with your key numbers and the Run button, a linear sidebar of input sections, and results that run automatically and refresh as you edit.
 
-## Screenshots
-
-ASCII mockup of the main screen:
+## Main screen
 
 ```
 +----------------------------------------------------------------+
-| Retirement Monte Carlo                                         |
+| Top bar: household | net worth | gross income | target age |     |
+|          success rate | [ Run ] | simulations | Settings       |
 +--------------+-------------------------------------------------+
-| Theme toggle | +-- Portfolio breakdown --------------------+   |
-| Save / Load  |   Auto-updates as you edit sidebar inputs       |
-| [Median 25 v]|                                                 |
-|--------------| +-- Net worth projection --------------------+  |
-| > About you  |   Auto-updates as you edit sidebar inputs       |
-| > Accounts   |                                                 |
-| > Income     | +-- Savings projection / Spending --------+     |
-| > Taxes      |   Auto-updates as you edit sidebar inputs       |
+| Money check- | EARLIEST RETIREMENT AGE (hero) + key stats      |
+| up | Planner | Success rate by retirement age                  |
+|--------------| Portfolio needed to retire, withdrawal rate,    |
+| > About you  | bridge to 59.5                                  |
+| > Accounts   | Spending | Savings | Income | Tax                |
+| > Income     | Life expectancy                                 |
+| > Taxes      | > What if (scenarios, deep dives)               |
 | > Expenses   |                                                 |
-| > Savings    | (Click Run ▶ to unlock results below)           |
+| > Savings    |                                                 |
 | > Retirement |                                                 |
-|   goals      | +-----------------------------------------+     |
-| > Assumptions|  EARLIEST RETIREMENT AGE                  |     |
-|              |          46                               |     |
-| [ Run ▶ ]    |          with 80% success probability     |     |
-| FAQ          | +-----------------------------------------+     |
-|              | [ Trajectories | Income | Tax | Withdrawal      |
-|              |   | Sensitivity ]                                |
+|   goals      |                                                 |
+| > Assumptions|                                                 |
+| FAQ          |                                                 |
 +--------------+-------------------------------------------------+
 ```
 
@@ -50,13 +44,13 @@ The app opens at http://localhost:8501.
 
 ## Navigating the UI
 
-- **Theme toggle, Save / Load, Profile picker** (top of sidebar): switch light/dark mode; download your current inputs as a JSON file or upload a previously saved file to restore them; instantly load a preset household — median 25-year-old, young professional, mid-career couple, near-retirement, or custom.
-- **Linear sidebar walkthrough** (one section at a time, in advisor order): About you, Accounts (starting balances), Income, Taxes, Expenses, Savings, Retirement goals, Assumptions (advanced). Each is an expandable section reading/writing `st.session_state.user_overrides`.
-- **Run ▶ simulation**: sits below the sidebar sections and kicks off 1,000 Monte Carlo simulations.
-- **FAQ**: below the Run button, for reference while you fill in inputs.
-- **Main panel — always visible**: portfolio breakdown, net worth projection, savings projection, and spending charts auto-update immediately as you change sidebar inputs, with no Run required.
-- **Main panel — after Run**: hero metric → success rate by retirement age → key stats → fan chart → allocation & income composition charts.
-- **Deep dives tabs** (after Run): individual trajectories, income-source breakdown, tax analysis, withdrawal strategy, sensitivity.
+- **Welcome**: pick the *Money check-up* or the *Retirement planner*. A switch at the top of the sidebar moves between them at any time.
+- **Guided setup** (planner, first visit): a short series of screens with a "how to answer" line under each question. Check-up answers carry over. *Skip for now* goes straight to the planner, and a banner offers to finish later.
+- **Linear sidebar** (one section at a time, in advisor order): About you, Accounts (starting balances), Income, Taxes, Expenses, Savings, Retirement goals, Assumptions. Each section reads and writes `st.session_state.user_overrides`.
+- **Top bar**: your household numbers, the **Run** button, the simulation count, and the **Settings** popover (privacy and Remember me, theme, profile presets, Save / Load profile, print summary, export).
+- **Results run automatically** when you change an input; Run re-runs on demand. The page shows the hero metric (earliest retirement age at your target success rate), success rate by retirement age, key stats, the portfolio needed to retire, withdrawal rate, bridge to 59.5, then Spending, Savings, Income and Tax sections and a life-expectancy view.
+- **What if**: a collapsed section with scenario comparisons and deep dives (trajectories, withdrawal, sensitivity, stress tests, mortgage paydown).
+- **FAQ**: in the sidebar, for reference while you fill in inputs.
 
 ## Design Philosophy
 
@@ -72,7 +66,10 @@ The app opens at http://localhost:8501.
 ui/
 ├── app.py                    # Entry point
 ├── components/               # Each a render(st, ...) function
-│   ├── header.py
+│   ├── welcome.py            # first screen
+│   ├── guided_setup.py       # first-visit question flow
+│   ├── simple_mode.py        # Money check-up
+│   ├── top_bar.py
 │   ├── profile_picker.py
 │   ├── sec_about_you.py
 │   ├── account_inputs.py
@@ -84,7 +81,7 @@ ui/
 │   ├── sec_assumptions.py
 │   ├── ...
 │   ├── hero_metric.py
-│   ├── fan_chart.py
+│   ├── success_by_age.py
 │   └── ...
 ├── utils/
 │   ├── config_builder.py     # UI state -> simulator config

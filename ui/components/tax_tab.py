@@ -32,9 +32,9 @@ def _tax_context(st) -> dict:
     if code == cfg.STATE_NONE:
         state_label = "State (none)"
     elif code == cfg.STATE_FLAT:
-        state_label = "State (flat rate)"
+        state_label = "State (flat rate, working years)"
     else:
-        state_label = f"State ({code})"
+        state_label = f"State ({code}, working years)"
     return {"state_label": state_label, "state_name": cfg.state_display_name(code),
             "status_label": _FILING_LABELS[status],
             "two_returns": cfg.files_two_returns(status, partner),

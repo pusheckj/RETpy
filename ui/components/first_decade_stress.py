@@ -127,7 +127,7 @@ def render(st, results: dict = None, chart_key: str = "first_decade_stress") -> 
         ),
         height=400, margin=dict(l=50, r=40, t=100, b=50),
         xaxis=dict(title="Age", gridcolor="#f1f5f9", zeroline=False, tickfont=dict(color="#64748b")),
-        yaxis=dict(title="Investable net worth ($, today)", gridcolor="#f1f5f9", zeroline=False,
+        yaxis=dict(title="Investable portfolio ($, today)", gridcolor="#f1f5f9", zeroline=False,
                    rangemode="tozero", tickformat="$,.3~s", tickfont=dict(color="#64748b")),
         showlegend=True,
         dragmode="pan", uirevision="keep",

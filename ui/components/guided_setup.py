@@ -27,7 +27,7 @@ from retirement_sim import config as cfg
 try:
     from utils.expense_categories import CATEGORIES
     from utils.formatting import money, money_md
-    from utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, get_limit
+    from utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL, KEEP_AMOUNTS_LABEL, get_limit
     from utils import simple_to_full as s2f
     from utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH, household_of,
                                  clear_partner)
@@ -35,7 +35,7 @@ try:
 except ImportError:  # pragma: no cover
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
-    from ui.utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, get_limit  # type: ignore
+    from ui.utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL, KEEP_AMOUNTS_LABEL, get_limit  # type: ignore
     from ui.utils import simple_to_full as s2f  # type: ignore
     from ui.utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH,  # type: ignore
                                     household_of, clear_partner)
@@ -52,7 +52,7 @@ _REQUIRED = "Required"
 STATES = {**{label: sc.code_for(label) for label in sc.STATE_LABELS},
           "Somewhere else (enter a rate)": cfg.STATE_FLAT}
 RENT, OWN = "Rent", "Own"
-KEEP, FILL = "Keep my amounts and invest the rest", "Fill my 401(k) first, then invest the rest"
+KEEP, FILL = KEEP_AMOUNTS_LABEL, AUTO_ALLOCATE_LABEL
 SS_YES, SS_NO = "Yes", "No, plan without it"
 # Children: at most this many in all (the Expenses section shows one row each),
 # planned ones spaced this many years apart, and each child after the first
@@ -728,7 +728,7 @@ class Step(NamedTuple):
 STEPS: List[Step] = [
     Step("About you", "A few basics. Rough answers are fine, and you can change anything later.",
          draw_you, commit_you, check_you),
-    Step("Kids", "", draw_kids, commit_kids, check_kids),
+    Step("Children", "", draw_kids, commit_kids, check_kids),
     Step("Where you live", "", draw_state, commit_state, check_state),
     Step("Your income", "", draw_income, commit_income, check_income),
     Step("What you've saved so far", "", draw_saved, commit_saved, _nothing),

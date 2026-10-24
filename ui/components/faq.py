@@ -14,7 +14,7 @@ QUESTIONS: list[tuple[str, str]] = [
         "behavior. Each \"simulation\" plays out a different hypothetical future, "
         "then we count the fraction that succeed. A result like \"80% success at "
         "age 55\" means 8 out of 10 simulated futures have you covered through "
-        "age 95.",
+        "your plan-until age (95 by default).",
     ),
     (
         "What's a good \"target success rate\"?",
@@ -49,10 +49,12 @@ QUESTIONS: list[tuple[str, str]] = [
     ),
     (
         "What are \"spending guardrails\"?",
-        "Instead of spending the same amount every year, you dial spending down "
-        "about 15% when the portfolio drops below 70% of target, and hold steady "
-        "when it's up. This Guyton-Klinger-style rule dramatically improves "
-        "success rates at the cost of some lifestyle flexibility in bad markets.",
+        "Instead of spending the same amount every year, the plan trims the "
+        "flexible part of your spending when the portfolio drops below 70% of "
+        "target, and holds steady when it's up. Only about 30% of non-housing "
+        "spending counts as flexible, and the trim is 15% of that (about 4.5% of "
+        "spending); housing is never cut. This Guyton-Klinger-style rule improves "
+        "success rates at the cost of some flexibility in bad markets.",
     ),
     (
         "What's a safe withdrawal rate?",
@@ -84,16 +86,17 @@ QUESTIONS: list[tuple[str, str]] = [
     ),
     (
         "How do I save my inputs?",
-        "Use the 💾 Save/Load expander at the top of the sidebar. Download the "
-        "current config as JSON, then upload later to restore. The file is "
-        "gitignored so it's safe to keep locally.",
+        "Open Settings (top right) and choose Save / Load profile. Download your "
+        "inputs as a JSON file, then upload it later to restore them. The file "
+        "stays on your computer.",
     ),
     (
         "What's NOT modeled?",
         "Pension income, rental real estate, qualified charitable distributions, "
         "inherited IRAs, tax-loss harvesting, SEP-IRAs, sole-proprietor 401(k)s, "
-        "and other states' tax brackets: pick \"Other\" under Taxes and set your "
-        "state's rate, which is applied as a flat rate.",
+        "city and county income taxes, and the child tax credit. All 50 states and "
+        "DC have tax tables (some approximate). If yours looks wrong, pick "
+        "\"Another state (flat rate)\" under Taxes and enter a rate.",
     ),
 ]
 

@@ -50,11 +50,11 @@ ACCOUNTS = [
     ("Your Traditional IRA","YOUR_TRADITIONAL_IRA", None,                           None),
     ("Your HSA",           "YOUR_HSA",             "YOUR_HSA_CONTRIBUTION",         None),
     ("Your taxable brokerage", "YOUR_BROKERAGE",       "YOUR_BROKERAGE_CONTRIBUTION",   None),
-    ("Your Cash",          "YOUR_CASH",            None,                            None),
+    ("Your cash",          "YOUR_CASH",            None,                            None),
     ("Partner 401(k)",     "PARTNER_401K",         "PARTNER_401K_CONTRIBUTION",     None),
     ("Partner Roth IRA",   "PARTNER_ROTH_IRA",     "PARTNER_ROTH_CONTRIBUTION",     None),
     ("Partner taxable brokerage", "PARTNER_BROKERAGE",    "PARTNER_BROKERAGE_CONTRIBUTION",None),
-    ("Partner Cash",       "PARTNER_CASH",         None,                            None),
+    ("Partner cash",       "PARTNER_CASH",         None,                            None),
     ("Home equity",        "_HOME_EQUITY",         None,                            None),  # special-cased
 ]
 
@@ -70,7 +70,7 @@ _SCENARIO_RETURNS = {
 
 def _expected_return_for(account_label: str, scenario_returns: dict) -> float:
     """Return the deterministic real return for a given account label."""
-    if "Cash" in account_label:
+    if "cash" in account_label.lower():
         return scenario_returns["cash"]
     if account_label == "Home equity":
         return scenario_returns["home"]
@@ -155,7 +155,7 @@ def _vacation_outlay(overrides: dict, age: int, retirement_age: int) -> float:
         return float(cfg.calculate_retirement_vacation(age, retirement_age))
 
 
-_DRAW_ORDER_TAIL = ("Partner Cash", "Your taxable brokerage", "Partner taxable brokerage",
+_DRAW_ORDER_TAIL = ("Partner cash", "Your taxable brokerage", "Partner taxable brokerage",
                     "Your 401(k)", "Partner 401(k)")
 
 
@@ -246,7 +246,7 @@ def project_net_worth(user_overrides: dict) -> dict:
     ages = []
 
     events = housing_timeline(user_overrides)    # buy / sell and buy / sell and rent
-    cash_label = "Your Cash"
+    cash_label = "Your cash"
     home_label = "Home equity"
 
     # Track the property and the loan separately so principal paydown shows up as
@@ -461,6 +461,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
         f"Real (inflation-adjusted) return: investment accounts "
         f"{_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['investment']*100:.1f}%, "
         f"cash {_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['cash']*100:.1f}%, "
-        f"home equity stays at value−mortgage. The Monte Carlo simulation in the "
-        f"Run button below adds return uncertainty + tax-efficient drawdown."
+        f"home equity follows the mortgage paydown and any planned moves. The Monte "
+        f"Carlo simulation (Run is in the top bar) adds return uncertainty and "
+        f"tax-efficient drawdown."
     )

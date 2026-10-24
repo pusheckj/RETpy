@@ -52,8 +52,8 @@ High-value contribution areas:
 - **Bug fixes** with a reproducer test that fails before the fix and passes after.
 - **New tax and account types** — SEP-IRA, SIMPLE IRA, 403(b), 457(b),
   inherited IRAs, solo 401(k), etc.
-- **Additional state tax brackets.** Only California is implemented today;
-  any US state is fair game.
+- **State tax accuracy.** All 50 states and DC have tax tables, some
+  approximate; exact brackets, credits and local taxes are fair game.
 - **Additional return scenarios** or historical return datasets (e.g.
   country-specific equity/bond series, alternative asset classes).
 - **Performance improvements**, especially vectorizing the Monte Carlo loop

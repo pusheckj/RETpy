@@ -148,7 +148,8 @@ def render_body(st) -> None:
     claim_age = st.slider("Your claim age" if has_partner else "Claim age",
                           min_value=62, max_value=70, step=1,
                           key="rg_ss_claim",
-                          help="62 = early (30% reduction). 67 = full retirement age. "
+                          help="62 = earliest (about 30% less if your full retirement age is 67). "
+                               "67 = full retirement age. "
                                "70 = delayed (+24% credit).")
     set_override(st, "SS_CLAIM_AGE", safe_int(claim_age))
     partner_claim = claim_age

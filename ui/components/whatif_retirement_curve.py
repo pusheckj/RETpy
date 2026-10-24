@@ -89,7 +89,7 @@ def render(st, results: dict = None) -> None:
     st.caption(
         "Compare your **current plan** against an **alternate scenario** you tweak right here. "
         "The changes below apply only to this comparison — your sidebar inputs and the main "
-        "results are untouched. Each line shows your success probability at every retirement age."
+        "results are untouched. Each line shows your success rate at every retirement age."
     )
 
     # ---- Alternate-scenario controls (default to your current settings) ----
@@ -234,7 +234,7 @@ def _render_plot(st, stored: dict) -> None:
     fig.update_layout(
         title=dict(
             text="<b>When can you retire? — current vs. alternate</b><br>"
-                 "<span style='font-size:13px;color:#64748b;'>Success probability at each retirement age</span>",
+                 "<span style='font-size:13px;color:#64748b;'>Success rate at each retirement age</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),
         height=380, margin=dict(l=50, r=40, t=80, b=50),

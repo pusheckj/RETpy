@@ -1,7 +1,7 @@
 """Hero metric — earliest retirement age card."""
 from __future__ import annotations
 
-from utils.formatting import pct
+from utils.formatting import pct, success_tier
 
 
 def render(st, results: dict) -> None:
@@ -20,9 +20,10 @@ def render(st, results: dict) -> None:
     # The success rate uses the SAME threshold ladder as stats_row.py — it was
     # unconditionally success-green here, so a 25%-success plan showed a
     # confident green "25.0%" directly above stats_row's red "✕ At risk 25.0%".
-    if (success_rate or 0.0) >= 0.8:
+    tier = success_tier(success_rate, target_success_rate)
+    if tier == "good":
         green, green_cls = "#059669", "mc-good"
-    elif (success_rate or 0.0) >= 0.6:
+    elif tier == "warn":
         green, green_cls = "#d97706", "mc-warn"
     else:
         green, green_cls = "#dc2626", "mc-bad"
@@ -33,7 +34,7 @@ def render(st, results: dict) -> None:
     else:
         big_num = str(earliest)
         big_color, big_cls = "#0d9488", "mc-teal"
-        subtitle = f"with {pct(target_success_rate)} success probability. Selected target: age {target_age} ({pct(success_rate)})."
+        subtitle = f"with a {pct(target_success_rate)} success rate. Selected target: age {target_age} ({pct(success_rate)})."
 
     st.markdown(
         f'''

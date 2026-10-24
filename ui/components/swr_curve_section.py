@@ -37,17 +37,24 @@ def render(st, results: dict = None) -> None:
     st.markdown('<div class="mc-section">Safe withdrawal rate</div>', unsafe_allow_html=True)
     overrides = st.session_state.get("user_overrides", {}) or {}
 
+    # The plan's actual horizon (retirement age -> plan end), when a run exists.
+    _pr = (results or {}).get("primary_result", {}) or {}
+    _snap = (results or {}).get("config_snapshot", {}) or {}
+    _end = _snap.get("PLAN_END_AGE") or _snap.get("PLAN_UNTIL_AGE")
+    _ret = _pr.get("retirement_age")
+    _years = int(_end) - int(_ret) if _end and _ret else 0
+    _horizon = f"{_years}-year horizon" if _years > 0 else "horizon"
     st.caption(
         "Your personalized 4% rule. It sweeps how much you draw in year 1 "
         "(as a % of investable assets at retirement), runs the full Monte Carlo "
         "at each level, and finds the **highest rate that still meets your success "
-        "target** — factoring in your taxes, Social Security, guardrails, and a "
-        "40+ year horizon that the generic 4% rule ignores."
+        f"target** — factoring in your taxes, Social Security, guardrails, and your "
+        f"{_horizon}, which the generic 4% rule ignores."
     )
     st.caption(
         "Third view of the same plan: **Retirement** gives the earliest age, "
-        "**Net worth to retire** gives the portfolio you need, and this gives the "
-        "spending that portfolio supports.]"
+        "**Portfolio needed to retire** gives the portfolio you need, and this gives the "
+        "spending that portfolio supports."
     )
 
     n_sims = int(st.session_state.get("n_simulations", 1000))

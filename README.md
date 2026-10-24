@@ -17,7 +17,7 @@ Key features:
 
 - Account-level tracking across 401(k), Roth IRA, Traditional IRA, HSA, taxable brokerage, and cash
 - Tax-efficient withdrawal ordering that changes at age 59.5
-- Full 2024 US federal and California income tax brackets
+- Full 2024 US federal income tax brackets (married filing jointly, single, head of household), state income tax for all 50 states and DC (some approximate), and FICA per earner
 - Social Security modeling with claiming-age adjustments (62 through 70)
 - ACA marketplace premium subsidies and Medicare IRMAA surcharges
 - Required Minimum Distributions under SECURE 2.0 rules
@@ -35,7 +35,7 @@ Key features:
 Most retirement calculators are either black-box web forms or spreadsheets that flatten the tax code into a single effective rate. This project takes a different approach:
 
 - **Account-level tracking.** Every dollar is tagged by account type, so withdrawal order, RMDs, and tax-free Roth growth are modeled explicitly — not approximated.
-- **Real tax brackets.** Federal, California, Social Security provisional income, NIIT, and IRMAA are applied the way the IRS actually applies them.
+- **Real tax brackets.** Federal, state (all 50 states and DC, some approximate), FICA, Social Security provisional income, NIIT, and IRMAA are applied the way the IRS actually applies them.
 - **Transparent Python.** Everything is auditable code, not a sealed SaaS. Readers can fork it, extend it, plug in a different return distribution, or add a tax regime.
 - **Honest defaults.** The simulator reports when a plan fails, why it failed, and what changed — not just a reassuring green checkmark.
 
@@ -67,7 +67,7 @@ print(f"Median end value: ${result['median_ending_balance']:,.0f}")
 
 ## Try the interactive UI
 
-A polished Streamlit UI ships with the package — inspired by Personal Capital and Wealthfront dashboards — with always-visible quick inputs, advanced parameters tucked into dropdowns, and Plotly charts for Monte Carlo fan projections, success-by-age curves, allocation glide paths, and tax flow.
+A polished Streamlit UI ships with the package: a welcome screen (Money check-up or Retirement planner), a short guided setup, a linear sidebar of input sections, and a results page that updates as you edit. It includes Plotly charts for Monte Carlo fan projections, success-by-age curves, allocation glide paths and tax flow, plus a What-if section for scenario comparisons.
 
 ```bash
 pip install -r ui/requirements-ui.txt
@@ -93,7 +93,7 @@ Features:
 ================================================================
 Retirement age:       50
 Simulations:          5,000
-Plan horizon:         Age 50 through 90
+Plan horizon:         Age 50 through 95
 
 Success rate:         84.2%
 Median end balance:   $1,250,000
@@ -123,8 +123,9 @@ At minimum, users typically edit:
 
 ### Taxes
 
-- Federal income tax brackets (2024, married-filing-jointly and single)
-- California state income tax brackets
+- Federal income tax brackets (2024; married filing jointly, single and head of household)
+- State income tax for all 50 states and DC (some approximate)
+- FICA (Social Security and Medicare) per earner
 - Long-term capital gains rates with 0% / 15% / 20% thresholds
 - Social Security provisional income taxation (up to 85% taxable)
 - Net Investment Income Tax (NIIT) at 3.8%
@@ -167,7 +168,7 @@ At minimum, users typically edit:
 
 Transparency matters. The following are deliberately out of scope:
 
-- State-specific income taxes other than California
+- City and county income taxes and the child tax credit
 - Federal estate tax and gift tax planning
 - Self-employment tax, SEP-IRA, or Solo 401(k) mechanics
 - Annuity products (immediate, deferred, QLAC)

@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import logging
 
+from retirement_sim import config as cfg
+
 
 def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
     st.markdown('<div class="mc-section">Tax-efficient withdrawal order</div>', unsafe_allow_html=True)
-    st.caption("The simulator pulls from accounts in this order each year to minimize lifetime taxes.")
+    st.caption("The simulator pulls from accounts in this order each year to minimize lifetime taxes, "
+               "unless you turn on an early-access strategy (72(t) payments or a Roth ladder).")
 
     col_a, col_b = st.columns(2)
     with col_a:
@@ -38,14 +41,19 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
 
     st.markdown("---")
     st.markdown('<div class="mc-section">Roth conversion strategy</div>', unsafe_allow_html=True)
+    _t = cfg.ROTH_CONVERSION_TARGET_BY_STATUS
+    _top = " / ".join(f"\\${_t[k]:,.0f} {name}" for k, name in
+                      ((cfg._FILING_MFJ, "joint"), (cfg._FILING_SINGLE, "single"),
+                       (cfg._FILING_HOH, "head of household")))
     st.markdown(
-        """
+        f"""
         When enabled, the simulator converts Traditional → Roth during low-income early-retirement years,
-        filling up to the 12% tax bracket ceiling (\$94,300 MFJ, 2024). This creates tax-free growth in Roth
-        and reduces future RMDs from Traditional balances at age 73/75.
+        filling up to the top of the 12% tax bracket for your filing status ({_top}; 2024 values).
+        This creates tax-free growth in Roth and reduces future RMDs from Traditional balances
+        (RMD age is 73 or 75, depending on birth year).
 
         Conversions typically run from retirement age through the Social Security claim age (often 67),
-        which is the period of lowest earned income. They are **capped** at \$100k/year by default.
+        which is the period of lowest earned income. They are **capped** at \\${cfg.ROTH_CONVERSION_MAX_ANNUAL:,.0f}/year by default.
         """
     )
 

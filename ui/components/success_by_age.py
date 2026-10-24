@@ -66,7 +66,7 @@ def render(st, results: dict, chart_key: str = "success_by_age_main") -> None:
 
     fig.update_layout(
         title=dict(
-            text="<b>When can you retire?</b><br><span style='font-size:13px;color:#64748b;'>Success probability at each retirement age</span>",
+            text="<b>When can you retire?</b><br><span style='font-size:13px;color:#64748b;'>Success rate at each retirement age</span>",
             x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
         ),
         height=340,

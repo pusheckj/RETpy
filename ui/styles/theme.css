@@ -1525,7 +1525,7 @@ footer { display: none !important; }
     [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-gutter) { top: 8px; right: 20px; }
 }
 
-/* ---------- Simple mode ("Get my money in order") ---------- */
+/* ---------- Simple mode ("Money check-up") ---------- */
 .simple-sub { color: var(--mc-muted); font-size: 15px; line-height: 1.45; margin: -8px 0 6px; }
 .simple-group { font-weight: 700; font-size: 15px; color: var(--mc-ink); margin: 6px 0 -4px; }
 .simple-kpi-value { font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em;

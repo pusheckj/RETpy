@@ -1,7 +1,7 @@
 """Mortgage-paydown effectiveness tab.
 
 Answers "is putting extra money against the mortgage worth it?" by sweeping the
-extra annual principal and reporting what each level buys: success probability,
+extra annual principal and reporting what each level buys: success rate,
 the age the house is owned outright, years shaved off the loan, and lifetime
 interest avoided.
 
@@ -103,7 +103,7 @@ def render(st, results: dict = None, chart_key: str = "mortgage_paydown") -> Non
     fig.update_layout(
         title=dict(
             text="<b>Does prepaying the mortgage improve the plan?</b><br>"
-                 "<span style='font-size:13px;color:#64748b;'>Success probability vs "
+                 "<span style='font-size:13px;color:#64748b;'>Success rate vs "
                  "extra principal per year · today's dollars</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),

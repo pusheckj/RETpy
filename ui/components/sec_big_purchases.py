@@ -240,7 +240,7 @@ def _home_moves(st) -> None:
                             step=0.05, key="bp_new_home_escrow_pct",
                             help="Percent of the home's value per year, added to the "
                                  "monthly payment and kept once the loan is paid off. "
-                                 "CA is roughly 1.1% tax + 0.25% insurance.")
+                                 "Varies by state (California is about 1.1% tax + 0.25% insurance).")
         set_override(st, "NEW_HOME_ESCROW_PCT", v / 100)
     if owns_today and stored:
         value = safe_int(ov.get("HOME_VALUE", 0), 0)
@@ -405,7 +405,7 @@ def render_body(st) -> None:
             except Exception:
                 pass
             st.caption("See **What if → Mortgage paydown** for what this does to your "
-                       "success probability.")
+                       "success rate.")
         else:
             set_override(st, "EXTRA_MORTGAGE_PAYMENT_START_AGE", None)
             st.caption("Set an amount to model paying the mortgage down faster. "
@@ -422,7 +422,8 @@ def render_body(st) -> None:
     vacation_on = st.toggle("Plan extra travel spending early in retirement",
                               key="bp_vacation_enable",
                               help="Extra annual spending from retirement until a "
-                                   "chosen slow-down age.")
+                                   "chosen slow-down age. It is on top of the "
+                                   "\"Extra for travel and hobbies\" in Retirement goals.")
     set_override(st, "RETIREMENT_VACATION_ENABLED", bool(vacation_on))
     if vacation_on:
         c8, c9 = st.columns(2)

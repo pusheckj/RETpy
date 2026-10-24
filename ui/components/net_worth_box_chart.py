@@ -87,7 +87,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
         else:
             fig.add_trace(go.Box(
                 x=ages, q1=p25, median=p50, q3=p75, lowerfence=p10, upperfence=p90,
-                name="Investable net worth", boxpoints=False,
+                name="Investable portfolio", boxpoints=False,
                 marker_color=box_color, line=dict(color=box_color, width=1.2),
                 fillcolor=fill,
                 customdata=list(zip(p10, p25, p50, p75, p90)),
@@ -113,7 +113,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
         y_cap = 1.15 * max([v for v in p90 if v] or [1.0]) if points_mode else None
         fig.update_layout(
             title=dict(
-                text="<b>Investable net worth range over time</b><br>"
+                text="<b>Investable portfolio range over time</b><br>"
                      f"<span style='font-size:13px;color:#64748b;'>Distribution of projected "
                      f"investable balance across Monte Carlo runs · {mode_label}</span>",
                 x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
@@ -124,7 +124,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
             xaxis=dict(title="Age", gridcolor="#f1f5f9", zeroline=False,
                        tickfont=dict(color="#64748b"), fixedrange=False,
                        range=[min(ages) - 1, max(ages) + 1]),
-            yaxis=dict(title=f"Investable net worth ({unit})", gridcolor="#f1f5f9", zeroline=False,
+            yaxis=dict(title=f"Investable portfolio ({unit})", gridcolor="#f1f5f9", zeroline=False,
                        rangemode="tozero", tickformat="$,.3~s", tickfont=dict(color="#64748b"),
                        range=([0, y_cap] if points_mode else None)),
             showlegend=False, dragmode="pan", boxgap=0.2,

@@ -189,7 +189,7 @@ def render(st, results: Optional[dict] = None,
     html_parts.append(f'<span class="mc-topbar-title">{escape(title)}</span>')
     html_parts.append(_metric_html("Name(s)", names))
     html_parts.append(_metric_html("Net worth", net_worth_str))
-    html_parts.append(_metric_html("Income", income_str))
+    html_parts.append(_metric_html("Gross income", income_str))
     # Label matches the sidebar slider and the hero card ("Target retirement
     # age") — the same value was previously called three different things on
     # screen at once.

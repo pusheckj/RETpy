@@ -215,10 +215,12 @@ def render_body(st) -> None:
     _preset_short = {
         "Early-retirement travel boom, quieter later": "Travel boom, quieter later",
         "Children then empty-nest": "Kids then empty-nest",
+        "Flat (no change)": "Flat (no preset change)",
     }
     preset = st.selectbox("How does spending evolve?", presets, key="se_lifecycle",
         format_func=lambda p: _preset_short.get(p, p),
-        help="Flat: inflation only. Travel boom: discretionary +50% early in "
+        help="Flat: no preset change (the retirement extra and later drop in "
+             "Retirement goals still apply). Travel boom: discretionary +50% early in "
              "retirement, -20% in later years. Conservative senior: discretionary "
              "-30% in later years. Empty-nest: food/discretionary +30% while any "
              "child is at home, -25% once all have left. Early and later years are "

@@ -14,6 +14,16 @@ def _is_bad(value) -> bool:
     return False
 
 
+def success_tier(rate, target) -> str:
+    """"good" (>= target), "warn" (>= 75% of target) or "bad", for the user's target."""
+    rate = rate or 0.0
+    if rate >= target - 1e-9:
+        return "good"
+    if rate >= 0.75 * target - 1e-9:
+        return "warn"
+    return "bad"
+
+
 def money(value: Union[int, float, None], precision: int = 0, shorten: bool = False) -> str:
     """Format a dollar amount.
 

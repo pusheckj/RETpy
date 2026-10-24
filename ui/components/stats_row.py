@@ -1,7 +1,7 @@
 """KPI stats row — 4 compact cards below the hero."""
 from __future__ import annotations
 
-from utils.formatting import money, pct
+from utils.formatting import money, pct, success_tier
 
 
 def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a", cls: str = "") -> str:
@@ -53,13 +53,19 @@ def render(st, results: dict) -> None:
     # dark theme's generic recolor lighten them.
     # A word + glyph accompanies each color so the risk level is legible without
     # color vision (color alone was the only signal).
-    if success >= 0.8:
+    target = float(snap.get("TARGET_SUCCESS_RATE", 0.80))
+    tier = success_tier(success, target)
+    if tier == "good":
         success_cls, success_color, success_tag = "mc-good", "#059669", "✓ On track"
-    elif success >= 0.6:
+    elif tier == "warn":
         success_cls, success_color, success_tag = "mc-warn", "#d97706", "Borderline"
     else:
         success_cls, success_color, success_tag = "mc-bad", "#dc2626", "✕ At risk"
-    if p10 < 1_000_000:
+    # "Thin cushion": the bad-luck (10th percentile) ending portfolio covers
+    # under two years of retirement spending. Skipped if spending isn't known.
+    spend_rows = pr.get("spending_by_year", []) or []
+    start_spend = next((r.get("p50") for r in spend_rows if r.get("age") == retire_age), None)
+    if start_spend and p10 < 2 * start_spend:
         p10_cls, p10_color, p10_tag = "mc-warn", "#d97706", "Thin cushion"
     else:
         p10_cls, p10_color, p10_tag = "", "#0f172a", ""
@@ -91,7 +97,7 @@ def render(st, results: dict) -> None:
             _stat_card(
                 "Success rate",
                 pct(success),
-                f"{success_tag} · out of {num_sims:,} simulations",
+                f"{success_tag} · {num_sims:,} simulations",
                 color=success_color,
                 cls=success_cls,
             ),
