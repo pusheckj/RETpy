@@ -1,6 +1,6 @@
 """Pinning tests for rank #9/#10-ui: income-sources and tax-tab data must be
-derived from the REAL representative ``withdrawal_log`` (see
-``_median_withdrawal_log`` / engine's per-year tax logging from #10-engine),
+derived from the engine's REAL ``withdrawal_log`` rows (per-age medians across
+runs, see ``_median_withdrawal_log_from_data`` / engine's per-year tax logging),
 not the fabricated 50/20/20/10 split or flat federal/state/ltcg constants.
 
 See ui/utils/sim_runner.py::_approximate_income_sources and

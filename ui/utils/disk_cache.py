@@ -42,7 +42,8 @@ logger = logging.getLogger("retirement_ui.disk_cache")
 
 # Bump to invalidate every entry after changing the stored payload SHAPE
 # (as opposed to the engine maths, which the source fingerprint already covers).
-_FORMAT_VERSION = "v2"   # v2: primary_result gained p25/p75_final, n_simulations, sample_successes; spending over all runs
+_FORMAT_VERSION = "v3"   # v2: primary_result gained p25/p75_final, n_simulations, sample_successes; spending over all runs
+                         # v3: withdrawals/income/taxes by year are per-age medians across runs (+ withdrawals_basis)
 
 _DIR_NAME = ".sim_cache"
 _MAX_FILES = 400          # generous; entries are small and pruned oldest-first
