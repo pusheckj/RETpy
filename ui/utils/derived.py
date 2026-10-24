@@ -414,8 +414,9 @@ def sidebar_savings_budget(state) -> Dict[str, object]:
     """savings_budget for the sidebar as it stands this rerun.
 
     ``state`` is st.session_state: user_overrides plus the Savings widgets
-    (mode, Custom % sliders, manual 401(k)/HSA amounts), which hold this
-    rerun's values before the Savings section writes them to user_overrides.
+    (mode, Custom % sliders, kept/manual amounts, match and after-tax 401(k)
+    percents), which hold this rerun's values before the Savings section
+    writes them to user_overrides.
     The Taxes section and the Savings section both call this, so they show
     one tax figure even when the Taxes section draws first.
     """
@@ -523,7 +524,8 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
       3. Your HSA family → IRS limit (only if HSA-eligible — assume yes if user has any HSA balance)
       4. Your IRA / backdoor Roth → IRS limit
       5. Partner IRA → IRS limit, less any Roth income phase-out
-      6. Your brokerage → fills remainder (split 50/50 with partner if partner exists)
+      6. Brokerage → the remainder, split between you as the simulation splits it
+         (split_brokerage)
 
     Returns a dict with keys matching the simulator's contribution config keys:
       YOUR_401K_CONTRIBUTION, PARTNER_401K_CONTRIBUTION, YOUR_HSA_CONTRIBUTION,

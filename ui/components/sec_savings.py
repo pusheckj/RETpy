@@ -75,8 +75,8 @@ def render_body(st) -> None:
     with row2[0]: st.metric("− Expenses", money(expenses, shorten=True))
     with row2[1]: st.metric("= Left to save", money(disposable, shorten=True),
                             help="What's left of this year's pay after tax and "
-                                 "expenses. The simulation saves all of it in the "
-                                 "auto modes; your employer match comes on top.")
+                                 "expenses. With either Auto option the simulation "
+                                 "saves all of it; your employer match comes on top.")
 
     if disposable <= 0:
         st.warning(
