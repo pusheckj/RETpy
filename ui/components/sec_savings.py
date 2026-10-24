@@ -5,15 +5,15 @@ try:
     from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money, money_md
     from utils.derived import (
-        compute_total_income, compute_taxes, compute_expenses_today,
-        compute_disposable, auto_allocate_savings, get_limit, KEEP_AMOUNTS_MODE,
+        KEEP_AMOUNTS_MODE, SAVINGS_MODES,
+        sidebar_savings_budget, custom_pct_defaults, custom_pct_amounts, pct_widget_key,
     )
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.derived import (  # type: ignore
-        compute_total_income, compute_taxes, compute_expenses_today,
-        compute_disposable, auto_allocate_savings, get_limit, KEEP_AMOUNTS_MODE,
+        KEEP_AMOUNTS_MODE, SAVINGS_MODES,
+        sidebar_savings_budget, custom_pct_defaults, custom_pct_amounts, pct_widget_key,
     )
 
 try:
@@ -58,32 +58,35 @@ def _zero_partner_contributions(st, overrides: dict) -> None:
 def render_body(st) -> None:
     overrides = st.session_state.get("user_overrides", {}) or {}
 
-    income = compute_total_income(overrides)
-    # Before pre-tax savings, matching compute_disposable (the pool split below).
-    taxes = compute_taxes(overrides, pretax_savings=False)["total"]
-    expenses = compute_expenses_today(overrides)
-    disposable = compute_disposable(overrides)
-
     # ---- Top KPI strip ----
-    # Stacked (not 4 cramped columns) so labels/values never truncate in the
-    # narrow sidebar; income/taxes/expenses on one row, disposable on its own.
-    row1 = st.columns(3)
+    # The tax is the Taxes section's figure: the tax on what you actually put
+    # in your 401(k)s and HSA (derived.sidebar_savings_budget), so the two
+    # sections show one number. 2x2 like the Taxes section: three columns in
+    # the 328px sidebar wrapped "Expenses" mid-word.
+    budget = sidebar_savings_budget(st.session_state)
+    income, expenses = budget["income"], budget["expenses"]
+    taxes, disposable = budget["taxes"]["total"], budget["disposable"]
+    row1 = st.columns(2)
     with row1[0]: st.metric("Income", money(income, shorten=True))
     with row1[1]: st.metric("− Taxes", money(taxes, shorten=True),
-                            help="Before your 401(k)/HSA savings lower it. The Taxes "
-                                 "section shows the tax after them.")
-    with row1[2]: st.metric("− Expenses", money(expenses, shorten=True))
-    st.metric("= Disposable", money(disposable, shorten=True))
+                            help="This year's tax, after your 401(k) and HSA savings "
+                                 "lower it. The same figure as the Taxes section.")
+    row2 = st.columns(2)
+    with row2[0]: st.metric("− Expenses", money(expenses, shorten=True))
+    with row2[1]: st.metric("= Left to save", money(disposable, shorten=True),
+                            help="What's left of this year's pay after tax and "
+                                 "expenses. The simulation saves all of it in the "
+                                 "auto modes; your employer match comes on top.")
 
     if disposable <= 0:
         st.warning(
-            f"Disposable income is ≤ \\$0 "
+            f"Nothing is left to save "
             f"({money_md(income)} − {money_md(taxes)} − {money_md(expenses)}). "
             "Adjust income, expenses, or taxes before setting savings."
         )
 
     # ---- Mode selector ----
-    modes = ["Auto-allocate (recommended)", KEEP_AMOUNTS_MODE, "Custom %", "Manual amounts"]
+    modes = SAVINGS_MODES
     current_mode = str(get_override(st, "SAVINGS_MODE", modes[0]))
     if current_mode not in modes:
         current_mode = modes[0]
@@ -94,7 +97,7 @@ def render_body(st) -> None:
     _render_employer_match(st, overrides)
 
     if mode == "Auto-allocate (recommended)":
-        _render_auto(st, disposable, overrides)
+        _render_auto(st, budget, overrides)
     elif mode == KEEP_AMOUNTS_MODE:
         _render_keep_amounts(st, overrides)
     elif mode == "Custom %":
@@ -197,9 +200,14 @@ def _render_employer_match(st, overrides: dict) -> None:
         set_override(st, "PARTNER_401K_MATCH_PCT", float(v) / 100.0)
 
 
-def _render_auto(st, disposable: int, overrides: dict) -> None:
+def _render_auto(st, budget: dict, overrides: dict) -> None:
     """Auto: fill tax-advantaged first, residual to brokerage."""
-    allocation = auto_allocate_savings(disposable, overrides)
+    disposable = budget["disposable"]
+    # The same split savings_budget settled on (its tax is the tax on these
+    # 401(k)/HSA amounts); the brokerage share is net of this year's 529 and
+    # after-tax 401(k), which the simulation pays first.
+    allocation = budget["amounts"]
+    set_aside = budget.get("set_aside", {})
 
     # Push the auto-derived amounts into user_overrides so the simulator picks them up.
     for key, amount in allocation.items():
@@ -218,6 +226,11 @@ def _render_auto(st, disposable: int, overrides: dict) -> None:
     colors = []
     for idx, (label, key, _color) in enumerate(_ACCOUNT_LABELS):
         amt = allocation.get(key, 0)
+        if amt > 0:
+            labels.append(label)
+            values.append(amt)
+            colors.append(series_color(idx, st))
+    for idx, (label, amt) in enumerate(set_aside.items(), start=len(_ACCOUNT_LABELS)):
         if amt > 0:
             labels.append(label)
             values.append(amt)
@@ -256,57 +269,30 @@ def _render_auto(st, disposable: int, overrides: dict) -> None:
                         config={"displayModeBar": False},
                         key="sv_auto_alloc_chart")
 
-    # Summary line
-    total = sum(allocation.values())
+    # Summary line: every dollar left to save is placed.
+    total = sum(allocation.values()) + sum(set_aside.values())
     st.caption(f"**Total allocated**: {money(total, shorten=True)}")
 
 
 def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
     """Custom %: user provides allocation percentages."""
-    st.caption("Set what fraction of disposable income goes to each account. "
-               "Each gets `pct × disposable`, capped at 2024 IRS limits.")
+    st.caption("Set what share of what's left to save goes to each account. "
+               "Each gets that share, capped at 2024 IRS limits.")
 
-    # Default split if no values yet: roughly mirror auto (100% either way)
-    defaults = {
-        "YOUR_401K_CONTRIBUTION": 30,
-        "PARTNER_401K_CONTRIBUTION": 20,
-        "YOUR_HSA_CONTRIBUTION": 8,
-        "YOUR_BACKDOOR_ROTH": 7,
-        "PARTNER_ROTH_CONTRIBUTION": 5,
-        "YOUR_BROKERAGE_CONTRIBUTION": 15,
-        "PARTNER_BROKERAGE_CONTRIBUTION": 15,
-    } if _has_partner(overrides) else {
-        "YOUR_401K_CONTRIBUTION": 50,
-        "YOUR_HSA_CONTRIBUTION": 8,
-        "YOUR_BACKDOOR_ROTH": 12,
-        "YOUR_BROKERAGE_CONTRIBUTION": 30,
-    }
+    # Defaults (100% either way) and amounts come from utils.derived, which
+    # also uses them to work out what's left to save (sidebar_savings_budget).
+    defaults = custom_pct_defaults(overrides)
     pcts = {}
     total_pct = 0
     for label, key, _ in _shown_accounts(overrides):
-        widget_key = f"sv_pct_{key.lower()}"
+        widget_key = pct_widget_key(key)
         ensure_default(st, widget_key, defaults.get(key, 0))
         v = st.slider(f"{label} %", min_value=0, max_value=100, step=1,
                       key=widget_key)
         pcts[key] = v
         total_pct += v
 
-    # Compute amounts
-    your_age = safe_int(overrides.get("YOUR_AGE", 30), 30)
-    partner_age = safe_int(overrides.get("PARTNER_AGE", 0), 0)
-    caps = {
-        "YOUR_401K_CONTRIBUTION": get_limit("401k", your_age),
-        "PARTNER_401K_CONTRIBUTION": get_limit("401k", partner_age) if partner_age > 0 else 0,
-        "YOUR_HSA_CONTRIBUTION": get_limit("hsa", your_age, family=True),
-        "YOUR_BACKDOOR_ROTH": get_limit("ira", your_age),
-        "PARTNER_ROTH_CONTRIBUTION": get_limit("ira", partner_age) if partner_age > 0 else 0,
-        "YOUR_BROKERAGE_CONTRIBUTION": 10_000_000,
-        "PARTNER_BROKERAGE_CONTRIBUTION": 10_000_000,
-    }
-    for key, pct_val in pcts.items():
-        amount = int(disposable * pct_val / 100)
-        cap = caps.get(key, 10_000_000)
-        amount = min(amount, cap)
+    for key, amount in custom_pct_amounts(pcts, disposable, overrides).items():
         set_override(st, key, amount)
     _zero_partner_contributions(st, overrides)
 
@@ -321,7 +307,7 @@ def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
         else:
             st.warning(
                 f"Percentages sum to **{total_pct}%** "
-                f"(over by {total_pct - 100}%). Contributions will exceed disposable income."
+                f"(over by {total_pct - 100}%). Contributions will exceed what's left to save."
             )
 
 
@@ -380,7 +366,7 @@ def _render_keep_amounts(st, overrides: dict) -> None:
 def _render_manual(st, disposable: int, overrides: dict) -> None:
     """Manual: explicit dollar amount per account."""
     st.caption("Enter exact annual dollars per account. Useful when savings "
-               "doesn't follow income − expenses (inheritance, side income, etc.).")
+               "doesn't follow income − tax − expenses (inheritance, side income, etc.).")
 
     c1, c2 = st.columns(2)
     with c1:
@@ -409,13 +395,13 @@ def _render_manual(st, disposable: int, overrides: dict) -> None:
     if manual_total > disposable + 1000:
         st.warning(
             f"Manual contributions total **{money_md(manual_total, shorten=True)}** but "
-            f"disposable is only {money_md(disposable, shorten=True)}. The simulator "
+            f"only {money_md(disposable, shorten=True)} is left to save. The simulator "
             f"uses these amounts as set; just note the math only works if you have "
             f"other income sources."
         )
     else:
         st.caption(f"**Manual total**: {money_md(manual_total, shorten=True)} of "
-                   f"{money_md(disposable, shorten=True)} disposable")
+                   f"{money_md(disposable, shorten=True)} left to save")
 
 
 def render(st) -> None:

@@ -192,18 +192,119 @@ def compute_expenses_today(overrides: dict) -> int:
 
 
 def compute_disposable(overrides: dict) -> int:
-    """Income - taxes - expenses today (annual).
+    """Income - taxes - expenses today (annual): what's left to save.
 
-    Taxes BEFORE pre-tax savings (compute_taxes(pretax_savings=False)): this is
-    the pool auto_allocate_savings splits into 401(k)/HSA/IRA/brokerage, so it
-    must not depend on those amounts (that would feed back across reruns). The
-    tax those deferrals save shows up in the simulation, which sweeps every
-    leftover dollar into the brokerage.
+    The tax is the tax on the 401(k)/HSA amounts actually saved, as in the
+    Taxes section and the simulation's first working year. See savings_budget.
+    """
+    return savings_budget(overrides)["disposable"]
+
+
+# Pre-tax payroll savings: they lower this year's income tax (_working_tax_inputs).
+PRETAX_KEYS = ("YOUR_401K_CONTRIBUTION", "YOUR_HSA_CONTRIBUTION", "PARTNER_401K_CONTRIBUTION")
+
+COLLEGE_529_LABEL = "529 college savings"
+AFTER_TAX_401K_LABEL = "After-tax 401(k) → Roth"
+
+
+def college_saving_this_year(overrides: dict) -> float:
+    """This year's 529 saving across the children, as the simulation has it
+    (cfg.calculate_529_contribution at your current age): each child's college
+    target spread evenly from birth until COLLEGE_START_AGE."""
+    start = safe_int(overrides.get("COLLEGE_START_AGE", cfg.COLLEGE_START_AGE),
+                     cfg.COLLEGE_START_AGE)
+    if start <= 0:
+        return 0.0
+    return float(sum(cfg.college_target(kid) / start for kid in cfg.children_in(overrides)
+                     if 0 <= -cfg._child(kid, "years_until_birth") < start))
+
+
+def after_tax_401k_this_year(overrides: dict, deferral: float) -> float:
+    """This year's after-tax 401(k) -> Roth (mega backdoor), sized as the
+    simulation sizes it (account_simulation.working_year_cashflow):
+    YOUR_AFTER_TAX_401K_PCT of base pay, up to the total 401(k) limit left
+    after your own ``deferral`` and the match it earns."""
+    pct = as_fraction(overrides.get("YOUR_AFTER_TAX_401K_PCT", 0.0), 0.0)
+    if pct <= 0:
+        return 0.0
+    age = safe_int(overrides.get("YOUR_AGE", 30), 30)
+    year = cfg.CURRENT_YEAR
+    base = max(0, safe_int(overrides.get("YOUR_BASE_SALARY", 0), 0))
+    wages = base + sum(max(0, safe_int(overrides.get(k, 0), 0))
+                       for k in ("YOUR_BONUS_AMOUNT", "YOUR_RSU_AMOUNT"))
+    deferral = max(0.0, min(float(deferral), cfg.get_401k_limit(age, year), wages))
+    match = min(deferral, base * as_fraction(overrides.get("YOUR_401K_MATCH_PCT", 0.0), 0.0))
+    room = max(0.0, cfg.get_401k_total_limit(age, year) - deferral - match)
+    return float(min(pct * base, room))
+
+
+def savings_budget(overrides: dict, custom_pcts: Dict[str, float] = None) -> Dict[str, object]:
+    """This year's income, tax, expenses and what's left to save.
+
+    The tax is the tax on what's actually put into the 401(k)s and HSA, so it
+    is the Taxes section's figure and the simulation's (cfg.working_year_taxes).
+    Those amounts can depend on what's left: Auto-allocate fills the 401(k)s
+    and HSA from it and Custom % takes shares of it, and pre-tax saving lowers
+    the tax, which leaves more. So this solves
+        left = income - tax(amounts(left)) - expenses
+    in whole dollars, starting from the tax with no pre-tax saving. Each pass
+    can only raise ``left`` (more pre-tax saving, less tax), by less than the
+    change before it, so it settles in a few passes and gives the same answer
+    on every rerun (it never feeds back across reruns).
+
+    Amounts by SAVINGS_MODE: Auto-allocate -> auto_allocate_savings(left);
+    Custom % with ``custom_pcts`` -> custom_pct_amounts(custom_pcts, left);
+    otherwise the amounts already in ``overrides`` (they don't depend on left).
+
+    ``set_aside``: this year's 529 saving and after-tax 401(k). The simulation
+    pays them from take-home ahead of its brokerage sweep, so Auto-allocate's
+    brokerage share is what's left after them -- never more than the
+    simulation's own sweep (a larger brokerage figure would act as a floor
+    the simulation has to fund by selling investments).
+
+    Returns {"income", "taxes" (a compute_taxes dict), "expenses",
+    "disposable" (int), "amounts" (account amounts for that left),
+    "set_aside" ({label: dollars})}.
     """
     income = compute_total_income(overrides)
-    taxes = compute_taxes(overrides, pretax_savings=False)["total"]
     expenses = compute_expenses_today(overrides)
-    return int(max(0, income - taxes - expenses))
+    college = college_saving_this_year(overrides)
+    mode = str(overrides.get("SAVINGS_MODE", AUTO_ALLOCATE_MODE))
+    if mode == AUTO_ALLOCATE_MODE:
+        def amounts_for(left: int) -> Dict[str, int]:
+            first = auto_allocate_savings(left, overrides)
+            extra = college + after_tax_401k_this_year(
+                overrides, first["YOUR_401K_CONTRIBUTION"])
+            # set_aside only trims the brokerage share; the 401(k)/HSA/IRA
+            # amounts (and so the tax) are the same as in ``first``.
+            return auto_allocate_savings(left, overrides, set_aside=extra)
+    elif mode == CUSTOM_PCT_MODE and custom_pcts is not None:
+        def amounts_for(left: int) -> Dict[str, int]:
+            return custom_pct_amounts(custom_pcts, left, overrides)
+    else:
+        fixed = {k: max(0, safe_int(overrides.get(k, 0), 0)) for k in PRETAX_KEYS}
+
+        def amounts_for(left: int) -> Dict[str, int]:
+            return fixed
+
+    def solve(amounts: Dict[str, int]):
+        taxes = compute_taxes({**overrides, **{k: amounts.get(k, 0) for k in PRETAX_KEYS}})
+        return taxes, int(max(0.0, income - taxes["total"] - expenses))
+
+    amounts: Dict[str, int] = {}
+    taxes, left = solve(amounts)
+    for _ in range(200):
+        amounts = amounts_for(left)
+        taxes, new_left = solve(amounts)
+        if new_left == left:
+            break
+        left = new_left
+    deferral = amounts.get("YOUR_401K_CONTRIBUTION", overrides.get("YOUR_401K_CONTRIBUTION", 0))
+    set_aside = {COLLEGE_529_LABEL: college,
+                 AFTER_TAX_401K_LABEL: after_tax_401k_this_year(overrides, safe_int(deferral, 0))}
+    return {"income": income, "taxes": taxes, "expenses": expenses,
+            "disposable": left, "amounts": amounts,
+            "set_aside": {k: v for k, v in set_aside.items() if v > 0}}
 
 
 # IRS limits (2024)
@@ -246,10 +347,91 @@ def get_limit(name: str, age: int = 30, family: bool = True) -> int:
 # user's own 401(k) / HSA / IRA amounts instead of auto_allocate_savings'.
 AUTO_ALLOCATE_MODE = "Auto-allocate (recommended)"
 KEEP_AMOUNTS_MODE = "Auto-invest what's left (keep my amounts)"
+CUSTOM_PCT_MODE = "Custom %"
+MANUAL_MODE = "Manual amounts"
+SAVINGS_MODES = [AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, CUSTOM_PCT_MODE, MANUAL_MODE]
+
+# Contribution keys in the Savings section's order, and the Savings widgets
+# that hold them a rerun before user_overrides does.
+CONTRIBUTION_KEYS = (
+    "YOUR_401K_CONTRIBUTION", "PARTNER_401K_CONTRIBUTION", "YOUR_HSA_CONTRIBUTION",
+    "YOUR_BACKDOOR_ROTH", "PARTNER_ROTH_CONTRIBUTION",
+    "YOUR_BROKERAGE_CONTRIBUTION", "PARTNER_BROKERAGE_CONTRIBUTION",
+)
+_MANUAL_WIDGETS = {
+    "YOUR_401K_CONTRIBUTION": "sv_manual_your_401k",
+    "YOUR_HSA_CONTRIBUTION": "sv_manual_your_hsa",
+    "PARTNER_401K_CONTRIBUTION": "sv_manual_partner_401k",
+}
 
 
-def auto_allocate_savings(disposable: int, overrides: dict) -> Dict[str, int]:
+def pct_widget_key(key: str) -> str:
+    """The Custom % slider for a contribution key."""
+    return f"sv_pct_{key.lower()}"
+
+
+def custom_pct_defaults(overrides: dict) -> Dict[str, int]:
+    """Starting Custom % split (sums to 100), over the accounts shown."""
+    if safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0:
+        return {"YOUR_401K_CONTRIBUTION": 30, "PARTNER_401K_CONTRIBUTION": 20,
+                "YOUR_HSA_CONTRIBUTION": 8, "YOUR_BACKDOOR_ROTH": 7,
+                "PARTNER_ROTH_CONTRIBUTION": 5, "YOUR_BROKERAGE_CONTRIBUTION": 15,
+                "PARTNER_BROKERAGE_CONTRIBUTION": 15}
+    return {"YOUR_401K_CONTRIBUTION": 50, "YOUR_HSA_CONTRIBUTION": 8,
+            "YOUR_BACKDOOR_ROTH": 12, "YOUR_BROKERAGE_CONTRIBUTION": 30}
+
+
+def custom_pct_amounts(pcts: Dict[str, float], disposable: int, overrides: dict) -> Dict[str, int]:
+    """Custom %: each account gets pct x disposable, capped at its IRS limit."""
+    your_age = safe_int(overrides.get("YOUR_AGE", 30), 30)
+    partner_age = safe_int(overrides.get("PARTNER_AGE", 0), 0)
+    caps = {
+        "YOUR_401K_CONTRIBUTION": get_limit("401k", your_age),
+        "PARTNER_401K_CONTRIBUTION": get_limit("401k", partner_age) if partner_age > 0 else 0,
+        "YOUR_HSA_CONTRIBUTION": get_limit("hsa", your_age, family=True),
+        "YOUR_BACKDOOR_ROTH": get_limit("ira", your_age),
+        "PARTNER_ROTH_CONTRIBUTION": get_limit("ira", partner_age) if partner_age > 0 else 0,
+    }
+    return {key: min(int(disposable * float(pct) / 100), caps.get(key, 10_000_000))
+            for key, pct in pcts.items()}
+
+
+def sidebar_savings_budget(state) -> Dict[str, object]:
+    """savings_budget for the sidebar as it stands this rerun.
+
+    ``state`` is st.session_state: user_overrides plus the Savings widgets
+    (mode, Custom % sliders, manual 401(k)/HSA amounts), which hold this
+    rerun's values before the Savings section writes them to user_overrides.
+    The Taxes section and the Savings section both call this, so they show
+    one tax figure even when the Taxes section draws first.
+    """
+    overrides = dict(state.get("user_overrides", {}) or {})
+    mode = state.get("sv_mode")
+    if mode in SAVINGS_MODES:
+        overrides["SAVINGS_MODE"] = mode
+    mode = str(overrides.get("SAVINGS_MODE", AUTO_ALLOCATE_MODE))
+    pcts = None
+    if mode == CUSTOM_PCT_MODE:
+        pcts = {k: state.get(pct_widget_key(k), d)
+                for k, d in custom_pct_defaults(overrides).items()}
+    elif mode != AUTO_ALLOCATE_MODE:
+        for key, widget in _MANUAL_WIDGETS.items():
+            if widget in state:
+                overrides[key] = state[widget]
+    # Percent widgets stored as fractions.
+    for key, widget in (("YOUR_AFTER_TAX_401K_PCT", "sv_after_tax_401k"),
+                        ("YOUR_401K_MATCH_PCT", "sv_match_pct")):
+        if state.get(widget) is not None:
+            overrides[key] = safe_float(state[widget], 0.0) / 100.0
+    return savings_budget(overrides, custom_pcts=pcts)
+
+
+def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0) -> Dict[str, int]:
     """Default allocation rule: max tax-advantaged first, residual to brokerage.
+
+    ``set_aside`` is paid from what's left before the brokerage gets the rest:
+    this year's 529 saving and after-tax 401(k), which the simulation also
+    funds ahead of its brokerage sweep (see savings_budget).
 
     Order:
       1. Your 401(k) → IRS limit
@@ -312,6 +494,8 @@ def auto_allocate_savings(disposable: int, overrides: dict) -> Dict[str, int]:
         fill = min(cap, remaining)
         allocated["PARTNER_ROTH_CONTRIBUTION"] = fill
         remaining -= fill
+
+    remaining = max(0, remaining - int(round(set_aside)))
 
     # 6. Brokerage (residual). The couple SPLITS EXPENSES EVENLY, so each person
     #    covers HALF of household expenses from their own income and banks their
