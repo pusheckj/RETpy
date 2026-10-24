@@ -18,11 +18,11 @@ import plotly.graph_objects as go
 try:
     from utils.coerce import safe_int, as_fraction
     from utils.household import plan_end_ages
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark, beeswarm_xy
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, beeswarm_xy
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, as_fraction  # type: ignore
     from ui.utils.household import plan_end_ages  # type: ignore
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark, beeswarm_xy  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, beeswarm_xy  # type: ignore
 
 
 def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> None:
@@ -132,12 +132,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
                         else dict(duration=350, easing="cubic-in-out")),
             uirevision="keep",
         )
-        fig = style_fig(fig, st)
-        st.plotly_chart(
-            fig, width="stretch",
-            key=f"{chart_key}_{'nom' if future else 'tod'}_{'pts' if points_mode else 'box'}_{'dk' if dark else 'lt'}",
-            config=PLOTLY_CONFIG,
-        )
+        show_chart(st, fig, f"{chart_key}_{'nom' if future else 'tod'}_{'pts' if points_mode else 'box'}_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
         st.caption(
             "Each box is the spread of **projected investable net worth across all simulated "
             "market paths** at that age (portfolio balances only — home equity is excluded, "

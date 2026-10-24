@@ -305,11 +305,10 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
             uirevision="keep",
         )
         try:
-            from utils.plot_theme import style_fig
+            from utils.plot_theme import style_fig, show_chart
         except ImportError:
-            from ui.utils.plot_theme import style_fig
-        fig1 = style_fig(fig1, st)
-        st.plotly_chart(fig1, width="stretch", key=f"{chart_key}_category", config={"displayModeBar": False})
+            from ui.utils.plot_theme import style_fig, show_chart
+        show_chart(st, fig1, f"{chart_key}_category", {"displayModeBar": False})
 
     with pie_cols[1]:
         # #17: "By account" as a HORIZONTAL BAR chart, sorted by value descending.
@@ -356,8 +355,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         fig2.update_xaxes(tickformat="$,.3~s", nticks=4, tickangle=0, range=[0, _max * 1.4] if _max else None)
         fig2.update_yaxes(tickfont=dict(size=13), automargin=True)
         try:
-            from utils.plot_theme import style_fig
+            from utils.plot_theme import style_fig, show_chart
         except ImportError:
-            from ui.utils.plot_theme import style_fig
-        fig2 = style_fig(fig2, st)
-        st.plotly_chart(fig2, width="stretch", key=f"{chart_key}_account", config={"displayModeBar": False})
+            from ui.utils.plot_theme import style_fig, show_chart
+        show_chart(st, fig2, f"{chart_key}_account", {"displayModeBar": False})

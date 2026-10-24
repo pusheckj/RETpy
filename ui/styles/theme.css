@@ -1192,15 +1192,9 @@ footer { display: none !important; }
     [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-wide-"]) { display: none; }
     [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-narrow-"]) { display: block; }
 
-    /* Chart subtitles can't wrap and ran off the edge: keep the title line
-       (the caption under each chart explains it), and drop the toolbar icons
-       that crowded the title (pinch-zoom does the job on a phone). */
-    .js-plotly-plot .gtitle > tspan.line ~ tspan.line { display: none; }
+    /* Compact charts (plot_theme.show_chart) carry no subtitle, so only the
+       toolbar icons that crowded the title go (pinch-zoom does the job). */
     .js-plotly-plot .modebar-container { display: none !important; }
-    /* A legend under the plot collided with the x-axis title ("Age" over
-       "Home equity"); on charts that have a legend the tick values and the
-       caption carry the axis meaning. */
-    .js-plotly-plot:has(g.legend) .g-xtitle { display: none; }
 }
 
 /* =========================================================
@@ -1645,10 +1639,16 @@ section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.mc-stat-car
 [data-testid="stColumn"] .stElementContainer:has(.mc-stat-card),
 [data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) [data-testid="stMarkdownContainer"],
 .mc-stat-wrap { height: 100%; }
-[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) { flex: 1 1 auto; }
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) { flex: 1 1 auto; display: flex; flex-direction: column; }
+/* The markdown wrappers between the element slot and the card were plain blocks,
+   so the card stopped at its own content height (125px in a 144px slot). Make
+   each wrapper fill the slot; the card (height: 100%) then does too. */
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) > [data-testid="stMarkdown"] { flex: 1 1 auto; display: flex; }
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) > [data-testid="stMarkdown"] > div { flex: 1 1 auto; }
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) [data-testid="stMarkdownContainer"] { flex: 1 1 auto; }
 /* Streamlit's -16px markdown bottom margin made the 100%-high card overflow its slot into the next row. */
 [data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
-.mc-stat-card { box-sizing: border-box; }
+.mc-stat-card { box-sizing: border-box; height: 100%; }
 /* Labels stay on one line (no "NON-/RETIREMENT"); tighter tracking on narrow tiles. */
 .mc-stat-card > div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.05em !important; }
 @media (max-width: 1100px) { .mc-stat-card > div:first-child { font-size: 11px !important; letter-spacing: 0.03em !important; } }

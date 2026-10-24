@@ -42,9 +42,9 @@ except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, as_fraction
 
 try:
-    from utils.plot_theme import style_fig, concept_color, PLOTLY_CONFIG
+    from utils.plot_theme import style_fig, show_chart, concept_color, PLOTLY_CONFIG
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import style_fig, concept_color, PLOTLY_CONFIG
+    from ui.utils.plot_theme import style_fig, show_chart, concept_color, PLOTLY_CONFIG
 
 
 # --- Ordered source labels (stacking order, bottom -> top). Working-years
@@ -462,9 +462,8 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
             colors=colors,
             roth_conversion=roth_conversion,
         )
-        fig = style_fig(fig, st)
 
-        st.plotly_chart(fig, config=PLOTLY_CONFIG, key=chart_key, width="stretch")
+        show_chart(st, fig, chart_key, PLOTLY_CONFIG)
 
         st.caption(retirement_caption(results))
 

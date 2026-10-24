@@ -13,12 +13,12 @@ try:
     from utils.coerce import safe_int
     from utils.household import plan_end_ages
     from utils.mortality import life_distribution, RISK_FACTORS, CONDITIONS
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
     from ui.utils.household import plan_end_ages  # type: ignore
     from ui.utils.mortality import life_distribution, RISK_FACTORS, CONDITIONS  # type: ignore
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
 
 
 def render(st) -> None:
@@ -131,8 +131,7 @@ def render(st) -> None:
                    tickfont=dict(color="#64748b")),
         showlegend=False, dragmode="pan", uirevision="keep",
     )
-    fig = style_fig(fig, st)
-    st.plotly_chart(fig, width="stretch", key=f"life_dist_{'dk' if dark else 'lt'}", config=PLOTLY_CONFIG)
+    show_chart(st, fig, f"life_dist_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
 
     # ---- Plan tie-in ----
     reach90 = dist["reach"][90]

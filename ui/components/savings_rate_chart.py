@@ -13,10 +13,10 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 try:
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
     from components.savings_rate_inputs import year_savings
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
     from ui.components.savings_rate_inputs import year_savings  # type: ignore
 
 
@@ -88,8 +88,7 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
         showlegend=False, hovermode="x unified", dragmode="pan", bargap=0.2,
         uirevision="keep",
     )
-    fig = style_fig(fig, st)
-    st.plotly_chart(fig, width="stretch", key=chart_key, config=PLOTLY_CONFIG)
+    show_chart(st, fig, chart_key, PLOTLY_CONFIG)
 
     tail = (
         "take-home (after-tax) income. This runs higher than the pre-tax view because "

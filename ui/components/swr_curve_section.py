@@ -13,11 +13,11 @@ import plotly.graph_objects as go
 try:
     from utils.formatting import money
     from utils.sim_runner import run_swr_analysis, _hashable
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
     from ui.utils.formatting import money  # type: ignore
     from ui.utils.sim_runner import run_swr_analysis, _hashable  # type: ignore
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
 
 
 def _inputs_hash(overrides: dict, n_sims):
@@ -176,8 +176,7 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
                    zeroline=False, tickfont=dict(color="#64748b")),
         showlegend=False, dragmode="pan", uirevision="keep",
     )
-    fig = style_fig(fig, st)
-    st.plotly_chart(fig, width="stretch", key=f"swr_curve_{'dk' if dark else 'lt'}", config=PLOTLY_CONFIG)
+    show_chart(st, fig, f"swr_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
     st.caption(
         "Each point re-runs the full Monte Carlo at a different year-1 spending level. The rate is the "
         "**realized total** first-year draw ÷ investable balance at retirement, directly comparable "

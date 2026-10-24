@@ -6,9 +6,9 @@ import plotly.graph_objects as go
 from utils.formatting import money
 
 try:
-    from utils.plot_theme import style_fig
+    from utils.plot_theme import style_fig, show_chart
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import style_fig  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart  # type: ignore
 
 
 # (label, primary_result key): final-balance percentiles over ALL runs, the
@@ -84,8 +84,7 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
         yaxis=dict(title="Portfolio value", zeroline=False, tickformat="$,.3~s"),
         hovermode="closest",
     )
-    fig = style_fig(fig, st)
-    st.plotly_chart(fig, width="stretch", key=chart_key, config={"displayModeBar": False})
+    show_chart(st, fig, chart_key, {"displayModeBar": False})
 
     # Distribution table: every run, not the sample above (a handful of paths
     # gave a median far from the tile's).

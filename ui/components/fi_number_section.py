@@ -13,12 +13,12 @@ import plotly.graph_objects as go
 try:
     from utils.formatting import money
     from utils.household import has_partner, plan_end_text
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
     from utils.sim_runner import run_networth_analysis, _hashable
 except ImportError:  # pragma: no cover
     from ui.utils.formatting import money  # type: ignore
     from ui.utils.household import has_partner, plan_end_text  # type: ignore
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
     from ui.utils.sim_runner import run_networth_analysis, _hashable  # type: ignore
 
 
@@ -223,8 +223,7 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
                    zeroline=False, tickfont=dict(color="#64748b")),
         showlegend=False, dragmode="pan", uirevision="keep",
     )
-    fig = style_fig(fig, st)
-    st.plotly_chart(fig, width="stretch", key=f"fi_curve_{'dk' if dark else 'lt'}", config=PLOTLY_CONFIG)
+    show_chart(st, fig, f"fi_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
 
     st.caption(
         "Each point: keep working until the investable portfolio first reaches that target, "

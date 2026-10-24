@@ -25,10 +25,10 @@ import plotly.graph_objects as go
 
 try:
     from utils.formatting import money, pct
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
     from ui.utils.formatting import money, pct  # type: ignore
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
 
 STATE_KEY = "mortgage_paydown_result"
 
@@ -113,9 +113,7 @@ def render(st, results: dict = None, chart_key: str = "mortgage_paydown") -> Non
         yaxis=dict(title="Success rate (%)", gridcolor="#f1f5f9", zeroline=False),
         showlegend=False, dragmode="pan", uirevision="keep",
     )
-    fig = style_fig(fig, st)
-    st.plotly_chart(fig, width="stretch",
-                    key=f"{chart_key}_{'dk' if dark else 'lt'}", config=PLOTLY_CONFIG)
+    show_chart(st, fig, f"{chart_key}_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
 
     # ---- Table -----------------------------------------------------------
     import pandas as pd

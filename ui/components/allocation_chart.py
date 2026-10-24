@@ -72,14 +72,8 @@ def render(st, results: dict, chart_key: str = "allocation_main") -> None:
     fig.update_yaxes(fixedrange=False)
 
     try:
-        from utils.plot_theme import style_fig
+        from utils.plot_theme import style_fig, show_chart
     except ImportError:
-        from ui.utils.plot_theme import style_fig
-    fig = style_fig(fig, st)
+        from ui.utils.plot_theme import style_fig, show_chart
 
-    st.plotly_chart(
-        fig,
-        width="stretch",
-        key=chart_key,
-        config=PLOTLY_CONFIG,
-    )
+    show_chart(st, fig, chart_key, PLOTLY_CONFIG)
