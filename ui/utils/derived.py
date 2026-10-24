@@ -26,144 +26,97 @@ def compute_total_income(overrides: dict) -> int:
     return total
 
 
-def compute_taxes(overrides: dict) -> Dict[str, float]:
+def _working_tax_inputs(overrides: dict, pretax_savings: bool = True) -> dict:
+    """Keyword arguments for cfg.working_year_taxes from the sidebar inputs.
+
+    Missing keys count as 0 / not set, like the rest of this module. A partner
+    is present when PARTNER_AGE > 0 (or, without an age, when they have income).
+    Deferrals are capped at this year's IRS limits, as the simulation caps them.
+    """
+    from retirement_sim import config as cfg
+
+    def _sum(keys):
+        return sum(max(0, safe_int(overrides.get(k, 0), 0)) for k in keys)
+
+    your_wages = _sum(("YOUR_BASE_SALARY", "YOUR_BONUS_AMOUNT", "YOUR_RSU_AMOUNT"))
+    partner_wages = _sum(("PARTNER_BASE_SALARY", "PARTNER_BONUS_AMOUNT", "PARTNER_RSU_AMOUNT"))
+    your_other = _sum(("YOUR_OTHER_INCOME",))
+    partner_other = _sum(("PARTNER_OTHER_INCOME",))
+    if your_wages + partner_wages + your_other + partner_other == 0:
+        # Only a quick household figure: it stands in for one salary.
+        your_wages = max(0, safe_int(overrides.get("HOUSEHOLD_INCOME_QUICK", 0), 0))
+
+    your_age = safe_int(overrides.get("YOUR_AGE", 30), 30)
+    if "PARTNER_AGE" in overrides:
+        partner_age = safe_int(overrides.get("PARTNER_AGE", 0), 0)
+        partner = partner_age > 0
+    else:
+        partner = (partner_wages + partner_other) > 0
+        partner_age = your_age if partner else 0
+
+    raw_status = overrides.get("FILING_STATUS")
+    status = cfg.normalize_filing_status("MFJ" if raw_status is None else raw_status)
+
+    k401 = hsa = p401 = 0.0
+    if pretax_savings:
+        year = cfg.CURRENT_YEAR
+        k401 = min(max(0, safe_int(overrides.get("YOUR_401K_CONTRIBUTION", 0), 0)),
+                   cfg.get_401k_limit(your_age, year))
+        hsa = min(max(0, safe_int(overrides.get("YOUR_HSA_CONTRIBUTION", 0), 0)),
+                  cfg.get_hsa_limit(your_age, year, is_family=True))
+        if partner:
+            p401 = min(max(0, safe_int(overrides.get("PARTNER_401K_CONTRIBUTION", 0), 0)),
+                       cfg.get_401k_limit(partner_age, year))
+
+    return dict(
+        your_wages=your_wages, partner_wages=partner_wages,
+        your_other=your_other, partner_other=partner_other,
+        your_401k=k401, partner_401k=p401, your_hsa=hsa,
+        your_age=your_age, partner_age=partner_age, status=status, partner=partner,
+        state=overrides.get("STATE_CHOICE", "CA"),
+        flat_rate=as_fraction(overrides.get("YOUR_MARGINAL_TAX_RATE", 0.05), 0.05),
+    )
+
+
+def compute_taxes(overrides: dict, pretax_savings: bool = True) -> Dict[str, float]:
     """Return a dict with federal, state, fica, total, effective_rate.
 
-    Uses simplified rough calculations:
-      - Federal: 2024 MFJ progressive brackets if married, single brackets if not
-      - State: depends on STATE_CHOICE override:
-          "CA" -> 2024 California brackets
-          "No state tax" -> 0
-          "Other" -> flat YOUR_MARGINAL_TAX_RATE on taxable income, matching the
-                     engine's FlatRateStateTax for this choice
-      - FICA: 7.65% of wages up to SS wage base ($168,600 for 2024), then 1.45% above
+    This year's tax on the household's pay, from the SAME function the
+    simulation uses for every working year (cfg.working_year_taxes): federal
+    brackets and standard deduction by filing status (two returns for an
+    unmarried couple), the chosen state's table (STATE_CHOICE; "Other" = flat
+    YOUR_MARGINAL_TAX_RATE above the federal standard deduction), and FICA per
+    earner with the Social Security wage base and the Additional Medicare Tax.
+    "state" includes state payroll tax (California SDI).
+
+    ``pretax_savings`` (default True) lowers taxable income by the 401(k)/HSA
+    contributions, as the simulation does. compute_disposable passes False:
+    its pool is what the auto-allocation splits INTO those accounts, so it
+    can't depend on them.
     """
     income = compute_total_income(overrides)
     if income <= 0:
         return {"federal": 0.0, "state": 0.0, "fica": 0.0, "total": 0.0, "effective_rate": 0.0}
 
-    # Normalize filing status to one of "MFJ" / "S" / "HOH" (matches
-    # retirement_sim.config.normalize_filing_status). Default MFJ.
-    raw_status = overrides.get("FILING_STATUS", "MFJ")
-    s = str(raw_status).strip().lower() if raw_status is not None else "mfj"
-    if s in ("hoh", "head of household", "head-of-household") or s.startswith("h"):
-        status = "HOH"
-    elif s in ("s", "single") or s.startswith("s"):
-        status = "S"
-    else:
-        status = "MFJ"
+    from retirement_sim import config as cfg
 
-    # 2024 federal standard deduction by filing status (from retirement_sim.config).
-    fed_std_ded = {"MFJ": 29_200, "S": 14_600, "HOH": 21_900}[status]
-    taxable = max(0, income - fed_std_ded)
-
-    # 2024 federal ordinary-income brackets by filing status (from retirement_sim.config).
-    if status == "MFJ":
-        brackets = [
-            (23_200,  0.10), (94_300,  0.12), (201_050, 0.22),
-            (383_900, 0.24), (487_450, 0.32), (731_200, 0.35), (float("inf"), 0.37),
-        ]
-    elif status == "HOH":
-        brackets = [
-            (16_550,  0.10), (63_100,  0.12), (100_500, 0.22),
-            (191_950, 0.24), (243_700, 0.32), (609_350, 0.35), (float("inf"), 0.37),
-        ]
-    else:  # Single
-        brackets = [
-            (11_600,  0.10), (47_150,  0.12), (100_525, 0.22),
-            (191_950, 0.24), (243_725, 0.32), (609_350, 0.35), (float("inf"), 0.37),
-        ]
-
-    fed_tax = 0.0
-    prev = 0.0
-    for cap, rate in brackets:
-        if taxable <= prev:
-            break
-        slab = min(taxable, cap) - prev
-        fed_tax += slab * rate
-        prev = cap
-
-    # State
-    state_choice = str(overrides.get("STATE_CHOICE", "CA"))
-    if state_choice == "No state tax" or state_choice == "None":
-        state_tax = 0.0
-    elif state_choice == "CA":
-        # CA treats HoH as unmarried for bracket/deduction purposes here.
-        ca_married = (status == "MFJ")
-        # 2024 CA standard deduction (from retirement_sim.config: MFJ $11,080).
-        # Single/HoH use the unmarried figure ($5,540).
-        ca_std_ded = 11_080 if ca_married else 5_540
-        ca_taxable = max(0, income - ca_std_ded)
-        # 2024 CA brackets (simplified)
-        ca_brackets = (
-            [(20_824, 0.01), (49_368, 0.02), (77_918, 0.04), (108_162, 0.06),
-             (136_700, 0.08), (698_274, 0.093), (837_922, 0.103),
-             (1_396_542, 0.113), (float("inf"), 0.123)]
-            if ca_married else
-            [(10_412, 0.01), (24_684, 0.02), (38_959, 0.04), (54_081, 0.06),
-             (68_350, 0.08), (349_137, 0.093), (418_961, 0.103),
-             (698_271, 0.113), (float("inf"), 0.123)]
-        )
-        state_tax = 0.0
-        prev = 0.0
-        for cap, rate in ca_brackets:
-            if ca_taxable <= prev:
-                break
-            slab = min(ca_taxable, cap) - prev
-            state_tax += slab * rate
-            prev = cap
-    else:
-        # "Other": mirror the ENGINE exactly. account_simulation's
-        # _select_state_tax_brackets() builds FlatRateStateTax(rate=
-        # cfg.YOUR_MARGINAL_TAX_RATE) for this choice, so the sidebar must charge
-        # the same rate. It previously hard-coded 5% and ignored the slider, so
-        # the reported state tax never moved while the simulated one swung by
-        # tens of thousands a year.
-        state_tax = taxable * as_fraction(overrides.get("YOUR_MARGINAL_TAX_RATE", 0.05), 0.05)
-
-    # FICA: computed PER EARNER so the SS wage base caps each person's wages
-    # independently (a two-earner household gets two SS caps, not one shared
-    # cap on combined wages). SS = 6.2% up to the wage base; Medicare = 1.45%
-    # uncapped. Sum the two earners.
-    SS_WAGE_BASE = 168_600
-    SS_RATE = 0.062
-    MEDICARE_RATE = 0.0145
-
-    def _fica_for(wage_keys) -> float:
-        w = sum(safe_int(overrides.get(k, 0), 0) for k in wage_keys)
-        if w <= 0:
-            return 0.0
-        return min(w, SS_WAGE_BASE) * SS_RATE + w * MEDICARE_RATE
-
-    your_wages = sum(safe_int(overrides.get(k, 0), 0)
-                     for k in ("YOUR_BASE_SALARY", "YOUR_BONUS_AMOUNT", "YOUR_RSU_AMOUNT"))
-    partner_wages = sum(safe_int(overrides.get(k, 0), 0)
-                        for k in ("PARTNER_BASE_SALARY", "PARTNER_BONUS_AMOUNT", "PARTNER_RSU_AMOUNT"))
-
-    if partner_wages > 0:
-        fica = (_fica_for(("YOUR_BASE_SALARY", "YOUR_BONUS_AMOUNT", "YOUR_RSU_AMOUNT"))
-                + _fica_for(("PARTNER_BASE_SALARY", "PARTNER_BONUS_AMOUNT", "PARTNER_RSU_AMOUNT")))
-    else:
-        # Single-earner fallback. When no wage keys are set, fall back to the
-        # QUICK household-income figure (which stands in for a salary), NOT total
-        # income — total income includes *_OTHER_INCOME (pension, rental,
-        # interest), which is not subject to payroll tax. The two-earner branch
-        # above deliberately excludes those keys, so using `income` here
-        # contradicted it and charged FICA on a pure-pension household.
-        wages = your_wages if your_wages > 0 else safe_int(
-            overrides.get("HOUSEHOLD_INCOME_QUICK", 0), 0)
-        fica = min(wages, SS_WAGE_BASE) * SS_RATE + wages * MEDICARE_RATE
-
-    total = fed_tax + state_tax + fica
-    effective = total / income if income > 0 else 0.0
-
+    t = cfg.working_year_taxes(**_working_tax_inputs(overrides, pretax_savings))
+    total = t["federal"] + t["state"] + t["fica"]
     return {
-        "federal": float(fed_tax),
-        "state": float(state_tax),
-        "fica": float(fica),
+        "federal": float(t["federal"]),
+        "state": float(t["state"]),
+        "fica": float(t["fica"]),
         "total": float(total),
-        "effective_rate": float(effective),
+        "effective_rate": float(total / income) if income > 0 else 0.0,
     }
+
+
+def files_two_returns(overrides: dict) -> bool:
+    """Whether the sidebar inputs describe an unmarried couple (two returns)."""
+    from retirement_sim import config as cfg
+
+    kw = _working_tax_inputs(overrides, pretax_savings=False)
+    return cfg.files_two_returns(kw["status"], kw["partner"])
 
 
 def compute_expenses_today(overrides: dict) -> int:
@@ -237,9 +190,16 @@ def compute_expenses_today(overrides: dict) -> int:
 
 
 def compute_disposable(overrides: dict) -> int:
-    """Income - taxes - expenses today (annual)."""
+    """Income - taxes - expenses today (annual).
+
+    Taxes BEFORE pre-tax savings (compute_taxes(pretax_savings=False)): this is
+    the pool auto_allocate_savings splits into 401(k)/HSA/IRA/brokerage, so it
+    must not depend on those amounts (that would feed back across reruns). The
+    tax those deferrals save shows up in the simulation, which sweeps every
+    leftover dollar into the brokerage.
+    """
     income = compute_total_income(overrides)
-    taxes = compute_taxes(overrides)["total"]
+    taxes = compute_taxes(overrides, pretax_savings=False)["total"]
     expenses = compute_expenses_today(overrides)
     return int(max(0, income - taxes - expenses))
 

@@ -11,17 +11,45 @@ try:
 except ImportError:
     from ui.utils.plot_theme import assign_colors, PLOTLY_CONFIG
 
-_SERIES_NAMES = ["Federal", "State (CA)", "LTCG", "NIIT"]
-_SERIES = [
-    ("Federal", "federal"),
-    ("State (CA)", "state"),
-    ("LTCG", "ltcg"),
-    ("NIIT", "niit"),
-]
-
-# Federal MFJ marginal tax bracket rates (2024), shown as horizontal
-# reference guides on the "% of income" view.
+# Federal marginal tax bracket rates (2024; the same rates for every filing
+# status), shown as horizontal reference guides on the "% of income" view.
 _FEDERAL_MARGINAL_RATES = [10, 12, 22, 24, 32, 35, 37]
+
+_FILING_LABELS = {"MFJ": "married filing jointly", "S": "single",
+                  "HOH": "head of household"}
+
+
+def _tax_context(st) -> dict:
+    """Active state + filing status, for the labels (from the sidebar inputs)."""
+    from retirement_sim import config as cfg
+    ov = st.session_state.get("user_overrides", {}) or {}
+    code = cfg.resolve_state_code(ov.get("STATE_CHOICE", cfg.STATE_CHOICE))
+    status = cfg.normalize_filing_status(ov.get("FILING_STATUS", cfg.FILING_STATUS))
+    try:
+        partner = int(ov.get("PARTNER_AGE", cfg.PARTNER_AGE) or 0) > 0
+    except (TypeError, ValueError):
+        partner = False
+    if code == cfg.STATE_NONE:
+        state_label = "State (none)"
+    elif code == cfg.STATE_FLAT:
+        state_label = "State (flat rate)"
+    else:
+        state_label = f"State ({code})"
+    return {"state_label": state_label, "state_name": cfg.state_display_name(code),
+            "status_label": _FILING_LABELS[status],
+            "two_returns": cfg.files_two_returns(status, partner),
+            # Markdown-escaped dollar sign.
+            "niit": "\\$250k" if status == "MFJ" else "\\$200k"}
+
+
+def _series(ctx: dict) -> list:
+    return [
+        ("Federal", "federal"),
+        (ctx["state_label"], "state"),
+        ("Payroll (FICA)", "fica"),
+        ("LTCG", "ltcg"),
+        ("NIIT", "niit"),
+    ]
 
 
 def _effective_rate(total_tax: float, gross_income: float) -> float:
@@ -36,15 +64,18 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
     pr = results.get("primary_result", {}) or {}
     tax_rows = pr.get("taxes_by_year", []) or []
     retirement_age = pr.get("retirement_age", None)
+    ctx = _tax_context(st)
+    series = _series(ctx)
     if not tax_rows:
         st.info("Per-year tax data not available.")
         st.markdown(
-            """
+            f"""
             **Tax model summary:**
-            - **Federal income tax**: 2024 MFJ brackets (10% - 37%)
-            - **California state**: 2024 brackets (1% - 12.3%) — configurable
+            - **Federal income tax**: 2024 brackets for {ctx['status_label']} (10% - 37%)
+            - **State ({ctx['state_name']})**: that state's 2024 tax table
+            - **Payroll (FICA)**: Social Security and Medicare tax on pay
             - **Federal LTCG**: 0% / 15% / 20% based on taxable income
-            - **NIIT**: 3.8% surtax on investment income above $250k MAGI
+            - **NIIT**: 3.8% surtax on investment income above {ctx['niit']} MAGI
             - **Medicare IRMAA**: Higher Part B/D premiums based on MAGI tier
             """
         )
@@ -67,7 +98,8 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
 
     def _total(rows):
         return sum(
-            r.get("federal", 0) + r.get("state", 0) + r.get("ltcg", 0) + r.get("niit", 0)
+            r.get("federal", 0) + r.get("state", 0) + r.get("fica", 0)
+            + r.get("ltcg", 0) + r.get("niit", 0)
             for r in rows
         )
 
@@ -103,10 +135,10 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
 
     ages = [r.get("age") for r in tax_rows]
 
-    series_colors = assign_colors(_SERIES_NAMES, st)
+    series_colors = assign_colors([label for label, _ in series], st)
 
     fig = go.Figure()
-    for label, key in _SERIES:
+    for label, key in series:
         color = series_colors[label]
         if view == "Dollar amount":
             values = [r.get(key, 0) for r in tax_rows]
@@ -140,7 +172,7 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
         )
 
     # On the "% of income" view the y-axis is a rate, so overlay the federal
-    # MFJ marginal bracket rates as subtle horizontal reference guides. (On the
+    # marginal bracket rates as subtle horizontal reference guides. (On the
     # "Dollar amount" view the y-axis is dollars, so these don't map — skip.)
     if view != "Dollar amount":
         for rate in _FEDERAL_MARGINAL_RATES:
@@ -197,13 +229,16 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
         key=chart_key,
     )
 
+    two_returns = (" You're not married, so each of you files your own return."
+                   if ctx["two_returns"] else "")
     with st.expander("About these tax categories"):
         st.markdown(
-            """
-            - **Federal income tax** — 2024 MFJ brackets applied to ordinary income (Traditional 401k/IRA withdrawals, SS up to 85%, wages).
-            - **State (CA)** — California income tax, treats all capital gains as ordinary income. Swap for your state in `retirement_sim/config.py`.
+            f"""
+            - **Federal income tax** — 2024 brackets for {ctx['status_label']}, applied to ordinary income (wages, Traditional 401k/IRA withdrawals, Social Security up to 85%).{two_returns}
+            - **{ctx['state_label']}** — {ctx['state_name']} income tax from its 2024 tax table (brackets, deductions, and whether it taxes Social Security and retirement income). In retirement years it is included in the Federal band, since the simulation records one combined income-tax figure per year.
+            - **Payroll (FICA)** — Social Security and Medicare tax on working-year pay.
             - **LTCG** — Long-term capital gains (0% / 15% / 20%) on taxable brokerage withdrawals.
-            - **NIIT** — Net Investment Income Tax: 3.8% surtax on investment income when MAGI > $250k MFJ.
+            - **NIIT** — Net Investment Income Tax: 3.8% surtax on investment income when MAGI > {ctx['niit']}.
             - **RMDs** — from your RMD start age (72, 73 or 75 depending on birth
               year, per SECURE 2.0; each owner uses their own age, so a younger
               partner starts later) the IRS forces a minimum withdrawal from

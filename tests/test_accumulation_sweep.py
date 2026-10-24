@@ -20,6 +20,7 @@ from retirement_sim import config as cfg
 from retirement_sim.account_simulation import (
     create_initial_portfolio,
     simulate_accumulation_year,
+    working_year_cashflow,
 )
 
 
@@ -208,21 +209,11 @@ class TestFullProfileNoLeak:
                     _added(portfolio, before, name) for name in after_tax_funded
                 )
 
-                comp = cfg.YOUR_COMPENSATION_BY_AGE.get(age)
-                your_after_tax = float(comp["after_tax"])
-                partner_salary = cfg.PARTNER_SALARY * (
-                    (1 + cfg.PARTNER_SALARY_GROWTH_RATE) ** (age - cfg.YOUR_AGE)
-                )
-                p401 = min(
-                    float(cfg.PARTNER_401K_CONTRIBUTION),
-                    cfg.get_401k_limit(
-                        age - (cfg.YOUR_AGE - cfg.PARTNER_AGE), cfg.CURRENT_YEAR
-                    ),
-                )
-                partner_after_tax = (partner_salary - p401) * (
-                    1 - cfg.PARTNER_ESTIMATED_TAX_RATE
-                )
-                household_after_tax = your_after_tax + partner_after_tax
+                # Take-home now comes from ONE function (real tax rules,
+                # replacing the old comp after_tax + flat partner rate); the
+                # sweep must conserve exactly what it reports.
+                cf = working_year_cashflow(age)
+                household_after_tax = cf["your_take_home"] + cf["partner_take_home"]
                 living = cfg.calculate_annual_expenses(age, 1.0, childcare_factor=1.0)
 
                 expected = max(0.0, household_after_tax - living)

@@ -404,38 +404,24 @@ def test_build_config_overrides_clamps_negative_quick_income_and_savings():
 # ---------------------------------------------------------------------------
 
 def test_build_config_overrides_household_income_quick_byte_identical():
-    import json
-
+    """Pinned 55/45 split, 2% growth and row shape. Updated for real taxes:
+    rows no longer carry the old flat 70% ``after_tax`` (take-home is computed
+    by cfg.working_year_taxes), ``saved`` is 7% of pay (= the old 10% of 70%),
+    and the separate income lines the quick figure stands in for are zeroed so
+    the engine can't count them twice."""
     out = build_config_overrides({"HOUSEHOLD_INCOME_QUICK": 150_000, "YOUR_AGE": 28})
-    serialized = json.dumps(out, sort_keys=True, default=str)
-
-    expected = (
-        '{"PARTNER_SALARY": 67500, "YOUR_AGE": 28, "YOUR_COMPENSATION_BY_AGE": '
-        '{"28": {"after_tax": 57749, "base": 82500, "bonus": 0, "rsu_gross": 0, '
-        '"saved": 5774, "total_comp": 82500}, "29": {"after_tax": 58904, "base": '
-        '84150, "bonus": 0, "rsu_gross": 0, "saved": 5890, "total_comp": 84150}, '
-        '"30": {"after_tax": 60083, "base": 85833, "bonus": 0, "rsu_gross": 0, '
-        '"saved": 6008, "total_comp": 85833}, "31": {"after_tax": 61284, "base": '
-        '87549, "bonus": 0, "rsu_gross": 0, "saved": 6128, "total_comp": 87549}, '
-        '"32": {"after_tax": 62509, "base": 89300, "bonus": 0, "rsu_gross": 0, '
-        '"saved": 6250, "total_comp": 89300}, "33": {"after_tax": 63760, "base": '
-        '91086, "bonus": 0, "rsu_gross": 0, "saved": 6376, "total_comp": 91086}, '
-        '"34": {"after_tax": 65035, "base": 92908, "bonus": 0, "rsu_gross": 0, '
-        '"saved": 6503, "total_comp": 92908}, "35": {"after_tax": 66336, "base": '
-        '94766, "bonus": 0, "rsu_gross": 0, "saved": 6633, "total_comp": 94766}, '
-        '"36": {"after_tax": 67662, "base": 96661, "bonus": 0, "rsu_gross": 0, '
-        '"saved": 6766, "total_comp": 96661}, "37": {"after_tax": 69016, "base": '
-        '98595, "bonus": 0, "rsu_gross": 0, "saved": 6901, "total_comp": 98595}, '
-        '"38": {"after_tax": 70396, "base": 100567, "bonus": 0, "rsu_gross": 0, '
-        '"saved": 7039, "total_comp": 100567}, "39": {"after_tax": 71804, "base": '
-        '102578, "bonus": 0, "rsu_gross": 0, "saved": 7180, "total_comp": 102578}, '
-        '"40": {"after_tax": 73240, "base": 104629, "bonus": 0, "rsu_gross": 0, '
-        '"saved": 7324, "total_comp": 104629}, "41": {"after_tax": 74705, "base": '
-        '106722, "bonus": 0, "rsu_gross": 0, "saved": 7470, "total_comp": 106722}, '
-        '"42": {"after_tax": 76199, "base": 108856, "bonus": 0, "rsu_gross": 0, '
-        '"saved": 7619, "total_comp": 108856}}}'
-    )
-    assert serialized == expected
+    assert out["PARTNER_SALARY"] == 67_500
+    for k in ("YOUR_OTHER_INCOME", "PARTNER_BONUS_AMOUNT", "PARTNER_RSU_AMOUNT",
+              "PARTNER_OTHER_INCOME"):
+        assert out[k] == 0
+    table = out["YOUR_COMPENSATION_BY_AGE"]
+    assert sorted(table) == list(range(28, 43))
+    expected_bases = [82500, 84150, 85833, 87549, 89300, 91086, 92908, 94766,
+                      96661, 98595, 100567, 102578, 104629, 106722, 108856]
+    assert [table[a]["base"] for a in range(28, 43)] == expected_bases
+    for row in table.values():
+        assert row == {"base": row["base"], "bonus": 0, "rsu_gross": 0,
+                       "total_comp": row["base"], "saved": int(row["base"] * 0.07)}
 
 
 # ---------------------------------------------------------------------------

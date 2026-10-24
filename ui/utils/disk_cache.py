@@ -30,6 +30,7 @@ degrades to "recompute", never to an exception.
 """
 from __future__ import annotations
 
+import datetime
 import hashlib
 import logging
 import os
@@ -68,6 +69,9 @@ def engine_fingerprint() -> str:
     if _engine_fp_cache is not None:
         return _engine_fp_cache
     h = hashlib.sha256()
+    # The engine reads the current year from the clock (config.CURRENT_YEAR),
+    # so a new year must not serve last year's results.
+    h.update(str(datetime.date.today().year).encode("utf-8"))
     engine = os.path.join(_project_root(), "retirement_sim")
     try:
         for name in sorted(os.listdir(engine)):

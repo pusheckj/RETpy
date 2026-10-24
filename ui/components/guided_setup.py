@@ -29,11 +29,13 @@ try:
     from utils.formatting import money, money_md
     from utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, get_limit
     from utils import simple_to_full as s2f
+    from utils import state_choice as sc
 except ImportError:  # pragma: no cover
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, get_limit  # type: ignore
     from ui.utils import simple_to_full as s2f  # type: ignore
+    from ui.utils import state_choice as sc  # type: ignore
 
 STATE = "setup"
 _DOLLAR = ":material/attach_money:"
@@ -42,7 +44,10 @@ _PCT = ":material/percent:"
 JUST_ME, SPOUSE, PARTNER = "Just me", "Me and my spouse", "Me and my partner (not married)"
 NO_KIDS, HAVE_KIDS, PLAN_KIDS = "No kids", "I have kids", "Planning to have kids"
 ONE, TWO = "1", "2 or more"
-STATES = {"California": "CA", "No state income tax": "No state tax", "Another state": "Other"}
+# Where-you-live choices: every state + DC (by name), then a flat-rate fallback.
+# Saved legacy values ("CA", "No state tax", "Other") map onto these.
+STATES = {**{label: sc.code_for(label) for label in sc.STATE_LABELS},
+          "Somewhere else (enter a rate)": cfg.STATE_FLAT}
 RENT, OWN = "Rent", "Own"
 KEEP, FILL = "Keep my amounts and invest the rest", "Fill my 401(k) first, then invest the rest"
 SS_YES, SS_NO = "Yes", "No, plan without it"
@@ -308,22 +313,37 @@ def check_kids(st) -> Optional[str]:
     return None
 
 
+_STATE_FLAT_LABEL = next(label for label, c in STATES.items() if c == cfg.STATE_FLAT)
+
+
+def _state_saved(ov) -> Optional[str]:
+    code = ov.get("STATE_CHOICE")
+    if code is None or cfg.resolve_state_code(code) == cfg.STATE_NONE:
+        return None   # "no state tax" from an older plan: pick the actual state
+    if cfg.resolve_state_code(code) == cfg.STATE_FLAT:
+        return _STATE_FLAT_LABEL
+    return sc.label_for(code)
+
+
 def draw_state(st) -> None:
     ov = _ov(st)
-    saved = next((label for label, c in STATES.items() if c == ov.get("STATE_CHOICE")), None)
-    where = _choice(st, "gs_state", "Where do you live?", list(STATES), saved, None)
-    _cue(st, "Used only for state income tax. States with no income tax include Texas, "
-             "Florida, Washington, Nevada and Tennessee.")
-    if where == "Another state":
+    _seed(st, "gs_state", _state_saved(ov), None)
+    where = st.selectbox("Where do you live?", list(STATES), key="gs_state",
+                         placeholder="Choose your state")
+    _cue(st, "Used for state income tax, with your state's own rates and rules. Texas, "
+             "Florida, Washington, Nevada, Tennessee and a few others have none.")
+    if where == _STATE_FLAT_LABEL:
         _pct(st, "gs_state_rate", "Your state's income tax rate", _num(
             ov.get("YOUR_MARGINAL_TAX_RATE"), 0.05) * 100, 5.0)
         _cue(st, "Search \"[your state] income tax rate\". Not sure? Keep 5%.")
+    elif where in STATES and cfg.state_tax_rules(STATES[where])["confidence"] == "approx":
+        _cue(st, "We use approximate figures for this state.")
 
 
 def commit_state(st) -> None:
     if _val(st, "gs_state") in STATES:
         _ov(st)["STATE_CHOICE"] = STATES[_val(st, "gs_state")]
-    if _val(st, "gs_state") == "Another state" and _val(st, "gs_state_rate") is not None:
+    if _val(st, "gs_state") == _STATE_FLAT_LABEL and _val(st, "gs_state_rate") is not None:
         _ov(st)["YOUR_MARGINAL_TAX_RATE"] = min(_num(_val(st, "gs_state_rate")), 15.0) / 100.0
 
 

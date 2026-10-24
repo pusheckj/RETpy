@@ -292,9 +292,11 @@ class TestGlidePathStartsAtAccumulationAllocation:
 
 # ==============================================================================
 # Rank #5: STATE_CHOICE is wired into the engine. AccountPortfolio selects its
-# state-tax model from cfg.STATE_CHOICE: "CA" (default, unchanged) ->
-# CaliforniaTaxBrackets, "No state tax" -> NoStateTax (zero), "Other" ->
-# FlatRateStateTax at cfg.YOUR_MARGINAL_TAX_RATE.
+# state-tax model from cfg.STATE_CHOICE. Since the all-states rewrite every
+# choice is one generic StateIncomeTax read from state_tax_data (the old
+# CaliforniaTaxBrackets / NoStateTax / FlatRateStateTax objects were CA-only or
+# flat stand-ins): "CA" (default) -> California's table, "No state tax" ->
+# zero, "Other" -> flat cfg.YOUR_MARGINAL_TAX_RATE.
 # ==============================================================================
 
 class TestStateChoiceWiring:
@@ -307,8 +309,10 @@ class TestStateChoiceWiring:
         try:
             cfg.STATE_CHOICE = "CA"
             p = AccountPortfolio()
-            assert isinstance(p.ca_tax_brackets, CaliforniaTaxBrackets)
-            # CA progressive tax on $100k taxable income is a positive amount.
+            assert p.ca_tax_brackets.code == "CA"
+            # Same schedule as the CA joint-table convenience class.
+            assert p.ca_tax_brackets.calculate_tax(100_000) == pytest.approx(
+                CaliforniaTaxBrackets().calculate_tax(100_000))
             assert p.ca_tax_brackets.calculate_tax(100_000) > 0
         finally:
             self._restore(orig_choice, orig_rate)
@@ -318,7 +322,6 @@ class TestStateChoiceWiring:
         try:
             cfg.STATE_CHOICE = "No state tax"
             p = AccountPortfolio()
-            assert isinstance(p.ca_tax_brackets, NoStateTax)
             assert p.ca_tax_brackets.calculate_tax(100_000) == 0.0
             assert p.ca_tax_brackets.calculate_tax(1_000_000) == 0.0
         finally:
@@ -330,11 +333,13 @@ class TestStateChoiceWiring:
             cfg.STATE_CHOICE = "Other"
             cfg.YOUR_MARGINAL_TAX_RATE = 0.09
             p = AccountPortfolio()
-            assert isinstance(p.ca_tax_brackets, FlatRateStateTax)
             # Flat 9% of $100k taxable income == $9,000.
-            assert p.ca_tax_brackets.calculate_tax(100_000) == 9_000.0
+            assert p.ca_tax_brackets.calculate_tax(100_000) == pytest.approx(9_000.0)
             # No tax on zero / negative income.
             assert p.ca_tax_brackets.calculate_tax(0) == 0.0
+            # The deduction is the federal standard deduction for the status
+            # (it used to borrow California's joint deduction).
+            assert p.ca_tax_brackets.deduction == cfg.get_standard_deduction(0, 0)
         finally:
             self._restore(orig_choice, orig_rate)
 
@@ -343,7 +348,7 @@ class TestStateChoiceWiring:
         try:
             cfg.STATE_CHOICE = "Narnia"
             p = AccountPortfolio()
-            assert isinstance(p.ca_tax_brackets, CaliforniaTaxBrackets)
+            assert p.ca_tax_brackets.code == "CA"
         finally:
             self._restore(orig_choice, orig_rate)
 
@@ -383,13 +388,15 @@ class TestCaliforniaSocialSecurityExemption:
         finally:
             self._restore(*orig)
 
-    def test_other_and_no_state_tax_are_byte_identical_regardless_of_toggle(self):
-        """The exemption is a CA-specific rule; a flat-rate 'Other' stand-in or
-        an explicit no-state-tax choice must be unaffected either way."""
+    def test_no_state_tax_and_taxing_states_are_byte_identical_regardless_of_toggle(self):
+        """The toggle only switches the STATE Social Security exemption, so a
+        no-tax choice and a state that taxes benefits (Montana) are unaffected.
+        ("Other" used to be listed here; it now follows most states and
+        exempts Social Security, so the toggle does move it.)"""
         orig = (cfg.STATE_CHOICE, cfg.MODEL_CA_EXEMPTS_SOCIAL_SECURITY, cfg.INCLUDE_SOCIAL_SECURITY)
         try:
             cfg.INCLUDE_SOCIAL_SECURITY = True
-            for choice in ("Other", "No state tax"):
+            for choice in ("No state tax", "MT"):
                 cfg.STATE_CHOICE = choice
 
                 cfg.MODEL_CA_EXEMPTS_SOCIAL_SECURITY = False

@@ -51,7 +51,6 @@ def _load_my_situation(path: str | None = None) -> dict | None:
 PROFILES = {
     "Median US 25-year-old household": {
         'YOUR_AGE': 25, 'PARTNER_AGE': 25,
-        'CURRENT_YEAR': 2026,
         'YEARS_UNTIL_WEDDING': 3, 'YEARS_UNTIL_FIRST_CHILD': 3,
         'YOUR_401K': 10_000, 'YOUR_ROTH_IRA': 3_500, 'YOUR_TRADITIONAL_IRA': 0,
         'YOUR_HSA': 500, 'YOUR_BROKERAGE': 2_500, 'YOUR_CASH': 4_000,

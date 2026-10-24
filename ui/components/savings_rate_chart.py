@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover
 _CONTRIB_KEYS = [
     "your_401k", "your_employer_match", "your_hsa", "your_roth", "your_aftertax_roth",
     "your_brokerage",
-    "partner_401k", "partner_roth", "partner_brokerage",
+    "partner_401k", "partner_employer_match", "partner_roth", "partner_brokerage",
 ]
 
 

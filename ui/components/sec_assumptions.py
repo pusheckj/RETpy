@@ -117,8 +117,7 @@ def render_body(st) -> None:
     try:
         from retirement_sim import config as _cfg
         _age = safe_int(get_override(st, "YOUR_AGE", _cfg.YOUR_AGE), _cfg.YOUR_AGE)
-        _year = safe_int(get_override(st, "CURRENT_YEAR", _cfg.CURRENT_YEAR), _cfg.CURRENT_YEAR)
-        _rmd_age = _cfg.get_rmd_start_age(_year - _age)   # birth year follows from age
+        _rmd_age = _cfg.get_rmd_start_age(_cfg.CURRENT_YEAR - _age)   # birth year follows from age
         st.caption(
             f"From age **{_rmd_age}** (your SECURE 2.0 RMD start age) the IRS forces "
             "minimum withdrawals from Traditional balances, taxed as income. "
@@ -133,12 +132,27 @@ def render_body(st) -> None:
     if st.session_state.get("sa_roth_enable", True):
         c5, c6 = st.columns(2)
         with c5:
-            ensure_default(st, "sa_roth_target",
-                           safe_int(get_override(st, "ROTH_CONVERSION_TARGET_BRACKET", 94_300), 94_300))
-            v = st.number_input("Fill up to bracket ($)", min_value=0, max_value=250_000,
+            # Default = the top of the 12% bracket for YOUR filing status, kept
+            # as None ("follow the status") until you type another amount; any
+            # status default left in the box re-follows a status change.
+            from retirement_sim import config as _cfg
+            _status = _cfg.normalize_filing_status(
+                get_override(st, "FILING_STATUS", "Married filing jointly"))
+            _auto = int(_cfg.ROTH_CONVERSION_TARGET_BY_STATUS[_status])
+            _defaults = {int(x) for x in _cfg.ROTH_CONVERSION_TARGET_BY_STATUS.values()}
+            _stored = get_override(st, "ROTH_CONVERSION_TARGET_BRACKET", None)
+            if _stored is None or safe_int(_stored, _auto) in _defaults:
+                _stored = None
+                if safe_int(st.session_state.get("sa_roth_target"), _auto) in _defaults:
+                    st.session_state["sa_roth_target"] = _auto
+            ensure_default(st, "sa_roth_target", _auto if _stored is None else safe_int(_stored, _auto))
+            v = st.number_input("Fill up to income of ($)", min_value=0, max_value=250_000,
                                 step=5_000, key="sa_roth_target",
-                                help="$94,300 = top of 12% MFJ bracket.")
-            set_override(st, "ROTH_CONVERSION_TARGET_BRACKET", safe_int(v))
+                                help=f"Each year, convert until your income reaches this. "
+                                     f"Default ${_auto:,} = the top of the 12% bracket "
+                                     f"for your filing status.")
+            set_override(st, "ROTH_CONVERSION_TARGET_BRACKET",
+                         None if safe_int(v) == _auto else safe_int(v))
             ensure_default(st, "sa_roth_max",
                            safe_int(get_override(st, "ROTH_CONVERSION_MAX_ANNUAL", 100_000), 100_000))
             v = st.number_input("Max annual conversion ($)", min_value=0,

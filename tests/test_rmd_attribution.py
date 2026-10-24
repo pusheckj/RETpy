@@ -106,7 +106,9 @@ def test_surplus_rmd_is_reinvested_not_spent(no_roth_conversion):
     That gap is the money the engine reinvests into taxable (conservation #4) —
     the part a user cannot see when RMDs are folded into one bucket.
     """
-    forced = [r for r in _log() if r["rmd_gross"] > 0]
+    # Retire at 55: with real working-year taxes the default household's
+    # seeded path retiring at 50 now runs out before RMDs ever exceed spending.
+    forced = [r for r in _log(retirement_age=55) if r["rmd_gross"] > 0]
     assert forced, "seeded run should force RMDs once conversions are disabled"
     assert any(r["rmd_gross"] > r["rmd_spent"] + 1.0 for r in forced), (
         "expected at least one year where the forced RMD exceeded spending need"

@@ -65,13 +65,18 @@ household, or set ``YEARS_UNTIL_WEDDING = 0`` if the couple is already
 married at the simulation start.
 """
 
+import datetime as _datetime
+
 # -----------------------------------------------------------------------------
 # PERSONAL INFORMATION
 # -----------------------------------------------------------------------------
 # Defaults represent a median US household headed by 25-year-olds.
 YOUR_AGE = 25
 PARTNER_AGE = 25
-CURRENT_YEAR = 2026
+# This year, from the clock. Birth years (and so each person's RMD start age)
+# are derived from it; saved profiles' own CURRENT_YEAR is ignored
+# (ui/utils/config_builder._DERIVED_KEYS).
+CURRENT_YEAR = _datetime.date.today().year
 
 # Planning horizon - model until this age for the older person.
 # Rationale: ~30-40% chance one partner in a couple lives past 90, so plan long.
@@ -147,25 +152,27 @@ HOME_EQUITY_ACCESSIBLE_PCT = 0.85
 # rising to ~$1,250 at age 45-54). No bonuses or RSUs by default (these
 # appear in a minority of jobs).
 #
-# Format per age: {base, bonus, rsu_gross, total_comp, after_tax, saved}
+# Format per age: {base, bonus, rsu_gross, total_comp, saved[, after_tax]}
 #   - base       : W-2 base salary
 #   - bonus      : annual cash bonus
 #   - rsu_gross  : gross value of vesting RSUs
-#   - total_comp : sum of the three (for reference)
-#   - after_tax  : take-home pay after federal + state + payroll taxes
-#   - saved      : portion of after_tax that is saved (brokerage + ESPP +
-#                  backdoor Roth). Excludes 401k and HSA (those are pre-tax).
+#   - total_comp : sum of the three (the wages that are taxed)
+#   - saved      : after-tax savings to brokerage in "Manual" savings mode only
+#   - after_tax  : OPTIONAL. Leave it out and take-home is computed from the tax
+#                  rules (working_year_taxes: federal + state + FICA, after the
+#                  pre-tax 401(k)/HSA). Set it only to force a known take-home
+#                  (pay after taxes AND after 401(k)/HSA deferrals).
 YOUR_COMPENSATION_BY_AGE = {
-    25: {"base": 45_000, "bonus": 0, "rsu_gross": 0, "total_comp": 45_000, "after_tax": 36_000, "saved": 2_000},
-    26: {"base": 46_400, "bonus": 0, "rsu_gross": 0, "total_comp": 46_400, "after_tax": 37_100, "saved": 2_200},
-    27: {"base": 47_800, "bonus": 0, "rsu_gross": 0, "total_comp": 47_800, "after_tax": 38_200, "saved": 2_400},
-    28: {"base": 49_200, "bonus": 0, "rsu_gross": 0, "total_comp": 49_200, "after_tax": 39_300, "saved": 2_600},
-    29: {"base": 50_700, "bonus": 0, "rsu_gross": 0, "total_comp": 50_700, "after_tax": 40_500, "saved": 2_800},
-    30: {"base": 52_200, "bonus": 0, "rsu_gross": 0, "total_comp": 52_200, "after_tax": 41_700, "saved": 3_000},
-    32: {"base": 55_400, "bonus": 0, "rsu_gross": 0, "total_comp": 55_400, "after_tax": 44_200, "saved": 3_400},
-    35: {"base": 60_500, "bonus": 0, "rsu_gross": 0, "total_comp": 60_500, "after_tax": 48_200, "saved": 4_000},
-    38: {"base": 66_100, "bonus": 0, "rsu_gross": 0, "total_comp": 66_100, "after_tax": 52_600, "saved": 4_500},
-    40: {"base": 70_100, "bonus": 0, "rsu_gross": 0, "total_comp": 70_100, "after_tax": 55_700, "saved": 4_800},
+    25: {"base": 45_000, "bonus": 0, "rsu_gross": 0, "total_comp": 45_000, "saved": 2_000},
+    26: {"base": 46_400, "bonus": 0, "rsu_gross": 0, "total_comp": 46_400, "saved": 2_200},
+    27: {"base": 47_800, "bonus": 0, "rsu_gross": 0, "total_comp": 47_800, "saved": 2_400},
+    28: {"base": 49_200, "bonus": 0, "rsu_gross": 0, "total_comp": 49_200, "saved": 2_600},
+    29: {"base": 50_700, "bonus": 0, "rsu_gross": 0, "total_comp": 50_700, "saved": 2_800},
+    30: {"base": 52_200, "bonus": 0, "rsu_gross": 0, "total_comp": 52_200, "saved": 3_000},
+    32: {"base": 55_400, "bonus": 0, "rsu_gross": 0, "total_comp": 55_400, "saved": 3_400},
+    35: {"base": 60_500, "bonus": 0, "rsu_gross": 0, "total_comp": 60_500, "saved": 4_000},
+    38: {"base": 66_100, "bonus": 0, "rsu_gross": 0, "total_comp": 66_100, "saved": 4_500},
+    40: {"base": 70_100, "bonus": 0, "rsu_gross": 0, "total_comp": 70_100, "saved": 4_800},
 }
 
 # Beyond the last age in the table, project forward with these growth rates.
@@ -177,7 +184,9 @@ YOUR_RSU_PCT = 0.00             # RSUs are concentrated in tech/executive roles
 # Median 401k participant contributes ~6-7% of salary per Vanguard data.
 # At $45k salary, 6% = $2,700. Employer match median ~4%.
 YOUR_401K_CONTRIBUTION = 2_700  # ~6% of starting salary (typical median)
-YOUR_401K_MATCH_PCT = 0.04       # Employer matches 100% up to this % of base
+# Employer matches your deferral dollar for dollar up to this % of base pay:
+# the match is min(your 401(k) contribution, this % x base).
+YOUR_401K_MATCH_PCT = 0.04
 # HSA - most workers don't have / fund an HSA; defaults are 0.
 YOUR_HSA_CONTRIBUTION = 0
 YOUR_HSA_MATCH = 0
@@ -201,6 +210,9 @@ PRIMARY_PAYS_HOUSING = False
 YOUR_BASE_SALARY = 45_000  # matches YOUR_COMPENSATION_BY_AGE[25]['base'] (median-worker persona)
 YOUR_BONUS_AMOUNT = 0
 YOUR_RSU_AMOUNT = 0
+# Taxable income that isn't pay (rent, interest, side work): taxed as ordinary
+# income but not subject to FICA, flat in today's dollars, and received only
+# while you work (it stops at retirement).
 YOUR_OTHER_INCOME = 0
 YOUR_ESPP_PCT = 0.00             # ESPP is rare outside public tech companies
 YOUR_ESPP_DISCOUNT = 0.00
@@ -291,16 +303,18 @@ def get_hsa_limit(your_age: int, year: int, is_family: bool = True) -> float:
         base_limit += get_inflation_adjusted_limit('hsa_catchup', years_from_2024)
     return base_limit
 
-# Flat STATE income tax rate for STATE_CHOICE "Other" -- its only use (the
-# engine's FlatRateStateTax and derived.compute_taxes). It used to default to
-# 0.22, a federal + state + FICA "next dollar" estimate, which charged every
-# "Other" state a 22% state income tax.
+# Flat STATE income tax rate for STATE_CHOICE "Other" (a state you'd rather
+# describe by one rate): applied to income above the federal standard
+# deduction, with Social Security exempt as in most states.
 YOUR_MARGINAL_TAX_RATE = 0.05
 
-# State of residence for state income tax modeling. One of:
-#   "CA"           -> California 2024 progressive brackets (CaliforniaTaxBrackets)
-#   "No state tax" -> no state income tax (e.g. TX, FL) -> NoStateTax
-#   "Other"        -> flat rate applied at YOUR_MARGINAL_TAX_RATE (FlatRateStateTax)
+# State of residence for state income tax. One of:
+#   a two-letter code ("CA", "NY", "TX", "DC", ...) -> that state's 2024 tax
+#       table in state_tax_data.py (brackets by filing status, deductions,
+#       Social Security and retirement-income rules)
+#   "No state tax"  -> no state income tax (legacy; same as picking TX/FL/...)
+#   "Other"         -> flat rate YOUR_MARGINAL_TAX_RATE
+# Unknown values fall back to "CA" (the historical default).
 STATE_CHOICE = "CA"
 
 # -----------------------------------------------------------------------------
@@ -324,7 +338,7 @@ def calculate_your_total_savings(age: int) -> float:
         total = (
             saved_to_taxable +           # Brokerage, ESPP, Backdoor Roth
             YOUR_401K_CONTRIBUTION +      # Your 401k
-            base_salary * YOUR_401K_MATCH_PCT +  # 401k match
+            min(YOUR_401K_CONTRIBUTION, base_salary * YOUR_401K_MATCH_PCT) +  # match
             YOUR_HSA_TOTAL                # HSA (you + employer)
         )
         return total
@@ -340,13 +354,20 @@ def calculate_your_total_savings(age: int) -> float:
 # -----------------------------------------------------------------------------
 # Default: median US 25-year-old individual income ~$42,000 (slightly below
 # primary user to reflect typical spread in partner earnings).
+# PARTNER_SALARY is the partner's BASE pay; the engine adds PARTNER_BONUS_AMOUNT
+# + PARTNER_RSU_AMOUNT (wages) and PARTNER_OTHER_INCOME (not wages), all grown
+# at PARTNER_SALARY_GROWTH_RATE except other income (flat).
 PARTNER_SALARY = 42_000
 PARTNER_SALARY_GROWTH_RATE = 0.02  # Modest real wage growth
 
 # Partner's contributions
 PARTNER_401K_CONTRIBUTION = 2_500  # ~6% of salary (median contribution)
-PARTNER_401K_MATCH = 0             # Many jobs have no match
-PARTNER_ROTH_CONTRIBUTION = 2_000  # Direct Roth (income below MFJ phase-out)
+# Partner's employer match, same rule as YOUR_401K_MATCH_PCT: dollar for dollar
+# on the partner's deferral, up to this % of the partner's base pay.
+PARTNER_401K_MATCH_PCT = 0.0       # Many jobs have no match
+# Direct Roth IRA. Reduced by the Roth income phase-out (household income on a
+# joint return, the partner's own income otherwise) -- see roth_ira_allowed().
+PARTNER_ROTH_CONTRIBUTION = 2_000
 PARTNER_BROKERAGE_CONTRIBUTION = 0 # Annual partner after-tax savings to brokerage
 
 # -----------------------------------------------------------------------------
@@ -388,26 +409,25 @@ PARTNER_OTHER_INCOME = 0
 # update BOTH constants to keep them consistent.
 PARTNER_MONTHLY_SPENDING = 1_500
 PARTNER_ANNUAL_SPENDING = PARTNER_MONTHLY_SPENDING * 12
-PARTNER_ESTIMATED_TAX_RATE = 0.20  # Effective rate for median income single/MFJ
 
 def calculate_partner_total_savings(salary: float, years_from_now: int, married: bool = False) -> float:
     """
-    Calculate partner's TOTAL annual savings including 401k.
+    Calculate partner's TOTAL annual savings including 401k (standalone helper;
+    the engine uses account_simulation.working_year_cashflow).
 
-    Partner's Roth contribution drops to 0 once married due to joint-income
-    MAGI limits (assumes the couple is over the phase-out); override by
-    adjusting PARTNER_ROTH_CONTRIBUTION or the backdoor-Roth logic.
+    Taxes come from working_year_taxes on the partner's pay alone (a joint
+    return when ``married``, else Single). The direct Roth is limited by the
+    Roth income phase-out for that return, not dropped at marriage.
     """
-    # 401k is always contributed (pre-tax)
-    savings_401k = PARTNER_401K_CONTRIBUTION
+    # 401k is always contributed (pre-tax), but never more than the pay itself
+    savings_401k = min(float(PARTNER_401K_CONTRIBUTION), max(0.0, float(salary)))
 
-    # Calculate after-tax savings
-    taxable_income = salary - PARTNER_401K_CONTRIBUTION
-    taxes = taxable_income * PARTNER_ESTIMATED_TAX_RATE
-    after_tax = taxable_income - taxes
+    status = _FILING_MFJ if married else _FILING_SINGLE
+    taxes = working_year_taxes(partner_wages=salary, partner_401k=savings_401k,
+                               status=status, partner=True)
+    after_tax = taxes["partner"]["take_home"]
 
-    # Roth contribution (only before marriage in this example model)
-    roth = 0 if married else PARTNER_ROTH_CONTRIBUTION
+    roth = roth_ira_allowed(PARTNER_ROTH_CONTRIBUTION, salary - savings_401k, status)
 
     # What goes to brokerage after spending
     to_brokerage = max(0, after_tax - roth - PARTNER_ANNUAL_SPENDING)
@@ -1229,10 +1249,9 @@ SS_CLAIM_AGE = 67  # When to start claiming (62-70)
 # Up to 85% of Social Security benefits are taxable based on "provisional income"
 # Provisional Income = AGI + 50% of SS benefits + tax-exempt interest
 #
-# Thresholds for Married Filing Jointly (2024):
-#   - Below $32,000: 0% taxable
-#   - $32,000 - $44,000: Up to 50% taxable
-#   - Above $44,000: Up to 85% taxable
+# Thresholds (2024): MFJ $32,000 / $44,000; Single and head of household
+# $25,000 / $34,000. Below the first: 0% taxable; between: up to 50%; above the
+# second: up to 85%.
 
 # Model the REAL-TERMS DECAY of tax thresholds that Congress never indexed.
 #
@@ -1270,38 +1289,43 @@ def real_frozen_threshold(nominal_threshold: float, years_from_start: float) -> 
     return nominal_threshold / ((1.0 + EXPECTED_INFLATION) ** yrs)
 
 
-# California fully exempts Social Security benefits from STATE income tax
-# (federal taxability is unaffected either way -- see SS_TAX_THRESHOLD_*
-# below). Left False, the model reproduces the pre-fix behaviour: taxable SS
-# ran through the CA brackets like any other ordinary income, overstating CA
-# tax owed (and, via the shared year_ordinary_income total, overstating CA
-# tax on any withdrawal recognized later in the same year too). Only takes
-# effect when STATE_CHOICE selects real CA brackets -- "Other" is a rough
-# flat-rate stand-in for an unmodeled state and does not inherit this.
+# Honor the state's Social Security rule (state_tax_data.py "social_security":
+# most states exempt benefits; MT and UT tax them; a few exempt them below an
+# income limit). Federal taxability is unaffected either way. The historical
+# name dates from when California was the only modeled state. Left False, the
+# model reproduces the old behaviour: taxable SS runs through the state
+# brackets like any other ordinary income in every state.
 MODEL_CA_EXEMPTS_SOCIAL_SECURITY = True
 
 
+# Provisional-income thresholds (2024, never indexed): 50% of benefits become
+# taxable above the first, up to 85% above the second.
 SS_TAX_THRESHOLD_1_MFJ = 32_000     # Below this: 0% taxable
 SS_TAX_THRESHOLD_2_MFJ = 44_000     # Above this: up to 85% taxable
+SS_TAX_THRESHOLD_1_SINGLE = 25_000  # Single and head of household
+SS_TAX_THRESHOLD_2_SINGLE = 34_000
 SS_TAX_RATE_TIER_1 = 0.50           # Max 50% taxable in middle tier
 SS_TAX_RATE_TIER_2 = 0.85           # Max 85% taxable in top tier
 
 def calculate_taxable_social_security(ss_benefits: float, other_agi: float,
-                                      years_from_start: float = 0.0) -> float:
+                                      years_from_start: float = 0.0,
+                                      status=None) -> float:
     """
     Calculate the taxable portion of Social Security benefits.
 
     Uses IRS provisional income formula:
     Provisional Income = AGI (excluding SS) + 50% of SS benefits + tax-exempt interest
 
-    For MFJ:
-    - Provisional < $32,000: 0% taxable
-    - $32,000 <= Provisional <= $44,000: 50% of (Provisional - $32,000) is taxable
-    - Provisional > $44,000: 85% taxable (with formula adjustment)
+    Thresholds by filing status (``status``; default the active one):
+    MFJ $32,000 / $44,000; Single and head of household $25,000 / $34,000.
+    - Provisional < first: 0% taxable
+    - first <= Provisional <= second: 50% of (Provisional - first) is taxable
+    - Provisional > second: up to 85% taxable (with formula adjustment)
 
     Args:
-        ss_benefits: Total Social Security benefits received
-        other_agi: AGI excluding Social Security
+        ss_benefits: Social Security benefits on this return
+        other_agi: AGI excluding Social Security, on this return
+        status: "MFJ" / "S" / "HOH" (or a UI label)
 
     Returns:
         Taxable portion of Social Security benefits
@@ -1315,8 +1339,12 @@ def calculate_taxable_social_security(ss_benefits: float, other_agi: float,
     # These two thresholds have been frozen in NOMINAL dollars since 1993, so in
     # this real-dollar frame they lose value every year (see
     # real_frozen_threshold). Holding them constant would model them as indexed.
-    thresh_1 = real_frozen_threshold(SS_TAX_THRESHOLD_1_MFJ, years_from_start)
-    thresh_2 = real_frozen_threshold(SS_TAX_THRESHOLD_2_MFJ, years_from_start)
+    if normalize_filing_status(status) == _FILING_MFJ:
+        nominal_1, nominal_2 = SS_TAX_THRESHOLD_1_MFJ, SS_TAX_THRESHOLD_2_MFJ
+    else:
+        nominal_1, nominal_2 = SS_TAX_THRESHOLD_1_SINGLE, SS_TAX_THRESHOLD_2_SINGLE
+    thresh_1 = real_frozen_threshold(nominal_1, years_from_start)
+    thresh_2 = real_frozen_threshold(nominal_2, years_from_start)
 
     if provisional_income <= thresh_1:
         # Below first threshold: nothing taxable
@@ -1347,18 +1375,12 @@ def calculate_taxable_social_security(ss_benefits: float, other_agi: float,
         return min(combined, max_taxable)
 
 # -----------------------------------------------------------------------------
-# FEDERAL TAX CONFIGURATION (2024 MFJ)
+# FEDERAL TAX CONFIGURATION (2024, by filing status)
 # -----------------------------------------------------------------------------
-# Note: the progressive federal / California / LTCG bracket tables are defined
-# as dataclasses inside account_simulation.py. Edit those there if you want to
-# model a different state's brackets or a single-filer scenario.
-
-# =============================================================================
-# EXAMPLE STATE: California brackets are used as the default state tax model
-# (see account_simulation.py). Users in other states should replace those
-# brackets with their state's brackets, or set them to all zeros to model a
-# no-income-tax state (AK, FL, NV, SD, TN, TX, WA, WY).
-# =============================================================================
+# Federal ordinary and capital-gains brackets, standard deductions, NIIT,
+# IRMAA, FICA and the Roth phase-out live below, each keyed by filing status.
+# State tables (all 50 states + DC) live in state_tax_data.py and are read by
+# state_tax_rules().
 
 # -----------------------------------------------------------------------------
 # FILING STATUS (finding #8)
@@ -1370,17 +1392,15 @@ def calculate_taxable_social_security(ss_benefits: float, other_agi: float,
 # reaches the engine (was dropped by the hasattr() gate in
 # sim_runner._apply_overrides).
 #
-# WIRED: federal brackets (get_federal_brackets) + federal standard deduction
-# (get_standard_deduction) branch on FILING_STATUS. These are the dominant
-# dollar effects (single vs MFJ federal tax differs by ~$2.8k @ $70k, ~$5.9k @
-# $150k, ~$17.3k @ $300k).
-# DOCUMENTED LIMITATION (not yet filing-aware — still uses MFJ figures):
-# California brackets + CA standard deduction, NIIT threshold, Social-Security
-# provisional-income thresholds, LTCG brackets, and Medicare IRMAA brackets all
-# remain MFJ. For a Single/HOH filer these are roughly the MFJ thresholds and
-# therefore CONSERVATIVE (they understate CA tax / NIIT / IRMAA and overstate
-# the SS-taxable ceiling for a single filer). Wiring them fully would require a
-# Single/HOH table for each; left as a bounded follow-up.
+# Every filing-status-dependent table follows it: federal and state brackets
+# and standard deductions, LTCG brackets, Social Security taxability, NIIT,
+# IRMAA, the Additional Medicare Tax, the Roth IRA phase-out and the Roth
+# conversion target.
+#
+# An unmarried couple (a partner in the plan, cfg.has_partner(), with a status
+# other than MFJ) files TWO returns: you on FILING_STATUS (Single or head of
+# household) and your partner as Single, each taxed on their own income
+# (files_two_returns / return_status).
 FILING_STATUS = "Married filing jointly"
 
 # Canonical short codes -> the strings the UI emits, so callers can compare
@@ -1388,6 +1408,13 @@ FILING_STATUS = "Married filing jointly"
 _FILING_MFJ = "MFJ"
 _FILING_SINGLE = "S"
 _FILING_HOH = "HOH"
+
+
+_FILING_FAST = {
+    _FILING_MFJ: _FILING_MFJ, _FILING_SINGLE: _FILING_SINGLE, _FILING_HOH: _FILING_HOH,
+    "Married filing jointly": _FILING_MFJ, "Single": _FILING_SINGLE,
+    "Head of household": _FILING_HOH,
+}
 
 
 def has_partner() -> bool:
@@ -1409,6 +1436,9 @@ def normalize_filing_status(status=None) -> str:
     """
     if status is None:
         status = FILING_STATUS
+    fast = _FILING_FAST.get(status) if isinstance(status, str) else None
+    if fast is not None:   # the canonical codes and UI labels (hot path)
+        return fast
     s = str(status).strip().lower()
     if s in ("mfj", "married filing jointly", "married", "m"):
         return _FILING_MFJ
@@ -1424,6 +1454,25 @@ def normalize_filing_status(status=None) -> str:
     if s.startswith("s"):
         return _FILING_SINGLE
     return _FILING_MFJ
+
+
+def files_two_returns(status=None, partner=None) -> bool:
+    """An unmarried couple: a partner in the plan and a status other than MFJ.
+
+    Each person then files their own return (you on the chosen status, your
+    partner as Single) and is taxed on their own income.
+    """
+    if partner is None:
+        partner = has_partner()
+    return bool(partner) and normalize_filing_status(status) != _FILING_MFJ
+
+
+def return_status(owner: str = "you", status=None, partner=None) -> str:
+    """Filing status of the return ``owner``'s income is taxed on."""
+    status = normalize_filing_status(status)
+    if owner == "partner" and files_two_returns(status, partner):
+        return _FILING_SINGLE
+    return status
 
 
 # 2024 federal ordinary-income brackets as (upper_threshold, marginal_rate).
@@ -1473,8 +1522,28 @@ ADDITIONAL_STD_DEDUCTION_65_PLUS_SINGLE = 1_950
 
 # California standard deduction for Married Filing Jointly (2024 tax year).
 # Source: CA Franchise Tax Board, 2024 California Standard Deduction Worksheet
-# (FTB Form 540 instructions, 2024), published 2024.
+# (FTB Form 540 instructions, 2024), published 2024. The full CA table (every
+# filing status) is state_tax_data.STATES["CA"]; this constant is kept for
+# callers that quote the joint figure.
 CA_STANDARD_DEDUCTION_MFJ_2024 = 11_080
+
+
+def standard_deduction_for_return(status, ages) -> float:
+    """FEDERAL standard deduction of one return.
+
+    ``ages`` are the people on it (both spouses on a joint return). Base 2024
+    deduction by status, plus the age-65+ add-on: $1,550 per spouse 65+ on a
+    joint return, $1,950 for a 65+ Single/HOH filer.
+    """
+    status = normalize_filing_status(status)
+    deduction = STANDARD_DEDUCTION_BY_STATUS[status]
+    add_on = (ADDITIONAL_STD_DEDUCTION_65_PLUS if status == _FILING_MFJ
+              else ADDITIONAL_STD_DEDUCTION_65_PLUS_SINGLE)
+    for age in ages:
+        if age is not None and age >= 65:
+            deduction += add_on
+    return deduction
+
 
 def get_standard_deduction(your_age: int, partner_age: int) -> float:
     """
@@ -1483,21 +1552,315 @@ def get_standard_deduction(your_age: int, partner_age: int) -> float:
     2024 base deduction: MFJ $29,200 / Single $14,600 / HOH $21,900.
     Age-65+ add-on: $1,550 per spouse for MFJ; $1,950 for Single/HOH (per filer).
     For non-MFJ filers only the primary filer's age is considered (there is no
-    second filer), matching the single-return schedule.
+    second filer on the return), matching the single-return schedule.
     """
     status = normalize_filing_status()
-    deduction = STANDARD_DEDUCTION_BY_STATUS[status]
+    ages = [your_age, partner_age] if status == _FILING_MFJ else [your_age]
+    return standard_deduction_for_return(status, ages)
 
-    if status == _FILING_MFJ:
-        if your_age >= 65:
-            deduction += ADDITIONAL_STD_DEDUCTION_65_PLUS
-        if partner_age >= 65:
-            deduction += ADDITIONAL_STD_DEDUCTION_65_PLUS
+
+def progressive_tax(brackets, taxable_income: float) -> float:
+    """Tax on ``taxable_income`` under an ascending [(upper_limit, rate), ...]
+    schedule whose last limit is inf. The one implementation every federal and
+    state calculation shares (account_simulation._progressive_tax delegates)."""
+    if taxable_income <= 0:
+        return 0
+    tax = 0
+    prev_bracket = 0
+    for bracket_limit, rate in brackets:
+        if taxable_income <= bracket_limit:
+            tax += (taxable_income - prev_bracket) * rate
+            break
+        tax += (bracket_limit - prev_bracket) * rate
+        prev_bracket = bracket_limit
+    return tax
+
+
+# 2024 federal long-term capital gains brackets by filing status, as
+# (upper limit of taxable income, rate). Gains stack on top of ordinary taxable
+# income (account_simulation.calculate_ltcg_tax).
+LTCG_BRACKETS_BY_STATUS = {
+    _FILING_MFJ: [(94_050, 0.0), (583_750, 0.15), (float('inf'), 0.20)],
+    _FILING_SINGLE: [(47_025, 0.0), (518_900, 0.15), (float('inf'), 0.20)],
+    _FILING_HOH: [(63_000, 0.0), (551_350, 0.15), (float('inf'), 0.20)],
+}
+
+# -----------------------------------------------------------------------------
+# PAYROLL (FICA) TAXES ON WAGES (2024)
+# -----------------------------------------------------------------------------
+# Per earner: Social Security 6.2% up to the wage base, Medicare 1.45% on all
+# wages. The 0.9% Additional Medicare Tax applies per RETURN above $250k (joint)
+# / $200k (others); that threshold is not indexed, so like NIIT it decays in
+# this real-dollar frame (real_frozen_threshold). 401(k) deferrals are FICA
+# wages; HSA contributions made through payroll are not.
+SS_WAGE_BASE = 168_600
+SOCIAL_SECURITY_TAX_RATE = 0.062
+MEDICARE_TAX_RATE = 0.0145
+ADDITIONAL_MEDICARE_TAX_RATE = 0.009
+ADDITIONAL_MEDICARE_THRESHOLD_BY_STATUS = {
+    _FILING_MFJ: 250_000, _FILING_SINGLE: 200_000, _FILING_HOH: 200_000,
+}
+
+# -----------------------------------------------------------------------------
+# ROTH IRA INCOME PHASE-OUT (2024 MAGI ranges, indexed -> flat in real terms)
+# -----------------------------------------------------------------------------
+ROTH_IRA_PHASEOUT_BY_STATUS = {
+    _FILING_MFJ: (230_000, 240_000),
+    _FILING_SINGLE: (146_000, 161_000),
+    _FILING_HOH: (146_000, 161_000),
+}
+
+
+def roth_ira_allowed(desired: float, magi: float, status=None) -> float:
+    """Direct Roth IRA contribution allowed at ``magi`` (the return's income):
+    the full amount below the phase-out range, nothing above it, linear in
+    between."""
+    desired = max(0.0, float(desired or 0.0))
+    lo, hi = ROTH_IRA_PHASEOUT_BY_STATUS[normalize_filing_status(status)]
+    if magi <= lo:
+        return desired
+    if magi >= hi:
+        return 0.0
+    return desired * (hi - magi) / (hi - lo)
+
+
+# -----------------------------------------------------------------------------
+# STATE INCOME TAX (all 50 states + DC; data in state_tax_data.py)
+# -----------------------------------------------------------------------------
+def _state_data():
+    """The state_tax_data module, imported on first use and cached in a
+    lowercase global (config otherwise holds plain data; a snapshot that drops
+    the cache just causes a re-import)."""
+    mod = globals().get("_state_data_cache")
+    if mod is not None:
+        return mod
+    try:
+        from . import state_tax_data as mod
+    except ImportError:  # config.py loaded by file path (examples/*.py)
+        import importlib.util
+        import os
+        import sys
+        mod = sys.modules.get("state_tax_data")
+        if mod is None:
+            spec = importlib.util.spec_from_file_location(
+                "state_tax_data", os.path.join(os.path.dirname(__file__), "state_tax_data.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            sys.modules["state_tax_data"] = mod
+    globals()["_state_data_cache"] = mod
+    return mod
+
+STATE_NONE = "No state tax"   # legacy choice: no state income tax
+STATE_FLAT = "Other"          # a flat rate, YOUR_MARGINAL_TAX_RATE
+
+
+def resolve_state_code(choice=None) -> str:
+    """Canonical STATE_CHOICE: a two-letter code, STATE_NONE or STATE_FLAT.
+
+    Accepts codes in any case, full state names, and the legacy UI strings.
+    Unknown values fall back to "CA" (the historical default)."""
+    if choice is None:
+        choice = STATE_CHOICE
+    s = str(choice).strip()
+    if s in (STATE_NONE, STATE_FLAT):
+        return s
+    low = s.lower()
+    if low in ("none", "no state income tax", "no state tax"):
+        return STATE_NONE
+    if low.startswith("other") or low.startswith("another state"):
+        return STATE_FLAT
+    if s.upper() in _state_data().STATES:
+        return s.upper()
+    for code, row in _state_data().STATES.items():
+        if row["name"].lower() == low:
+            return code
+    return "CA"
+
+
+def state_display_name(choice=None) -> str:
+    code = resolve_state_code(choice)
+    if code == STATE_NONE:
+        return "No state income tax"
+    if code == STATE_FLAT:
+        return "Flat-rate state"
+    return _state_data().STATES[code]["name"]
+
+
+def state_tax_rules(choice=None, status=None, people=None, flat_rate=None) -> dict:
+    """Plain parameters of one STATE return: brackets, deduction and rules.
+
+    ``people`` is how many personal exemptions the return claims (default 2 on
+    a joint return, else 1). ``flat_rate`` overrides YOUR_MARGINAL_TAX_RATE for
+    the flat "Other" choice.
+    """
+    code = resolve_state_code(choice)
+    status = normalize_filing_status(status)
+    if people is None:
+        people = 2 if status == _FILING_MFJ else 1
+    rules = {
+        "code": code, "name": state_display_name(code), "status": status,
+        "year": _state_data().TAX_YEAR, "confidence": "high", "note": "",
+        "brackets": [(float('inf'), 0.0)], "deduction": 0.0,
+        "social_security": "exempt", "retirement_exclusion": None,
+        "ltcg_exclusion": 0.0, "pretax_401k_taxed": False, "hsa_taxed": False,
+        "payroll": None,
+    }
+    if code == STATE_NONE:
+        return rules
+    if code == STATE_FLAT:
+        rate = YOUR_MARGINAL_TAX_RATE if flat_rate is None else flat_rate
+        rules.update(brackets=[(float('inf'), max(0.0, float(rate or 0.0)))],
+                     deduction=float(STANDARD_DEDUCTION_BY_STATUS[status]),
+                     confidence="approx",
+                     note="A flat rate you entered, on income above the federal "
+                          "standard deduction.")
+        return rules
+    row = _state_data().STATES[code]
+    std = row["std_deduction"]
+    std = STANDARD_DEDUCTION_BY_STATUS[status] if std == "federal" else std[status]
+    exemption = row.get("exemption", 0) or 0
+    exemption = exemption[status] if isinstance(exemption, dict) else exemption * people
+    rules.update(
+        year=row["year"], confidence=row["confidence"], note=row.get("note", ""),
+        brackets=row["brackets"][status], deduction=float(std + exemption),
+        social_security=row.get("social_security", "exempt"),
+        retirement_exclusion=row.get("retirement_exclusion"),
+        ltcg_exclusion=float(row.get("ltcg_exclusion", 0.0) or 0.0),
+        pretax_401k_taxed=bool(row.get("pretax_401k_taxed", False)),
+        hsa_taxed=bool(row.get("hsa_taxed", False)),
+        payroll=row.get("payroll"),
+    )
+    return rules
+
+
+def state_exempts_social_security(rules: dict, return_income: float) -> bool:
+    """Does this state return exempt Social Security at ``return_income``?"""
+    if not MODEL_CA_EXEMPTS_SOCIAL_SECURITY:
+        return False
+    rule = rules.get("social_security", "exempt")
+    if rule == "exempt":
+        return True
+    if rule == "taxed":
+        return False
+    limit = rule.get("exempt_below_agi", {}).get(rules["status"], 0)
+    return return_income < limit
+
+
+def state_retirement_exclusion(rules: dict, age) -> float:
+    """Yearly per-person traditional 401(k)/IRA amount the state exempts at ``age``."""
+    best = 0.0
+    for tier in rules.get("retirement_exclusion") or ():
+        if age is not None and age >= tier["min_age"]:
+            best = max(best, float(tier["per_person"]))
+    return best
+
+
+# -----------------------------------------------------------------------------
+# WORKING-YEAR TAKE-HOME (one function for the engine and the UI)
+# -----------------------------------------------------------------------------
+
+def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
+                       your_other: float = 0.0, partner_other: float = 0.0,
+                       your_401k: float = 0.0, partner_401k: float = 0.0,
+                       your_hsa: float = 0.0, partner_hsa: float = 0.0,
+                       your_age=None, partner_age=None, status=None,
+                       partner=None, state=None, flat_rate=None,
+                       years_from_start: float = 0.0) -> dict:
+    """Income and payroll taxes on a working year's pay, and the take-home.
+
+    The single source of the working-year tax: simulate_accumulation_year (via
+    account_simulation.working_year_cashflow) and the sidebar's Taxes panel
+    (ui/utils/derived.compute_taxes) both call it, so the tax shown is the tax
+    simulated.
+
+    Wages are base + bonus + RSU (FICA applies); "other" income is ordinary
+    income without FICA. 401(k) and HSA amounts are pre-tax payroll deferrals:
+    they lower federal and (unless the state says otherwise) state taxable
+    income; 401(k) deferrals still pay FICA, HSA payroll contributions don't.
+
+    Returns a married couple's joint return (or a single person's return) as
+    one return; an unmarried couple (files_two_returns) as two, you on
+    ``status`` and your partner as Single. Defaults come from the active config
+    (FILING_STATUS, has_partner(), STATE_CHOICE, YOUR_MARGINAL_TAX_RATE, ages).
+
+    Returns {"federal", "state", "state_payroll", "fica", "total", "take_home",
+    "two_returns", "you": {...}, "partner": {...}}, each person carrying
+    gross / deferrals / agi / federal / state / fica / total / take_home. On a
+    joint return each person's share of the income tax is pro-rata to their
+    taxable income.
+    """
+    status = normalize_filing_status(status)
+    if partner is None:
+        partner = has_partner()
+    if your_age is None:
+        your_age = YOUR_AGE
+    if partner_age is None:
+        partner_age = PARTNER_AGE
+    two = files_two_returns(status, partner)
+
+    def _person(wages, other, k401, hsa, age):
+        wages = max(0.0, float(wages or 0.0))
+        other = max(0.0, float(other or 0.0))
+        k401 = min(max(0.0, float(k401 or 0.0)), wages)
+        hsa = min(max(0.0, float(hsa or 0.0)), wages - k401)
+        return {"wages": wages, "other": other, "k401": k401, "hsa": hsa, "age": age,
+                "agi": wages - k401 - hsa + other,
+                "federal": 0.0, "state": 0.0, "state_payroll": 0.0, "fica": 0.0}
+
+    you = _person(your_wages, your_other, your_401k, your_hsa, your_age)
+    them = _person(partner_wages, partner_other, partner_401k, partner_hsa, partner_age)
+
+    if two:
+        returns = [(status, [you], [your_age]), (_FILING_SINGLE, [them], [partner_age])]
     else:
-        if your_age >= 65:
-            deduction += ADDITIONAL_STD_DEDUCTION_65_PLUS_SINGLE
+        ages = [your_age, partner_age] if (status == _FILING_MFJ and partner) else [your_age]
+        returns = [(status, [you, them], ages)]
 
-    return deduction
+    for ret_status, people, ages in returns:
+        # Federal income tax
+        agi = sum(p["agi"] for p in people)
+        fed_taxable = max(0.0, agi - standard_deduction_for_return(ret_status, ages))
+        federal = progressive_tax(get_federal_brackets(ret_status), fed_taxable)
+        # State income tax
+        rules = state_tax_rules(state, ret_status, people=len(ages), flat_rate=flat_rate)
+        state_income = {id(p): (p["wages"] + p["other"]
+                                - (0.0 if rules["pretax_401k_taxed"] else p["k401"])
+                                - (0.0 if rules["hsa_taxed"] else p["hsa"]))
+                        for p in people}
+        st_total = sum(state_income.values())
+        state_tax = progressive_tax(rules["brackets"], max(0.0, st_total - rules["deduction"]))
+        # Additional Medicare Tax is a per-return amount on combined wages.
+        med_wages = sum(p["wages"] - p["hsa"] for p in people)
+        threshold = real_frozen_threshold(
+            ADDITIONAL_MEDICARE_THRESHOLD_BY_STATUS[ret_status], years_from_start)
+        extra_medicare = ADDITIONAL_MEDICARE_TAX_RATE * max(0.0, med_wages - threshold)
+        for p in people:
+            fica_wages = p["wages"] - p["hsa"]
+            p["fica"] = (SOCIAL_SECURITY_TAX_RATE * min(fica_wages, SS_WAGE_BASE)
+                         + MEDICARE_TAX_RATE * fica_wages
+                         + (extra_medicare * fica_wages / med_wages if med_wages > 0 else 0.0))
+            p["federal"] = federal * p["agi"] / agi if agi > 0 else 0.0
+            p["state"] = (state_tax * state_income[id(p)] / st_total) if st_total > 0 else 0.0
+            pay = rules.get("payroll")
+            if pay:
+                cap = pay.get("wage_cap")
+                p["state_payroll"] = pay["rate"] * (p["wages"] if cap is None else min(p["wages"], cap))
+
+    out = {"two_returns": two}
+    for key, p in (("you", you), ("partner", them)):
+        state_total = p["state"] + p["state_payroll"]
+        total = p["federal"] + state_total + p["fica"]
+        gross = p["wages"] + p["other"]
+        out[key] = {
+            "gross": gross, "wages": p["wages"], "other": p["other"],
+            "deferrals": p["k401"] + p["hsa"], "agi": p["agi"],
+            "federal": p["federal"], "state": state_total,
+            "state_payroll": p["state_payroll"], "fica": p["fica"], "total": total,
+            "take_home": gross - p["k401"] - p["hsa"] - total,
+        }
+    for k in ("federal", "state", "state_payroll", "fica", "total", "take_home"):
+        out[k] = out["you"][k] + out["partner"][k]
+    return out
 
 # -----------------------------------------------------------------------------
 # EARLY WITHDRAWAL PENALTIES
@@ -1569,24 +1932,28 @@ def calculate_early_withdrawal_penalty(amount: float, account_type: str,
 # 3.8% additional tax on net investment income for high earners.
 # Applies to interest, dividends, capital gains, rental income, etc.
 
-NIIT_THRESHOLD_MFJ = 250_000  # MAGI threshold for MFJ
-NIIT_RATE = 0.038             # 3.8% surtax
+NIIT_THRESHOLD_MFJ = 250_000     # MAGI threshold, married filing jointly
+NIIT_THRESHOLD_SINGLE = 200_000  # Single and head of household
+NIIT_RATE = 0.038                # 3.8% surtax
 
 def calculate_niit(magi: float, net_investment_income: float,
-                   years_from_start: float = 0.0) -> float:
+                   years_from_start: float = 0.0, status=None) -> float:
     """
     Calculate Net Investment Income Tax (3.8% surtax).
 
     Args:
-        magi: Modified Adjusted Gross Income
+        magi: Modified Adjusted Gross Income of the return
         net_investment_income: Investment income (interest, dividends, capital gains)
+        status: filing status of the return (default the active one)
 
     Returns:
         NIIT tax amount
     """
-    # $250k MFJ has been frozen in NOMINAL dollars since 2013 -> it decays in real
-    # terms (see real_frozen_threshold).
-    niit_threshold = real_frozen_threshold(NIIT_THRESHOLD_MFJ, years_from_start)
+    # $250k MFJ / $200k others have been frozen in NOMINAL dollars since 2013 ->
+    # they decay in real terms (see real_frozen_threshold).
+    nominal = (NIIT_THRESHOLD_MFJ if normalize_filing_status(status) == _FILING_MFJ
+               else NIIT_THRESHOLD_SINGLE)
+    niit_threshold = real_frozen_threshold(nominal, years_from_start)
     if magi <= niit_threshold:
         return 0
 
@@ -1604,11 +1971,9 @@ def calculate_niit(magi: float, net_investment_income: float,
 # Higher-income beneficiaries pay more for Medicare Parts B and D.
 # Based on MAGI from 2 years prior (e.g., 2024 income affects 2026 premiums).
 
-# 2025 IRMAA thresholds and monthly surcharges (MFJ), per official CMS figures.
-# NOTE: Thresholds are held FROZEN in nominal dollars (not inflated year-over-year)
-# because this engine operates in an all-real frame. This is a known, documented
-# limitation: in reality IRMAA thresholds are inflation-adjusted annually, so this
-# will overstate IRMAA exposure for future years modeled far past 2025.
+# 2025 IRMAA thresholds and monthly surcharges, per official CMS figures.
+# IRMAA IS indexed to inflation, so holding its thresholds flat in this
+# all-real frame is consistent (they are deliberately not decayed).
 # Format: (income_threshold, monthly_part_b_premium, monthly_part_d_surcharge)
 MEDICARE_IRMAA_BRACKETS_MFJ = [
     (0,        185.00,  0.00),      # Base premium (no surcharge)
@@ -1618,9 +1983,18 @@ MEDICARE_IRMAA_BRACKETS_MFJ = [
     (400_000,  591.90,  78.60),
     (750_000,  628.90,  85.80),     # Maximum tier
 ]
+# Single, head of household (and any other individual return).
+MEDICARE_IRMAA_BRACKETS_SINGLE = [
+    (0,        185.00,  0.00),
+    (106_000,  259.00,  13.70),
+    (133_000,  370.00,  35.30),
+    (167_000,  480.90,  57.00),
+    (200_000,  591.90,  78.60),
+    (500_000,  628.90,  85.80),
+]
 
 def calculate_medicare_irmaa(magi: float, inflation_factor: float = 1.0,
-                             enrollees: int = 2) -> float:
+                             enrollees: int = 2, status=None) -> float:
     """
     Calculate annual Medicare premiums including IRMAA surcharges.
 
@@ -1634,15 +2008,24 @@ def calculate_medicare_irmaa(magi: float, inflation_factor: float = 1.0,
             for a single filer, or for an age-gapped couple in the years when
             only one spouse has reached MEDICARE_AGE -- billing two premiums for
             a household with one eligible person overstated the cost.
+        status: filing status whose tiers apply. Default: the active one; for
+            an unmarried couple (two returns) ``magi`` is the household's, so
+            each person is tested on half of it against the individual tiers.
 
     Returns:
         Annual Medicare premium (Part B + Part D) for ``enrollees`` people
     """
+    if status is None:
+        status = normalize_filing_status()
+        if files_two_returns(status):
+            magi = magi / 2.0
+    brackets = (MEDICARE_IRMAA_BRACKETS_MFJ if normalize_filing_status(status) == _FILING_MFJ
+                else MEDICARE_IRMAA_BRACKETS_SINGLE)
     # Find the applicable bracket
-    part_b_monthly = MEDICARE_IRMAA_BRACKETS_MFJ[0][1]  # Base
-    part_d_monthly = MEDICARE_IRMAA_BRACKETS_MFJ[0][2]  # Base
+    part_b_monthly = brackets[0][1]  # Base
+    part_d_monthly = brackets[0][2]  # Base
 
-    for threshold, part_b, part_d in MEDICARE_IRMAA_BRACKETS_MFJ:
+    for threshold, part_b, part_d in brackets:
         if magi >= threshold:
             part_b_monthly = part_b
             part_d_monthly = part_d
@@ -1737,12 +2120,24 @@ def calculate_rmd(account_balance: float, age: int, start_age: int = RMD_START_A
 
 ENABLE_ROTH_CONVERSION = True  # Toggle Roth conversion strategy on/off
 
-# Target tax brackets to fill (2024 MFJ brackets):
-# 10% bracket: $0 - $23,200
-# 12% bracket: $23,200 - $94,300
-# 22% bracket: $94,300 - $201,050
-# Strategy: Fill up to the top of the 12% bracket for optimal tax arbitrage.
-ROTH_CONVERSION_TARGET_BRACKET = 94_300  # Fill up to top of 12% bracket
+# Fill each year's ordinary income up to this amount with conversions. None
+# (default) = the top of the 12% bracket for the return's filing status (2024:
+# $94,300 joint, $47,150 single, $63,100 head of household); a number applies
+# to every return. Compared against the year's ordinary income (before the
+# standard deduction), so the fill stops short of the bracket top by the
+# deduction -- a deliberately conservative reading.
+ROTH_CONVERSION_TARGET_BRACKET = None
+ROTH_CONVERSION_TARGET_BY_STATUS = {
+    _FILING_MFJ: 94_300, _FILING_SINGLE: 47_150, _FILING_HOH: 63_100,
+}
+
+
+def roth_conversion_target(status=None) -> float:
+    """Ordinary-income level Roth conversions fill up to on a return."""
+    if ROTH_CONVERSION_TARGET_BRACKET is not None:
+        return float(ROTH_CONVERSION_TARGET_BRACKET)
+    return float(ROTH_CONVERSION_TARGET_BY_STATUS[normalize_filing_status(status)])
+
 
 # Maximum conversion per year (can set lower if desired).
 ROTH_CONVERSION_MAX_ANNUAL = 100_000

@@ -116,7 +116,7 @@ def _walk_to(at, step_title):
         "About you": lambda: (at.number_input(key="gs_age").set_value(31),
                               at.radio(key="gs_household").set_value(gs.JUST_ME)),
         "Kids": lambda: at.radio(key="gs_kids").set_value(gs.NO_KIDS),
-        "Where you live": lambda: at.radio(key="gs_state").set_value("California"),
+        "Where you live": lambda: at.selectbox(key="gs_state").set_value("California"),
         "Your income": lambda: at.number_input(key="gs_salary").set_value(
             at.number_input(key="gs_salary").value or 70_000),
         "Your home": lambda: (at.radio(key="gs_home").set_value(gs.RENT).run(),

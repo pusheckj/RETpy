@@ -12,8 +12,13 @@ except ImportError:  # pragma: no cover
 
 try:
     from utils.overrides import get_override, set_override
+    from utils.config_builder import QUICK_INCOME_SAVINGS_RATE as _SAVED_SHARE
 except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
+    from ui.utils.config_builder import QUICK_INCOME_SAVINGS_RATE as _SAVED_SHARE  # type: ignore
+
+_OTHER_INCOME_HELP = ("Taxable income that isn't pay, such as rent, interest or side "
+                      "work. Counted while working; no Social Security/Medicare tax.")
 
 
 def _income_input(st, label: str, widget_key: str, override_key: str,
@@ -59,7 +64,8 @@ def render_body(st) -> None:
         you_rsu = _income_input(st, "📈 RSU (gross, annual)", "si_your_rsu",
                                 "YOUR_RSU_AMOUNT", 0, max_value=5_000_000)
         you_other = _income_input(st, "🔄 Other income", "si_your_other",
-                                  "YOUR_OTHER_INCOME", 0, max_value=1_000_000, step=500)
+                                  "YOUR_OTHER_INCOME", 0, max_value=1_000_000, step=500,
+                                  help_text=_OTHER_INCOME_HELP)
 
     ensure_default(st, "si_your_growth",
                    safe_float(get_override(st, "YOUR_SALARY_GROWTH_RATE", 0.02), 0.02) * 100)
@@ -83,7 +89,8 @@ def render_body(st) -> None:
             p_rsu = _income_input(st, "📈 Partner RSU (gross)", "si_partner_rsu",
                                   "PARTNER_RSU_AMOUNT", 0, max_value=5_000_000)
             p_other = _income_input(st, "🔄 Partner other income", "si_partner_other",
-                                    "PARTNER_OTHER_INCOME", 0, max_value=1_000_000, step=500)
+                                    "PARTNER_OTHER_INCOME", 0, max_value=1_000_000, step=500,
+                                    help_text=_OTHER_INCOME_HELP)
 
         ensure_default(st, "si_partner_growth",
                        safe_float(get_override(st, "PARTNER_SALARY_GROWTH_RATE", 0.02), 0.02) * 100)
@@ -92,7 +99,8 @@ def render_body(st) -> None:
         set_override(st, "PARTNER_SALARY_GROWTH_RATE", r / 100)
 
         p_total = p_base + p_bonus + p_rsu + p_other
-        # Backwards compat for simulator
+        # The engine reads PARTNER_SALARY as base pay and adds the partner's
+        # bonus, RSU and other income itself.
         set_override(st, "PARTNER_SALARY", safe_int(p_base))
     else:
         st.caption("Single household — no partner income.")
@@ -161,8 +169,7 @@ def render_body(st) -> None:
                 total = base + bonus + rsu
                 new_table[age] = {
                     "base": base, "bonus": bonus, "rsu_gross": rsu,
-                    "total_comp": total, "after_tax": int(total * 0.70),
-                    "saved": int(int(total * 0.70) * 0.10),
+                    "total_comp": total, "saved": int(total * _SAVED_SHARE),
                 }
             set_override(st, "YOUR_COMPENSATION_BY_AGE", new_table)
             st.session_state["si_comp_customized"] = False
@@ -214,10 +221,11 @@ def render_body(st) -> None:
             bonus = safe_int(row.get("bonus", 0))
             rsu = safe_int(row.get("rsu_gross", 0))
             total = base + bonus + rsu
+            # No after_tax: the simulation computes take-home from the tax
+            # rules (the Taxes section shows the same figure).
             new_table[age] = {
                 "base": base, "bonus": bonus, "rsu_gross": rsu,
-                "total_comp": total, "after_tax": int(total * 0.70),
-                "saved": int(int(total * 0.70) * 0.10),
+                "total_comp": total, "saved": int(total * _SAVED_SHARE),
             }
         set_override(st, "YOUR_COMPENSATION_BY_AGE", new_table)
 

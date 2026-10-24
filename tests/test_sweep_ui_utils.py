@@ -481,8 +481,8 @@ class TestSynthesizeCompTable:
         assert sorted(table) == list(range(30, 45))
         assert all(isinstance(k, int) for k in table)
         for row in table.values():
-            assert set(row) == {"base", "bonus", "rsu_gross", "total_comp",
-                                "after_tax", "saved"}
+            # No after_tax: take-home is computed from the tax rules.
+            assert set(row) == {"base", "bonus", "rsu_gross", "total_comp", "saved"}
 
     def test_first_row_is_the_starting_salary(self):
         table = config_builder._synthesize_comp_table(123_456, 40, 3, 0.03)
@@ -496,12 +496,11 @@ class TestSynthesizeCompTable:
         bases = [table[a]["base"] for a in sorted(table)]
         assert bases == sorted(bases)
 
-    def test_after_tax_and_saved_ratios(self):
+    def test_saved_ratio(self):
         table = config_builder._synthesize_comp_table(100_000, 30, 1, 0.0)
         row = table[30]
-        assert row["after_tax"] == int(100_000 * config_builder.QUICK_INCOME_AFTER_TAX_RATE)
-        assert row["saved"] == int(row["after_tax"] * config_builder.QUICK_INCOME_SAVINGS_RATE)
-        assert row["saved"] < row["after_tax"] <= row["total_comp"]
+        assert row["saved"] == int(100_000 * config_builder.QUICK_INCOME_SAVINGS_RATE)
+        assert row["saved"] < row["total_comp"]
 
     def test_zero_salary_and_zero_rows(self):
         table = config_builder._synthesize_comp_table(0, 30, 2, 0.02)

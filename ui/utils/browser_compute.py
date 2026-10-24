@@ -40,7 +40,7 @@ IFRAME_KEY = "mc-browser-compute-iframe"
 COMPONENT_DIR = Path(__file__).resolve().parent.parent / "components" / "browser_compute"
 ENGINE_DIR = Path(__file__).resolve().parents[2] / "retirement_sim"
 ENGINE_FILES = ("__init__.py", "config.py", "account_simulation.py", "mc_parallel.py",
-                "mc_jobs.py", "historical_returns.py")
+                "mc_jobs.py", "historical_returns.py", "state_tax_data.py")
 DEFAULT_PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"
 MAX_WORKERS = 6
 MAX_REPLY_CHARS = 30_000_000
