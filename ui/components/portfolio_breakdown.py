@@ -336,26 +336,34 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         bar_values = [acct_values[i] for i in order]
         bar_colors = [acct_colors[i] for i in order]
 
-        fig2 = go.Figure(data=[go.Bar(
-            x=bar_values, y=bar_labels, orientation="h",
-            marker=dict(color=bar_colors),
-            text=[money(v, shorten=True) for v in bar_values],
-            textposition="outside", cliponaxis=False,
-            textfont=dict(size=13),
-            hovertemplate="<b>%{y}</b><br>%{x:$,.0f}<extra></extra>",
-        )])
-        fig2.update_layout(
-            title=dict(text="<b>By account</b>", x=0.0, xanchor="left", y=0.97, yanchor="top", font=dict(size=15)),
-            height=340, margin=dict(l=20, r=56, t=64, b=30),
-            bargap=0.35, showlegend=False,
-            uirevision="keep",
-        )
-        # Headroom on the x-axis so the outside $ labels are not clipped.
-        _max = max(bar_values) if bar_values else 0
-        fig2.update_xaxes(tickformat="$,.3~s", nticks=4, tickangle=0, range=[0, _max * 1.4] if _max else None)
-        fig2.update_yaxes(tickfont=dict(size=13), automargin=True)
+        def _account_bars(compact: bool) -> go.Figure:
+            fig = go.Figure(data=[go.Bar(
+                x=bar_values, y=bar_labels, orientation="h",
+                marker=dict(color=bar_colors),
+                text=[money(v, shorten=True) for v in bar_values],
+                textposition="outside", cliponaxis=False,
+                textfont=dict(size=12 if compact else 13),
+                hovertemplate="<b>%{y}</b><br>%{x:$,.0f}<extra></extra>",
+            )])
+            fig.update_layout(
+                title=dict(text="<b>By account</b>", x=0.0, xanchor="left", y=0.97, yanchor="top", font=dict(size=15)),
+                height=340, margin=dict(l=20, r=56, t=64, b=30),
+                bargap=0.35, showlegend=False,
+                uirevision="keep",
+            )
+            # Headroom on the x-axis so the outside $ labels are not clipped.
+            _max = max(bar_values) if bar_values else 0
+            fig.update_xaxes(tickformat="$,.3~s", nticks=4, tickangle=0, range=[0, _max * 1.4] if _max else None)
+            fig.update_yaxes(tickfont=dict(size=11 if compact else 13), automargin=True)
+            if compact:
+                # Phone: every bar carries its value, and at ~90 px of plot the
+                # axis numbers only ran into each other ("$0$200k$400k").
+                fig.update_xaxes(showticklabels=False, showgrid=False)
+                fig.update_layout(margin=dict(l=8, r=60, t=56, b=8))
+            return fig
+
         try:
             from utils.plot_theme import style_fig, show_chart
         except ImportError:
             from ui.utils.plot_theme import style_fig, show_chart
-        show_chart(st, fig2, f"{chart_key}_account", {"displayModeBar": False})
+        show_chart(st, _account_bars, f"{chart_key}_account", {"displayModeBar": False})
