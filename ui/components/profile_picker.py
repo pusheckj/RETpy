@@ -177,7 +177,7 @@ def render(st) -> None:
         _PRESERVE = {
             "profile", "profile_selectbox", "user_overrides", "results",
             "whatif_results", "si_comp_customized", "theme_mode",
-            "font_choice", "palette_choice", "n_simulations", "pinned_scenarios",
+            "font_choice", "palette_choice", "_appearance_saved", "n_simulations", "pinned_scenarios",
             "_anim_epoch",
             # On-device saving + which version is open: a profile switch must not
             # reload from the browser or bounce the visitor to the welcome screen.
