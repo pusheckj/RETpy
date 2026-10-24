@@ -38,6 +38,23 @@ _ACCOUNT_LABELS = [
 ]
 
 
+def _has_partner(overrides: dict) -> bool:
+    return safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0
+
+
+def _shown_accounts(overrides: dict) -> list:
+    """The contribution rows to show: the partner's only when there is one."""
+    return [row for row in _ACCOUNT_LABELS
+            if _has_partner(overrides) or not row[1].startswith("PARTNER_")]
+
+
+def _zero_partner_contributions(st, overrides: dict) -> None:
+    if not _has_partner(overrides):
+        for _, key, _ in _ACCOUNT_LABELS:
+            if key.startswith("PARTNER_"):
+                set_override(st, key, 0)
+
+
 def render_body(st) -> None:
     overrides = st.session_state.get("user_overrides", {}) or {}
 
@@ -101,19 +118,22 @@ def render_body(st) -> None:
     set_override(st, "SAVINGS_INFLATION_ADJUST", bool(v))
 
     # ---- Expense-sharing (brokerage attribution) ----
-    ensure_default(st, "sv_primary_housing",
-                   bool(get_override(st, "PRIMARY_PAYS_HOUSING", False)))
-    pph = st.toggle(
-        "I (primary) pay the full mortgage; split the rest evenly",
-        key="sv_primary_housing",
-        help="How leftover savings split between the two brokerage accounts. "
-             "Off = split all expenses evenly. On = the primary earner covers "
-             "the whole mortgage and the rest splits 50/50, so more leftover "
-             "lands in the primary's brokerage. (Car purchases stay a shared "
-             "outflow. This only re-labels which brokerage gets the savings; "
-             "both are taxable.)",
-    )
-    set_override(st, "PRIMARY_PAYS_HOUSING", bool(pph))
+    # A couple-only choice: with no partner there is nothing to split.
+    if _has_partner(overrides):
+        ensure_default(st, "sv_primary_housing",
+                       bool(get_override(st, "PRIMARY_PAYS_HOUSING", False)))
+        pph = st.toggle(
+            "I pay the full mortgage; we split the rest evenly",
+            key="sv_primary_housing",
+            help="How leftover savings split between your two brokerage accounts. "
+                 "Off = split all expenses evenly. On = you cover the whole "
+                 "mortgage and the rest splits 50/50, so more leftover lands in "
+                 "your brokerage. (Car purchases stay a shared outflow. This only "
+                 "re-labels which brokerage gets the savings; both are taxable.)",
+        )
+        set_override(st, "PRIMARY_PAYS_HOUSING", bool(pph))
+    else:
+        set_override(st, "PRIMARY_PAYS_HOUSING", False)
 
     # ---- Mega backdoor Roth (after-tax 401(k) -> in-plan Roth conversion) ----
     ensure_default(st, "sv_after_tax_401k",
@@ -210,7 +230,7 @@ def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
     st.caption("Set what fraction of disposable income goes to each account. "
                "Each gets `pct × disposable`, capped at 2024 IRS limits.")
 
-    # Default split if no values yet: roughly mirror auto
+    # Default split if no values yet: roughly mirror auto (100% either way)
     defaults = {
         "YOUR_401K_CONTRIBUTION": 30,
         "PARTNER_401K_CONTRIBUTION": 20,
@@ -219,10 +239,15 @@ def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
         "PARTNER_ROTH_CONTRIBUTION": 5,
         "YOUR_BROKERAGE_CONTRIBUTION": 15,
         "PARTNER_BROKERAGE_CONTRIBUTION": 15,
+    } if _has_partner(overrides) else {
+        "YOUR_401K_CONTRIBUTION": 50,
+        "YOUR_HSA_CONTRIBUTION": 8,
+        "YOUR_BACKDOOR_ROTH": 12,
+        "YOUR_BROKERAGE_CONTRIBUTION": 30,
     }
     pcts = {}
     total_pct = 0
-    for label, key, _ in _ACCOUNT_LABELS:
+    for label, key, _ in _shown_accounts(overrides):
         widget_key = f"sv_pct_{key.lower()}"
         ensure_default(st, widget_key, defaults.get(key, 0))
         v = st.slider(f"{label} %", min_value=0, max_value=100, step=1,
@@ -247,6 +272,7 @@ def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
         cap = caps.get(key, 10_000_000)
         amount = min(amount, cap)
         set_override(st, key, amount)
+    _zero_partner_contributions(st, overrides)
 
     # Sum check
     if total_pct != 100:
@@ -296,7 +322,6 @@ def _render_keep_amounts(st, overrides: dict) -> None:
     set to 0 so it gets exactly what's left."""
     st.caption("Your 401(k), HSA and IRA stay at these amounts. Whatever else you don't "
                "spend is invested in a regular brokerage account each year.")
-    has_partner = safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0
     c1, c2 = st.columns(2)
     with c1:
         _manual_amount(st, "sv_manual_your_401k", "YOUR_401K_CONTRIBUTION",
@@ -306,14 +331,12 @@ def _render_keep_amounts(st, overrides: dict) -> None:
         _manual_amount(st, "sv_manual_your_roth", "YOUR_BACKDOOR_ROTH",
                        "Your Roth IRA / backdoor ($/yr)", 10_000, 500)
     with c2:
-        if has_partner:
+        if _has_partner(overrides):
             _manual_amount(st, "sv_manual_partner_401k", "PARTNER_401K_CONTRIBUTION",
                            "Partner 401(k) ($/yr)", _MANUAL_401K_MAX, 500)
             _manual_amount(st, "sv_manual_partner_roth", "PARTNER_ROTH_CONTRIBUTION",
                            "Partner Roth IRA ($/yr)", 10_000, 500)
-    if not has_partner:
-        set_override(st, "PARTNER_401K_CONTRIBUTION", 0)
-        set_override(st, "PARTNER_ROTH_CONTRIBUTION", 0)
+    _zero_partner_contributions(st, overrides)
     set_override(st, "YOUR_BROKERAGE_CONTRIBUTION", 0)
     set_override(st, "PARTNER_BROKERAGE_CONTRIBUTION", 0)
 
@@ -335,12 +358,14 @@ def _render_manual(st, disposable: int, overrides: dict) -> None:
                        "Your brokerage ($/yr)", 500_000, 1_000)
 
     with c2:
-        _manual_amount(st, "sv_manual_partner_401k", "PARTNER_401K_CONTRIBUTION",
-                       "Partner 401(k) ($/yr)", _MANUAL_401K_MAX, 500)
-        _manual_amount(st, "sv_manual_partner_roth", "PARTNER_ROTH_CONTRIBUTION",
-                       "Partner Roth IRA ($/yr)", 10_000, 500)
-        _manual_amount(st, "sv_manual_partner_brk", "PARTNER_BROKERAGE_CONTRIBUTION",
-                       "Partner brokerage ($/yr)", 500_000, 1_000)
+        if _has_partner(overrides):
+            _manual_amount(st, "sv_manual_partner_401k", "PARTNER_401K_CONTRIBUTION",
+                           "Partner 401(k) ($/yr)", _MANUAL_401K_MAX, 500)
+            _manual_amount(st, "sv_manual_partner_roth", "PARTNER_ROTH_CONTRIBUTION",
+                           "Partner Roth IRA ($/yr)", 10_000, 500)
+            _manual_amount(st, "sv_manual_partner_brk", "PARTNER_BROKERAGE_CONTRIBUTION",
+                           "Partner brokerage ($/yr)", 500_000, 1_000)
+    _zero_partner_contributions(st, overrides)
 
     # Sum check
     overrides2 = st.session_state.get("user_overrides", {}) or {}

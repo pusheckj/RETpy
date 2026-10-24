@@ -476,74 +476,71 @@ class TestRothConversion:
 # EXPENSE CALCULATION TESTS
 # ==============================================================================
 
+def _birth(i: int) -> int:
+    """Child ``i``'s birth age in the primary's age terms (default family)."""
+    return cfg.YOUR_AGE + cfg.CHILDREN[i]["years_until_birth"]
+
+
 class TestChildExpenses:
-    """Test child expense calculations by age."""
+    """Test child expense calculations by age (the default two-child family)."""
 
     def test_no_expenses_before_children(self):
         """No child expenses before first child born."""
-        first_child_age = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD
-        expenses = cfg.calculate_child_expenses(first_child_age - 1)
+        expenses = cfg.calculate_child_expenses(_birth(0) - 1)
         assert expenses == 0
 
     def test_first_child_expenses(self):
         """First child should have correct annual cost."""
-        first_child_age = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD
-        expenses = cfg.calculate_child_expenses(first_child_age)
-        assert expenses == cfg.FIRST_CHILD_ANNUAL_COST
+        expenses = cfg.calculate_child_expenses(_birth(0))
+        assert expenses == cfg.CHILDREN[0]["monthly_cost"] * 12
 
     def test_both_children_expenses(self):
         """Both children should have combined cost."""
-        both_children_age = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD + cfg.YEARS_BETWEEN_CHILDREN
-        expenses = cfg.calculate_child_expenses(both_children_age)
-        assert expenses == cfg.BOTH_CHILDREN_ANNUAL_COST
+        expenses = cfg.calculate_child_expenses(_birth(1))
+        assert expenses == (cfg.CHILDREN[0]["monthly_cost"] + cfg.CHILDREN[1]["monthly_cost"]) * 12
 
     def test_first_child_leaves_home(self):
-        """First child leaving should reduce expenses."""
-        first_child_leaves = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD + cfg.CHILD_LEAVES_HOME_AGE
-        expenses = cfg.calculate_child_expenses(first_child_leaves)
-        # Should be second child only
-        second_child_only = cfg.BOTH_CHILDREN_ANNUAL_COST - cfg.FIRST_CHILD_ANNUAL_COST
-        assert expenses == second_child_only
+        """First child leaving should reduce expenses to the second child's."""
+        expenses = cfg.calculate_child_expenses(_birth(0) + cfg.CHILDREN[0]["leaves_home_age"])
+        assert expenses == cfg.CHILDREN[1]["monthly_cost"] * 12
 
     def test_all_children_leave_home(self):
         """Both children leaving should eliminate child expenses."""
-        all_leave_age = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD + (2 * cfg.CHILD_LEAVES_HOME_AGE)
-        expenses = cfg.calculate_child_expenses(all_leave_age)
+        expenses = cfg.calculate_child_expenses(_birth(1) + cfg.CHILDREN[1]["leaves_home_age"])
         assert expenses == 0
+
+
+@pytest.fixture
+def funded_college(monkeypatch):
+    """The default family with half of each child's college funded."""
+    monkeypatch.setattr(cfg, "CHILDREN",
+                        [{**c, "college_funding_pct": 0.5} for c in cfg.CHILDREN])
+    return cfg.CHILDREN[0]["college_annual_cost"] * 0.5
 
 
 class TestCollegeExpenses:
     """Test college expense calculations."""
 
-    def test_no_college_expenses_before_age_18(self):
+    def test_no_college_expenses_before_age_18(self, funded_college):
         """No college expenses before child turns 18."""
-        first_child_age = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD
-        expenses = cfg.calculate_college_expenses(first_child_age + 10)
+        expenses = cfg.calculate_college_expenses(_birth(0) + 10)
         assert expenses['child1'] == 0
         assert expenses['child2'] == 0
 
-    def test_college_expense_at_age_18(self):
+    def test_college_expense_at_age_18(self, funded_college):
         """College expenses start when child turns 18."""
-        first_child_birth = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD
-        your_age_at_child_18 = first_child_birth + 18
-        expenses = cfg.calculate_college_expenses(your_age_at_child_18)
-        expected = cfg.COLLEGE_ANNUAL_COST * cfg.COLLEGE_FUNDING_PCT
-        assert expenses['child1'] == expected
+        expenses = cfg.calculate_college_expenses(_birth(0) + 18)
+        assert expenses['child1'] == funded_college > 0
 
-    def test_college_expenses_span_4_years(self):
+    def test_college_expenses_span_4_years(self, funded_college):
         """College expenses should be for 4 years (18-21)."""
-        first_child_birth = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD
-        for college_year in range(cfg.COLLEGE_YEARS):
-            your_age = first_child_birth + 18 + college_year
-            expenses = cfg.calculate_college_expenses(your_age)
-            expected = cfg.COLLEGE_ANNUAL_COST * cfg.COLLEGE_FUNDING_PCT
-            assert expenses['child1'] == expected
+        for college_year in range(cfg.CHILDREN[0]["college_years"]):
+            expenses = cfg.calculate_college_expenses(_birth(0) + 18 + college_year)
+            assert expenses['child1'] == funded_college
 
-    def test_no_college_after_age_22(self):
+    def test_no_college_after_age_22(self, funded_college):
         """No college expenses after child turns 22."""
-        first_child_birth = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD
-        your_age = first_child_birth + 22
-        expenses = cfg.calculate_college_expenses(your_age)
+        expenses = cfg.calculate_college_expenses(_birth(0) + 22)
         assert expenses['child1'] == 0
 
 

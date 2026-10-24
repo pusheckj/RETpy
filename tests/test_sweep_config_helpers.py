@@ -150,12 +150,16 @@ class TestStandardDeduction:
 # 529 contributions
 # ---------------------------------------------------------------------------
 class TestFiveTwoNineContribution:
+    # Two children born at your_age 32 and 35, each with a $90,000 college
+    # target (45k x 4 years x 50%) saved over 18 years = $5,000 a year.
+    KID = {"monthly_cost": 0, "college_annual_cost": 45_000, "college_years": 4,
+           "college_funding_pct": 0.5}
+
     @pytest.fixture(autouse=True)
     def _per_child(self, monkeypatch):
         monkeypatch.setattr(cfg, "YOUR_AGE", 30)
-        monkeypatch.setattr(cfg, "YEARS_UNTIL_FIRST_CHILD", 2)
-        monkeypatch.setattr(cfg, "YEARS_BETWEEN_CHILDREN", 3)
-        monkeypatch.setattr(cfg, "SAVINGS_529_PER_CHILD_ANNUAL", 5_000.0)
+        monkeypatch.setattr(cfg, "CHILDREN", [{**self.KID, "years_until_birth": 2},
+                                              {**self.KID, "years_until_birth": 5}])
 
     def test_zero_before_first_birth(self):
         assert cfg.calculate_529_contribution(31) == 0
@@ -175,11 +179,17 @@ class TestFiveTwoNineContribution:
         assert cfg.calculate_529_contribution(53) == 0
 
     def test_zero_per_child_amount_yields_zero(self, monkeypatch):
-        monkeypatch.setattr(cfg, "SAVINGS_529_PER_CHILD_ANNUAL", 0.0)
+        monkeypatch.setattr(cfg, "CHILDREN", [{**c, "college_funding_pct": 0.0}
+                                              for c in cfg.CHILDREN])
         assert cfg.calculate_529_contribution(35) == 0
 
+    def test_each_child_has_its_own_amount(self, monkeypatch):
+        monkeypatch.setattr(cfg, "CHILDREN", [cfg.CHILDREN[0],
+                                              {**cfg.CHILDREN[1], "college_funding_pct": 1.0}])
+        assert cfg.child_529_contributions(35) == [5_000.0, 10_000.0]
+
     def test_child_free_household_never_contributes(self, monkeypatch):
-        monkeypatch.setattr(cfg, "YEARS_UNTIL_FIRST_CHILD", 999)
+        monkeypatch.setattr(cfg, "CHILDREN", [])
         assert all(cfg.calculate_529_contribution(a) == 0 for a in range(25, 95))
 
 

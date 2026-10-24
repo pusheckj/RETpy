@@ -22,12 +22,14 @@ try:
     from components.spending_inputs import (
         SPENDING_CATEGORIES,
         compute_lifecycle_multipliers,
+        first_child_window,
     )
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, as_fraction  # noqa: F401
     from ui.components.spending_inputs import (
         SPENDING_CATEGORIES,
         compute_lifecycle_multipliers,
+        first_child_window,
     )
 
 try:
@@ -109,11 +111,7 @@ def _vacation_outlay(overrides: dict, age: int, retirement_age: int) -> float:
         return float(cfg.calculate_retirement_vacation(age, retirement_age))
 
 
-_CHILD_CFG_KEYS = (
-    "YOUR_AGE", "YEARS_UNTIL_FIRST_CHILD", "YEARS_BETWEEN_CHILDREN",
-    "CHILD_LEAVES_HOME_AGE", "FIRST_CHILD_ANNUAL_COST", "BOTH_CHILDREN_ANNUAL_COST",
-    "FIRST_CHILD_MONTHLY_COST", "BOTH_CHILDREN_MONTHLY_COST",
-)
+_CHILD_CFG_KEYS = ("YOUR_AGE", "CHILDREN")
 
 
 def _child_expense(overrides: dict, age: int) -> float:
@@ -121,21 +119,15 @@ def _child_expense(overrides: dict, age: int) -> float:
 
     Reuses the ENGINE's child-cost function (config.calculate_child_expenses),
     so the chart shows the same child spending the Monte Carlo simulation
-    applies. Returns 0 when no kids are planned (YEARS_UNTIL_FIRST_CHILD far
-    out) or after both children have left home.
+    applies. Returns 0 when there are no children or after every child has
+    left home.
     """
     if cfg is None:  # pragma: no cover
         return 0.0
     calc = getattr(cfg, "calculate_child_expenses", None)
     if calc is None:
         return 0.0
-    with _cfg_patched(overrides, _CHILD_CFG_KEYS):
-        # calculate_child_expenses reads the ANNUAL cost globals; derive them
-        # from the monthly overrides the sidebar actually writes.
-        if "FIRST_CHILD_MONTHLY_COST" in overrides:
-            cfg.FIRST_CHILD_ANNUAL_COST = safe_int(overrides["FIRST_CHILD_MONTHLY_COST"], 0) * 12
-        if "BOTH_CHILDREN_MONTHLY_COST" in overrides:
-            cfg.BOTH_CHILDREN_ANNUAL_COST = safe_int(overrides["BOTH_CHILDREN_MONTHLY_COST"], 0) * 12
+    with _cfg_patched({**overrides, "CHILDREN": cfg.children_in(overrides)}, _CHILD_CFG_KEYS):
         try:
             return float(calc(int(age)))
         except Exception:
@@ -445,9 +437,10 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
 
     current_age = safe_int(overrides.get("YOUR_AGE", 25), 25)
     retirement_age = safe_int(overrides.get("TARGET_RETIREMENT_AGE", 55), 55)
-    plan_until = safe_int(overrides.get("PLAN_UNTIL_AGE", 90), 90)
-    yufc = safe_int(overrides.get("YEARS_UNTIL_FIRST_CHILD", 99), 99)
-    leave_age = safe_int(overrides.get("CHILD_LEAVES_HOME_AGE", 18), 18)
+    plan_until = cfg.plan_end_age(overrides) if cfg is not None else safe_int(
+        overrides.get("PLAN_UNTIL_AGE", 90), 90)
+    yufc, leave_age = first_child_window(
+        cfg.children_in(overrides) if cfg is not None else [])
     preset = str(overrides.get("SPEND_LIFECYCLE_PRESET", "Flat (no change)"))
     inflation_rate = as_fraction(overrides.get("EXPECTED_INFLATION", 0.0275), 0.0275)
 

@@ -366,24 +366,37 @@ class TestWidgetSyncCasts:
 
 
 class TestWidgetSyncDerivations:
-    @pytest.mark.parametrize("yuw,expected", [
-        (0, "Married"), (5, "Getting married"), (99, "Single (no wedding planned)"),
-        (999, "Single (no wedding planned)"), (None, "Married"), ("x", "Married"),
-    ])
-    def test_marital(self, yuw, expected):
-        assert ws._derive_marital({"YEARS_UNTIL_WEDDING": yuw}) == expected
-
+    # The household radio replaced the wedding flag: the household now comes
+    # from PARTNER_AGE (partner or not) and FILING_STATUS (married or not).
     @pytest.mark.parametrize("o,expected", [
-        ({"YEARS_UNTIL_FIRST_CHILD": 3, "FIRST_CHILD_MONTHLY_COST": 2_100},
-         "Kids planned / already born"),
-        ({"YEARS_UNTIL_FIRST_CHILD": 0, "FIRST_CHILD_MONTHLY_COST": 2_100},
-         "Kids planned / already born"),
-        ({"YEARS_UNTIL_FIRST_CHILD": 99}, "No kids planned"),
-        ({"FIRST_CHILD_MONTHLY_COST": 0}, "No kids planned"),
-        ({}, "Kids planned / already born"),
+        ({"PARTNER_AGE": 0}, "Just me"), ({}, "Just me"),
+        ({"PARTNER_AGE": 33, "FILING_STATUS": "Married filing jointly"}, "Me and my spouse"),
+        ({"PARTNER_AGE": 33}, "Me and my spouse"),
+        ({"PARTNER_AGE": 33, "FILING_STATUS": "Single"}, "Me and my partner (not married)"),
+        ({"PARTNER_AGE": 33, "FILING_STATUS": "Head of household"},
+         "Me and my partner (not married)"),
     ])
-    def test_kids(self, o, expected):
-        assert ws._derive_kids(o) == expected
+    def test_household(self, o, expected):
+        assert ws.DERIVED_MAPPINGS["ay_household"](o) == expected
+
+    # The kids radio became a count plus one row per child (old two-child
+    # profiles are read through cfg.children_in, so they fill the rows too).
+    @pytest.mark.parametrize("o,expected_n", [
+        ({"CHILDREN": []}, 0),
+        ({"YEARS_UNTIL_FIRST_CHILD": 99}, 0),
+        ({"YEARS_UNTIL_FIRST_CHILD": 0, "FIRST_CHILD_MONTHLY_COST": 2_100}, 2),
+        ({"CHILDREN": [{"years_until_birth": -4, "monthly_cost": 900}] * 3}, 3),
+    ])
+    def test_children_rows(self, o, expected_n):
+        class _St:
+            session_state = {}
+        st = _St()
+        ws._sync_children(st, o)
+        assert st.session_state["se_kids_n"] == expected_n
+        if expected_n == 3:
+            assert st.session_state["se_kid2_born"] is True
+            assert st.session_state["se_kid2_age"] == 4
+            assert st.session_state["se_kid2_cost"] == 900
 
     @pytest.mark.parametrize("hv,expected", [
         (0, "Renting"), (1, "Own home"), (800_000, "Own home"),

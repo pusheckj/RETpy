@@ -96,6 +96,27 @@ def test_a_fresh_interpreter_with_only_the_job_matches_the_server():
     assert json.loads(out.stdout) == server
 
 
+def test_a_fresh_interpreter_matches_the_server_with_three_children():
+    """Children travel as a plain list in the config snapshot: three of them,
+    one with college funding (its own 529), plus a younger partner whose
+    plan-until age lengthens the plan."""
+    kid = {"leaves_home_age": 18, "college_annual_cost": 30_000, "college_years": 4,
+           "college_funding_pct": 0.0}
+    ov = {**SINGLE, "PARTNER_AGE": 24, "FILING_STATUS": "Married filing jointly",
+          "CHILDREN": [{**kid, "years_until_birth": -4, "monthly_cost": 1_200,
+                        "college_funding_pct": 0.5},
+                       {**kid, "years_until_birth": 1, "monthly_cost": 900},
+                       {**kid, "years_until_birth": 4, "monthly_cost": 900}],
+          "HOME_VALUE": 400_000, "MORTGAGE_BALANCE": 250_000, "MORTGAGE_MONTHLY": 2_000,
+          "MORTGAGE_YEARS_REMAINING": 25}
+    plan = sr.plan_mortgage_paydown(ov, 40, 55, extra_grid=[0, 12_000])
+    assert len(plan.job["base"]["CHILDREN"]) == 3
+    server = [mc_jobs.dumps(r) for r in sr.run_plan_calls(plan)]
+    out = subprocess.run([sys.executable, "-c", _CHILD, _ROOT], input=mc_jobs.dumps(plan.job),
+                         capture_output=True, text=True, check=True)
+    assert json.loads(out.stdout) == server
+
+
 def test_split_plan_equals_the_all_server_run():
     plan = sr.plan_full_analysis(SINGLE, 120, 55)
     assert plan.local and all(plan.job["calls"][i][0] == "batch" for i in plan.local)

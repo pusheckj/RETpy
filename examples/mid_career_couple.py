@@ -50,7 +50,7 @@ YOUR_AGE = 40       # Alex (primary user)
 PARTNER_AGE = 38    # Riley (partner)
 CURRENT_YEAR = 2026
 PLAN_UNTIL_AGE = 95
-YEARS_UNTIL_WEDDING = 0  # Already married ~10 years
+FILING_STATUS = "Married filing jointly"  # Married ~10 years
 
 YOUR_BIRTH_YEAR = CURRENT_YEAR - YOUR_AGE        # derived from age
 PARTNER_BIRTH_YEAR = CURRENT_YEAR - PARTNER_AGE
@@ -141,27 +141,17 @@ BASE_RETIREMENT_EXPENSES_NO_MORTGAGE = (YOUR_OTHER_ANNUAL + UTILITIES_ANNUAL
 RETIREMENT_ANNUAL_EXPENSES = BASE_RETIREMENT_EXPENSES_NO_MORTGAGE
 
 # -----------------------------------------------------------------------------
-# CHILDREN
+# CHILDREN / COLLEGE
 # -----------------------------------------------------------------------------
-# First child is already 5 -> YEARS_UNTIL_FIRST_CHILD = -5 places the birth
-# 5 years ago relative to YOUR_AGE. Second child planned in 1 year ->
-# YEARS_BETWEEN_CHILDREN = 6. The base calculate_child_expenses handles
-# negative offsets correctly because it derives the birth age from
-# YOUR_AGE + YEARS_UNTIL_FIRST_CHILD, which remains valid for any integer.
-YEARS_UNTIL_FIRST_CHILD = -5
-YEARS_BETWEEN_CHILDREN = 6
-FIRST_CHILD_MONTHLY_COST = 1_800
-FIRST_CHILD_ANNUAL_COST = FIRST_CHILD_MONTHLY_COST * 12
-BOTH_CHILDREN_MONTHLY_COST = 3_400
-BOTH_CHILDREN_ANNUAL_COST = BOTH_CHILDREN_MONTHLY_COST * 12
-
-# -----------------------------------------------------------------------------
-# COLLEGE / 529
-# -----------------------------------------------------------------------------
-COLLEGE_FUNDING_PCT = 0.50  # Target covering ~50% of in-state 4-year cost
-COLLEGE_ANNUAL_COST = 40_000
-COLLEGE_TARGET_PER_CHILD = COLLEGE_ANNUAL_COST * 4 * COLLEGE_FUNDING_PCT
-SAVINGS_529_PER_CHILD_ANNUAL = COLLEGE_TARGET_PER_CHILD / 18
+# First child is already 5 (born 5 years ago -> years_until_birth = -5); the
+# second is planned next year. Each child has their own monthly cost, and
+# half of an in-state 4-year college is saved in each child's own 529.
+_COLLEGE = {"leaves_home_age": 18, "college_annual_cost": 40_000, "college_years": 4,
+            "college_funding_pct": 0.50}
+CHILDREN = [
+    {"years_until_birth": -5, "monthly_cost": 1_800, **_COLLEGE},
+    {"years_until_birth": 1, "monthly_cost": 1_600, **_COLLEGE},
+]
 
 # -----------------------------------------------------------------------------
 # ASSET ALLOCATION / RETURNS
@@ -229,42 +219,26 @@ def calculate_partner_total_savings(salary, years_from_now, married=False):
     return PARTNER_401K_CONTRIBUTION + roth + to_brokerage
 
 
+def _child_age(child, your_age):
+    return your_age - (YOUR_AGE + child["years_until_birth"])
+
+
 def calculate_child_expenses(your_age):
-    first_birth = YOUR_AGE + YEARS_UNTIL_FIRST_CHILD
-    second_birth = first_birth + YEARS_BETWEEN_CHILDREN
-    first_leaves = first_birth + _base.CHILD_LEAVES_HOME_AGE
-    second_leaves = second_birth + _base.CHILD_LEAVES_HOME_AGE
-    if your_age < first_birth:
-        return 0
-    if your_age < second_birth:
-        return FIRST_CHILD_ANNUAL_COST if your_age < first_leaves else 0
-    if your_age < first_leaves:
-        return BOTH_CHILDREN_ANNUAL_COST
-    if your_age < second_leaves:
-        return BOTH_CHILDREN_ANNUAL_COST - FIRST_CHILD_ANNUAL_COST
-    return 0
+    return sum(c["monthly_cost"] * 12 for c in CHILDREN
+               if 0 <= _child_age(c, your_age) < c["leaves_home_age"])
 
 
 def calculate_529_contribution(your_age):
-    first_birth = YOUR_AGE + YEARS_UNTIL_FIRST_CHILD
-    second_birth = first_birth + YEARS_BETWEEN_CHILDREN
-    total = 0
-    if 0 <= (your_age - first_birth) < 18:
-        total += SAVINGS_529_PER_CHILD_ANNUAL
-    if 0 <= (your_age - second_birth) < 18:
-        total += SAVINGS_529_PER_CHILD_ANNUAL
-    return total
+    return sum(_base.college_target(c) / _base.COLLEGE_START_AGE for c in CHILDREN
+               if 0 <= _child_age(c, your_age) < _base.COLLEGE_START_AGE)
 
 
 def calculate_college_expenses(your_age):
-    first_birth = YOUR_AGE + YEARS_UNTIL_FIRST_CHILD
-    second_birth = first_birth + YEARS_BETWEEN_CHILDREN
-    out = {'child1': 0, 'child2': 0, 'total': 0}
-    if 18 <= (your_age - first_birth) < 18 + _base.COLLEGE_YEARS:
-        out['child1'] = COLLEGE_ANNUAL_COST * COLLEGE_FUNDING_PCT
-    if 18 <= (your_age - second_birth) < 18 + _base.COLLEGE_YEARS:
-        out['child2'] = COLLEGE_ANNUAL_COST * COLLEGE_FUNDING_PCT
-    out['total'] = out['child1'] + out['child2']
+    out = {}
+    for i, c in enumerate(CHILDREN, 1):
+        in_college = 0 <= _child_age(c, your_age) - _base.COLLEGE_START_AGE < c["college_years"]
+        out[f"child{i}"] = c["college_annual_cost"] * c["college_funding_pct"] if in_college else 0
+    out["total"] = sum(out.values())
     return out
 
 
@@ -321,14 +295,14 @@ if __name__ == "__main__":
     print(f"  Mortgage paid off at Alex's age {YOUR_AGE + MORTGAGE_YEARS_REMAINING}")
     print(f"  Target retirement age: {EARLIEST_RETIREMENT_AGE}+")
 
-    first_birth = YOUR_AGE + YEARS_UNTIL_FIRST_CHILD
-    second_birth = first_birth + YEARS_BETWEEN_CHILDREN
     print("\nCHILDREN:")
-    print(f"  First child currently age {YOUR_AGE - first_birth} (born when Alex was {first_birth})")
-    print(f"  Second child born when Alex is {second_birth} (in {second_birth - YOUR_AGE} year)")
+    for i, c in enumerate(CHILDREN, 1):
+        when = (f"currently age {-c['years_until_birth']}" if c["years_until_birth"] <= 0
+                else f"due in {c['years_until_birth']} year(s)")
+        print(f"  Child {i}: {when}, ${c['monthly_cost']:,}/month")
 
     your_total = calculate_your_total_savings(YOUR_AGE)
-    partner_total = calculate_partner_total_savings(PARTNER_SALARY, 0, married=(YEARS_UNTIL_WEDDING == 0))
+    partner_total = calculate_partner_total_savings(PARTNER_SALARY, 0, married=True)
     print("\nANNUAL SAVINGS:")
     print(f"  Alex:                 ${your_total:>12,.0f}")
     print(f"  Riley:                ${partner_total:>12,.0f}")

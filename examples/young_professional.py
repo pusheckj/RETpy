@@ -19,8 +19,8 @@ LIMITATIONS OF THIS PROFILE
 - Student loans are NOT modeled by the base package. Sarah has ~$35k in
   federal loans at 5% (not reflected in this config). Consider adding the
   monthly payment to YOUR_OTHER_MONTHLY until payoff.
-- ``PARTNER_*`` fields are zeroed out to simulate a single household.
-  ``YEARS_UNTIL_WEDDING = 99`` disables the filing-status change.
+- ``PARTNER_AGE = 0`` makes this a single household: no partner accounts,
+  pay, contributions or Social Security. Filing status is Single.
 
 Run with::
 
@@ -57,12 +57,11 @@ globals().update({k: v for k, v in vars(_base).items() if not k.startswith('_')}
 # PERSONAL INFORMATION
 # -----------------------------------------------------------------------------
 YOUR_AGE = 28
-PARTNER_AGE = 28          # Dummy (no partner); kept equal to YOUR_AGE
+PARTNER_AGE = 0           # 0 = no partner (single household)
 CURRENT_YEAR = 2026
 PLAN_UNTIL_AGE = 95
 
-# Single -> never married in the simulation window.
-YEARS_UNTIL_WEDDING = 99
+FILING_STATUS = "Single"
 MARRIED = False
 
 # -----------------------------------------------------------------------------
@@ -155,24 +154,9 @@ CURRENT_ANNUAL_EXPENSES = (
 )
 
 # -----------------------------------------------------------------------------
-# LIFE EVENTS - children disabled (set large wait + zero cost)
+# LIFE EVENTS - no children (so no 529 or college costs either)
 # -----------------------------------------------------------------------------
-YEARS_UNTIL_FIRST_CHILD = 99
-FIRST_CHILD_MONTHLY_COST = 0
-FIRST_CHILD_ANNUAL_COST = 0
-YEARS_BETWEEN_CHILDREN = 3
-BOTH_CHILDREN_MONTHLY_COST = 0
-BOTH_CHILDREN_ANNUAL_COST = 0
-CHILD_LEAVES_HOME_AGE = 18
-
-# -----------------------------------------------------------------------------
-# 529 (disabled)
-# -----------------------------------------------------------------------------
-COLLEGE_FUNDING_PCT = 0.00
-COLLEGE_ANNUAL_COST = 40_000
-COLLEGE_YEARS = 4
-COLLEGE_TARGET_PER_CHILD = 0.0
-SAVINGS_529_PER_CHILD_ANNUAL = 0.0
+CHILDREN = []
 
 # -----------------------------------------------------------------------------
 # Overrides for helper functions that hardcode module-level references
@@ -193,7 +177,7 @@ def calculate_529_contribution(your_age: int) -> float:
 
 
 def calculate_college_expenses(your_age: int) -> dict:
-    return {'child1': 0, 'child2': 0, 'total': 0}
+    return {'total': 0}
 
 
 def calculate_your_total_savings(age: int) -> float:

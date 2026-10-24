@@ -48,11 +48,18 @@ def _load_my_situation(path: str | None = None) -> dict | None:
     return found[1] if found else None
 
 
+def _kid(years_until_birth: int, monthly_cost: int) -> dict:
+    """A preset child: home until 18, no college funding."""
+    return {"years_until_birth": years_until_birth, "monthly_cost": monthly_cost,
+            "leaves_home_age": 18, "college_annual_cost": 40_000, "college_years": 4,
+            "college_funding_pct": 0.0}
+
+
 PROFILES = {
     "Median US 25-year-old household": {
         'YOUR_AGE': 25, 'PARTNER_AGE': 25,
         'CURRENT_YEAR': 2026,
-        'YEARS_UNTIL_WEDDING': 3, 'YEARS_UNTIL_FIRST_CHILD': 3,
+        'CHILDREN': [_kid(3, 2_100), _kid(6, 1_400)],
         'YOUR_401K': 10_000, 'YOUR_ROTH_IRA': 3_500, 'YOUR_TRADITIONAL_IRA': 0,
         'YOUR_HSA': 500, 'YOUR_BROKERAGE': 2_500, 'YOUR_CASH': 4_000,
         'PARTNER_401K': 7_000, 'PARTNER_ROTH_IRA': 2_500, 'PARTNER_BROKERAGE': 1_000, 'PARTNER_CASH': 3_000,
@@ -69,7 +76,7 @@ PROFILES = {
     },
     "Young professional (28, single)": {
         'YOUR_AGE': 28, 'PARTNER_AGE': 0,
-        'YEARS_UNTIL_WEDDING': 99, 'YEARS_UNTIL_FIRST_CHILD': 99,
+        'CHILDREN': [],
         'YOUR_401K': 50_000, 'YOUR_ROTH_IRA': 25_000, 'YOUR_TRADITIONAL_IRA': 0,
         'YOUR_HSA': 8_000, 'YOUR_BROKERAGE': 30_000, 'YOUR_CASH': 25_000,
         'PARTNER_401K': 0, 'PARTNER_ROTH_IRA': 0, 'PARTNER_BROKERAGE': 0, 'PARTNER_CASH': 0,
@@ -86,7 +93,7 @@ PROFILES = {
     },
     "Mid-career couple (40, kids)": {
         'YOUR_AGE': 40, 'PARTNER_AGE': 38,
-        'YEARS_UNTIL_WEDDING': 0, 'YEARS_UNTIL_FIRST_CHILD': -5,
+        'CHILDREN': [_kid(-5, 2_100), _kid(-2, 1_400)],
         'YOUR_401K': 350_000, 'YOUR_ROTH_IRA': 95_000, 'YOUR_TRADITIONAL_IRA': 20_000,
         'YOUR_HSA': 25_000, 'YOUR_BROKERAGE': 180_000, 'YOUR_CASH': 40_000,
         'PARTNER_401K': 180_000, 'PARTNER_ROTH_IRA': 55_000, 'PARTNER_BROKERAGE': 30_000, 'PARTNER_CASH': 25_000,
@@ -103,7 +110,7 @@ PROFILES = {
     },
     "Near retirement (55)": {
         'YOUR_AGE': 55, 'PARTNER_AGE': 53,
-        'YEARS_UNTIL_WEDDING': 0, 'YEARS_UNTIL_FIRST_CHILD': -25,
+        'CHILDREN': [],   # grown and gone
         'YOUR_401K': 1_200_000, 'YOUR_ROTH_IRA': 300_000, 'YOUR_TRADITIONAL_IRA': 150_000,
         'YOUR_HSA': 80_000, 'YOUR_BROKERAGE': 600_000, 'YOUR_CASH': 75_000,
         'PARTNER_401K': 450_000, 'PARTNER_ROTH_IRA': 180_000, 'PARTNER_BROKERAGE': 100_000, 'PARTNER_CASH': 60_000,

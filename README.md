@@ -27,7 +27,7 @@ Key features:
 - Glide-path asset allocation that shifts toward bonds over time
 - Long-term care cost modeling
 - Category-specific inflation (general, healthcare, housing, childcare)
-- Child expense modeling with life-event triggers (daycare, K-12, college)
+- Children: any number, each with their own monthly cost, leave-home age and optional 529 college savings
 - Stock/bond return correlation modeling
 
 ## Why Another Retirement Calculator?
@@ -144,7 +144,7 @@ At minimum, users typically edit:
 - Category-specific inflation rates (general CPI, healthcare, housing, childcare)
 - Pre-Medicare healthcare via ACA marketplace with subsidy calculation
 - Medicare Part B/D premiums with IRMAA
-- Child expense modeling: daycare, K-12, extracurriculars, college
+- Child expense modeling: any number of children (daycare, K-12, extracurriculars), with each child's college saved in their own 529
 - Long-term care shock modeling with duration and cost distributions
 - Housing transitions (mortgage payoff, downsize events)
 

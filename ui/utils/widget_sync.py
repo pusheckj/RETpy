@@ -16,8 +16,12 @@ from typing import Any, Dict
 
 try:
     from utils.expense_categories import CATEGORIES
+    from utils.household import household_of
 except ImportError:  # pragma: no cover
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
+    from ui.utils.household import household_of  # type: ignore
+
+from retirement_sim import config as cfg
 
 
 # Each entry maps a widget-key (as used by the component's render()) to a
@@ -161,6 +165,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "ay_target_age":      ("TARGET_RETIREMENT_AGE", _as_int(60, 25, 75)),
     "ay_partner_target_age": ("PARTNER_RETIREMENT_AGE", _as_int(60, 25, 75)),
     "ay_plan_until":      ("PLAN_UNTIL_AGE", _as_int(90, 75, 100)),
+    "ay_partner_plan_until": ("PARTNER_PLAN_UNTIL_AGE", _as_int(95, 75, 100)),
 
     # sec_income.py
     "si_your_base":       ("YOUR_BASE_SALARY", _as_int(70_000, 0, 2_000_000)),
@@ -186,11 +191,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "se_rent_monthly":    ("SPEND_RENT_MONTHLY", _as_int(1_500, 0, 20_000)),
     # the monthly spending inputs, one per expense category (incl. se_partner)
     **{c.widget: (c.key, _as_int(c.default, 0, c.max_value)) for c in CATEGORIES},
-    "se_yufc":            ("YEARS_UNTIL_FIRST_CHILD", _as_int(3, -25, 20)),
-    "se_ybc":             ("YEARS_BETWEEN_CHILDREN", _as_int(3, 1, 10)),
-    "se_fcmc":            ("FIRST_CHILD_MONTHLY_COST", _as_int(2_100, 0, 10_000)),
-    "se_bcmc":            ("BOTH_CHILDREN_MONTHLY_COST", _as_int(3_500, 0, 15_000)),
-    "se_leave_age":       ("CHILD_LEAVES_HOME_AGE", _as_int(18, 16, 25)),
+    # (the children rows are synced by _sync_children below)
     "se_lifecycle":       ("SPEND_LIFECYCLE_PRESET", lambda v: str(v)),
 
     # sec_savings.py
@@ -237,6 +238,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "rg_spend_abs":       ("RETIREMENT_SPENDING_ABSOLUTE", _as_int(0, 0, 1_000_000)),
     "rg_ss_include":      ("INCLUDE_SOCIAL_SECURITY", lambda v: bool(v)),
     "rg_ss_claim":        ("SS_CLAIM_AGE", _as_int(67, 62, 70)),
+    "rg_partner_ss_claim": ("PARTNER_SS_CLAIM_AGE", _as_int(67, 62, 70)),
     "rg_your_fra":        ("YOUR_SS_MONTHLY_FRA", _as_int(2_000, 0, 5_000)),
     "rg_partner_fra":     ("PARTNER_SS_MONTHLY_FRA", _as_int(1_800, 0, 5_000)),
     "rg_target_success":  ("TARGET_SUCCESS_RATE", _as_pct_int(80, 70, 95)),
@@ -266,30 +268,23 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
 }
 
 
-def _derive_marital(overrides: dict) -> str:
-    yuw = overrides.get("YEARS_UNTIL_WEDDING")
-    try:
-        yuw = int(yuw)
-    except (TypeError, ValueError):
-        return "Married"
-    if yuw == 0:
-        return "Married"
-    if yuw >= 99:
-        return "Single (no wedding planned)"
-    return "Getting married"
-
-
-def _derive_kids(overrides: dict) -> str:
-    yufc = overrides.get("YEARS_UNTIL_FIRST_CHILD")
-    fcmc = overrides.get("FIRST_CHILD_MONTHLY_COST")
-    try:
-        yufc = int(yufc) if yufc is not None else None
-        fcmc = int(fcmc) if fcmc is not None else None
-    except (TypeError, ValueError):
-        return "No kids planned"
-    if (yufc is not None and yufc >= 99) or fcmc == 0:
-        return "No kids planned"
-    return "Kids planned / already born"
+def _sync_children(st, overrides: dict) -> None:
+    """The Expenses section's children rows (components/sec_expenses.py): the
+    count, then each child's inputs, clamped to the widgets' ranges."""
+    kids = cfg.children_in(overrides)[:6]
+    ss = st.session_state
+    ss["se_kids_n"] = len(kids)
+    for i, kid in enumerate(kids):
+        p, yub = f"se_kid{i}_", int(kid["years_until_birth"])
+        ss[p + "born"] = yub <= 0
+        ss[p + "age" if yub <= 0 else p + "in"] = _clamp(abs(yub), 0 if yub <= 0 else 1, 30)
+        ss[p + "leaves"] = _as_int(18, 16, 30)(kid["leaves_home_age"])
+        ss[p + "cost"] = _as_int(0, 0, 10_000)(kid["monthly_cost"])
+        ss[p + "college"] = _clamp(int(round(100 * float(kid["college_funding_pct"]))), 0, 100)
+    funded = [k for k in kids if k["college_funding_pct"] > 0]
+    if funded:
+        ss["se_kid_college_cost"] = _as_int(40_000, 0, 200_000)(funded[0]["college_annual_cost"])
+        ss["se_kid_college_years"] = _as_int(4, 1, 8)(funded[0]["college_years"])
 
 
 def _derive_rent_own(overrides: dict) -> str:
@@ -353,8 +348,7 @@ def _derive_hc_early(overrides: dict) -> int:
 # Widget keys whose values depend on one or more overrides and require
 # custom derivation logic (marital status, kids, rent/own, etc.)
 DERIVED_MAPPINGS: Dict[str, Any] = {
-    "fam_marital": _derive_marital,
-    "fam_kids":    _derive_kids,
+    "ay_household": household_of,
     "hi_rent_own": _derive_rent_own,
     "ri_scenario": _derive_scenario,
     "si_floor_trigger":   _derive_spending_guardrail_trigger,
@@ -362,7 +356,6 @@ DERIVED_MAPPINGS: Dict[str, Any] = {
     "si_hc_early":        _derive_hc_early,
     # New sec_*.py derived widgets
     "se_rent_own": _derive_rent_own,
-    "se_kids":     _derive_kids,
     "sa_hc_early": _derive_hc_early,
 }
 
@@ -405,7 +398,8 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age")
 #   wifc_     the what-if levers (plus the cached ``wifc_result`` plot data,
 #             which is stale the moment the inputs change).
 #   le_       life-expectancy card inputs (age / sex / conditions).
-_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_")
+#   se_kid    the Expenses section's children rows (one set per child).
+_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid")
 
 
 def reset_input_widget_state(st) -> None:
@@ -452,3 +446,8 @@ def sync_widgets_from_overrides(st) -> None:
             st.session_state[widget_key] = derive_fn(overrides)
         except Exception:
             pass
+
+    try:
+        _sync_children(st, overrides)
+    except Exception:
+        pass

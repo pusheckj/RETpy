@@ -8,6 +8,11 @@ restore them later, even across releases.
 The envelope may also carry an optional top-level ``"label"`` (the name shown
 in the profile picker). :func:`deserialize_overrides` ignores it, so it never
 leaks into the overrides.
+
+Loading also brings an older profile up to today's keys (its two-child keys
+become a ``CHILDREN`` list; the retired wedding flag is dropped -- see
+``retirement_sim.config.migrate_legacy_overrides``), so it gives the same
+results and saves back in the new form.
 """
 from __future__ import annotations
 
@@ -15,6 +20,8 @@ import json
 import os
 from datetime import datetime
 from typing import Any
+
+from retirement_sim import config as cfg
 
 SCHEMA_VERSION = "1.0"
 APP_TAG = "retirement-monte-carlo"
@@ -111,4 +118,4 @@ def deserialize_overrides(json_str: str) -> dict:
         # Bare dict (legacy, no envelope keys) — treat the whole thing as overrides.
         overrides = data
 
-    return _restore_int_keys(overrides)
+    return cfg.migrate_legacy_overrides(_restore_int_keys(overrides))

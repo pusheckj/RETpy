@@ -75,7 +75,7 @@ submodules), not treated as an independent change.
 `config.py` computes several constants from primitives at import time (e.g.
 `MORTGAGE_ANNUAL = MORTGAGE_MONTHLY * 12`, `CURRENT_ANNUAL_EXPENSES`,
 `HOME_EQUITY`, `TOTAL_INVESTMENTS`, `TOTAL_NET_WORTH`, `RETIREMENT_ANNUAL_EXPENSES`,
-`YOUR_HSA_TOTAL`, `COLLEGE_TARGET_PER_CHILD`). Because those derived values
+`YOUR_HSA_TOTAL`). Because those derived values
 were already computed once at import time, overriding a primitive via
 `setattr` (e.g. changing `MORTGAGE_MONTHLY`) does **not** automatically
 recompute the derived constants that depend on it — Python doesn't

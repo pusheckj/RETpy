@@ -77,9 +77,10 @@ QUESTIONS: list[tuple[str, str]] = [
     ),
     (
         "What if I don't own a home / am not married?",
-        "Set home value and mortgage to \\$0 (you'll rent forever, and rent is "
-        "already included in expenses). Set partner age to 0 and partner salary "
-        "to 0 if single. The simulator handles both cleanly.",
+        "Renting: choose Renting under Expenses and enter your rent. Single: choose "
+        "\"Just me\" under About you; every partner input disappears and the plan has "
+        "no partner accounts, pay, savings or Social Security. A couple who isn't "
+        "married picks \"Me and my partner (not married)\".",
     ),
     (
         "How do I save my inputs?",

@@ -31,6 +31,7 @@ from utils.config_builder import _UI_ONLY_KEYS as _BUILDER_UI_ONLY_KEYS
 # mapping (finding #11). Reused so the ENGINE honors the exact same pattern the
 # spending chart renders, instead of re-deriving it.
 from components.spending_inputs import compute_lifecycle_multipliers as _compute_lifecycle_multipliers
+from components.spending_inputs import first_child_window as _first_child_window
 
 logger = logging.getLogger(__name__)
 
@@ -79,11 +80,12 @@ def audit_override_keys(built_overrides: dict) -> List[str]:
     sets them but the engine never reads them.
 
     ``built_overrides`` should be the output of ``build_config_overrides`` (i.e.
-    after the UI->config translation layer has run).
+    after the UI->config translation layer has run). An old profile's legacy
+    keys are not "dropped": ``_write_overrides`` translates them first.
     """
     return sorted(
         key
-        for key in built_overrides
+        for key in cfg.migrate_legacy_overrides(built_overrides)
         if key not in UI_ONLY_KEYS and not hasattr(cfg, key)
     )
 
@@ -169,6 +171,10 @@ def _apply_overrides(overrides: dict) -> dict:
 
 def _write_overrides(overrides: dict) -> dict:
     """Unlocked body of _apply_overrides."""
+    # Old saved profiles (and anything built from them) may still carry the
+    # two-child keys or the retired wedding flag: translate them here, the one
+    # place overrides reach cfg, so they keep giving the same results.
+    overrides = cfg.migrate_legacy_overrides(overrides)
     # Root-cause guard: warn (do not crash) about any override that will be
     # silently dropped because it is neither UI-only nor a real cfg attribute.
     dropped = audit_override_keys(overrides)
@@ -210,7 +216,6 @@ def _recompute_derived(original: dict) -> None:
         "PARTNER_ANNUAL_SPENDING", "CURRENT_ANNUAL_EXPENSES",
         "HOME_EQUITY", "BASE_RETIREMENT_EXPENSES_NO_MORTGAGE",
         "RETIREMENT_ANNUAL_EXPENSES", "YOUR_HSA_TOTAL",
-        "COLLEGE_TARGET_PER_CHILD", "SAVINGS_529_PER_CHILD_ANNUAL",
         "TOTAL_RETIREMENT_ACCOUNTS", "TOTAL_TAXABLE", "TOTAL_CASH",
         "TOTAL_INVESTMENTS", "TOTAL_NET_WORTH",
         # Bond partners derived from their stock-allocation knobs (finding #1).
@@ -219,8 +224,6 @@ def _recompute_derived(original: dict) -> None:
         # Return-scenario parameters copied from the active scenario (finding #2).
         "EXPECTED_STOCK_RETURN", "EXPECTED_BOND_RETURN",
         "STOCK_VOLATILITY", "BOND_VOLATILITY",
-        # Annual child costs derived from the monthly overrides (finding #5).
-        "FIRST_CHILD_ANNUAL_COST", "BOTH_CHILDREN_ANNUAL_COST",
         # Annual health premiums derived from the monthly overrides (finding #12).
         "ACA_BASE_ANNUAL_PREMIUM", "MEDICARE_ANNUAL_PREMIUM",
         # Lifecycle multiplier dict derived from the preset name (finding #11).
@@ -281,14 +284,8 @@ def _recompute_derived(original: dict) -> None:
     # config.py:165 — YOUR_HSA_TOTAL = YOUR_HSA_CONTRIBUTION + YOUR_HSA_MATCH
     if hasattr(cfg, "YOUR_HSA_CONTRIBUTION") and hasattr(cfg, "YOUR_HSA_MATCH"):
         cfg.YOUR_HSA_TOTAL = cfg.YOUR_HSA_CONTRIBUTION + cfg.YOUR_HSA_MATCH
-    # config.py:417 — COLLEGE_TARGET_PER_CHILD = COLLEGE_ANNUAL_COST * COLLEGE_YEARS * COLLEGE_FUNDING_PCT
-    if hasattr(cfg, "COLLEGE_ANNUAL_COST") and hasattr(cfg, "COLLEGE_YEARS") and hasattr(cfg, "COLLEGE_FUNDING_PCT"):
-        cfg.COLLEGE_TARGET_PER_CHILD = cfg.COLLEGE_ANNUAL_COST * cfg.COLLEGE_YEARS * cfg.COLLEGE_FUNDING_PCT
-        # config.py:565 — SAVINGS_529_PER_CHILD_ANNUAL = COLLEGE_TARGET_PER_CHILD / 18.
-        # Without recomputing this, overriding COLLEGE_FUNDING_PCT updated the
-        # target but left the annual 529 contribution stale (0) — so enabling
-        # college funding in the UI produced ZERO simulated 529 savings.
-        cfg.SAVINGS_529_PER_CHILD_ANNUAL = cfg.COLLEGE_TARGET_PER_CHILD / 18.0
+    # (Children, their costs and their 529s are read live from cfg.CHILDREN, so
+    # nothing about them needs recomputing here.)
 
     # finding #1 (PHANTOM LEVERAGE) — the UI exposes only the STOCK side of each
     # allocation pair; the engine reads STOCK_ALLOCATION *and* BOND_ALLOCATION
@@ -323,20 +320,11 @@ def _recompute_derived(original: dict) -> None:
         cfg.STOCK_VOLATILITY = params["stock_volatility"]
         cfg.BOND_VOLATILITY = params["bond_volatility"]
 
-    # finding #5 (CHILD COSTS) — the child-cost sliders set the *_MONTHLY_COST
-    # overrides, but calculate_child_expenses (config.py:495-504) reads the
-    # *_ANNUAL_COST derived constants. Mirror config.py:468/472 so the sliders
-    # actually feed the engine.
     # config.py — YOUR_BIRTH_YEAR / PARTNER_BIRTH_YEAR = CURRENT_YEAR - age, and
     # RMD_START_AGE = get_rmd_start_age(YOUR_BIRTH_YEAR).
     cfg.YOUR_BIRTH_YEAR = int(cfg.CURRENT_YEAR) - int(cfg.YOUR_AGE)
     cfg.PARTNER_BIRTH_YEAR = int(cfg.CURRENT_YEAR) - int(cfg.PARTNER_AGE)
     cfg.RMD_START_AGE = cfg.get_rmd_start_age(cfg.YOUR_BIRTH_YEAR)
-
-    if hasattr(cfg, "FIRST_CHILD_MONTHLY_COST"):
-        cfg.FIRST_CHILD_ANNUAL_COST = cfg.FIRST_CHILD_MONTHLY_COST * 12
-    if hasattr(cfg, "BOTH_CHILDREN_MONTHLY_COST"):
-        cfg.BOTH_CHILDREN_ANNUAL_COST = cfg.BOTH_CHILDREN_MONTHLY_COST * 12
 
     # finding #12 (HEALTH PREMIUMS) — calculate_aca_premium / the Medicare cost
     # path read the *_ANNUAL_PREMIUM derived constants (config.py:1445/1462),
@@ -354,13 +342,14 @@ def _recompute_derived(original: dict) -> None:
     # UI helper (single source of truth for the preset -> multiplier mapping).
     if hasattr(cfg, "SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE"):
         preset = str(getattr(cfg, "SPEND_LIFECYCLE_PRESET", "Flat (no change)"))
+        yufc, leave_age = _first_child_window(cfg.CHILDREN)
         cfg.SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE = _compute_lifecycle_multipliers(
             preset=preset,
             current_age=int(getattr(cfg, "YOUR_AGE", 25)),
             retirement_age=int(getattr(cfg, "YOUR_AGE", 25)),
-            plan_until_age=int(getattr(cfg, "PLAN_UNTIL_AGE", 90)),
-            years_until_first_child=int(getattr(cfg, "YEARS_UNTIL_FIRST_CHILD", 99)),
-            child_leaves_home_age=int(getattr(cfg, "CHILD_LEAVES_HOME_AGE", 18)),
+            plan_until_age=int(cfg.plan_end_age()),
+            years_until_first_child=yufc,
+            child_leaves_home_age=leave_age,
         )
 
     # Totals
@@ -1363,7 +1352,7 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
     # paths that lasted the full horizon) and expose its per-year withdrawal_log.
     # A depleted path's log stops early and its last year spikes toward ~100% as
     # the portfolio hits zero, so we deliberately avoid it — the breakdown must
-    # span retirement_age..PLAN_UNTIL_AGE. income_sources_by_year and
+    # span retirement_age..the plan end. income_sources_by_year and
     # taxes_by_year for retirement years are derived directly from this same log
     # so all three charts stay internally consistent.
     withdrawals_by_year = _median_withdrawal_log(paths, portfolios, successes)
@@ -1440,7 +1429,7 @@ def _trajectory_from_portfolio(portfolio) -> List[Tuple[int, float]]:
 def _synthetic_trajectory(retirement_age: int) -> List[Tuple[int, float]]:
     """Fallback only if no simulation succeeded; purely for chart placeholder."""
     start_age = int(getattr(cfg, "YOUR_AGE", 35))
-    end_age = int(getattr(cfg, "PLAN_UNTIL_AGE", 90))
+    end_age = int(cfg.plan_end_age())
     value = float(getattr(cfg, "TOTAL_INVESTMENTS", 100_000))
     path: List[Tuple[int, float]] = []
     for age in range(start_age, end_age + 1):
@@ -1595,10 +1584,11 @@ def _median_withdrawal_log(paths, portfolios, successes=None) -> List[dict]:
     ``portfolio.withdrawal_log`` as a list of plain dicts.
 
     We prefer a SURVIVING path — one that lasted from ``retirement_age`` through
-    ``PLAN_UNTIL_AGE`` — and among survivors pick the one whose final balance is
-    closest to the survivors' median. A depleted path's log stops early (its last
-    year spikes toward ~100% as the portfolio hits zero), so choosing it would
-    truncate the withdrawal chart and paint a spurious 100% bar. Only if NO path
+    the plan end (``cfg.plan_end_age()``) — and among survivors pick the one
+    whose final balance is closest to the survivors' median. A depleted path's
+    log stops early (its last year spikes toward ~100% as the portfolio hits
+    zero), so choosing it would truncate the withdrawal chart and paint a
+    spurious 100% bar. Only if NO path
     survives do we fall back to the closest-to-median path overall.
 
     This gives the UI a single, internally-consistent per-year withdrawal
@@ -1673,7 +1663,9 @@ def _approximate_income_sources(withdrawal_rows: List[dict], retirement_age: int
         if age < retirement_age:
             continue
         ss = 0.0
-        if include_ss and calc_ss is not None and age >= ss_claim_age:
+        # No claim-age gate here: the partner may claim at their own age, and
+        # calculate_social_security is already 0 before anyone has claimed.
+        if include_ss and calc_ss is not None:
             try:
                 ss = float(calc_ss(age, ss_claim_age))
             except Exception:
@@ -1696,7 +1688,7 @@ def _compute_allocation_by_year(median_traj, retirement_age: int) -> List[Alloca
     if calc_alloc is None:
         return []
     start_age = int(getattr(cfg, "YOUR_AGE", 25))
-    end_age = int(getattr(cfg, "PLAN_UNTIL_AGE", 90))
+    end_age = int(cfg.plan_end_age())
     # Use configured age range so the chart spans current age → plan end
     # regardless of how far any single simulation path advanced. Fall back to
     # median_traj ages only if config is misconfigured.
@@ -1768,7 +1760,7 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
     partner_salary_base = float(getattr(cfg, "PARTNER_SALARY", 0))
     partner_401k = float(getattr(cfg, "PARTNER_401K_CONTRIBUTION", 0))
     partner_roth_desired = float(getattr(cfg, "PARTNER_ROTH_CONTRIBUTION", 0))
-    years_until_wedding = int(getattr(cfg, "YEARS_UNTIL_WEDDING", 0))
+    married = cfg.normalize_filing_status() == cfg._FILING_MFJ
     partner_spending = float(getattr(cfg, "PARTNER_ANNUAL_SPENDING", 0))
     partner_tax_rate = float(getattr(cfg, "PARTNER_ESTIMATED_TAX_RATE", 0.2))
     your_ira_limit_fn = getattr(cfg, "get_ira_limit", None)
@@ -1785,20 +1777,23 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
     your_401k_limit_fn = getattr(cfg, "get_401k_limit", None)
     savings_mode = str(getattr(cfg, "SAVINGS_MODE", "Auto-allocate (recommended)"))
     your_brokerage_override = getattr(cfg, "YOUR_BROKERAGE_CONTRIBUTION", None)
-    partner_brokerage_override = getattr(cfg, "PARTNER_BROKERAGE_CONTRIBUTION", None)
+    _has_partner = cfg.has_partner()
+    partner_brokerage_override = (getattr(cfg, "PARTNER_BROKERAGE_CONTRIBUTION", None)
+                                  if _has_partner else None)
 
     # Partner's own working boundary (separate-partner-retirement-age feature).
     # This loop only spans the primary's working years, so by default the partner
     # is working throughout (== prior behavior). When PARTNER_RETIREMENT_AGE puts
     # the partner's retirement before the primary's, their contributions drop to
-    # zero on time.
+    # zero on time. A single household has no partner working years at all.
     _pra = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
     _partner_age0 = int(getattr(cfg, "PARTNER_AGE", 0))
-    _has_partner = _partner_age0 > 0
     _age_gap = start_age - _partner_age0  # primary_age - partner_age
 
     def _partner_working(a: int) -> bool:
-        if not _has_partner or _pra is None:
+        if not _has_partner:
+            return False
+        if _pra is None:
             return True
         return (a - _age_gap) < int(_pra)
 
@@ -1870,14 +1865,12 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
         partner_salary = partner_salary_base * ((1 + partner_growth) ** max(0, years_from_now))
         partner_taxable = max(0.0, partner_salary - partner_401k)
         partner_after_tax = partner_taxable * (1 - partner_tax_rate)
-        # Direct partner Roth is only funded pre-marriage (MFJ income
-        # phase-out kicks in after) -- see simulate_accumulation_year:
+        # Direct partner Roth is only funded when not married (MFJ income
+        # phase-out) -- see simulate_accumulation_year:
         # ``0.0 if married else min(partner_roth_desired, ira_limit)``.
         # Previously this chart used the flat PARTNER_ROTH_CONTRIBUTION
-        # unconditionally, phantom-crediting a post-marriage elective (and
-        # understating the brokerage sweep by the same amount) every year
-        # after YEARS_UNTIL_WEDDING.
-        married = years_from_now >= years_until_wedding
+        # unconditionally, phantom-crediting an elective the engine never
+        # makes (and understating the brokerage sweep by the same amount).
         partner_roth = 0.0 if married else partner_roth_desired
 
         # Zero the partner's earnings/contributions once they've retired (feature).
@@ -1988,7 +1981,7 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
     calcs work.
     """
     start_age = int(getattr(cfg, "YOUR_AGE", 25))
-    end_age = int(getattr(cfg, "PLAN_UNTIL_AGE", 90))
+    end_age = int(cfg.plan_end_age())
     # Use configured age range so tax chart spans current age → plan end
     # regardless of how far any single simulation path advanced.
     if end_age > start_age:
@@ -2062,7 +2055,7 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
                 if bool(getattr(cfg, "INCLUDE_SOCIAL_SECURITY", False)):
                     ss_claim_age = int(getattr(cfg, "SS_CLAIM_AGE", 67))
                     calc_ss = getattr(cfg, "calculate_social_security", None)
-                    if calc_ss is not None and age >= ss_claim_age:
+                    if calc_ss is not None:
                         try:
                             ss_income = float(calc_ss(age, ss_claim_age))
                         except Exception:
@@ -2094,12 +2087,14 @@ def _snapshot_config() -> dict:
     keys = [
         "YOUR_AGE", "PARTNER_AGE", "YOUR_BIRTH_YEAR", "PARTNER_BIRTH_YEAR",
         "TOTAL_INVESTMENTS", "TOTAL_NET_WORTH", "CURRENT_ANNUAL_EXPENSES",
-        "PLAN_UNTIL_AGE", "TARGET_SUCCESS_RATE", "NUM_SIMULATIONS",
+        "PLAN_UNTIL_AGE", "PARTNER_PLAN_UNTIL_AGE", "TARGET_SUCCESS_RATE", "NUM_SIMULATIONS",
         "ACTIVE_RETURN_SCENARIO", "INCLUDE_SOCIAL_SECURITY",
         "DYNAMIC_SPENDING_ENABLED", "ENABLE_ROTH_CONVERSION",
         "SS_CLAIM_AGE",
     ]
-    return {k: getattr(cfg, k, None) for k in keys}
+    snap = {k: getattr(cfg, k, None) for k in keys}
+    snap["PLAN_END_AGE"] = int(cfg.plan_end_age())
+    return snap
 
 
 def _payoff_projection_for(overrides: dict, extra: float) -> dict:

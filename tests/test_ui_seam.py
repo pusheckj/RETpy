@@ -140,15 +140,17 @@ def test_retirement_annual_expenses_tracks_base():
 
 
 def test_college_target_per_child_recomputed():
-    before = cfg.COLLEGE_TARGET_PER_CHILD
+    # An old profile's COLLEGE_FUNDING_PCT now lands on each child (there is no
+    # derived per-child target constant any more) and is undone on restore.
+    before = cfg.CHILDREN
     original = sr._apply_overrides({"COLLEGE_FUNDING_PCT": 0.5})
     try:
-        # config.py:417 — COLLEGE_ANNUAL_COST * COLLEGE_YEARS * COLLEGE_FUNDING_PCT
-        expected = cfg.COLLEGE_ANNUAL_COST * cfg.COLLEGE_YEARS * 0.5
-        assert cfg.COLLEGE_TARGET_PER_CHILD == expected
+        targets = [cfg.college_target(c) for c in cfg.CHILDREN]
+        assert targets == [40_000 * 4 * 0.5] * 2
+        assert cfg.calculate_529_contribution(cfg.YOUR_AGE + 6) == 2 * targets[0] / 18
     finally:
         sr._restore_overrides(original)
-    assert cfg.COLLEGE_TARGET_PER_CHILD == before
+    assert cfg.CHILDREN == before
 
 
 # ---------------------------------------------------------------------------
@@ -477,19 +479,19 @@ def test_savings_contributions_brokerage_matches_engine_sweep_default_profile(ag
 
 
 def test_savings_contributions_brokerage_matches_engine_sweep_after_marriage():
-    """Once married (age >= YOUR_AGE + YEARS_UNTIL_WEDDING), the engine stops
-    funding a direct partner Roth (MFJ phase-out), which also changes the
-    swept brokerage split. The chart-derived row must track this exactly
+    """A married couple (filing jointly; the wedding-year flag is gone) gets
+    no direct partner Roth from the engine (MFJ phase-out), which also changes
+    the swept brokerage split. The chart-derived row must track this exactly
     (regression for the 'unconditional partner_roth elective' sub-bug found
-    while fixing #9 against a real profile that marries at
-    YEARS_UNTIL_WEDDING == 0; the sample household does too)."""
+    while fixing #9 against a real married profile; the sample household is
+    married too)."""
     from tests.conftest import load_sample_household
 
     overrides = load_sample_household()
     original = sr._apply_overrides(overrides)
     try:
         start_age = int(cfg.YOUR_AGE)
-        assert int(cfg.YEARS_UNTIL_WEDDING) == 0  # sanity: married from year 1
+        assert cfg.normalize_filing_status() == "MFJ"  # sanity: married
 
         for age in (start_age, start_age + 3, start_age + 10):
             engine_your, engine_partner = _engine_brokerage_delta(age)

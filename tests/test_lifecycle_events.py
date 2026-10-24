@@ -197,7 +197,15 @@ class TestLifecycleFeaturesDefaultOff:
         # $24k band, which ignored age (a 64-year-old couple now pays ~$34k) and
         # charged no pre-65 out-of-pocket. Toggle off reproduces the old pin.
         # Previously {45: 0.113, 50: 0.618}.
-        assert results == {45: 0.081, 50: 0.512}
+        # REBASELINED 2026-10-24: the wedding-year flag (YEARS_UNTIL_WEDDING) is
+        # gone; marriage is the filing status. The default couple files jointly,
+        # so they are married from year 0 and the partner's direct Roth (blocked
+        # for married couples by the MFJ phase-out assumption) stops 3 years
+        # earlier. The planner always ran this way (About you set the flag to 0
+        # for joint filers); only the bare config default had a wedding in year
+        # 3. Verified: the previous engine with YEARS_UNTIL_WEDDING = 0 gives
+        # exactly these numbers. Previously {45: 0.081, 50: 0.512}.
+        assert results == {45: 0.0945, 50: 0.502}
 
 
 # ==============================================================================

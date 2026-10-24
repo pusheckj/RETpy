@@ -53,7 +53,7 @@ def _household(your_age, partner_age=None, *, kids=False):
     cfg.FILING_STATUS = "Single" if partner_age is None else "Married filing jointly"
     cfg.PARTNER_AGE = your_age if partner_age is None else partner_age
     if not kids:
-        cfg.YEARS_UNTIL_FIRST_CHILD = 99
+        cfg.CHILDREN = []
     p = AccountPortfolio()
     p.update_ages(your_age)
     return p
@@ -114,11 +114,15 @@ def test_early_retirement_band_is_not_the_ceiling_when_on():
 # 2. Children enter and leave the marketplace household by age
 # ---------------------------------------------------------------------------
 
+def _kids(*births, leave=18):
+    """CHILDREN for children born ``births`` years from now."""
+    return [{"years_until_birth": b, "monthly_cost": 1_000, "leaves_home_age": leave}
+            for b in births]
+
+
 def test_children_added_and_removed_by_age():
     cfg.YOUR_AGE = 30
-    cfg.YEARS_UNTIL_FIRST_CHILD = 2   # born at primary 32
-    cfg.YEARS_BETWEEN_CHILDREN = 3    # born at primary 35
-    cfg.CHILD_LEAVES_HOME_AGE = 18
+    cfg.CHILDREN = _kids(2, 5)        # born at primary 32 and 35
     kids = cfg.children_at_home_ages
     assert kids(31) == []
     assert kids(32) == [0]
@@ -132,25 +136,23 @@ def test_children_timeline_matches_child_expense_timeline():
     """Reuse, not reinvention: kids are on the marketplace exactly in the years
     calculate_child_expenses charges for them."""
     cfg.YOUR_AGE = 30
-    cfg.FIRST_CHILD_ANNUAL_COST = 10_000
-    cfg.BOTH_CHILDREN_ANNUAL_COST = 18_000
-    for yufc, ybc, leave in [(2, 3, 18), (0, 1, 18), (-5, 2, 18), (4, 10, 21), (99, 3, 18)]:
-        cfg.YEARS_UNTIL_FIRST_CHILD, cfg.YEARS_BETWEEN_CHILDREN = yufc, ybc
-        cfg.CHILD_LEAVES_HOME_AGE = leave
+    # Each child costs a different power of two, so the bill says exactly which
+    # children were charged; leave-home ages differ per child.
+    for births, leaves in [((2, 5), (18, 18)), ((0, 1), (18, 22)), ((-5, -3, 4), (18, 25, 16)),
+                           ((4, 14), (21, 18)), ((), ())]:
+        cfg.CHILDREN = [{"years_until_birth": b, "monthly_cost": 2 ** i, "leaves_home_age": l}
+                        for i, (b, l) in enumerate(zip(births, leaves))]
         for age in range(30, 80):
-            n = len(cfg.children_at_home_ages(age))
-            cost = cfg.calculate_child_expenses(age)
-            expected = {0: 0, 2: 18_000}.get(n)
-            if n == 1:
-                assert cost in (10_000, 8_000)
-            else:
-                assert cost == expected, (yufc, ybc, leave, age)
+            at_home = cfg.children_at_home_ages(age)
+            charged = int(cfg.calculate_child_expenses(age) / 12)
+            assert len(at_home) == bin(charged).count("1"), (births, age)
+            assert sorted(at_home) == sorted(
+                age - 30 - b for i, b in enumerate(births) if charged & (2 ** i)), (births, age)
 
 
 def test_engine_prices_children_at_home():
     p = _household(40, 40, kids=True)
-    cfg.YEARS_UNTIL_FIRST_CHILD, cfg.YEARS_BETWEEN_CHILDREN = 2, 3
-    cfg.CHILD_LEAVES_HOME_AGE = 18
+    cfg.CHILDREN = _kids(2, 5)
     child = cfg.ACA_CHILD_MONTHLY * 12
     adults = 2 * _rate(41)
     p.update_ages(41)

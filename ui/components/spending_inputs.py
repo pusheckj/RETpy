@@ -109,6 +109,17 @@ def compute_lifecycle_multipliers(
     return out
 
 
+def first_child_window(children) -> tuple:
+    """``(years_until_first_child, child_leaves_home_age)`` for the "Children
+    then empty-nest" pattern above: the oldest child's (the earliest birth), or
+    ``(99, 18)`` -- no children -- for an empty list."""
+    kids = [k for k in (children or []) if isinstance(k, dict)]
+    if not kids:
+        return 99, 18
+    first = min(kids, key=lambda k: k.get("years_until_birth", 0))
+    return int(first.get("years_until_birth", 0)), int(first.get("leaves_home_age", 18))
+
+
 def render_body(st) -> None:
     """Render the widgets WITHOUT the outer expander (for embedding)."""
     st.caption(
@@ -181,8 +192,7 @@ def render_body(st) -> None:
     current_age = safe_int(get_override(st, "YOUR_AGE", 25), 25)
     retirement_age = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 55), 55)
     plan_until = safe_int(get_override(st, "PLAN_UNTIL_AGE", 90), 90)
-    yufc = safe_int(get_override(st, "YEARS_UNTIL_FIRST_CHILD", 99), 99)
-    leave_age = safe_int(get_override(st, "CHILD_LEAVES_HOME_AGE", 18), 18)
+    yufc, leave_age = first_child_window(get_override(st, "CHILDREN", []))
 
     multipliers = compute_lifecycle_multipliers(
         preset=preset,

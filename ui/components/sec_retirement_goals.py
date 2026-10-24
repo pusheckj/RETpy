@@ -26,15 +26,15 @@ def _section_label(st, txt):
 
 
 def _ss_factor(claim_age: int) -> float:
-    """Factor applied to FRA monthly benefit for early/delayed claiming."""
-    if claim_age >= 70:
+    """Factor applied to FRA monthly benefit for early/delayed claiming (the
+    engine's own rule, cfg.ss_claim_factor)."""
+    if cfg is not None:
+        return float(cfg.ss_claim_factor(claim_age))
+    if claim_age >= 70:  # pragma: no cover - engine not importable
         return 1.24
-    if claim_age >= 67:
+    if claim_age >= 67:  # pragma: no cover
         return 1.0 + 0.08 * (claim_age - 67)
-    if claim_age == 62:
-        return 0.70
-    # Linear interp 62-67
-    return 0.70 + (1.0 - 0.70) * (claim_age - 62) / 5.0
+    return 0.70 + (1.0 - 0.70) * (claim_age - 62) / 5.0  # pragma: no cover
 
 
 def render_body(st) -> None:
@@ -83,11 +83,23 @@ def render_body(st) -> None:
 
     ensure_default(st, "rg_ss_claim",
                    safe_int(get_override(st, "SS_CLAIM_AGE", 67), 67))
-    claim_age = st.slider("Claim age", min_value=62, max_value=70, step=1,
+    claim_age = st.slider("Your claim age" if has_partner else "Claim age",
+                          min_value=62, max_value=70, step=1,
                           key="rg_ss_claim",
                           help="62 = early (30% reduction). 67 = full retirement age. "
                                "70 = delayed (+24% credit).")
     set_override(st, "SS_CLAIM_AGE", safe_int(claim_age))
+    partner_claim = claim_age
+    if has_partner:
+        ensure_default(st, "rg_partner_ss_claim",
+                       safe_int(get_override(st, "PARTNER_SS_CLAIM_AGE", None) or claim_age,
+                                claim_age))
+        partner_claim = st.slider("Partner's claim age", min_value=62, max_value=70, step=1,
+                                  key="rg_partner_ss_claim",
+                                  help="When your partner starts, in their own age.")
+        set_override(st, "PARTNER_SS_CLAIM_AGE", safe_int(partner_claim))
+    else:
+        set_override(st, "PARTNER_SS_CLAIM_AGE", None)
 
     c1, c2 = st.columns(2)
     with c1:
@@ -110,15 +122,21 @@ def render_body(st) -> None:
         else:
             set_override(st, "PARTNER_SS_MONTHLY_FRA", 0)
 
-    # Live preview of household SS at claim age
+    # Live preview of household SS once each person has claimed
     factor = _ss_factor(claim_age)
     your_fra = safe_int(get_override(st, "YOUR_SS_MONTHLY_FRA", 2_000), 2_000)
     partner_fra = safe_int(get_override(st, "PARTNER_SS_MONTHLY_FRA", 0), 0) if has_partner else 0
-    annual_ss = (your_fra + partner_fra) * 12 * factor
+    annual_ss = (your_fra * factor + partner_fra * _ss_factor(partner_claim)) * 12
+    if has_partner and cfg is not None and str(get_override(st, "FILING_STATUS", "")) in (
+            "Married filing jointly", "MFJ"):
+        # Spousal top-up once both have claimed (full rule: cfg.calculate_social_security).
+        annual_ss += 12 * (max(0, your_fra / 2 - partner_fra) * cfg.ss_spousal_factor(partner_claim)
+                           + max(0, partner_fra / 2 - your_fra) * cfg.ss_spousal_factor(claim_age))
     if include and annual_ss > 0:
         st.caption(
-            f"At age {claim_age} (**{factor:.0%}** of FRA): "
-            f"household SS ≈ {money_md(annual_ss, shorten=True)}/yr "
+            (f"At age {claim_age} (**{factor:.0%}** of FRA): " if not has_partner else
+             "Once you've both claimed: ")
+            + f"household SS ≈ {money_md(annual_ss, shorten=True)}/yr "
             f"({money_md(annual_ss / 12, shorten=True)}/mo combined)."
         )
 

@@ -169,8 +169,8 @@ def _retirement_ss_for_age(age: int, ss_claim_age: int,
                          getattr(cfg, "INCLUDE_SOCIAL_SECURITY", False))
     if not bool(include_ss):
         return 0.0
-    if age < ss_claim_age:
-        return 0.0
+    # (No claim-age gate: the partner may claim at their own age, and
+    # calculate_social_security is already 0 before anyone has claimed.)
     calc = getattr(cfg, "calculate_social_security", None)
     if calc is None:
         return 0.0
@@ -219,8 +219,8 @@ def build_income_series(
     # Partner's own working boundary (separate-partner-retirement-age feature).
     # ``x`` here is the PRIMARY's age; the partner's age that year is offset by
     # the fixed starting age gap. PARTNER_RETIREMENT_AGE is expressed in the
-    # partner's own age. When it's unset (None) or there is no partner, the
-    # partner works exactly while the primary does -> identical to before.
+    # partner's own age. When it's unset (None), the partner works exactly while
+    # the primary does -> identical to before. No partner, no partner income.
     _pra_raw = overrides.get("PARTNER_RETIREMENT_AGE",
                              getattr(cfg, "PARTNER_RETIREMENT_AGE", None) if cfg else None)
     _partner_age0 = safe_int(overrides.get("PARTNER_AGE",
@@ -229,7 +229,9 @@ def build_income_series(
     _age_gap = current_age - _partner_age0  # primary_age - partner_age
 
     def _partner_working(primary_age: int) -> bool:
-        if not _has_partner or _pra_raw is None:
+        if not _has_partner:
+            return False
+        if _pra_raw is None:
             return primary_age < retirement_age
         return (primary_age - _age_gap) < safe_int(_pra_raw, retirement_age)
 
@@ -372,8 +374,8 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
                            getattr(cfg, "YOUR_AGE", 25) if cfg else 25), 25)
     retirement_age = safe_int(overrides.get("TARGET_RETIREMENT_AGE",
                               getattr(cfg, "TARGET_RETIREMENT_AGE", 55) if cfg else 55), 55)
-    plan_until = safe_int(overrides.get("PLAN_UNTIL_AGE",
-                          getattr(cfg, "PLAN_UNTIL_AGE", 90) if cfg else 90), 90)
+    plan_until = (cfg.plan_end_age(overrides) if cfg else
+                  safe_int(overrides.get("PLAN_UNTIL_AGE", 90), 90))
     inflation_rate = as_fraction(overrides.get("EXPECTED_INFLATION", 0.0275), 0.0275)
 
     # Assign palette colors at render time so they follow the runtime palette.

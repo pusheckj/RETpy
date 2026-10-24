@@ -217,6 +217,8 @@ def test_render_no_ages_shows_info():
     ov = _overrides()
     ov["YOUR_AGE"] = 95
     ov["PLAN_UNTIL_AGE"] = 90
+    # No partner: a younger partner extends the plan to their own plan-until age.
+    ov["PARTNER_AGE"] = 0
     st = _MockSt(ov)
     iot.render(st, results=None, chart_key="iot_test_noages")
     assert st.plotly_calls == 0

@@ -104,11 +104,6 @@ def render_body(st) -> None:
 
     household_total = you_total + p_total
     set_override(st, "HOUSEHOLD_INCOME_QUICK", safe_int(household_total))
-    if not has_partner:
-        st.caption(
-            "Enter only a household total elsewhere and we assume a 55/45 "
-            "primary/partner split and 10% savings rate for the projections."
-        )
 
     # KPI strip
     # NOTE: do NOT inject metric CSS here. An earlier unscoped

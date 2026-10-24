@@ -55,7 +55,8 @@ def section_2_financial_summary() -> None:
     try:
         your_savings = cfg.calculate_your_total_savings(cfg.YOUR_AGE)
         partner_savings = cfg.calculate_partner_total_savings(
-            cfg.PARTNER_SALARY, 0, married=(cfg.YEARS_UNTIL_WEDDING == 0)
+            cfg.PARTNER_SALARY, 0,
+            married=(cfg.normalize_filing_status() == "MFJ" and cfg.has_partner())
         )
         print(f"    Primary:  ${your_savings:>12,.0f}")
         print(f"    Partner:  ${partner_savings:>12,.0f}")

@@ -29,12 +29,13 @@ All dollar values in the config are in **today's dollars** unless otherwise note
 | Parameter | Default | Description |
 |---|---|---|
 | `YOUR_AGE` | `25` | Your current age. Drives every age-dependent calculation. |
-| `PARTNER_AGE` | `25` | Spouse/partner current age. Used for joint filing, RMDs, and SS. |
+| `PARTNER_AGE` | `25` | Spouse/partner current age. `0` = a single household: the engine then has no partner accounts, pay, contributions or Social Security (`has_partner()`), whatever partner numbers the profile still carries. |
 | `CURRENT_YEAR` | `2026` | Baseline calendar year for the simulation. |
 | `YOUR_BIRTH_YEAR` | derived | `CURRENT_YEAR − YOUR_AGE` (likewise `PARTNER_BIRTH_YEAR`). Sets the SECURE 2.0 RMD start age (73 if born 1951–1959, else 75). Not an input. |
 | `PARTNER_BIRTH_YEAR` | `2001` | Same purpose for partner. |
-| `PLAN_UNTIL_AGE` | `95` | Simulation horizon. Run longer if longevity is a concern — about 30–40% of couples have one spouse living past 90. |
-| `YEARS_UNTIL_WEDDING` | `1` | Years until legal marriage. Set to `0` if already married. Triggers MFJ filing and any income-based contribution limits for the partner. |
+| `PLAN_UNTIL_AGE` | `95` | Your plan-until age. Run longer if longevity is a concern — about 30–40% of couples have one spouse living past 90. |
+| `PARTNER_PLAN_UNTIL_AGE` | `None` | Your partner's plan-until age, in their own age (`None` = same as yours). The plan runs until the **later** of the two (`plan_end_age()`), so a younger partner is covered to their own age. |
+| `FILING_STATUS` | `"Married filing jointly"` | Married couples file jointly; a single person or an unmarried couple files `"Single"` or `"Head of household"`. Marriage is read from this (there is no separate wedding year). |
 
 ---
 
@@ -148,19 +149,17 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 
 | Parameter | Default | Description |
 |---|---|---|
-| `YEARS_UNTIL_FIRST_CHILD` | `3` | Years until first child. Set to large number to disable. |
-| `YEARS_BETWEEN_CHILDREN` | `2` | Gap between first and second child. |
-| `FIRST_CHILD_MONTHLY_COST` | `$2,100` | Added to expenses once first child arrives. |
-| `BOTH_CHILDREN_MONTHLY_COST` | `$3,500` | Total once second child arrives (not additive with the first). |
-| `CHILD_LEAVES_HOME_AGE` | `18` | Age child moves out and stops costing money. |
+| `CHILDREN` | two children (below) | One entry per child, born or planned; `[]` = child-free. Each entry's fields are below; a field left out takes its `CHILD_DEFAULTS` value. |
+| `years_until_birth` | `3`, `6` | Years from now until the child is born; negative = already born (`-5` is a 5-year-old today). |
+| `monthly_cost` | `$2,100`, `$1,400` | What the child costs each month while living at home (today's dollars, grows with the childcare factor). |
+| `leaves_home_age` | `18` | The child's age when those costs stop. Each child has their own. |
+| `college_funding_pct` | `0.0` | Share of college you pay (`0` = none, `1` = all). Saved in that child's own 529 from birth to `COLLEGE_START_AGE` (18), then college is paid from it, during working years or retirement; the budget covers anything the 529 can't. |
+| `college_annual_cost` | `$40,000` | One year of college (today's dollars). |
+| `college_years` | `4` | Years of college, from age 18. |
 
-### College funding (529)
+The engine opens one 529 per child (`child1_529`, `child2_529`, …).
 
-| Parameter | Default | Description |
-|---|---|---|
-| `COLLEGE_FUNDING_PCT` | `0.00` | Fraction of college cost funded from the simulation. `0` disables 529 modeling. |
-| `COLLEGE_ANNUAL_COST` | `$40,000` | Per-child annual cost (today's dollars). |
-| `COLLEGE_YEARS` | `4` | Duration of college expenses per child. |
+**Older profiles** described at most two children with `YEARS_UNTIL_FIRST_CHILD`, `YEARS_BETWEEN_CHILDREN`, `FIRST_CHILD_MONTHLY_COST`, `BOTH_CHILDREN_MONTHLY_COST`, `CHILD_LEAVES_HOME_AGE` and `COLLEGE_*`. They still load: `migrate_legacy_overrides()` turns them into the equivalent `CHILDREN` list (the second child costs what "both children" added over the first; `YEARS_UNTIL_FIRST_CHILD` ≥ 99 means none), so they give the same results. It runs when a profile is loaded and wherever overrides reach the config.
 
 ---
 
@@ -243,7 +242,9 @@ Get personal estimates from [ssa.gov](https://www.ssa.gov) — log in and downlo
 | Parameter | Default | Description |
 |---|---|---|
 | `INCLUDE_SOCIAL_SECURITY` | `True` | Toggle SS entirely. Turn off for a conservative "what if SS is cut" scenario. |
-| `SS_CLAIM_AGE` | `67` | Age both you and partner claim. 62–70. |
+| `SS_CLAIM_AGE` | `67` | Age you claim. 62–70. |
+| `PARTNER_SS_CLAIM_AGE` | `None` | Age your partner claims, in their own age (`None` = same as `SS_CLAIM_AGE`). |
+| `MODEL_SPOUSAL_SS_BENEFIT` | `True` | Married couples: a spouse whose own benefit is under half of the other's is topped up to half once both have claimed (reduced if claimed before 67, no delayed credit). Not for unmarried partners. `False` = each person's own benefit only. |
 | `YOUR_SS_MONTHLY_FRA` | `$2,000` | Your monthly benefit at full retirement age (67). |
 | `PARTNER_SS_MONTHLY_FRA` | `$1,800` | Partner's monthly benefit at FRA. |
 | `EARLY_SS_AGE` | `62` | Earliest SS claim. ~30% benefit reduction vs FRA. |

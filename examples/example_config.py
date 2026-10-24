@@ -81,9 +81,9 @@ REPLACE_ME = None
 # Typical range: 25-65 for accumulation-phase planning.
 YOUR_AGE = REPLACE_ME                 # e.g., 35
 
-# Your partner's current age. Set equal to YOUR_AGE for a single-earner
-# household modeled as one person (also zero out PARTNER_* balances/income).
-PARTNER_AGE = REPLACE_ME              # e.g., 33
+# Your partner's current age. Set 0 for a single household: the simulator then
+# leaves out every partner account, paycheck, contribution and SS benefit.
+PARTNER_AGE = REPLACE_ME              # e.g., 33; or 0 if single
 
 # Current calendar year — the simulation's "year 0".
 CURRENT_YEAR = 2026
@@ -93,15 +93,15 @@ CURRENT_YEAR = 2026
 YOUR_BIRTH_YEAR = None if YOUR_AGE is REPLACE_ME else CURRENT_YEAR - YOUR_AGE
 PARTNER_BIRTH_YEAR = None if PARTNER_AGE is REPLACE_ME else CURRENT_YEAR - PARTNER_AGE
 
-# Plan until this age (for the older partner). 90-95 is typical; ~30-40% of
-# couples have at least one partner live past 90, so plan long.
+# Plan until this age. 90-95 is typical; ~30-40% of couples have at least one
+# partner live past 90, so plan long. Your partner's plan-until age (in their
+# own age) defaults to the same; the plan runs until the later of the two.
 PLAN_UNTIL_AGE = 95
+PARTNER_PLAN_UNTIL_AGE = None         # e.g., 97; None = same as PLAN_UNTIL_AGE
 
-# Household event: years from CURRENT_YEAR until marriage.
-# Set to 0 if already married. Positive values trigger a filing-status
-# change and (optionally) end direct Roth-IRA contributions if joint income
-# exceeds MAGI limits.
-YEARS_UNTIL_WEDDING = REPLACE_ME      # e.g., 0 if married, 2 if in 2 years
+# Married couples file jointly; anyone unmarried (single, or a couple who
+# isn't married) files "Single" or "Head of household".
+FILING_STATUS = REPLACE_ME            # e.g., "Married filing jointly"
 
 
 # =============================================================================
@@ -264,25 +264,17 @@ CURRENT_ANNUAL_EXPENSES = (
 # =============================================================================
 # 6) CHILDREN
 # =============================================================================
-# If you don't plan to have kids, set YEARS_UNTIL_FIRST_CHILD = 999 and the
-# cost variables to 0. The simulator will then treat the household as
-# child-free throughout.
-
-YEARS_UNTIL_FIRST_CHILD = REPLACE_ME    # e.g., 2; or 999 for no kids
-FIRST_CHILD_MONTHLY_COST = REPLACE_ME   # e.g., 2_000 (childcare heavy early years)
-FIRST_CHILD_ANNUAL_COST = (FIRST_CHILD_MONTHLY_COST or 0) * 12
-
-YEARS_BETWEEN_CHILDREN = REPLACE_ME     # e.g., 3; irrelevant if only one kid
-BOTH_CHILDREN_MONTHLY_COST = REPLACE_ME # e.g., 3_500 total for two kids
-BOTH_CHILDREN_ANNUAL_COST = (BOTH_CHILDREN_MONTHLY_COST or 0) * 12
-
-CHILD_LEAVES_HOME_AGE = 18
-
-# 529 college funding (optional). Set COLLEGE_FUNDING_PCT = 0.0 to disable
-# entirely. 1.0 = fully funding 4 years at COLLEGE_ANNUAL_COST each.
-COLLEGE_FUNDING_PCT = 0.0               # 0.0 disabled; 0.5 = half-funding
-COLLEGE_ANNUAL_COST = 40_000            # Today's dollars, per kid
-COLLEGE_YEARS = 4
+# One entry per child, born or planned; [] for no children. Per child:
+#   years_until_birth    years from now until born; negative = already born
+#                        (-6 is a 6-year-old today)
+#   monthly_cost         cost while living at home (today's dollars)
+#   leaves_home_age      age when that cost stops
+#   college_funding_pct  share of college you pay (0 = none, 1 = all of it),
+#                        saved in that child's own 529 from birth
+#   college_annual_cost, college_years   one year of college, and how many
+CHILDREN = REPLACE_ME   # e.g. [{"years_until_birth": -6, "monthly_cost": 1_800,
+                        #        "leaves_home_age": 18, "college_funding_pct": 0.5,
+                        #        "college_annual_cost": 40_000, "college_years": 4}]
 
 
 # =============================================================================
@@ -463,10 +455,7 @@ if __name__ == "__main__":
     print("=" * 70)
     print(f"\nPrimary age: {YOUR_AGE}, Partner age: {PARTNER_AGE}")
     print(f"Current year: {CURRENT_YEAR}, plan until age {PLAN_UNTIL_AGE}")
-    if YEARS_UNTIL_WEDDING and YEARS_UNTIL_WEDDING > 0:
-        print(f"Wedding in {YEARS_UNTIL_WEDDING} year(s)")
-    else:
-        print("Married at simulation start")
+    print(f"Filing status: {FILING_STATUS}")
 
     print("\nASSETS:")
     print(f"  Retirement accounts:  ${total_retirement:>12,.0f}")

@@ -115,7 +115,8 @@ def _walk_to(at, step_title):
     answers = {
         "About you": lambda: (at.number_input(key="gs_age").set_value(31),
                               at.radio(key="gs_household").set_value(gs.JUST_ME)),
-        "Kids": lambda: at.radio(key="gs_kids").set_value(gs.NO_KIDS),
+        "Kids": lambda: (at.number_input(key="gs_kids_have").set_value(0),
+                         at.number_input(key="gs_kids_plan").set_value(0)),
         "Where you live": lambda: at.radio(key="gs_state").set_value("California"),
         "Your income": lambda: at.number_input(key="gs_salary").set_value(
             at.number_input(key="gs_salary").value or 70_000),
@@ -156,24 +157,43 @@ def test_just_me_clears_the_sample_partner(wizard):
     assert ov["PARTNER_AGE"] == 0 and ov["PARTNER_401K"] == 0 and ov["FILING_STATUS"] == "Single"
 
 
-def test_kids_one_child_and_two(wizard):
+def test_kids_any_number(wizard):
+    """One child is one child (the old step stored a phantom second child at
+    $0), and three born plus two planned are five."""
     at = wizard()
     _walk_to(at, "Kids")
-    at.radio(key="gs_kids").set_value(gs.HAVE_KIDS).run()
-    at.number_input(key="gs_oldest").set_value(6)
-    at.radio(key="gs_nkids").set_value(gs.ONE).run()
+    assert not any("up to two" in c.value for c in at.caption)
+    at.number_input(key="gs_kids_have").set_value(1).run()
+    at.number_input(key="gs_kid0_age").set_value(6)
+    at.number_input(key="gs_kids_plan").set_value(0)
     _next(at)
-    ov = at.session_state["user_overrides"]
-    assert ov["YEARS_UNTIL_FIRST_CHILD"] == -6
-    assert ov["BOTH_CHILDREN_MONTHLY_COST"] == ov["FIRST_CHILD_MONTHLY_COST"]   # one child
+    kids = at.session_state["user_overrides"]["CHILDREN"]
+    assert [(k["years_until_birth"], k["monthly_cost"]) for k in kids] == [(-6, 2_100)]
     at.button(key="gs_back").click().run()
-    assert at.radio(key="gs_kids").value == gs.HAVE_KIDS                         # answer kept
-    at.radio(key="gs_nkids").set_value(gs.TWO).run()
-    at.number_input(key="gs_youngest").set_value(2)
+    assert at.number_input(key="gs_kids_have").value == 1                    # answers kept
+    assert at.number_input(key="gs_kid0_age").value == 6
+    at.number_input(key="gs_kids_have").set_value(3).run()
+    at.number_input(key="gs_kid1_age").set_value(2)
+    at.number_input(key="gs_kid2_age").set_value(9)
+    at.number_input(key="gs_kids_plan").set_value(2).run()
+    at.number_input(key="gs_kids_in").set_value(1)
     _next(at)
-    ov = at.session_state["user_overrides"]
-    assert ov["YEARS_BETWEEN_CHILDREN"] == 4
-    assert ov["BOTH_CHILDREN_MONTHLY_COST"] > ov["FIRST_CHILD_MONTHLY_COST"]
+    kids = at.session_state["user_overrides"]["CHILDREN"]
+    assert [k["years_until_birth"] for k in kids] == [-9, -6, -2, 1, 4]       # oldest first
+    assert [k["monthly_cost"] for k in kids] == [2_100] + [1_400] * 4
+
+
+def test_kids_need_every_age_and_at_most_six(wizard):
+    at = wizard()
+    _walk_to(at, "Kids")
+    at.number_input(key="gs_kids_have").set_value(2).run()
+    at.number_input(key="gs_kid0_age").set_value(4)
+    at.number_input(key="gs_kids_plan").set_value(0)
+    assert _next(at)["error"] == "Enter each child's age."
+    at.number_input(key="gs_kid1_age").set_value(1)
+    at.number_input(key="gs_kids_plan").set_value(5).run()
+    at.number_input(key="gs_kids_in").set_value(2)
+    assert "up to 6" in _next(at)["error"]
 
 
 def test_checkup_answers_prefill_and_housing_comes_out_of_other(wizard):
@@ -283,3 +303,13 @@ def test_keep_amounts_mode_in_the_savings_section(monkeypatch):
     assert "sv_manual_your_brk" not in [n.key for n in at.number_input]   # the rest is swept
     ov = at.session_state["user_overrides"]
     assert ov["YOUR_BROKERAGE_CONTRIBUTION"] == 0 and ov["PARTNER_401K_CONTRIBUTION"] == 0
+
+
+def test_single_parent_files_head_of_household(wizard):
+    at = wizard()
+    _walk_to(at, "Kids")                                      # "Just me" on step one
+    at.number_input(key="gs_kids_have").set_value(1).run()
+    at.number_input(key="gs_kid0_age").set_value(7)
+    at.number_input(key="gs_kids_plan").set_value(0)
+    _next(at)
+    assert at.session_state["user_overrides"]["FILING_STATUS"] == "Head of household"

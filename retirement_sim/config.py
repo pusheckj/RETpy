@@ -60,9 +60,9 @@ NAMING CONVENTION
 -----------------
 ``YOUR_*``     refers to the primary user (user 1 / higher earner by default).
 ``PARTNER_*``  refers to the secondary user (user 2 / spouse or partner).
-Set ``PARTNER_SALARY = 0`` and related values to zero to model a single-earner
-household, or set ``YEARS_UNTIL_WEDDING = 0`` if the couple is already
-married at the simulation start.
+Set ``PARTNER_AGE = 0`` for a single household: the engine then leaves out every
+partner account, paycheck, contribution and Social Security benefit (see
+``has_partner``). ``FILING_STATUS`` says whether a couple is married.
 """
 
 # -----------------------------------------------------------------------------
@@ -73,14 +73,18 @@ YOUR_AGE = 25
 PARTNER_AGE = 25
 CURRENT_YEAR = 2026
 
-# Planning horizon - model until this age for the older person.
+# Planning horizon - model until this age. Each person has one: PLAN_UNTIL_AGE
+# is yours, PARTNER_PLAN_UNTIL_AGE your partner's (None = the same age), and the
+# plan runs until the LATER of the two (plan_end_age), so a younger partner is
+# covered to their own plan-until age.
 # Rationale: ~30-40% chance one partner in a couple lives past 90, so plan long.
 # LIMITATION (fixed-horizon / no-mortality model): the simulation assumes BOTH
-# spouses survive continuously through PLAN_UNTIL_AGE. There is no stochastic
+# spouses survive continuously through the plan. There is no stochastic
 # mortality, no survivor Social Security benefit, no filing-status change at
 # first death, and no widowhood expense reduction. Plan-until-age is used only
 # as a fixed simulation-length cutoff, not as a mortality assumption.
 PLAN_UNTIL_AGE = 95
+PARTNER_PLAN_UNTIL_AGE = None
 
 # Partner's own retirement age (independent of the primary user's, which arrives
 # as the ``retirement_age`` argument to the engine). ``None`` means "the partner
@@ -96,14 +100,6 @@ PARTNER_RETIREMENT_AGE = None
 # charged. The payroll premium belongs in the living-expense base (e.g. the
 # partner's own spending line). Medicare for a 65+ primary is unaffected.
 PARTNER_EMPLOYER_HEALTH_COVERAGE = True
-
-# Household-event timing.
-# Set YEARS_UNTIL_WEDDING = 0 if already married at the simulation start (no
-# filing-status change and no partner Roth-IRA income-limit trigger). Any
-# positive value schedules a filing-status change N years from CURRENT_YEAR.
-# Median US first-marriage age is ~29 (men) / ~28 (women), so 3 years is a
-# reasonable default for 25-year-olds.
-YEARS_UNTIL_WEDDING = 3
 
 # -----------------------------------------------------------------------------
 # CURRENT ASSETS
@@ -531,138 +527,193 @@ CURRENT_ANNUAL_EXPENSES = (
 # -----------------------------------------------------------------------------
 # LIFE EVENTS - CHILDREN
 # -----------------------------------------------------------------------------
-# Set YEARS_UNTIL_FIRST_CHILD very large (e.g. 999) to model a child-free
-# household. Set FIRST_CHILD_MONTHLY_COST = 0 to disable child expenses.
-# Median age at first birth in the US: ~27-28, so 3 years from age 25.
-YEARS_UNTIL_FIRST_CHILD = 3
-FIRST_CHILD_MONTHLY_COST = 2_100
-FIRST_CHILD_ANNUAL_COST = FIRST_CHILD_MONTHLY_COST * 12
+# One entry per child; an empty list is a child-free household. Each child:
+#   years_until_birth    years from now until the child is born; negative =
+#                        already born (-5 is a 5-year-old today)
+#   monthly_cost         what the child costs each month while living at home
+#                        (today's dollars; grows with the childcare factor)
+#   leaves_home_age      the child's age when those costs stop
+#   college_annual_cost  one year of college (today's dollars)
+#   college_years        years of college, starting at COLLEGE_START_AGE
+#   college_funding_pct  share of college you pay (0-1), saved in the child's own
+#                        529 from birth and then spent from it. 0 = none.
+# A field left out takes its CHILD_DEFAULTS value. Defaults: two children, born
+# in 3 and 6 years (median age at first birth in the US is ~27-28), $2,100/mo
+# for the first and $1,400/mo more for the second, no college funding.
+CHILD_DEFAULTS = {
+    "years_until_birth": 0,
+    "monthly_cost": 0,
+    "leaves_home_age": 18,
+    "college_annual_cost": 40_000,
+    "college_years": 4,
+    "college_funding_pct": 0.0,
+}
+CHILDREN = [
+    {"years_until_birth": 3, "monthly_cost": 2_100, "leaves_home_age": 18,
+     "college_annual_cost": 40_000, "college_years": 4, "college_funding_pct": 0.0},
+    {"years_until_birth": 6, "monthly_cost": 1_400, "leaves_home_age": 18,
+     "college_annual_cost": 40_000, "college_years": 4, "college_funding_pct": 0.0},
+]
 
-YEARS_BETWEEN_CHILDREN = 3
-BOTH_CHILDREN_MONTHLY_COST = 3_500  # Total for both kids
-BOTH_CHILDREN_ANNUAL_COST = BOTH_CHILDREN_MONTHLY_COST * 12
-
-CHILD_LEAVES_HOME_AGE = 18  # Kids leave at 18
+# College starts at this age for every child; 529 saving runs from birth to it.
+COLLEGE_START_AGE = 18
 
 
-def child_birth_ages() -> tuple:
-    """(first, second) child birth ages, in the PRIMARY's age terms.
+def _child(child: dict, field: str):
+    """One field of a child entry, CHILD_DEFAULTS filling any gap."""
+    value = child.get(field)
+    return CHILD_DEFAULTS[field] if value is None else value
 
-    Single source of truth for the two-child timeline shared by
-    calculate_child_expenses and children_at_home_ages.
-    """
-    first_child_birth_age = YOUR_AGE + YEARS_UNTIL_FIRST_CHILD
-    return first_child_birth_age, first_child_birth_age + YEARS_BETWEEN_CHILDREN
+
+def child_birth_ages() -> list:
+    """Each child's birth age, in the PRIMARY's age terms (CHILDREN order)."""
+    return [YOUR_AGE + _child(c, "years_until_birth") for c in CHILDREN]
 
 
 def children_at_home_ages(your_age: int) -> list:
     """Ages of the children living at home when the primary is ``your_age``.
 
     Same rule calculate_child_expenses encodes: each child is in the household
-    from birth until CHILD_LEAVES_HOME_AGE. Empty for a child-free household
-    (YEARS_UNTIL_FIRST_CHILD = 99) and after both children have left.
+    from birth until their leaves_home_age. Empty for a child-free household
+    and after every child has left.
     """
-    return [
-        your_age - birth for birth in child_birth_ages()
-        if 0 <= your_age - birth < CHILD_LEAVES_HOME_AGE
-    ]
+    years = your_age - YOUR_AGE
+    ages = []
+    for c in CHILDREN:
+        age = years - _child(c, "years_until_birth")
+        if 0 <= age < _child(c, "leaves_home_age"):
+            ages.append(age)
+    return ages
 
 
 def calculate_child_expenses(your_age: int) -> float:
-    """
-    Calculate annual child-related expenses based on the primary user's age.
+    """Annual cost of the children living at home when the primary is
+    ``your_age``: each child's monthly_cost x 12, from birth until they leave."""
+    years = your_age - YOUR_AGE
+    total = 0.0
+    for c in CHILDREN:
+        age = years - _child(c, "years_until_birth")
+        if 0 <= age < _child(c, "leaves_home_age"):
+            total += _child(c, "monthly_cost") * 12
+    return total
 
-    Models two children, born at configurable intervals, each leaving the
-    household at CHILD_LEAVES_HOME_AGE. Returns 0 before the first child is
-    born and after both have left.
-    """
-    first_child_birth_age, second_child_birth_age = child_birth_ages()
-    first_child_leaves_age = first_child_birth_age + CHILD_LEAVES_HOME_AGE
-    second_child_leaves_age = second_child_birth_age + CHILD_LEAVES_HOME_AGE
 
-    if your_age < first_child_birth_age:
-        # No kids yet
-        return 0
-    elif your_age < second_child_birth_age:
-        # Only first child
-        if your_age < first_child_leaves_age:
-            return FIRST_CHILD_ANNUAL_COST
-        else:
-            return 0
-    elif your_age < first_child_leaves_age:
-        # Both children at home
-        return BOTH_CHILDREN_ANNUAL_COST
-    elif your_age < second_child_leaves_age:
-        # Only second child (first has left)
-        # Second child cost = total - first child cost
-        return BOTH_CHILDREN_ANNUAL_COST - FIRST_CHILD_ANNUAL_COST
-    else:
-        # Both children have left
-        return 0
+def normalize_children(raw) -> list:
+    """A clean copy of a children list: dict entries only, every field present."""
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [{k: _child(c, k) for k in CHILD_DEFAULTS} for c in raw if isinstance(c, dict)]
+
+
+# Older profiles described at most two children with the keys below (values =
+# what the old config defaulted to). legacy_children() turns them into the
+# equivalent CHILDREN list -- the second child costs what "both children" added
+# over the first -- so an old profile gives the same results as before.
+LEGACY_CHILD_KEYS = {
+    "YEARS_UNTIL_FIRST_CHILD": 3,
+    "YEARS_BETWEEN_CHILDREN": 3,
+    "FIRST_CHILD_MONTHLY_COST": 2_100,
+    "BOTH_CHILDREN_MONTHLY_COST": 3_500,
+    "CHILD_LEAVES_HOME_AGE": 18,
+    "COLLEGE_FUNDING_PCT": 0.0,
+    "COLLEGE_ANNUAL_COST": 40_000,
+    "COLLEGE_YEARS": 4,
+}
+# Old keys that were derived from the ones above (always recomputed, so a stored
+# value never mattered), and the old "years until first child" that meant none.
+_LEGACY_CHILD_DERIVED = ("FIRST_CHILD_ANNUAL_COST", "BOTH_CHILDREN_ANNUAL_COST",
+                         "COLLEGE_TARGET_PER_CHILD", "SAVINGS_529_PER_CHILD_ANNUAL")
+_LEGACY_NO_CHILDREN = 99
+
+
+def legacy_children(values: dict) -> list:
+    """The CHILDREN list equivalent to the old two-child keys in ``values``."""
+    v = {k: (d if values.get(k) is None else values[k]) for k, d in LEGACY_CHILD_KEYS.items()}
+    first = v["YEARS_UNTIL_FIRST_CHILD"]
+    if first >= _LEGACY_NO_CHILDREN:
+        return []
+    shared = {"leaves_home_age": v["CHILD_LEAVES_HOME_AGE"],
+              "college_annual_cost": v["COLLEGE_ANNUAL_COST"],
+              "college_years": v["COLLEGE_YEARS"],
+              "college_funding_pct": v["COLLEGE_FUNDING_PCT"]}
+    one, both = v["FIRST_CHILD_MONTHLY_COST"], v["BOTH_CHILDREN_MONTHLY_COST"]
+    return [
+        {"years_until_birth": first, "monthly_cost": one, **shared},
+        {"years_until_birth": first + v["YEARS_BETWEEN_CHILDREN"],
+         "monthly_cost": max(0, both - one), **shared},
+    ]
+
+
+def children_in(values: dict) -> list:
+    """The children an overrides dict describes: its CHILDREN, else its old
+    two-child keys, else this config's CHILDREN. Always a fresh, clean list."""
+    if values.get("CHILDREN") is not None:
+        return normalize_children(values["CHILDREN"])
+    if any(k in values for k in LEGACY_CHILD_KEYS):
+        return legacy_children(values)
+    return normalize_children(CHILDREN)
+
+
+def migrate_legacy_overrides(values: dict) -> dict:
+    """``values`` updated to today's keys, so an old saved profile still loads
+    and gives the same results: the two-child keys become CHILDREN (a CHILDREN
+    entry already there wins) and the retired wedding flag is dropped. Returns
+    ``values`` itself when there is nothing to change."""
+    stale = [k for k in (*LEGACY_CHILD_KEYS, *_LEGACY_CHILD_DERIVED, "YEARS_UNTIL_WEDDING")
+             if k in values]
+    if not stale:
+        return values
+    out = {k: v for k, v in values.items() if k not in stale}
+    if "CHILDREN" not in out and any(k in values for k in (*LEGACY_CHILD_KEYS,
+                                                           *_LEGACY_CHILD_DERIVED)):
+        out["CHILDREN"] = legacy_children(values)
+    return out
 
 # -----------------------------------------------------------------------------
 # 529 COLLEGE SAVINGS
 # -----------------------------------------------------------------------------
-# Optional partial funding model. Set COLLEGE_FUNDING_PCT > 0 to enable.
-# The model assumes college starts at age 18 and lasts COLLEGE_YEARS years.
+# Per child, opt-in through college_funding_pct: the household saves that share
+# of college_annual_cost x college_years into the child's own 529, spread evenly
+# from birth to COLLEGE_START_AGE, then pays that share of each college year from
+# it (the household budget covers anything the 529 can't).
 
-COLLEGE_FUNDING_PCT = 0.00  # Disabled by default
-COLLEGE_ANNUAL_COST = 40_000  # Estimated annual cost (in today's dollars)
-COLLEGE_YEARS = 4
 
-# Total estimated need per child and target per child (depends on funding pct)
-COLLEGE_TARGET_PER_CHILD = COLLEGE_ANNUAL_COST * COLLEGE_YEARS * COLLEGE_FUNDING_PCT
+def college_target(child: dict) -> float:
+    """The part of this child's college the household pays (today's dollars)."""
+    return (_child(child, "college_annual_cost") * _child(child, "college_years")
+            * _child(child, "college_funding_pct"))
 
-# 529 contribution strategy: save monthly from birth until college.
-SAVINGS_529_PER_CHILD_ANNUAL = COLLEGE_TARGET_PER_CHILD / 18  # spread over 18 years
+
+def child_529_contributions(your_age: int) -> list:
+    """This year's 529 saving for each child (CHILDREN order): the child's
+    college_target spread evenly from birth until COLLEGE_START_AGE."""
+    years = your_age - YOUR_AGE
+    return [college_target(c) / COLLEGE_START_AGE
+            if 0 <= years - _child(c, "years_until_birth") < COLLEGE_START_AGE else 0.0
+            for c in CHILDREN]
+
 
 def calculate_529_contribution(your_age: int) -> float:
-    """
-    Calculate annual 529 contribution based on children's ages.
-    Contributions stop when each child turns 18.
-    """
-    first_child_birth_age = YOUR_AGE + YEARS_UNTIL_FIRST_CHILD
-    second_child_birth_age = first_child_birth_age + YEARS_BETWEEN_CHILDREN
-
-    contribution = 0
-
-    # First child: contribute from birth until 18
-    first_child_age = your_age - first_child_birth_age
-    if 0 <= first_child_age < 18:
-        contribution += SAVINGS_529_PER_CHILD_ANNUAL
-
-    # Second child: contribute from birth until 18
-    second_child_age = your_age - second_child_birth_age
-    if 0 <= second_child_age < 18:
-        contribution += SAVINGS_529_PER_CHILD_ANNUAL
-
-    return contribution
+    """Total 529 saving this year, across all children."""
+    return sum(child_529_contributions(your_age))
 
 
 def calculate_college_expenses(your_age: int) -> dict:
+    """This year's college bill the household pays, per child.
+
+    Returns ``{'child1': ..., 'child2': ..., 'total': ...}``: one key per child in
+    CHILDREN order (matching the engine's ``childN_529`` accounts) plus the sum.
+    College runs from COLLEGE_START_AGE for the child's college_years.
     """
-    Calculate annual college expenses for each child.
-    College runs from age 18 through 18 + COLLEGE_YEARS.
-
-    Returns:
-        Dict with 'child1', 'child2', and 'total' keys showing annual expense
-    """
-    first_child_birth_age = YOUR_AGE + YEARS_UNTIL_FIRST_CHILD
-    second_child_birth_age = first_child_birth_age + YEARS_BETWEEN_CHILDREN
-
-    expenses = {'child1': 0, 'child2': 0, 'total': 0}
-
-    # First child college
-    first_child_age = your_age - first_child_birth_age
-    if 18 <= first_child_age < 18 + COLLEGE_YEARS:
-        expenses['child1'] = COLLEGE_ANNUAL_COST * COLLEGE_FUNDING_PCT
-
-    # Second child college
-    second_child_age = your_age - second_child_birth_age
-    if 18 <= second_child_age < 18 + COLLEGE_YEARS:
-        expenses['child2'] = COLLEGE_ANNUAL_COST * COLLEGE_FUNDING_PCT
-
-    expenses['total'] = expenses['child1'] + expenses['child2']
+    years = your_age - YOUR_AGE
+    expenses = {}
+    for i, c in enumerate(CHILDREN, 1):
+        age = years - _child(c, "years_until_birth")
+        cost = 0.0
+        if COLLEGE_START_AGE <= age < COLLEGE_START_AGE + _child(c, "college_years"):
+            cost = _child(c, "college_annual_cost") * _child(c, "college_funding_pct")
+        expenses[f"child{i}"] = cost
+    expenses["total"] = sum(expenses.values())
     return expenses
 
 def has_mortgage(your_age: int) -> bool:
@@ -1148,23 +1199,11 @@ PARTNER_SS_MONTHLY_FRA = 1_800      # Slightly lower for partner
 # If claiming early (age 62): ~70% of FRA amount.
 # If claiming late (age 70): ~124% of FRA amount.
 
-def calculate_social_security(your_age: int, claim_age: int = 67) -> float:
-    """
-    Calculate annual Social Security income in today's dollars.
+def ss_claim_factor(claim_age: int) -> float:
+    """Share of the full-retirement-age benefit paid when claiming at
+    ``claim_age`` (per SSA rules).
 
-    Args:
-        your_age: Current age of primary user in simulation
-        claim_age: Age when SS benefits start (62-70)
-
-    Returns:
-        Annual SS income for both the primary user and partner (if eligible).
-
-    LIMITATION: both spouses are assumed alive for the full planning horizon
-    (see PLAN_UNTIL_AGE). This function does not model survivor benefits
-    (the higher of the two SS benefits continuing alone after a spouse's
-    death) because there is no stochastic mortality in this model.
-
-    Early claiming reduction (per SSA rules):
+    Early claiming reduction:
     - Months 1-36 early: 5/9 of 1% per month = 6.67% per year
     - Months 37-60 early: 5/12 of 1% per month = 5% per year
     So if claiming at 62 (5 years = 60 months early):
@@ -1175,53 +1214,83 @@ def calculate_social_security(your_age: int, claim_age: int = 67) -> float:
     Delayed claiming credit:
     - 8% per year increase for each year delayed past FRA (up to age 70)
     """
+    if claim_age < SOCIAL_SECURITY_START_AGE:
+        months_early = (SOCIAL_SECURITY_START_AGE - claim_age) * 12
+        first_36_reduction = min(months_early, 36) * (5/9) * 0.01
+        beyond_36_reduction = max(0, months_early - 36) * (5/12) * 0.01
+        return 1 - first_36_reduction - beyond_36_reduction
+    if claim_age > SOCIAL_SECURITY_START_AGE:
+        return 1 + 0.08 * min(claim_age - SOCIAL_SECURITY_START_AGE, 3)
+    return 1.0
+
+
+def ss_spousal_factor(start_age: float) -> float:
+    """Share of the full spousal benefit paid when it starts at ``start_age``:
+    25/36 of 1% less per month early for 36 months, 5/12 of 1% beyond, and
+    no credit for waiting past full retirement age."""
+    months_early = max(0.0, (SOCIAL_SECURITY_START_AGE - start_age) * 12)
+    return 1 - min(months_early, 36) * (25/36) * 0.01 - max(0.0, months_early - 36) * (5/12) * 0.01
+
+
+def calculate_social_security(your_age: int, claim_age: int = 67) -> float:
+    """
+    Calculate annual Social Security income in today's dollars.
+
+    Args:
+        your_age: Current age of primary user in simulation
+        claim_age: Age when the PRIMARY's benefit starts (62-70). The partner
+            claims at PARTNER_SS_CLAIM_AGE in their own age (None = claim_age).
+
+    Returns:
+        Annual SS income for both the primary user and partner (if eligible):
+        each person's own benefit (ss_claim_factor) plus, for a MARRIED couple
+        (MODEL_SPOUSAL_SS_BENEFIT), the spousal top-up -- a spouse whose own
+        benefit is under half of the other's gets the difference once both
+        have claimed (ss_spousal_factor; no delayed credit on it).
+
+    LIMITATION: both spouses are assumed alive for the full planning horizon
+    (see PLAN_UNTIL_AGE). This function does not model survivor benefits
+    (the higher of the two SS benefits continuing alone after a spouse's
+    death) because there is no stochastic mortality in this model. Benefits
+    are the FRA amounts you enter; they do not change with when you stop work.
+    """
     annual_income = 0
 
     # Primary user's SS
     if your_age >= claim_age:
-        your_monthly = YOUR_SS_MONTHLY_FRA
-        if claim_age < SOCIAL_SECURITY_START_AGE:
-            months_early = (SOCIAL_SECURITY_START_AGE - claim_age) * 12
-            first_36_reduction = min(months_early, 36) * (5/9) * 0.01
-            beyond_36_months = max(0, months_early - 36)
-            beyond_36_reduction = beyond_36_months * (5/12) * 0.01
-            total_reduction = first_36_reduction + beyond_36_reduction
-            your_monthly *= (1 - total_reduction)
-        elif claim_age > SOCIAL_SECURITY_START_AGE:
-            years_delayed = min(claim_age - SOCIAL_SECURITY_START_AGE, 3)
-            your_monthly *= (1 + 0.08 * years_delayed)
+        annual_income += YOUR_SS_MONTHLY_FRA * ss_claim_factor(claim_age) * 12
 
-        annual_income += your_monthly * 12
+    if not has_partner():
+        return annual_income
 
-    # Partner's SS (accounting for age difference)
-    # Only add partner SS if partner actually exists
-    partner_monthly_fra = PARTNER_SS_MONTHLY_FRA if 'PARTNER_SS_MONTHLY_FRA' in globals() else 0
-    partner_age_config = PARTNER_AGE if 'PARTNER_AGE' in globals() else 0
-    partner_exists = partner_monthly_fra > 0 and partner_age_config > 0
-    if partner_exists:
-        partner_age = your_age - (YOUR_AGE - PARTNER_AGE)
-        partner_claim_age = claim_age  # Assume same claiming strategy
+    # Partner's SS (accounting for age difference), at their own claim age
+    age_gap = YOUR_AGE - PARTNER_AGE
+    partner_age = your_age - age_gap
+    partner_claim_age = globals().get("PARTNER_SS_CLAIM_AGE") or claim_age
+    partner_monthly_fra = globals().get("PARTNER_SS_MONTHLY_FRA", 0) or 0
+    if partner_monthly_fra > 0 and partner_age >= partner_claim_age:
+        annual_income += partner_monthly_fra * ss_claim_factor(partner_claim_age) * 12
 
-        if partner_age >= partner_claim_age:
-            partner_monthly = PARTNER_SS_MONTHLY_FRA
-            if partner_claim_age < SOCIAL_SECURITY_START_AGE:
-                months_early = (SOCIAL_SECURITY_START_AGE - partner_claim_age) * 12
-                first_36_reduction = min(months_early, 36) * (5/9) * 0.01
-                beyond_36_months = max(0, months_early - 36)
-                beyond_36_reduction = beyond_36_months * (5/12) * 0.01
-                total_reduction = first_36_reduction + beyond_36_reduction
-                partner_monthly *= (1 - total_reduction)
-            elif partner_claim_age > SOCIAL_SECURITY_START_AGE:
-                years_delayed = min(partner_claim_age - SOCIAL_SECURITY_START_AGE, 3)
-                partner_monthly *= (1 + 0.08 * years_delayed)
-
-            annual_income += partner_monthly * 12
+    # Spousal top-up: married couples only, once BOTH have claimed. It starts
+    # when the second of the two files, at the receiving spouse's age then.
+    if (globals().get("MODEL_SPOUSAL_SS_BENEFIT", False)
+            and normalize_filing_status() == _FILING_MFJ
+            and your_age >= claim_age and partner_age >= partner_claim_age):
+        partner_top_up = max(0.0, 0.5 * YOUR_SS_MONTHLY_FRA - partner_monthly_fra)
+        your_top_up = max(0.0, 0.5 * partner_monthly_fra - YOUR_SS_MONTHLY_FRA)
+        annual_income += 12 * (
+            partner_top_up * ss_spousal_factor(max(partner_claim_age, claim_age - age_gap))
+            + your_top_up * ss_spousal_factor(max(claim_age, partner_claim_age + age_gap)))
 
     return annual_income
 
 # Toggle Social Security on/off for scenario comparison
 INCLUDE_SOCIAL_SECURITY = True
-SS_CLAIM_AGE = 67  # When to start claiming (62-70)
+SS_CLAIM_AGE = 67  # When you start claiming (62-70)
+PARTNER_SS_CLAIM_AGE = None  # When your partner starts, in their own age (None = same as yours)
+# Spousal benefit for married couples (calculate_social_security). False
+# reproduces the earlier results, which paid each person only their own benefit.
+MODEL_SPOUSAL_SS_BENEFIT = True
 
 # -----------------------------------------------------------------------------
 # SOCIAL SECURITY TAXATION
@@ -1398,6 +1467,24 @@ def has_partner() -> bool:
         return int(globals().get("PARTNER_AGE", 0) or 0) > 0
     except (TypeError, ValueError):
         return False
+
+
+def plan_end_age(values: dict = None) -> int:
+    """The primary's age when the plan ends: the later of you reaching
+    PLAN_UNTIL_AGE and your partner reaching PARTNER_PLAN_UNTIL_AGE (None = the
+    same age), so a younger partner is covered to their own plan-until age.
+    Simulations run the years before this age. ``values`` (a UI overrides
+    dict) supplies any of the four ages in place of this config's."""
+    def get(key):
+        if values is not None and values.get(key) is not None:
+            return values[key]
+        return globals().get(key)
+    end = int(get("PLAN_UNTIL_AGE"))
+    partner_age = int(get("PARTNER_AGE") or 0)
+    if partner_age > 0:                     # has_partner(), for these values
+        partner_until = int(get("PARTNER_PLAN_UNTIL_AGE") or end)
+        end = max(end, partner_until + int(get("YOUR_AGE")) - partner_age)
+    return end
 
 
 def normalize_filing_status(status=None) -> str:
@@ -2545,11 +2632,9 @@ if __name__ == "__main__":
     print(f"  TOTAL NET WORTH:      ${TOTAL_NET_WORTH:>12,.0f}")
 
     print("\nPERSONAL INFO:")
+    married = normalize_filing_status() == _FILING_MFJ
     print(f"  Primary age: {YOUR_AGE}, Partner age: {PARTNER_AGE}")
-    if YEARS_UNTIL_WEDDING > 0:
-        print(f"  Wedding in {YEARS_UNTIL_WEDDING} year(s)")
-    else:
-        print("  Married at simulation start")
+    print(f"  Filing status: {FILING_STATUS}")
     if MORTGAGE_YEARS_REMAINING > 0:
         print(f"  Mortgage paid off at age {YOUR_AGE + MORTGAGE_YEARS_REMAINING}")
     else:
@@ -2557,7 +2642,7 @@ if __name__ == "__main__":
 
     print("\nANNUAL SAVINGS:")
     your_total = calculate_your_total_savings(YOUR_AGE)
-    partner_total = calculate_partner_total_savings(PARTNER_SALARY, 0, married=(YEARS_UNTIL_WEDDING == 0))
+    partner_total = calculate_partner_total_savings(PARTNER_SALARY, 0, married=married)
     print(f"  Primary savings:      ${your_total:>12,.0f}")
     print(f"  Partner savings:      ${partner_total:>12,.0f}")
     print(f"  {'-' * 40}")
@@ -2582,7 +2667,6 @@ if __name__ == "__main__":
     for age in [YOUR_AGE, YOUR_AGE + 5, YOUR_AGE + 10, YOUR_AGE + 15]:
         your_s = calculate_your_total_savings(age)
         years = age - YOUR_AGE
-        married = years >= YEARS_UNTIL_WEDDING
         partner_salary = PARTNER_SALARY * ((1 + PARTNER_SALARY_GROWTH_RATE) ** years)
         partner_s = calculate_partner_total_savings(partner_salary, years, married)
         print(f"  Age {age}: Primary ${your_s:,.0f} + Partner ${partner_s:,.0f} = ${your_s + partner_s:,.0f}")

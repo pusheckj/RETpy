@@ -114,19 +114,22 @@ def test_child_expense_transitions():
     print("EDGE CASE TEST: Child Expense Transitions")
     print("=" * 70)
 
-    first_child_birth = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD
-    second_child_birth = first_child_birth + cfg.YEARS_BETWEEN_CHILDREN
-    first_child_leaves = first_child_birth + cfg.CHILD_LEAVES_HOME_AGE
-    second_child_leaves = second_child_birth + cfg.CHILD_LEAVES_HOME_AGE
+    # The default family: two children, each with their own cost and leave age.
+    first, second = cfg.CHILDREN[0], cfg.CHILDREN[1]
+    first_child_birth = cfg.YOUR_AGE + first["years_until_birth"]
+    second_child_birth = cfg.YOUR_AGE + second["years_until_birth"]
+    first_child_leaves = first_child_birth + first["leaves_home_age"]
+    second_child_leaves = second_child_birth + second["leaves_home_age"]
+    one, two = first["monthly_cost"] * 12, second["monthly_cost"] * 12
 
     transitions = [
         (first_child_birth - 1, 0, "Day before first child born"),
-        (first_child_birth, cfg.FIRST_CHILD_ANNUAL_COST, "First child born"),
-        (second_child_birth - 1, cfg.FIRST_CHILD_ANNUAL_COST, "Day before second born"),
-        (second_child_birth, cfg.BOTH_CHILDREN_ANNUAL_COST, "Second child born"),
-        (first_child_leaves - 1, cfg.BOTH_CHILDREN_ANNUAL_COST, "Day before first leaves"),
-        (first_child_leaves, cfg.BOTH_CHILDREN_ANNUAL_COST - cfg.FIRST_CHILD_ANNUAL_COST, "First child leaves"),
-        (second_child_leaves - 1, cfg.BOTH_CHILDREN_ANNUAL_COST - cfg.FIRST_CHILD_ANNUAL_COST, "Day before second leaves"),
+        (first_child_birth, one, "First child born"),
+        (second_child_birth - 1, one, "Day before second born"),
+        (second_child_birth, one + two, "Second child born"),
+        (first_child_leaves - 1, one + two, "Day before first leaves"),
+        (first_child_leaves, two, "First child leaves"),
+        (second_child_leaves - 1, two, "Day before second leaves"),
         (second_child_leaves, 0, "Second child leaves"),
     ]
 
@@ -183,10 +186,11 @@ def test_college_timing_precision():
     print("EDGE CASE TEST: College Timing Precision")
     print("=" * 70)
 
-    first_child_birth = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD
-    second_child_birth = first_child_birth + cfg.YEARS_BETWEEN_CHILDREN
+    first, second = cfg.CHILDREN[0], cfg.CHILDREN[1]
+    first_child_birth = cfg.YOUR_AGE + first["years_until_birth"]
+    second_child_birth = cfg.YOUR_AGE + second["years_until_birth"]
 
-    college_cost = cfg.COLLEGE_ANNUAL_COST * cfg.COLLEGE_FUNDING_PCT
+    college_cost = first["college_annual_cost"] * first["college_funding_pct"]
 
     transitions = [
         (first_child_birth + 17, 0, 0, "First child age 17 (before college)"),

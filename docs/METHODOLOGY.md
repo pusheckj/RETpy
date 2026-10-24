@@ -12,7 +12,7 @@ A **Monte Carlo retirement simulation** projects a household's portfolio forward
 
 > What is the earliest retirement age at which the plan achieves at least X% probability of success?
 
-**Success** is defined strictly: in every simulated year from the retirement age through `PLAN_UNTIL_AGE` (default 90), the portfolio must be able to cover at least **99%** of the required withdrawal for that year. A single year of coverage below 99% marks the path as a failure. The success rate for a given retirement age is the fraction of simulated paths that survive all years.
+**Success** is defined strictly: in every simulated year from the retirement age through the plan's end (`PLAN_UNTIL_AGE`, default 95, or later if a younger partner's own plan-until age comes later; see `plan_end_age()`), the portfolio must be able to cover at least **99%** of the required withdrawal for that year. A single year of coverage below 99% marks the path as a failure. The success rate for a given retirement age is the fraction of simulated paths that survive all years.
 
 The output is a success probability curve over candidate retirement ages. The solver walks back from an upper-bound age until the first age whose success rate meets or exceeds `TARGET_SUCCESS_RATE` (default 0.80).
 
@@ -26,10 +26,10 @@ For each candidate retirement age:
 2. Each simulation generates:
    - An annual path of stock and bond returns (correlated, see Section 3).
    - An annual path of inflation rates, one per expense category (see Section 4).
-3. Each simulation runs year-by-year from the user's current age to `PLAN_UNTIL_AGE`.
+3. Each simulation runs year-by-year from the user's current age to the plan's end: the later of you reaching `PLAN_UNTIL_AGE` and your partner reaching `PARTNER_PLAN_UNTIL_AGE` (same age by default).
 4. The lifecycle splits into two phases:
    - **Accumulation phase:** current age → retirement age. Contributions flow in; returns compound.
-   - **Retirement phase:** retirement age → `PLAN_UNTIL_AGE`. Withdrawals flow out; Social Security and RMDs provide income offsets.
+   - **Retirement phase:** retirement age → the plan's end. Withdrawals flow out; Social Security and RMDs provide income offsets.
 5. If at any point the portfolio cannot cover 99% of the required withdrawal, the simulation is marked a failure and terminates.
 
 Simulations are independent; there is no cross-path state.
@@ -127,7 +127,7 @@ IRS contribution limits are CPI-indexed in reality, so in the all-real frame the
 
 Each retirement year proceeds in this order:
 
-1. **Compute gross annual expenses** — sum of housing, food, transport, healthcare (age-banded), child costs (age-phased-out), leisure, and discretionary.
+1. **Compute gross annual expenses** — sum of housing, food, transport, healthcare (age-banded), child costs (each child in `CHILDREN` costs their own monthly amount from birth until their own leave-home age), college (paid first from that child's own 529), leisure, and discretionary.
 2. **Apply dynamic spending adjustments** (Section 8) if enabled.
 3. **Apply return-based spending adjustments** (Section 9) if enabled.
 4. **Subtract Social Security** income for both spouses, if each has reached their claim age.
@@ -231,6 +231,8 @@ For users born in 1960 or later, FRA is **67**.
 
 - **Early claim (62 ≤ age < FRA):** benefit is reduced by 5/9 of 1% per month for the first 36 months before FRA, then 5/12 of 1% per month for any earlier months. Claiming at 62 yields a **30% reduction** (70% of PIA).
 - **Delayed credits (FRA < age ≤ 70):** benefit grows by **8% per year** of delay (2/3 of 1% per month). Delaying from FRA=67 to 70 yields **124%** of PIA. No further credits accrue after 70.
+- **Each person claims at their own age:** you at `SS_CLAIM_AGE`, your partner at `PARTNER_SS_CLAIM_AGE` (in their own age; the same age by default).
+- **Spousal benefit (married couples, `MODEL_SPOUSAL_SS_BENEFIT`):** once both have claimed, a spouse whose own benefit is under half of the other's gets the difference, reduced by 25/36 of 1% per month before FRA for 36 months and 5/12 of 1% beyond (65% at 62), with no delayed credit. Unmarried partners don't qualify. Survivor benefits and benefits that depend on when you stop working are not modeled.
 
 ### 12.3 Taxation
 
@@ -293,10 +295,10 @@ When `USE_HOME_EQUITY_BACKUP = True`, accessible home equity (default **85%** of
 
 - **Normal-distribution returns** under-sample fat tails and skew relative to real markets. Crisis-level drawdowns are reached only via clamping rather than emerging organically from the distribution.
 - **No tax-loss harvesting** is modeled; taxable gains are realized at their embedded-gain ratio on withdrawal.
-- **Single filing status per year** — MFJ after the configured wedding year, single before. No modeling of divorce, widow(er) filing status, or head-of-household transitions.
+- **One filing status for the whole plan** (`FILING_STATUS`) — no wedding, divorce, widow(er) or head-of-household transitions.
 - **Geography:** federal + California state only by default. See `TAX_MODEL.md` §4 for how to substitute another state.
 - **Not modeled:** inherited IRAs (no 10-year rule accounting), pension income, rental real estate, annuities, cash-value life insurance, business equity, deferred comp.
 - **Medicare/Medicaid** are modeled as flat age-banded costs; no long-term-care Medicaid spend-down logic, no separate Part A/B/D bracket interaction beyond IRMAA.
 - **State residency is assumed constant.** Changing residency mid-retirement (e.g. moving from CA to a no-tax state) is not modeled.
 - **Sequence-of-returns risk** is captured by Monte Carlo but not separately reported. Users concerned about SORR should inspect the distribution of failures by retirement-year cohort.
-- **Fixed-horizon / no-mortality model:** both spouses are assumed alive for every year through `PLAN_UNTIL_AGE`. There is no stochastic mortality, no survivor Social Security benefit (the higher of the two benefits continuing alone after a spouse's death), no filing-status change at first death, and no widowhood expense reduction (single-person household costs are typically lower than a couple's). `PLAN_UNTIL_AGE` sets the simulation length only, not a mortality assumption.
+- **Fixed-horizon / no-mortality model:** both spouses are assumed alive for every year through the plan's end. There is no stochastic mortality, no survivor Social Security benefit (the higher of the two benefits continuing alone after a spouse's death), no filing-status change at first death, and no widowhood expense reduction (single-person household costs are typically lower than a couple's). `PLAN_UNTIL_AGE` sets the simulation length only, not a mortality assumption.

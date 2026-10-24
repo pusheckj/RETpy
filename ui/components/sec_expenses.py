@@ -15,6 +15,13 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
 
+from retirement_sim import config as cfg
+
+# Children: one row per child, up to MAX_CHILDREN. Every row widget's key starts
+# with "se_kid" (utils/widget_sync fills and clears them as a family).
+MAX_CHILDREN = 6
+_NEW_CHILD_COST = (2_100, 1_400)   # a first child, and each one after (the defaults)
+
 
 def _section_label(st, txt):
     st.markdown(f'<div style="font-size: 13px; color: #64748b; text-transform: uppercase; '
@@ -32,6 +39,77 @@ def _money_input(st, label, widget_key, override_key, default, max_value, step,
     if mirror_key:
         set_override(st, mirror_key, safe_int(v))
     return safe_int(v)
+
+
+def _clamped(v, lo, hi):
+    return max(lo, min(hi, safe_int(v, lo)))
+
+
+def _kid_number(st, key, label, seed, lo, hi, step, help_text=None) -> int:
+    ensure_default(st, key, _clamped(seed, lo, hi))
+    return safe_int(st.number_input(label, min_value=lo, max_value=hi, step=step, key=key,
+                                    help=help_text))
+
+
+def _new_child(earlier: list) -> dict:
+    """A row added by raising the number of children: born 3 years after the
+    previous child (or in a year), at the default cost."""
+    yub = earlier[-1]["years_until_birth"] + 3 if earlier else 1
+    return {**cfg.CHILD_DEFAULTS, "years_until_birth": max(1, yub),
+            "monthly_cost": _NEW_CHILD_COST[1 if earlier else 0]}
+
+
+def _child_row(st, i: int, kid: dict) -> dict:
+    """One child's inputs; returns the child's CHILDREN entry."""
+    p = f"se_kid{i}_"
+    yub = int(kid["years_until_birth"])
+    head, toggle = st.columns([1, 1.4], vertical_alignment="center")
+    head.markdown(f"**Child {i + 1}**")
+    ensure_default(st, p + "born", yub <= 0)
+    born = toggle.toggle("Already born", key=p + "born")
+    c1, c2 = st.columns(2)
+    with c1:
+        if born:
+            yub = -_kid_number(st, p + "age", "Age today", -yub if yub <= 0 else 0, 0, 30, 1)
+        else:
+            yub = _kid_number(st, p + "in", "Born in (years)", yub if yub > 0 else 1, 1, 30, 1)
+        leaves = _kid_number(st, p + "leaves", "Leaves home at", kid["leaves_home_age"], 16, 30, 1,
+                             "Their costs stop at this age.")
+    with c2:
+        cost = _kid_number(st, p + "cost", "Monthly cost ($)", kid["monthly_cost"], 0, 10_000, 100,
+                           "Childcare, food, clothes and activities while they live with "
+                           "you, in today's dollars.")
+        pct = _kid_number(st, p + "college", "College you pay (%)",
+                          round(100 * float(kid["college_funding_pct"])), 0, 100, 5,
+                          "Share of college you plan to pay. It's saved in a 529 from "
+                          "birth and college is paid from it. 0 = none.")
+    return {**kid, "years_until_birth": yub, "monthly_cost": cost, "leaves_home_age": leaves,
+            "college_funding_pct": pct / 100.0}
+
+
+def _children(st) -> list:
+    """The Children inputs: how many, then one row each. Writes CHILDREN."""
+    kids = cfg.children_in(st.session_state.get("user_overrides", {}) or {})
+    ensure_default(st, "se_kids_n", min(len(kids), MAX_CHILDREN))
+    n = st.number_input("Number of children", min_value=0, max_value=MAX_CHILDREN, step=1,
+                        key="se_kids_n", help="Children you have now or plan to have.")
+    out: list = []
+    for i in range(safe_int(n)):
+        out.append(_child_row(st, i, kids[i] if i < len(kids) else _new_child(out)))
+    if any(c["college_funding_pct"] > 0 for c in out):
+        # College prices: one pair for every child.
+        first = next(c for c in out if c["college_funding_pct"] > 0)
+        c1, c2 = st.columns(2)
+        with c1:
+            fee = _kid_number(st, "se_kid_college_cost", "A year of college ($)",
+                              first["college_annual_cost"], 0, 200_000, 1_000,
+                              "Tuition, housing and fees for one year, in today's dollars.")
+        with c2:
+            years = _kid_number(st, "se_kid_college_years", "Years of college",
+                                first["college_years"], 1, 8, 1)
+        out = [{**c, "college_annual_cost": fee, "college_years": years} for c in out]
+    set_override(st, "CHILDREN", out)
+    return out
 
 
 def _statement_sync(st, slot) -> None:
@@ -108,40 +186,7 @@ def render_body(st) -> None:
 
     # ----- Children -----
     _section_label(st, "Children")
-    yufc_current = safe_int(get_override(st, "YEARS_UNTIL_FIRST_CHILD", 99), 99)
-    fcmc_current = safe_int(get_override(st, "FIRST_CHILD_MONTHLY_COST", 0), 0)
-    has_kids_default = "Kids planned / already born" if (yufc_current < 99 and fcmc_current > 0) else "No kids planned"
-    ensure_default(st, "se_kids", has_kids_default)
-    kids_status = st.radio("Have / planning kids?",
-                            ["No kids planned", "Kids planned / already born"],
-                            horizontal=True, key="se_kids")
-    if kids_status == "Kids planned / already born":
-        c5, c6 = st.columns(2)
-        with c5:
-            ensure_default(st, "se_yufc", yufc_current if yufc_current < 99 else 3)
-            v = st.number_input("Years until first child", min_value=-25, max_value=20,
-                                step=1, key="se_yufc",
-                                help="Negative = already born that many years ago")
-            set_override(st, "YEARS_UNTIL_FIRST_CHILD", safe_int(v))
-            ensure_default(st, "se_ybc", safe_int(get_override(st, "YEARS_BETWEEN_CHILDREN", 3), 3))
-            v = st.number_input("Years between children", min_value=1, max_value=10,
-                                step=1, key="se_ybc")
-            set_override(st, "YEARS_BETWEEN_CHILDREN", safe_int(v))
-        with c6:
-            _money_input(st, "Monthly cost (one child)", "se_fcmc",
-                          "FIRST_CHILD_MONTHLY_COST", 2_100, 10_000, 100)
-            _money_input(st, "Monthly cost (both children)", "se_bcmc",
-                          "BOTH_CHILDREN_MONTHLY_COST", 3_500, 15_000, 100)
-
-        ensure_default(st, "se_leave_age",
-                       safe_int(get_override(st, "CHILD_LEAVES_HOME_AGE", 18), 18))
-        v = st.slider("Child leaves home age", min_value=16, max_value=25,
-                      step=1, key="se_leave_age")
-        set_override(st, "CHILD_LEAVES_HOME_AGE", safe_int(v))
-    else:
-        set_override(st, "YEARS_UNTIL_FIRST_CHILD", 99)
-        set_override(st, "FIRST_CHILD_MONTHLY_COST", 0)
-        set_override(st, "BOTH_CHILDREN_MONTHLY_COST", 0)
+    kids = _children(st)
 
     # ----- Lifecycle preset -----
     _section_label(st, "Lifecycle pattern")
@@ -217,9 +262,13 @@ def render_body(st) -> None:
         parts.append(f"partner {money_md(monthly_partner * 12)}")
     if monthly_kids > 1:
         parts.append(f"children {money_md(monthly_kids * 12)}")
+    changes = (["children"] if kids else []) + (
+        ["the house move"] if overrides.get("HOUSE_MOVE_ENABLED") else []) + [
+        "healthcare in retirement"]
     st.caption("Per year: " + " · ".join(parts)
-               + ".  This is the figure the simulation spends today; it grows "
-                 "with children, the house move, and healthcare in retirement.")
+               + ".  This is the figure the simulation spends today; it changes with "
+               + (", ".join(changes[:-1]) + " and " if len(changes) > 1 else "")
+               + changes[-1] + ".")
 
 
 def render(st) -> None:

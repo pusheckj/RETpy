@@ -29,25 +29,32 @@ try:
     from utils.formatting import money, money_md
     from utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, get_limit
     from utils import simple_to_full as s2f
+    from utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH, household_of,
+                                 clear_partner)
 except ImportError:  # pragma: no cover
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, get_limit  # type: ignore
     from ui.utils import simple_to_full as s2f  # type: ignore
+    from ui.utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH,  # type: ignore
+                                    household_of, clear_partner)
 
 STATE = "setup"
 _DOLLAR = ":material/attach_money:"
 _PCT = ":material/percent:"
 
-JUST_ME, SPOUSE, PARTNER = "Just me", "Me and my spouse", "Me and my partner (not married)"
-NO_KIDS, HAVE_KIDS, PLAN_KIDS = "No kids", "I have kids", "Planning to have kids"
-ONE, TWO = "1", "2 or more"
 STATES = {"California": "CA", "No state income tax": "No state tax", "Another state": "Other"}
 RENT, OWN = "Rent", "Own"
 KEEP, FILL = "Keep my amounts and invest the rest", "Fill my 401(k) first, then invest the rest"
 SS_YES, SS_NO = "Yes", "No, plan without it"
-# The planner's own two-child cost is this multiple of one child's.
-_TWO_KIDS = cfg.BOTH_CHILDREN_MONTHLY_COST / cfg.FIRST_CHILD_MONTHLY_COST
+# Children: at most this many in all (the Expenses section shows one row each),
+# planned ones spaced this many years apart, and each child after the first
+# costing this share of the first (the planner's default family: $2,100 for one,
+# $1,400 more for the second).
+MAX_KIDS = 6
+_KIDS_APART = 3
+_ONE_KID_COST = 2_100
+_MORE_KIDS_SHARE = 2 / 3
 # Short "what goes here" hints for the monthly categories.
 _SPEND_HINTS = {
     "SPEND_UTILITIES_MONTHLY": "Electric, gas, water, internet, phone.",
@@ -185,18 +192,12 @@ def _partner(st) -> bool:
 # Steps
 # ---------------------------------------------------------------------------
 
-def _household_saved(ov) -> Optional[str]:
-    if int(_num(ov.get("PARTNER_AGE"))) <= 0:
-        return JUST_ME
-    return SPOUSE if ov.get("FILING_STATUS") == "Married filing jointly" else PARTNER
-
-
 def draw_you(st) -> None:
     ov = _ov(st)
     _whole(st, "gs_age", "How old are you?", ov.get("YOUR_AGE"), None, 18, 100)
     _cue(st, "Your age today, in years.")
     hh = _choice(st, "gs_household", "Who is this plan for?", [JUST_ME, SPOUSE, PARTNER],
-                 _household_saved(ov), None)
+                 household_of(ov), None)
     _cue(st, "Pick spouse or partner if you share bills and savings. Their income and "
              "accounts come on later steps.")
     if hh in (SPOUSE, PARTNER):
@@ -211,15 +212,10 @@ def commit_you(st) -> None:
         ov["YOUR_AGE"] = int(_val(st, "gs_age"))
     hh = _val(st, "gs_household")
     if hh == JUST_ME:
-        ov.update(PARTNER_AGE=0, FILING_STATUS="Single", YEARS_UNTIL_WEDDING=99)
-        for k in ("PARTNER_401K", "PARTNER_ROTH_IRA", "PARTNER_BROKERAGE", "PARTNER_CASH",
-                  "PARTNER_401K_CONTRIBUTION", "PARTNER_ROTH_CONTRIBUTION",
-                  "PARTNER_BASE_SALARY", "PARTNER_SALARY", "PARTNER_SS_MONTHLY_FRA"):
-            ov[k] = 0
+        clear_partner(ov)
+        ov["FILING_STATUS"] = SINGLE
     elif hh in (SPOUSE, PARTNER):
-        married = hh == SPOUSE
-        ov.update(FILING_STATUS="Married filing jointly" if married else "Single",
-                  YEARS_UNTIL_WEDDING=0 if married else 99)
+        ov["FILING_STATUS"] = MFJ if hh == SPOUSE else SINGLE
         if _val(st, "gs_partner_age") is not None:
             ov["PARTNER_AGE"] = int(_val(st, "gs_partner_age"))
 
@@ -234,77 +230,83 @@ def check_you(st) -> Optional[str]:
     return None
 
 
-def _kids_saved(ov) -> Optional[str]:
-    yufc = int(_num(ov.get("YEARS_UNTIL_FIRST_CHILD"), 99))
-    if yufc >= 99 or _num(ov.get("FIRST_CHILD_MONTHLY_COST")) <= 0:
-        return NO_KIDS
-    return HAVE_KIDS if yufc <= 0 else PLAN_KIDS
+def _kids_saved(ov) -> Dict[str, Any]:
+    """The children step's earlier answers, from the plan's children list:
+    ages of those born (oldest first), how many are planned, and when."""
+    kids = cfg.children_in(ov)
+    born = sorted((-int(c["years_until_birth"]) for c in kids if c["years_until_birth"] <= 0),
+                  reverse=True)
+    planned = sorted(int(c["years_until_birth"]) for c in kids if c["years_until_birth"] > 0)
+    return {"born": born, "planned": len(planned), "next": planned[0] if planned else None,
+            "cost": kids[0]["monthly_cost"] if kids else None}
+
+
+def _kid_count(st) -> int:
+    return int(_num(_val(st, "gs_kids_have"))) + int(_num(_val(st, "gs_kids_plan")))
 
 
 def draw_kids(st) -> None:
     ov = _ov(st)
-    kids = _choice(st, "gs_kids", "Do you have kids, or plan to?", [NO_KIDS, HAVE_KIDS, PLAN_KIDS],
-                   _kids_saved(ov), None)
-    _cue(st, "Kids add to your spending until they leave home at 18. The planner models up "
-             "to two.")
-    yufc = int(_num(ov.get("YEARS_UNTIL_FIRST_CHILD"), 99))
-    two = _num(ov.get("BOTH_CHILDREN_MONTHLY_COST")) > _num(ov.get("FIRST_CHILD_MONTHLY_COST"))
-    if kids == HAVE_KIDS:
-        _whole(st, "gs_oldest", "How old is your oldest child?",
-               -yufc if yufc <= 0 else None, None, 0, 25)
-        n = _choice(st, "gs_nkids", "How many kids?", [ONE, TWO], TWO if two else ONE, ONE,
-                    horizontal=True)
-        if n == TWO:
-            years_apart = int(_num(ov.get("YEARS_BETWEEN_CHILDREN"), 3))
-            _whole(st, "gs_youngest", "How old is your youngest?",
-                   max(0, -yufc - years_apart) if yufc <= 0 else None, None, 0, 25)
-    elif kids == PLAN_KIDS:
-        _whole(st, "gs_kids_in", "In about how many years do you expect your first?",
-               yufc if 0 < yufc < 99 else None, None, 0, 20)
-        _cue(st, "0 means this year. A guess is fine.")
-        _choice(st, "gs_nkids", "How many kids?", [ONE, TWO], TWO if two else ONE, ONE,
-                horizontal=True)
-        _cue(st, "With two, we assume they're 3 years apart.")
-    if kids in (HAVE_KIDS, PLAN_KIDS):
-        _money(st, "gs_kid_cost", "Monthly cost of one child",
-               ov.get("FIRST_CHILD_MONTHLY_COST"), cfg.FIRST_CHILD_MONTHLY_COST, hi=10_000, step=100)
-        _cue(st, "Childcare, food, clothes and activities. A rough guess is fine; you can "
-                 "fine-tune it later under Expenses.")
+    saved = _kids_saved(ov)
+    _whole(st, "gs_kids_have", "How many children do you have?", len(saved["born"]), None,
+           0, MAX_KIDS)
+    _cue(st, "Count the children whose costs you cover. Enter 0 if none.")
+    have = int(_num(_val(st, "gs_kids_have")))
+    for i in range(have):
+        _whole(st, f"gs_kid{i}_age", f"Age of child {i + 1}",
+               saved["born"][i] if i < len(saved["born"]) else None, None, 0, 30)
+    if have:
+        _cue(st, "Oldest first. Their age today, in years.")
+    _whole(st, "gs_kids_plan", "How many more do you plan to have?", saved["planned"], None,
+           0, MAX_KIDS)
+    _cue(st, "A guess is fine. Enter 0 if none.")
+    if int(_num(_val(st, "gs_kids_plan"))) > 0:
+        _whole(st, "gs_kids_in", "In about how many years do you expect the next one?",
+               saved["next"], None, 0, 20)
+        _cue(st, f"0 means this year. We space any after that {_KIDS_APART} years apart.")
+    if _kid_count(st) > 0:
+        _money(st, "gs_kid_cost", "Monthly cost of one child", saved["cost"], _ONE_KID_COST,
+               hi=10_000, step=100)
+        _cue(st, "Childcare, food, clothes and activities, until they leave home at 18. Each "
+                 "child after the first is counted at about two-thirds of this. A rough guess "
+                 "is fine; you can fine-tune each child later under Expenses.")
 
 
 def commit_kids(st) -> None:
+    have, plan = _val(st, "gs_kids_have"), _val(st, "gs_kids_plan")
+    if have is None or plan is None:
+        return
+    ages = [_val(st, f"gs_kid{i}_age") for i in range(int(have))]
+    if any(a is None for a in ages) or (plan and _val(st, "gs_kids_in") is None):
+        return
+    births = sorted(-int(a) for a in ages)               # oldest first
+    first_planned = int(_num(_val(st, "gs_kids_in")))
+    births += [first_planned + _KIDS_APART * j for j in range(int(plan))]
+    cost = int(_num(_val(st, "gs_kid_cost"), _ONE_KID_COST))
     ov = _ov(st)
-    kids = _val(st, "gs_kids")
-    if kids == NO_KIDS:
-        ov.update(YEARS_UNTIL_FIRST_CHILD=99, FIRST_CHILD_MONTHLY_COST=0, BOTH_CHILDREN_MONTHLY_COST=0)
-        return
-    if kids not in (HAVE_KIDS, PLAN_KIDS):
-        return
-    cost = int(_num(_val(st, "gs_kid_cost"), cfg.FIRST_CHILD_MONTHLY_COST))
-    two = _val(st, "gs_nkids") == TWO
-    if kids == HAVE_KIDS and _val(st, "gs_oldest") is not None:
-        oldest = int(_val(st, "gs_oldest"))
-        ov["YEARS_UNTIL_FIRST_CHILD"] = -oldest
-        if two and _val(st, "gs_youngest") is not None:
-            ov["YEARS_BETWEEN_CHILDREN"] = max(1, oldest - int(_val(st, "gs_youngest")))
-    elif kids == PLAN_KIDS and _val(st, "gs_kids_in") is not None:
-        ov["YEARS_UNTIL_FIRST_CHILD"] = int(_val(st, "gs_kids_in"))
-        ov["YEARS_BETWEEN_CHILDREN"] = 3
-    ov["FIRST_CHILD_MONTHLY_COST"] = cost
-    # One child: the second child's share is 0 (the planner always models two).
-    ov["BOTH_CHILDREN_MONTHLY_COST"] = int(round(cost * _TWO_KIDS)) if two else cost
+    ov["CHILDREN"] = [
+        {**cfg.CHILD_DEFAULTS, "years_until_birth": b, "leaves_home_age": 18,
+         "monthly_cost": cost if i == 0 else int(round(cost * _MORE_KIDS_SHARE))}
+        for i, b in enumerate(births[:MAX_KIDS])
+    ]
+    if household_of(ov) == JUST_ME:
+        # A single parent with a child at home usually files as head of
+        # household (the side panel's About you can change it).
+        ov["FILING_STATUS"] = HOH if any(-18 < b <= 0 for b in births) else SINGLE
 
 
 def check_kids(st) -> Optional[str]:
-    kids = _val(st, "gs_kids")
-    if kids is None:
-        return "Choose an answer about kids to continue."
-    if kids == HAVE_KIDS and _val(st, "gs_oldest") is None:
-        return "Enter your oldest child's age."
-    if kids == HAVE_KIDS and _val(st, "gs_nkids") == TWO and _val(st, "gs_youngest") is None:
-        return "Enter your youngest child's age."
-    if kids == PLAN_KIDS and _val(st, "gs_kids_in") is None:
-        return "Enter about how many years until your first child."
+    have, plan = _val(st, "gs_kids_have"), _val(st, "gs_kids_plan")
+    if have is None:
+        return "Enter how many children you have (0 if none)."
+    if any(_val(st, f"gs_kid{i}_age") is None for i in range(int(have))):
+        return "Enter each child's age."
+    if plan is None:
+        return "Enter how many more children you plan to have (0 if none)."
+    if plan and _val(st, "gs_kids_in") is None:
+        return "Enter about how many years until your next child."
+    if _kid_count(st) > MAX_KIDS:
+        return f"The planner takes up to {MAX_KIDS} children in all."
     return None
 
 
@@ -645,6 +647,11 @@ def review_lines(ov: Dict[str, Any]) -> List[str]:
     """One plain line per topic, for the last step."""
     partner = int(_num(ov.get("PARTNER_AGE"))) > 0
     kids = _kids_saved(ov)
+    n_born, n_planned = len(kids["born"]), kids["planned"]
+    kids_line = ("no kids." if not (n_born or n_planned) else
+                 ", ".join(filter(None, [
+                     f"{n_born} {'child' if n_born == 1 else 'children'}" if n_born else "",
+                     f"{n_planned} planned" if n_planned else ""])) + ".")
     who = "just you" if not partner else f"you and your partner ({int(_num(ov.get('PARTNER_AGE')))})"
     pay = _num(ov.get("YOUR_BASE_SALARY")) + _num(ov.get("YOUR_BONUS_AMOUNT"))
     if partner:
@@ -658,8 +665,7 @@ def review_lines(ov: Dict[str, Any]) -> List[str]:
     ss = (f"Social Security {money_md(_num(ov.get('YOUR_SS_MONTHLY_FRA')))}/month"
           if ov.get("INCLUDE_SOCIAL_SECURITY", True) else "no Social Security")
     return [
-        f"**You:** {int(_num(ov.get('YOUR_AGE')))}, planning for {who}; "
-        + {NO_KIDS: "no kids.", HAVE_KIDS: "with kids.", PLAN_KIDS: "kids planned."}[kids or NO_KIDS],
+        f"**You:** {int(_num(ov.get('YOUR_AGE')))}, planning for {who}; {kids_line}",
         f"**Income:** {money_md(pay)} a year before taxes.",
         f"**Saved so far:** {money_md(saved)}.",
         f"**Saving:** {money_md(yearly)} a year into your 401(k), HSA and IRA"

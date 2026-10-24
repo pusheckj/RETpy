@@ -53,8 +53,7 @@ class TestAutoSweepGrowsBrokerageByResidual:
             "YOUR_BACKDOOR_ROTH": 0,
             "YOUR_HSA_CONTRIBUTION": 0,
             "YOUR_BROKERAGE_CONTRIBUTION": 0,
-            "YEARS_UNTIL_FIRST_CHILD": 999,   # no kids -> no 529, no childcare
-            "YEARS_BETWEEN_CHILDREN": 999,
+            "CHILDREN": [],                   # no kids -> no 529, no childcare
             "HOUSE_MOVE_ENABLED": False,
             "CAR_ONETIME_ENABLED": False,
             "CAR_RECURRING_ENABLED": False,
@@ -287,7 +286,7 @@ class TestFloorAboveSurplusIsFunded:
     _KEYS = ("YOUR_COMPENSATION_BY_AGE", "PARTNER_SALARY", "YOUR_401K_CONTRIBUTION",
              "YOUR_401K_MATCH_PCT", "YOUR_HSA_CONTRIBUTION", "YOUR_BACKDOOR_ROTH",
              "PARTNER_401K_CONTRIBUTION", "PARTNER_ROTH_CONTRIBUTION",
-             "YOUR_AFTER_TAX_401K_PCT", "SAVINGS_529_PER_CHILD_ANNUAL",
+             "YOUR_AFTER_TAX_401K_PCT", "CHILDREN",
              "SAVINGS_MODE", "HOUSE_MOVE_ENABLED", "CAR_ONETIME_ENABLED",
              "CAR_RECURRING_ENABLED", "YOUR_BROKERAGE_CONTRIBUTION",
              "PARTNER_BROKERAGE_CONTRIBUTION")
@@ -310,8 +309,9 @@ class TestFloorAboveSurplusIsFunded:
         for k in ("YOUR_401K_CONTRIBUTION", "YOUR_401K_MATCH_PCT",
                   "YOUR_HSA_CONTRIBUTION", "YOUR_BACKDOOR_ROTH",
                   "PARTNER_401K_CONTRIBUTION", "PARTNER_ROTH_CONTRIBUTION",
-                  "YOUR_AFTER_TAX_401K_PCT", "SAVINGS_529_PER_CHILD_ANNUAL"):
+                  "YOUR_AFTER_TAX_401K_PCT"):
             setattr(cfg, k, 0.0)
+        cfg.CHILDREN = [{**c, "college_funding_pct": 0.0} for c in cfg.CHILDREN]  # no 529
         cfg.SAVINGS_MODE = "Auto-allocate (recommended)"
         cfg.HOUSE_MOVE_ENABLED = False
         cfg.CAR_ONETIME_ENABLED = False

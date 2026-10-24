@@ -37,7 +37,7 @@ def render(st, results: dict) -> None:
 
     # Derive plan horizon from config snapshot
     snap = results.get("config_snapshot", {}) or {}
-    plan_until = snap.get("PLAN_UNTIL_AGE", 95)
+    plan_until = snap.get("PLAN_END_AGE") or snap.get("PLAN_UNTIL_AGE", 95)
     years_in_ret = max(0, plan_until - retire_age)
     num_sims = snap.get("NUM_SIMULATIONS", 1000)
 

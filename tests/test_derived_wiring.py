@@ -35,7 +35,7 @@ _NEW_DERIVED_KEYS = [
     "BOND_ALLOCATION", "GLIDE_PATH_START_BOND_PCT", "GLIDE_PATH_END_BOND_PCT",
     "EXPECTED_STOCK_RETURN", "EXPECTED_BOND_RETURN",
     "STOCK_VOLATILITY", "BOND_VOLATILITY",
-    "FIRST_CHILD_ANNUAL_COST", "BOTH_CHILDREN_ANNUAL_COST",
+    "CHILDREN",
     "ACA_BASE_ANNUAL_PREMIUM", "MEDICARE_ANNUAL_PREMIUM",
 ]
 
@@ -112,23 +112,22 @@ class TestReturnScenarioWiring:
 
 
 # =============================================================================
-# Finding #5 — CHILD COSTS: annual derived from the monthly overrides.
+# Finding #5 — CHILD COSTS. There are no derived annual child costs any more
+# (calculate_child_expenses reads CHILDREN directly); an old profile's monthly
+# two-child keys become a CHILDREN list where overrides reach cfg.
 # =============================================================================
 
 class TestChildCostDerivation:
-    def test_annual_child_costs_recompute_from_monthly(self):
+    def test_old_monthly_child_costs_become_children_and_restore(self):
         post, restored, defaults = _apply_and_restore({
             "FIRST_CHILD_MONTHLY_COST": 5000,
             "BOTH_CHILDREN_MONTHLY_COST": 9000,
         })
-        assert post["FIRST_CHILD_ANNUAL_COST"] == 5000 * 12
-        assert post["BOTH_CHILDREN_ANNUAL_COST"] == 9000 * 12
-        assert restored["FIRST_CHILD_ANNUAL_COST"] == defaults["FIRST_CHILD_ANNUAL_COST"]
-        assert restored["BOTH_CHILDREN_ANNUAL_COST"] == defaults["BOTH_CHILDREN_ANNUAL_COST"]
+        assert [c["monthly_cost"] for c in post["CHILDREN"]] == [5000, 4000]
+        assert restored["CHILDREN"] == defaults["CHILDREN"]
 
     def test_child_expense_reader_sees_the_override(self):
-        # calculate_child_expenses reads the *_ANNUAL_COST derived constants;
-        # with both kids at home the override must flow through.
+        # With both kids at home the old monthly override must flow through.
         original = sr._apply_overrides({
             "FIRST_CHILD_MONTHLY_COST": 5000,
             "BOTH_CHILDREN_MONTHLY_COST": 9000,

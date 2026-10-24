@@ -1,0 +1,310 @@
+{
+  "version": "1.0",
+  "app": "retirement-monte-carlo",
+  "label": "Single parent, 38, one child",
+  "overrides": {
+    "CURRENT_YEAR": 2026,
+    "STATE_CHOICE": "No state tax",
+    "PLAN_UNTIL_AGE": 95,
+    "SAVINGS_MODE": "Auto-invest what's left (keep my amounts)",
+    "YOUR_BROKERAGE_CONTRIBUTION": 0,
+    "INCLUDE_SOCIAL_SECURITY": true,
+    "SS_CLAIM_AGE": 67,
+    "RETIREMENT_SPENDING_MODE": "Same as today's expenses",
+    "HOUSE_MOVE_ENABLED": false,
+    "SPEND_UTILITIES_MONTHLY": 250,
+    "SPEND_TRANSPORT_MONTHLY": 450,
+    "SPEND_HEALTH_MONTHLY": 300,
+    "SPEND_OTHER_MONTHLY": 300,
+    "PARTNER_401K": 0,
+    "PARTNER_ROTH_IRA": 0,
+    "PARTNER_BROKERAGE": 0,
+    "PARTNER_CASH": 0,
+    "PARTNER_401K_CONTRIBUTION": 0,
+    "PARTNER_ROTH_CONTRIBUTION": 0,
+    "PARTNER_BROKERAGE_CONTRIBUTION": 0,
+    "PARTNER_SALARY": 0,
+    "PARTNER_BASE_SALARY": 0,
+    "PARTNER_BONUS_AMOUNT": 0,
+    "PARTNER_RSU_AMOUNT": 0,
+    "PARTNER_OTHER_INCOME": 0,
+    "PARTNER_SS_MONTHLY_FRA": 0,
+    "PARTNER_OTHER_MONTHLY": 0,
+    "PARTNER_MONTHLY_SPENDING": 0,
+    "YOUR_AGE": 38,
+    "PARTNER_AGE": 0,
+    "FILING_STATUS": "Head of household",
+    "CHILDREN": [
+      {
+        "years_until_birth": -7,
+        "monthly_cost": 1500,
+        "leaves_home_age": 18,
+        "college_annual_cost": 30000,
+        "college_years": 4,
+        "college_funding_pct": 0.5
+      }
+    ],
+    "TARGET_RETIREMENT_AGE": 62,
+    "HOME_VALUE": 0,
+    "MORTGAGE_BALANCE": 0,
+    "MORTGAGE_MONTHLY": 0,
+    "MORTGAGE_YEARS_REMAINING": 0,
+    "SPEND_RENT_MONTHLY": 1900,
+    "YOUR_BASE_SALARY": 90000,
+    "YOUR_COMPENSATION_BY_AGE": {
+      "38": {
+        "base": 90000,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 90000,
+        "after_tax": 72000,
+        "saved": 0
+      },
+      "39": {
+        "base": 91800,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 91800,
+        "after_tax": 73440,
+        "saved": 0
+      },
+      "40": {
+        "base": 93636,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 93636,
+        "after_tax": 74909,
+        "saved": 0
+      },
+      "41": {
+        "base": 95509,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 95509,
+        "after_tax": 76407,
+        "saved": 0
+      },
+      "42": {
+        "base": 97419,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 97419,
+        "after_tax": 77935,
+        "saved": 0
+      },
+      "43": {
+        "base": 99367,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 99367,
+        "after_tax": 79494,
+        "saved": 0
+      },
+      "44": {
+        "base": 101355,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 101355,
+        "after_tax": 81084,
+        "saved": 0
+      },
+      "45": {
+        "base": 103382,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 103382,
+        "after_tax": 82706,
+        "saved": 0
+      },
+      "46": {
+        "base": 105449,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 105449,
+        "after_tax": 84359,
+        "saved": 0
+      },
+      "47": {
+        "base": 107558,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 107558,
+        "after_tax": 86046,
+        "saved": 0
+      },
+      "48": {
+        "base": 109709,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 109709,
+        "after_tax": 87767,
+        "saved": 0
+      },
+      "49": {
+        "base": 111904,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 111904,
+        "after_tax": 89523,
+        "saved": 0
+      },
+      "50": {
+        "base": 114142,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 114142,
+        "after_tax": 91314,
+        "saved": 0
+      },
+      "51": {
+        "base": 116425,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 116425,
+        "after_tax": 93140,
+        "saved": 0
+      },
+      "52": {
+        "base": 118753,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 118753,
+        "after_tax": 95002,
+        "saved": 0
+      },
+      "53": {
+        "base": 121128,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 121128,
+        "after_tax": 96902,
+        "saved": 0
+      },
+      "54": {
+        "base": 123551,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 123551,
+        "after_tax": 98841,
+        "saved": 0
+      },
+      "55": {
+        "base": 126022,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 126022,
+        "after_tax": 100818,
+        "saved": 0
+      },
+      "56": {
+        "base": 128542,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 128542,
+        "after_tax": 102834,
+        "saved": 0
+      },
+      "57": {
+        "base": 131113,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 131113,
+        "after_tax": 104890,
+        "saved": 0
+      },
+      "58": {
+        "base": 133735,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 133735,
+        "after_tax": 106988,
+        "saved": 0
+      },
+      "59": {
+        "base": 136410,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 136410,
+        "after_tax": 109128,
+        "saved": 0
+      },
+      "60": {
+        "base": 139138,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 139138,
+        "after_tax": 111310,
+        "saved": 0
+      },
+      "61": {
+        "base": 141921,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 141921,
+        "after_tax": 113537,
+        "saved": 0
+      },
+      "62": {
+        "base": 144759,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 144759,
+        "after_tax": 115807,
+        "saved": 0
+      },
+      "63": {
+        "base": 147655,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 147655,
+        "after_tax": 118124,
+        "saved": 0
+      },
+      "64": {
+        "base": 150608,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 150608,
+        "after_tax": 120486,
+        "saved": 0
+      },
+      "65": {
+        "base": 153620,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 153620,
+        "after_tax": 122896,
+        "saved": 0
+      },
+      "66": {
+        "base": 156692,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 156692,
+        "after_tax": 125354,
+        "saved": 0
+      },
+      "67": {
+        "base": 159826,
+        "bonus": 0,
+        "rsu_gross": 0,
+        "total_comp": 159826,
+        "after_tax": 127861,
+        "saved": 0
+      }
+    },
+    "YOUR_401K": 85000,
+    "YOUR_ROTH_IRA": 20000,
+    "YOUR_TRADITIONAL_IRA": 0,
+    "YOUR_HSA": 0,
+    "YOUR_BROKERAGE": 10000,
+    "YOUR_CASH": 15000,
+    "YOUR_401K_CONTRIBUTION": 9000,
+    "YOUR_401K_MATCH_PCT": 0.04,
+    "YOUR_HSA_CONTRIBUTION": 0,
+    "YOUR_BACKDOOR_ROTH": 0,
+    "SPEND_FOOD_MONTHLY": 800,
+    "SPEND_DISCRETIONARY_MONTHLY": 400,
+    "YOUR_SS_MONTHLY_FRA": 2400
+  }
+}

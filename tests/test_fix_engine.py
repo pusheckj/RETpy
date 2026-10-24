@@ -51,7 +51,7 @@ def cfg_sandbox():
         "CAR_RECURRING_EVERY_YEARS", "CAR_RECURRING_START_AGE",
         "HOUSE_MOVE_ENABLED", "USE_HOME_AS_BACKUP",
         "SEPP_72T_ENABLED", "SEPP_72T_START_AGE", "SEPP_72T_CARVEOUT",
-        "ROTH_LADDER_ENABLED", "ACA_ENABLED", "SAVINGS_529_PER_CHILD_ANNUAL",
+        "ROTH_LADDER_ENABLED", "ACA_ENABLED", "CHILDREN",
         "MODEL_HEALTHCARE_COST_FLOOR", "MODEL_ACA_AGE_RATED",
     )
     saved = {k: getattr(cfg, k) for k in keys if hasattr(cfg, k)}
@@ -83,7 +83,7 @@ def _quiet_household(sandbox, base=300_000, after_tax=200_000):
     sandbox.PARTNER_ROTH_CONTRIBUTION = 0.0
     sandbox.PARTNER_BROKERAGE_CONTRIBUTION = 0
     sandbox.YOUR_AFTER_TAX_401K_PCT = 0.0
-    sandbox.SAVINGS_529_PER_CHILD_ANNUAL = 0
+    sandbox.CHILDREN = [{**c, "college_funding_pct": 0.0} for c in sandbox.CHILDREN]  # no 529
     sandbox.HOUSE_MOVE_ENABLED = False
     sandbox.COAST_FIRE_ENABLED = False
     sandbox.USE_HOME_AS_BACKUP = False

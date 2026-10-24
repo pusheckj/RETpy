@@ -53,7 +53,7 @@ CURRENT_YEAR = 2026
 YOUR_BIRTH_YEAR = CURRENT_YEAR - YOUR_AGE        # derived from age
 PARTNER_BIRTH_YEAR = CURRENT_YEAR - PARTNER_AGE
 PLAN_UNTIL_AGE = 95
-YEARS_UNTIL_WEDDING = 0    # long-married
+FILING_STATUS = "Married filing jointly"    # long-married
 
 # === CURRENT ASSETS -- mature balances after 30+ years of saving ===
 # Jordan
@@ -150,23 +150,8 @@ CURRENT_ANNUAL_EXPENSES = (
     MORTGAGE_ANNUAL + UTILITIES_ANNUAL + YOUR_OTHER_ANNUAL + PARTNER_OTHER_MONTHLY * 12
 )
 
-# Children already grown and launched. Large-negative YEARS_UNTIL_FIRST_CHILD
-# pushes computed "child age" well past CHILD_LEAVES_HOME_AGE so any
-# downstream calc correctly yields zero.
-YEARS_UNTIL_FIRST_CHILD = -25
-YEARS_BETWEEN_CHILDREN = 3
-FIRST_CHILD_MONTHLY_COST = 0
-FIRST_CHILD_ANNUAL_COST = 0
-BOTH_CHILDREN_MONTHLY_COST = 0
-BOTH_CHILDREN_ANNUAL_COST = 0
-CHILD_LEAVES_HOME_AGE = 18
-
-# 529 -- not applicable
-COLLEGE_FUNDING_PCT = 0.00
-COLLEGE_ANNUAL_COST = 40_000
-COLLEGE_YEARS = 4
-COLLEGE_TARGET_PER_CHILD = 0
-SAVINGS_529_PER_CHILD_ANNUAL = 0
+# Children already grown and launched: no child, 529 or college costs.
+CHILDREN = []
 
 def calculate_child_expenses(your_age: int) -> float:
     return 0.0
@@ -175,7 +160,7 @@ def calculate_529_contribution(your_age: int) -> float:
     return 0.0
 
 def calculate_college_expenses(your_age: int) -> dict:
-    return {'child1': 0, 'child2': 0, 'total': 0}
+    return {'total': 0}
 
 def has_mortgage(your_age: int) -> bool:
     return your_age < (YOUR_AGE + MORTGAGE_YEARS_REMAINING)

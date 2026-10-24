@@ -8,6 +8,8 @@ from __future__ import annotations
 from typing import Dict
 from utils.coerce import safe_int, safe_float, as_fraction
 
+from retirement_sim import config as cfg
+
 
 def compute_total_income(overrides: dict) -> int:
     """Return household gross annual income (today's $) from the income breakdown.
@@ -212,12 +214,12 @@ def compute_expenses_today(overrides: dict) -> int:
                                        overrides.get("NEW_HOME_ESCROW_PCT", 0.0135)), 0.0135)
         carrying = home_value * max(0.0, pct)
 
-    # Children (if applicable today)
-    yufc = safe_int(overrides.get("YEARS_UNTIL_FIRST_CHILD", 99), 99)
-    if yufc <= 0:
-        # Children already in household
-        first_cost = safe_int(overrides.get("FIRST_CHILD_MONTHLY_COST", 0), 0)
-        monthly += first_cost
+    # Children living at home today, each at their own monthly cost: the same
+    # rule cfg.calculate_child_expenses applies at your current age. (This used
+    # to count only the first child, even with two at home.)
+    for kid in cfg.children_in(overrides):
+        if 0 <= -kid["years_until_birth"] < kid["leaves_home_age"]:
+            monthly += safe_int(kid["monthly_cost"], 0)
 
     annual = monthly * 12 + round(carrying)
 

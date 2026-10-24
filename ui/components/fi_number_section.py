@@ -38,13 +38,16 @@ def render(st, results: dict = None) -> None:
     st.markdown('<div class="mc-section">Net worth to retire</div>', unsafe_allow_html=True)
     overrides = st.session_state.get("user_overrides", {}) or {}
 
+    couple = int(overrides.get("PARTNER_AGE", 0) or 0) > 0
     st.caption(
         "Instead of *when* you can retire, this finds the **investable portfolio** that "
-        "lets you stop. Both of you keep working and contributing until the balance first "
-        "hits a target, then retire that year. Your **number** is the smallest target that "
-        "still meets your success threshold. Excludes home equity and earmarked 529 college "
-        "funds; assumes both partners work until the target (no separate partner retirement "
-        "age)."
+        "lets you stop. "
+        + ("Both of you keep" if couple else "You keep")
+        + " working and contributing until the balance first hits a target, then retire "
+        "that year. Your **number** is the smallest target that still meets your success "
+        "threshold. Excludes home equity and earmarked 529 college funds"
+        + ("; assumes both partners work until the target (no separate partner retirement "
+           "age)." if couple else ".")
     )
     # Orient the reader: three tiles answer the same question three ways, and a
     # first-time user otherwise can't tell which number to trust.

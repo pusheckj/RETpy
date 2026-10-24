@@ -8,47 +8,52 @@ except ImportError:  # pragma: no cover
 
 try:
     from utils.overrides import get_override, set_override
+    from utils.household import (HOUSEHOLDS, JUST_ME, SPOUSE, MFJ, SINGLE, HOH,
+                                 UNMARRIED_FILING, household_of, clear_partner)
 except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
+    from ui.utils.household import (HOUSEHOLDS, JUST_ME, SPOUSE, MFJ, SINGLE, HOH,  # type: ignore
+                                    UNMARRIED_FILING, household_of, clear_partner)
+
+from retirement_sim.config import plan_end_age
 
 
 def render_body(st) -> None:
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**You**")
-        ensure_default(st, "ay_your_age", safe_int(get_override(st, "YOUR_AGE", 30), 30))
-        v = st.number_input("Age", min_value=18, max_value=100, step=1, key="ay_your_age")
-        set_override(st, "YOUR_AGE", safe_int(v))
+    ensure_default(st, "ay_your_age", safe_int(get_override(st, "YOUR_AGE", 30), 30))
+    v = st.number_input("Your age", min_value=18, max_value=100, step=1, key="ay_your_age")
+    set_override(st, "YOUR_AGE", safe_int(v))
+    your_age = safe_int(v)
 
-    with col2:
-        st.markdown("**Partner**")
-        ensure_default(st, "ay_partner_age", safe_int(get_override(st, "PARTNER_AGE", 0), 0))
-        v = st.number_input("Age ", min_value=0, max_value=100, step=1, key="ay_partner_age",
-                            help="Set to 0 for a single household.")
+    # Who the plan is for. Expressed through the existing keys only: a partner
+    # is PARTNER_AGE > 0, and a married couple files jointly (utils/household).
+    ensure_default(st, "ay_household", household_of(st.session_state.get("user_overrides", {}) or {}))
+    household = st.radio("Who is this plan for?", HOUSEHOLDS, key="ay_household",
+                         help="Pick spouse or partner if you share bills and savings.")
+    if household == JUST_ME:
+        clear_partner(st.session_state.setdefault("user_overrides", {}))
+    else:
+        # A partner age left at 0 by a single plan would sit below the input's
+        # minimum; start it at your own age instead.
+        if safe_int(st.session_state.get("ay_partner_age", 0), 0) < 18:
+            st.session_state["ay_partner_age"] = max(
+                18, safe_int(get_override(st, "PARTNER_AGE", 0), 0) or your_age)
+        v = st.number_input("Partner's age", min_value=18, max_value=100, step=1,
+                            key="ay_partner_age")
         set_override(st, "PARTNER_AGE", safe_int(v))
 
-    # Filing status
-    options = ["Married filing jointly", "Single", "Head of household"]
-    current_filing = str(get_override(st, "FILING_STATUS", "Married filing jointly"))
-    if current_filing not in options:
-        # Translate from canonical short codes
-        canonical_map = {"MFJ": "Married filing jointly", "S": "Single", "HOH": "Head of household"}
-        current_filing = canonical_map.get(current_filing, "Married filing jointly")
-    ensure_default(st, "ay_filing", current_filing)
-    filing = st.radio(
-        "Filing status",
-        options=options,
-        horizontal=True,
-        key="ay_filing",
-    )
-    set_override(st, "FILING_STATUS", filing)
-    # Sync YEARS_UNTIL_WEDDING (the engine's marital flag) for every status, so
-    # switching MFJ -> Head of household / Single can't leave stale "married"
-    # state. Only MFJ is married; Single and Head of household are unmarried.
-    if filing == "Married filing jointly":
-        set_override(st, "YEARS_UNTIL_WEDDING", 0)
+    # Filing status follows from the household: married couples file jointly;
+    # anyone unmarried (single or with a partner) files Single or Head of household.
+    if household == SPOUSE:
+        set_override(st, "FILING_STATUS", MFJ)
     else:
-        set_override(st, "YEARS_UNTIL_WEDDING", 99)
+        if st.session_state.get("ay_filing") not in UNMARRIED_FILING:
+            current = str(get_override(st, "FILING_STATUS", SINGLE))
+            st.session_state["ay_filing"] = HOH if current in (HOH, "HOH") else SINGLE
+        filing = st.radio("Your tax filing status", UNMARRIED_FILING, horizontal=True,
+                          key="ay_filing",
+                          help="Head of household: you're unmarried and pay more than half "
+                               "the cost of a home for a child or another dependent.")
+        set_override(st, "FILING_STATUS", filing)
 
     # Retirement target
     ensure_default(st, "ay_target_age",
@@ -57,7 +62,6 @@ def render_body(st) -> None:
                        step=1, key="ay_target_age",
                        help="When you plan to stop working.")
     set_override(st, "TARGET_RETIREMENT_AGE", safe_int(target))
-    your_age = safe_int(get_override(st, "YOUR_AGE", 30), 30)
     if target < your_age:
         st.warning(
             f"Target retirement age ({target}) is below your current age ({your_age}). "
@@ -70,7 +74,7 @@ def render_body(st) -> None:
     # which the engine treats identically to the single-switch default -- so this
     # is a no-op until the user actually moves it apart.
     partner_age = safe_int(get_override(st, "PARTNER_AGE", 0), 0)
-    if partner_age > 0:
+    if household != JUST_ME:
         age_gap = your_age - partner_age  # your_age - partner_age
         # "Retire together" = the partner's age in the year YOU retire. When that
         # lands outside the slider's 25-75 range (a large age gap), it can't be
@@ -112,17 +116,26 @@ def render_body(st) -> None:
                     f"Partner's retirement age ({p_target}) is below their current age "
                     f"({partner_age}); the simulator treats them as already retired."
                 )
-    else:
-        # Single household: keep the engine's None default (no partner overlay).
-        set_override(st, "PARTNER_RETIREMENT_AGE", None)
 
-    # Plan-until age
+    # Plan-until age: each person's own. The plan runs until the later of the
+    # two, so a younger partner is covered to their own plan-until age.
     ensure_default(st, "ay_plan_until",
                    safe_int(get_override(st, "PLAN_UNTIL_AGE", 95), 95))
     plan_until = st.slider("Plan until age", min_value=75, max_value=100,
                            step=1, key="ay_plan_until",
-                           help="Model finances through this age. ~30-40% of couples have one partner live past 90.")
+                           help="Model your finances through this age. About 30-40% of couples "
+                                "have one partner live past 90.")
     set_override(st, "PLAN_UNTIL_AGE", safe_int(plan_until))
+    if household != JUST_ME:
+        ensure_default(st, "ay_partner_plan_until",
+                       safe_int(get_override(st, "PARTNER_PLAN_UNTIL_AGE", None) or plan_until,
+                                plan_until))
+        p_until = st.slider("Partner's plan-until age", min_value=75, max_value=100, step=1,
+                            key="ay_partner_plan_until", help="The same, in your partner's age.")
+        set_override(st, "PARTNER_PLAN_UNTIL_AGE", safe_int(p_until))
+        end = plan_end_age(st.session_state.get("user_overrides", {}) or {})
+        st.caption(f"The plan runs until you're {end} and your partner is "
+                   f"{end - (your_age - partner_age)}.")
     if plan_until <= target:
         st.warning(
             f"Plan-until age ({plan_until}) is not after target retirement age ({target}). "

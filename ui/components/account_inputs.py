@@ -39,6 +39,12 @@ def render(st) -> None:
             v = st.number_input("Cash / savings ($)", min_value=0, max_value=10_000_000, step=500, key="ai_your_cash")
             set_override(st, "YOUR_CASH", safe_int(v))
 
+        if safe_int(get_override(st, "PARTNER_AGE", 0), 0) <= 0:
+            # Single household: no partner accounts (About you zeroes them too).
+            for k in ("PARTNER_401K", "PARTNER_ROTH_IRA", "PARTNER_BROKERAGE", "PARTNER_CASH"):
+                set_override(st, k, 0)
+            return
+
         st.markdown("**Partner**")
         col3, col4 = st.columns(2)
         with col3:

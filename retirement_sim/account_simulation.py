@@ -280,7 +280,7 @@ class Account:
         name: Account identifier (e.g., 'your_401k', 'partner_roth_ira')
         account_type: Type of account determining tax treatment
         balance: Current account balance
-        owner: Account owner ('you', 'partner', 'child1', 'child2')
+        owner: Account owner ('you', 'partner', or 'child1', 'child2', ... for 529s)
         cost_basis: For taxable accounts, tracks cost basis for capital gains calculation
     """
     name: str
@@ -1392,30 +1392,20 @@ class AccountPortfolio:
 
     def withdraw_529_for_college(self, your_age: int, inflation_factor: float = 1.0) -> float:
         """
-        Withdraw from 529 accounts for college expenses (tax-free).
+        Withdraw from each child's 529 for that child's college bill this year
+        (tax-free), up to the 529's balance.
 
         Returns:
             Amount withdrawn from 529 accounts to cover college expenses
         """
         college_expenses = cfg.calculate_college_expenses(your_age)
         total_withdrawn = 0
-
-        # Withdraw for child 1's college
-        if college_expenses['child1'] > 0:
-            expense_inflated = college_expenses['child1'] * inflation_factor
-            if 'child1_529' in self.accounts:
-                withdraw_amount = min(expense_inflated, self.accounts['child1_529'].balance)
-                self.accounts['child1_529'].balance -= withdraw_amount
+        for child, expense in college_expenses.items():
+            account = self.accounts.get(f"{child}_529") if child != "total" else None
+            if expense > 0 and account is not None:
+                withdraw_amount = min(expense * inflation_factor, account.balance)
+                account.balance -= withdraw_amount
                 total_withdrawn += withdraw_amount
-
-        # Withdraw for child 2's college
-        if college_expenses['child2'] > 0:
-            expense_inflated = college_expenses['child2'] * inflation_factor
-            if 'child2_529' in self.accounts:
-                withdraw_amount = min(expense_inflated, self.accounts['child2_529'].balance)
-                self.accounts['child2_529'].balance -= withdraw_amount
-                total_withdrawn += withdraw_amount
-
         return total_withdrawn
 
     # ------------------------------------------------------------------
@@ -1613,14 +1603,24 @@ def create_initial_portfolio() -> AccountPortfolio:
     portfolio.add_account(Account("your_hsa", AccountType.HSA, cfg.YOUR_HSA, "you"))
     portfolio.add_account(Account("your_brokerage", AccountType.TAXABLE, cfg.YOUR_BROKERAGE, "you"))
     portfolio.add_account(Account("your_cash", AccountType.CASH, cfg.YOUR_CASH, "you"))
-    portfolio.add_account(Account("partner_401k", AccountType.TRADITIONAL_401K, cfg.PARTNER_401K, "partner"))
-    portfolio.add_account(Account("partner_roth_ira", AccountType.ROTH_IRA, cfg.PARTNER_ROTH_IRA, "partner"))
-    portfolio.add_account(Account("partner_brokerage", AccountType.TAXABLE, cfg.PARTNER_BROKERAGE, "partner"))
-    portfolio.add_account(Account("partner_cash", AccountType.CASH, cfg.PARTNER_CASH, "partner"))
-    # 529 accounts (start at $0, funded when children are born)
-    portfolio.add_account(Account("child1_529", AccountType.COLLEGE_529, 0, "child1"))
-    portfolio.add_account(Account("child2_529", AccountType.COLLEGE_529, 0, "child2"))
+    # A single household has no partner accounts, so stray partner balances
+    # (an old profile, a preset's sample numbers) can't count as savings.
+    if cfg.has_partner():
+        portfolio.add_account(Account("partner_401k", AccountType.TRADITIONAL_401K, cfg.PARTNER_401K, "partner"))
+        portfolio.add_account(Account("partner_roth_ira", AccountType.ROTH_IRA, cfg.PARTNER_ROTH_IRA, "partner"))
+        portfolio.add_account(Account("partner_brokerage", AccountType.TAXABLE, cfg.PARTNER_BROKERAGE, "partner"))
+        portfolio.add_account(Account("partner_cash", AccountType.CASH, cfg.PARTNER_CASH, "partner"))
+    # One 529 per child (starts at $0, funded from birth when college funding is on)
+    for i in range(1, len(cfg.CHILDREN) + 1):
+        portfolio.add_account(Account(f"child{i}_529", AccountType.COLLEGE_529, 0, f"child{i}"))
     return portfolio
+
+
+def _contribute_529s(portfolio: AccountPortfolio, amounts) -> None:
+    """Deposit this year's 529 saving into each child's own account."""
+    for i, amount in enumerate(amounts, 1):
+        if amount > 0:
+            portfolio.contribute(f"child{i}_529", amount)
 
 
 def _simulate_partner_working_year(
@@ -1689,7 +1689,7 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     portfolio.reset_yearly_income()
     portfolio.update_ages(your_age)
     years_from_start = your_age - cfg.YOUR_AGE
-    married = years_from_start >= cfg.YEARS_UNTIL_WEDDING
+    married = cfg.normalize_filing_status() == cfg._FILING_MFJ
     current_year = cfg.CURRENT_YEAR + years_from_start
 
     # Coast FIRE: past the coast age the household keeps working just enough to
@@ -1751,22 +1751,10 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     your_backdoor_desired = getattr(cfg, "YOUR_BACKDOOR_ROTH", your_ira_limit)
     your_roth_contribution = min(float(your_backdoor_desired), your_ira_limit)
 
-    # 529 contributions (elective; funded from after-tax take-home below).
-    contribution_529 = cfg.calculate_529_contribution(your_age)
-    first_child_birth_age = cfg.YOUR_AGE + cfg.YEARS_UNTIL_FIRST_CHILD
-    second_child_birth_age = first_child_birth_age + cfg.YEARS_BETWEEN_CHILDREN
-
-    # Determine per-account 529 amounts (elective; count against income below).
-    child1_529 = 0.0
-    child2_529 = 0.0
-    if your_age >= first_child_birth_age:
-        first_child_age = your_age - first_child_birth_age
-        if first_child_age < 18:
-            child1_529 = cfg.SAVINGS_529_PER_CHILD_ANNUAL
-    if your_age >= second_child_birth_age:
-        second_child_age = your_age - second_child_birth_age
-        if second_child_age < 18:
-            child2_529 = cfg.SAVINGS_529_PER_CHILD_ANNUAL
+    # 529 contributions, one per child (elective; funded from after-tax
+    # take-home below).
+    child_529s = cfg.child_529_contributions(your_age)
+    contribution_529 = sum(child_529s)
 
     # ------------------------------------------------------------------
     # Partner pre-tax + Roth contributions (computed here so the household
@@ -1856,6 +1844,14 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
         engine_housing = portfolio.housing_expense_for_age(your_age)
         living += engine_housing - config_housing
 
+    # College while still working: each child's 529 pays this year's bill and
+    # the budget covers what it can't (as in retirement, where the bill is an
+    # expense and the 529 draw an offset). Without this, college during the
+    # working years was never paid and the 529 sat untouched for good.
+    college_bill = cfg.calculate_college_expenses(your_age)["total"]
+    if college_bill > 0:
+        living += college_bill - portfolio.withdraw_529_for_college(your_age)
+
     # Record working-year spending too (deterministic, so no cross-scenario
     # spread — it anchors the spending-range chart before retirement). Living
     # expenses already include housing/children/base, so living == total here.
@@ -1868,7 +1864,7 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     # after_tax, so they are NOT subtracted here). The mega-backdoor after-tax
     # 401(k) IS after-tax money, so it belongs here — it reduces the brokerage
     # sweep dollar-for-dollar (reallocating that saving into Roth).
-    your_after_tax_electives = your_roth_contribution + child1_529 + child2_529 + your_after_tax_401k
+    your_after_tax_electives = your_roth_contribution + contribution_529 + your_after_tax_401k
     partner_after_tax_electives = partner_roth_contribution
     after_tax_electives = your_after_tax_electives + partner_after_tax_electives
 
@@ -1884,7 +1880,8 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     # 0 in the overwhelmingly common case that income covers the floor.
     _floor_excess_to_fund = 0.0
     your_brokerage_override = getattr(cfg, "YOUR_BROKERAGE_CONTRIBUTION", None)
-    partner_brokerage_override = getattr(cfg, "PARTNER_BROKERAGE_CONTRIBUTION", None)
+    partner_brokerage_override = (getattr(cfg, "PARTNER_BROKERAGE_CONTRIBUTION", None)
+                                  if cfg.has_partner() else None)
 
     if savings_mode.startswith("Auto"):
         # AUTO: sweep the full residual into taxable brokerage. The flat
@@ -1940,8 +1937,7 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
             portfolio.overspent_years += 1
 
         portfolio.contribute("your_roth_ira", your_roth_contribution)  # Backdoor Roth
-        portfolio.contribute("child1_529", child1_529)
-        portfolio.contribute("child2_529", child2_529)
+        _contribute_529s(portfolio, child_529s)
         portfolio.contribute("your_brokerage", max(0.0, to_brokerage))
         portfolio.contribute("partner_brokerage", max(0.0, to_brokerage_partner))
     else:
@@ -1964,8 +1960,7 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
             + your_hsa_contribution
             + your_roth_contribution
             + your_after_tax_401k
-            + child1_529
-            + child2_529
+            + contribution_529
             + to_brokerage
         )
         overshoot = elective_total - base_salary
@@ -1977,8 +1972,7 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
                 your_roth_contribution = max(0.0, your_roth_contribution - overshoot)
 
         portfolio.contribute("your_roth_ira", your_roth_contribution)  # Backdoor Roth
-        portfolio.contribute("child1_529", child1_529)
-        portfolio.contribute("child2_529", child2_529)
+        _contribute_529s(portfolio, child_529s)
         portfolio.contribute("your_brokerage", to_brokerage)
 
         if partner_brokerage_override is not None and float(partner_brokerage_override) > 0:
@@ -2171,9 +2165,9 @@ def calculate_retirement_expenses(
     if current_age >= LATE_RETIREMENT_SPENDING_REDUCTION_AGE:
         base_expenses *= (1 - cfg.LATE_RETIREMENT_LEISURE_DECREASE)
 
-    # Add college expenses (ages 18-22 for each child)
+    # Add college expenses (from COLLEGE_START_AGE, for each child)
     college_costs = cfg.calculate_college_expenses(current_age)
-    base_expenses += (college_costs['child1'] + college_costs['child2']) * inflation_factors['general']
+    base_expenses += college_costs['total'] * inflation_factors['general']
 
     # Retirement "go-go years" vacation spending (optional; OFF by default).
     # Grows with the general inflation factor like other base liabilities.
@@ -2855,7 +2849,7 @@ def simulate_retirement_year(
 
 def _run_retirement_phase(portfolio, retirement_age, inflation_factors,
                           historical_returns, verbose, partner_working_at) -> bool:
-    """Run the decumulation phase from ``retirement_age`` to PLAN_UNTIL_AGE.
+    """Run the decumulation phase from ``retirement_age`` to ``cfg.plan_end_age()``.
 
     Shared by ``run_detailed_simulation`` (fixed retirement age) and
     ``run_detailed_simulation_networth`` (retire when net worth hits a target).
@@ -2866,7 +2860,7 @@ def _run_retirement_phase(portfolio, retirement_age, inflation_factors,
     (``portfolio.set_retirement_baseline``) before calling.
     """
     years_until_retirement = retirement_age - cfg.YOUR_AGE
-    years_in_retirement = cfg.PLAN_UNTIL_AGE - retirement_age
+    years_in_retirement = cfg.plan_end_age() - retirement_age
     for year in range(years_in_retirement):
         current_age = retirement_age + year
         current_year = cfg.CURRENT_YEAR + years_until_retirement + year
@@ -2906,7 +2900,7 @@ def _run_retirement_phase(portfolio, retirement_age, inflation_factors,
         partner_magi = 0.0
         if partner_working_at(current_age):
             years_from_start = current_age - cfg.YOUR_AGE
-            married = years_from_start >= cfg.YEARS_UNTIL_WEDDING
+            married = cfg.normalize_filing_status() == cfg._FILING_MFJ
             p_after_tax, p_taxable, p_roth = _simulate_partner_working_year(
                 portfolio, current_age, current_year, years_from_start, married
             )
@@ -2980,13 +2974,16 @@ def run_detailed_simulation(
     # own working state, so both loops below reproduce the original household-wide
     # switch byte-for-byte. Set it and the partner can retire before the primary
     # (stop earning during accumulation) or after (keep earning into retirement).
+    # A single household has no partner, so no partner working years at all.
     # ------------------------------------------------------------------
     _partner_ret_age = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
-    _has_partner = cfg.PARTNER_AGE > 0
+    _has_partner = cfg.has_partner()
     _age_gap = cfg.YOUR_AGE - cfg.PARTNER_AGE  # primary_age - partner_age (constant)
 
     def _partner_working_at(your_age_now: int) -> bool:
-        if not _has_partner or _partner_ret_age is None:
+        if not _has_partner:
+            return False
+        if _partner_ret_age is None:
             return your_age_now < retirement_age  # default: partner retires with primary
         return (your_age_now - _age_gap) < int(_partner_ret_age)
 
@@ -3054,10 +3051,10 @@ def run_detailed_simulation_networth(
 
     Answers "what net worth lets us stop working?" rather than "at what age?":
     both partners keep working (and contributing) until the household's investable
-    balance hits the target, then BOTH retire that year and decumulate to
-    PLAN_UNTIL_AGE. If the target isn't reached by ``max_work_age``, they retire
-    then anyway (with less than the target). If the target is at/below today's
-    balance, they retire immediately.
+    balance hits the target, then BOTH retire that year and decumulate to the
+    plan's end (``cfg.plan_end_age()``). If the target isn't reached by
+    ``max_work_age``, they retire then anyway (with less than the target). If the
+    target is at/below today's balance, they retire immediately.
 
     Returns ``(success, portfolio, retire_age)``. Parametric returns only (no
     historical sequence) — this drives the net-worth sweep.
@@ -3072,7 +3069,7 @@ def run_detailed_simulation_networth(
     portfolio.record_year(cfg.CURRENT_YEAR, cfg.YOUR_AGE)
 
     # Can't work past the plan horizon; keep at least a few retirement years.
-    cap_age = max(cfg.YOUR_AGE, min(int(max_work_age), cfg.PLAN_UNTIL_AGE - 1))
+    cap_age = max(cfg.YOUR_AGE, min(int(max_work_age), cfg.plan_end_age() - 1))
 
     year = 0
     # Accumulate (both partners working) until the investable portfolio first
@@ -3086,7 +3083,7 @@ def run_detailed_simulation_networth(
             calculate_blended_return(cfg.STOCK_ALLOCATION, cfg.BOND_ALLOCATION)
         )
         acc_solvent = simulate_accumulation_year(
-            portfolio, current_age, annual_return, partner_working=True
+            portfolio, current_age, annual_return, partner_working=cfg.has_partner()
         )
         if not acc_solvent:  # rare partner-retired-early-style drawdown depletion
             return False, portfolio, current_age
@@ -3309,14 +3306,17 @@ def run_monte_carlo_with_scenario(
     early_penalties = []
 
     # Partner retirement timing (see run_detailed_simulation for the rationale).
-    # Constant across all simulations; None / no-partner tracks the primary's own
-    # working state so this scenario path stays byte-identical when unused.
+    # Constant across all simulations; None tracks the primary's own working
+    # state so this scenario path stays byte-identical when unused. No partner,
+    # no partner working years.
     _partner_ret_age = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
-    _has_partner = cfg.PARTNER_AGE > 0
+    _has_partner = cfg.has_partner()
     _age_gap = cfg.YOUR_AGE - cfg.PARTNER_AGE
 
     def _partner_working_at(your_age_now: int) -> bool:
-        if not _has_partner or _partner_ret_age is None:
+        if not _has_partner:
+            return False
+        if _partner_ret_age is None:
             return your_age_now < retirement_age
         return (your_age_now - _age_gap) < int(_partner_ret_age)
 
@@ -3354,7 +3354,7 @@ def run_monte_carlo_with_scenario(
         # A partner-retired-early drawdown that depleted the portfolio during
         # accumulation is an outright failure -- don't run the retirement phase.
         success = acc_solvent
-        years_in_retirement = cfg.PLAN_UNTIL_AGE - retirement_age
+        years_in_retirement = cfg.plan_end_age() - retirement_age
         for year in range(years_in_retirement if acc_solvent else 0):
             current_age = retirement_age + year
             current_year = cfg.CURRENT_YEAR + (retirement_age - cfg.YOUR_AGE) + year
@@ -3375,7 +3375,7 @@ def run_monte_carlo_with_scenario(
             partner_magi = 0.0
             if _partner_working_at(current_age):
                 years_from_start = current_age - cfg.YOUR_AGE
-                married = years_from_start >= cfg.YEARS_UNTIL_WEDDING
+                married = cfg.normalize_filing_status() == cfg._FILING_MFJ
                 p_after_tax, p_taxable, p_roth = _simulate_partner_working_year(
                     portfolio, current_age, current_year, years_from_start, married
                 )
