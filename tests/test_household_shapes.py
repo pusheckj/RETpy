@@ -225,16 +225,22 @@ def test_stray_partner_numbers_change_nothing_for_a_single():
     assert _run({**single, **_LEAKED}, 60) == _run(single, 60)
 
 
-def test_unmarried_partner_files_single_and_keeps_their_roth(monkeypatch):
-    """Marriage is the filing status (the wedding-year flag is gone): an
-    unmarried partner's direct Roth is funded, a married one's is not."""
+def test_partner_roth_follows_the_income_phase_out_not_marriage(monkeypatch):
+    """Marriage is the filing status (the wedding-year flag is gone), and the
+    partner's direct Roth follows the Roth income phase-out of their return --
+    being married no longer blocks it (that was the author's own situation:
+    a joint income over the phase-out)."""
     monkeypatch.setattr(cfg, "PARTNER_ROTH_CONTRIBUTION", 2_000)
-    for status, expected in (("Single", 2_000), ("Married filing jointly", 0)):
+    for status, partner_pay, expected in (("Single", None, 2_000),
+                                          ("Married filing jointly", None, 2_000),
+                                          ("Married filing jointly", 400_000, 0)):
         monkeypatch.setattr(cfg, "FILING_STATUS", status)
+        if partner_pay is not None:
+            monkeypatch.setattr(cfg, "PARTNER_SALARY", partner_pay)
         p = sim.create_initial_portfolio()
         before = p.accounts["partner_roth_ira"].balance
         sim.simulate_accumulation_year(p, cfg.YOUR_AGE, 0.0)
-        assert p.accounts["partner_roth_ira"].balance - before == expected, status
+        assert p.accounts["partner_roth_ira"].balance - before == expected, (status, partner_pay)
 
 
 # ---------------------------------------------------------------------------

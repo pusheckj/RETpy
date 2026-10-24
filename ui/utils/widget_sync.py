@@ -100,16 +100,14 @@ def _as_pct_int(default_int: int, lo: int = None, hi: int = None):
 
 
 def _state_code_to_label(v):
-    code = str(v) if v else "CA"
-    return {
-        "CA": "California",
-        "California": "California",
-        "No state tax": "No state income tax",
-        "No state income tax": "No state income tax",
-        "Other": "Another state (flat rate)",
-        "Other (use marginal rate)": "Another state (flat rate)",     # earlier label
-        "Another state (flat rate)": "Another state (flat rate)",
-    }.get(code, "California")
+    """Stored STATE_CHOICE (code, legacy value or state name) -> selectbox label."""
+    if str(v) == "Other (use marginal rate)":     # earlier label
+        v = "Other"
+    try:
+        from utils.state_choice import label_for
+    except ImportError:  # pragma: no cover
+        from ui.utils.state_choice import label_for  # type: ignore
+    return label_for(v)
 
 
 def _scenario_cast(v):
@@ -200,6 +198,8 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sv_inflation_adjust":   ("SAVINGS_INFLATION_ADJUST", lambda v: bool(v)),
     "sv_primary_housing":    ("PRIMARY_PAYS_HOUSING", lambda v: bool(v)),
     "sv_after_tax_401k":     ("YOUR_AFTER_TAX_401K_PCT", _as_pct(0.0, 0.0, 20.0)),
+    "sv_match_pct":          ("YOUR_401K_MATCH_PCT", _as_pct(0.0, 0.0, 25.0)),
+    "sv_partner_match_pct":  ("PARTNER_401K_MATCH_PCT", _as_pct(0.0, 0.0, 25.0)),
     "sv_manual_your_401k":   ("YOUR_401K_CONTRIBUTION", _as_int(2_700, 0, 30_000)),
     "sv_manual_your_hsa":    ("YOUR_HSA_CONTRIBUTION", _as_int(0, 0, 10_000)),
     "sv_manual_your_roth":   ("YOUR_BACKDOOR_ROTH", _as_int(0, 0, 10_000)),

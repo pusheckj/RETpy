@@ -86,16 +86,18 @@ class TestProgressiveTax:
 # State tax model selection
 # ---------------------------------------------------------------------------
 class TestStateTaxSelection:
+    # Every choice is now one generic StateIncomeTax built from state_tax_data
+    # (the per-choice CA / NoStateTax / FlatRateStateTax objects were replaced).
     def test_default_ca(self, monkeypatch):
         monkeypatch.setattr(cfg, "STATE_CHOICE", "CA")
         model = asim._select_state_tax_brackets()
-        assert isinstance(model, asim.CaliforniaTaxBrackets)
+        assert isinstance(model, asim.StateIncomeTax) and model.code == "CA"
         assert model.calculate_tax(100_000) > 0
 
     def test_no_state_tax(self, monkeypatch):
         monkeypatch.setattr(cfg, "STATE_CHOICE", "No state tax")
         model = asim._select_state_tax_brackets()
-        assert isinstance(model, asim.NoStateTax)
+        assert model.code == "No state tax"
         assert model.calculate_tax(10_000_000) == 0.0
         assert model.calculate_tax(-5) == 0.0
 
@@ -103,14 +105,14 @@ class TestStateTaxSelection:
         monkeypatch.setattr(cfg, "STATE_CHOICE", "Other")
         monkeypatch.setattr(cfg, "YOUR_MARGINAL_TAX_RATE", 0.07)
         model = asim._select_state_tax_brackets()
-        assert isinstance(model, asim.FlatRateStateTax)
+        assert model.code == "Other"
         assert model.calculate_tax(100_000) == pytest.approx(7_000)
         assert model.calculate_tax(0) == 0.0
         assert model.calculate_tax(-100) == 0.0
 
     def test_unrecognized_choice_falls_back_to_ca(self, monkeypatch):
         monkeypatch.setattr(cfg, "STATE_CHOICE", "Freedonia")
-        assert isinstance(asim._select_state_tax_brackets(), asim.CaliforniaTaxBrackets)
+        assert asim._select_state_tax_brackets().code == "CA"
 
 
 # ---------------------------------------------------------------------------

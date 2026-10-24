@@ -257,6 +257,21 @@ class TestFilingStatus:
         # single vs MFJ changes federal tax materially during accumulation.
         p = _profile("Young professional (28, single)")
         ra = int(p["TARGET_RETIREMENT_AGE"])
+        # The preset carries no pay table (the Income section builds one in the
+        # app), so give it the one the app would build from its salary inputs.
+        # Without it the engine falls back to the config's median-worker table,
+        # and now that 401(k)/HSA deferrals really come out of take-home this
+        # profile's $30k of pre-tax savings can't be funded from that pay.
+        from components.sec_income import _build_comp_table
+        table = {}
+        for _, r in _build_comp_table(p["YOUR_AGE"], ra, p["YOUR_BASE_SALARY"],
+                                      p["YOUR_BONUS_AMOUNT"], p["YOUR_RSU_AMOUNT"],
+                                      0.02).iterrows():
+            total = int(r.base) + int(r.bonus) + int(r.rsu_gross)
+            table[int(r.age)] = {"base": int(r.base), "bonus": int(r.bonus),
+                                 "rsu_gross": int(r.rsu_gross), "total_comp": total,
+                                 "saved": 0}
+        p["YOUR_COMPENSATION_BY_AGE"] = table
 
         def _run(status):
             q = dict(p)

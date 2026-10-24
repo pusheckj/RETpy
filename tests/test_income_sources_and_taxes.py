@@ -229,8 +229,12 @@ def test_taxes_working_years_include_bonus_and_rsu_not_just_base():
     row = next(r for r in out if r["age"] == age)
     # gross_income must include the FULL total_comp (base+bonus+RSU), not base alone.
     assert row["gross_income"] >= comp["total_comp"]
-    real_your_tax = comp["total_comp"] - comp["after_tax"]
-    total_tax = row["federal"] + row["state"]
+    # The sample row's explicit after_tax is honoured as an override, and the
+    # tax it implies (pay - 401(k)/HSA deferrals - take-home) is what the chart
+    # reports, split federal / state / FICA.
+    real_your_tax = (comp["total_comp"] - comp["after_tax"]
+                     - overrides["YOUR_401K_CONTRIBUTION"] - overrides["YOUR_HSA_CONTRIBUTION"])
+    total_tax = row["federal"] + row["state"] + row["fica"]
     # The old bug used flat 18%/6% of (base + partner_salary) only -- omitting
     # bonus+RSU entirely. Reject any total that's consistent with a base-only
     # formula; the real comp-derived tax on just the primary's income already

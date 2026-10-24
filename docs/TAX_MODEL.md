@@ -6,117 +6,113 @@ This document describes every tax rule encoded in the simulator, with bracket ta
 
 ## 1. Scope
 
-- **Jurisdictions modeled:** US federal income tax, federal long-term capital gains tax, federal Net Investment Income Tax (NIIT), federal Medicare IRMAA surcharges, federal payroll (via wage inputs only), and **California** state income tax.
-- **Tax year baseline:** **2024** statutory brackets, thresholds, and contribution limits. The engine runs in an **all-real (today's-dollars) frame**: statutory items that are CPI-indexed in reality (federal ordinary/LTCG brackets, standard deduction, contribution limits) are held **flat at their 2024 real values**. Statutory thresholds that are *not* indexed in reality — **NIIT** ($250k MFJ), **IRMAA** brackets, and **Social Security taxation** provisional-income thresholds ($32k–$44k MFJ) — are also held at nominal 2024 values, which means they *tighten* in real terms over the horizon (a conservative, realistic bias). See `METHODOLOGY.md` §4.
-- **Granularity:** taxes are computed once per simulated year at year-end, using that year's aggregated income by type.
-- **Filing status:** `FILING_STATUS`, one status for the whole plan (there is no wedding year that switches it). Married couples file jointly (MFJ); a single person or an unmarried couple files Single or Head of household (HoH). MFS and QW are not modeled.
-- **Out of scope by design:** state taxes other than California (see §4 for substitution guidance), AMT, self-employment tax, FICA re-calculation in retirement, estate tax, gift tax, and foreign-tax credits.
+- **Jurisdictions modeled:** US federal income tax, federal long-term capital gains tax, the Net Investment Income Tax (NIIT), Medicare IRMAA surcharges, payroll taxes on wages (FICA, plus California SDI), and **state income tax for all 50 states + DC** (`retirement_sim/state_tax_data.py`).
+- **Tax year baseline:** **2024** statutory brackets, thresholds, and contribution limits (IRMAA uses the 2025 CMS tiers). The engine runs in an **all-real (today's-dollars) frame**: statutory items that are CPI-indexed in reality (federal ordinary/LTCG brackets, standard deduction, contribution limits, the Social Security wage base, IRMAA tiers, state tables) are held **flat at their real values**. Thresholds that are *not* indexed in reality — **NIIT** ($250k/$200k), the **Additional Medicare Tax** ($250k/$200k) and the **Social Security taxation** thresholds — decay in real terms over the horizon (a conservative, realistic bias). See `METHODOLOGY.md` §4.
+- **Granularity:** working-year pay is taxed once per year by `working_year_taxes` (§2.4); retirement-year taxes are computed incrementally as income is recognized (withdrawals, RMDs, conversions, Social Security), each stacked on the income already on the return.
+- **Filing status:** `FILING_STATUS` — **Married filing jointly**, **Single** or **Head of household** — selects every status-dependent table below, for the whole plan. An **unmarried couple** (a partner in the plan with a status other than MFJ) files **two returns**: you on `FILING_STATUS`, your partner as Single, each person's wages, withdrawals, RMDs, conversions, gains and Social Security on their own return (`files_two_returns()`, `return_status()`). Married filing separately and qualifying widow(er) are not modeled.
+- **Out of scope by design:** AMT, self-employment tax, tax credits (child tax credit, earned-income credit, state credits), itemized deductions, city/county income taxes, estate and gift tax, foreign-tax credits.
 
 ---
 
-## 2. Federal income tax (2024 MFJ)
+## 2. Federal income tax (2024)
 
-### 2.1 Ordinary-income brackets (MFJ)
+### 2.1 Ordinary-income brackets
 
-| Rate | Taxable income range (MFJ) |
-|------|----------------------------|
-| 10%  | $0 – $23,200               |
-| 12%  | $23,200 – $94,300          |
-| 22%  | $94,300 – $201,050         |
-| 24%  | $201,050 – $383,900        |
-| 32%  | $383,900 – $487,450        |
-| 35%  | $487,450 – $731,200        |
-| 37%  | $731,200+                  |
-
-Single brackets are the MFJ thresholds halved for every tier except the 35%→37% boundary (which is not exactly half, per IRC §1); the engine uses the statutory Single table, not a naive halving.
+| Rate | Married filing jointly | Single | Head of household |
+|------|------------------------|--------|-------------------|
+| 10%  | $0 – $23,200           | $0 – $11,600 | $0 – $16,550 |
+| 12%  | – $94,300              | – $47,150 | – $63,100 |
+| 22%  | – $201,050             | – $100,525 | – $100,500 |
+| 24%  | – $383,900             | – $191,950 | – $191,950 |
+| 32%  | – $487,450             | – $243,725 | – $243,700 |
+| 35%  | – $731,200             | – $609,350 | – $609,350 |
+| 37%  | above                  | above | above |
 
 ### 2.2 Standard deduction (2024)
 
-| Filing status | Standard deduction |
-|---------------|--------------------|
-| MFJ           | $29,200            |
-| Single        | $14,600            |
-
-**Age-65 additional standard deduction** (on top of the base):
-
-| Filing status | Per qualifying spouse age 65+ |
-|---------------|-------------------------------|
-| MFJ           | +$1,550                       |
-| Single        | +$1,950                       |
+| Filing status | Standard deduction | Per person 65+ |
+|---------------|--------------------|----------------|
+| MFJ           | $29,200            | +$1,550 per spouse |
+| Single        | $14,600            | +$1,950 |
+| HOH           | $21,900            | +$1,950 |
 
 The engine itemizes only if `USE_ITEMIZED_DEDUCTION = True`; otherwise the standard deduction is always taken.
 
 ### 2.3 Income types flowing into ordinary income
 
-- Wages, salary, bonuses
-- RSUs (treated as ordinary wage income in the year of vest)
-- Traditional 401(k) and Traditional IRA withdrawals
+- Wages, salary, bonuses, RSUs (in the year of vest), less pre-tax 401(k) and HSA deferrals
+- Other income (`YOUR_OTHER_INCOME` / `PARTNER_OTHER_INCOME`)
+- Traditional 401(k) and Traditional IRA withdrawals, RMDs, 72(t) distributions
 - Roth **conversions** (in the year of conversion)
 - Taxable portion of Social Security (§5)
-- Taxable interest and non-qualified dividends
 - HSA non-qualified distributions (plus the 20% penalty; see §8)
+
+### 2.4 Working-year taxes and take-home
+
+`config.working_year_taxes()` is the single source of the tax on a year's pay; `account_simulation.working_year_cashflow()` feeds it the year's pay and deferrals and the engine, the sidebar's Taxes panel (`ui/utils/derived.compute_taxes`) and the tax chart all read the result:
+
+```
+federal  = brackets(status)[ wages + other − 401(k) − HSA − standard deduction ]   (per return)
+state    = state brackets(status)[ state income − state deduction ] + state payroll tax
+FICA     = 6.2% × min(wages − HSA, $168,600)          per earner
+         + 1.45% × (wages − HSA)                       per earner
+         + 0.9% × max(0, return's wages − $250k/$200k) per return (Additional Medicare Tax)
+take-home = wages + other − 401(k) − HSA − federal − state − FICA
+```
+
+401(k) deferrals remain FICA wages; HSA contributions made through payroll do not. On a joint return each spouse's share of the income tax is pro-rata to their taxable income (used to attribute savings to each person's accounts). A comp-table row that sets `after_tax` overrides the primary's computed take-home.
+
+The employer 401(k) match is `min(deferral, match % × base)`, per person. The partner's direct Roth IRA contribution is reduced across the 2024 phase-out (MAGI $230k–$240k joint, $146k–$161k otherwise) of the return it's on.
 
 ---
 
-## 3. Federal long-term capital gains (2024 MFJ)
+## 3. Federal long-term capital gains (2024)
 
-### 3.1 LTCG brackets (MFJ)
+### 3.1 LTCG brackets
 
-| Rate | Taxable income range (MFJ) |
-|------|----------------------------|
-| 0%   | $0 – $94,050               |
-| 15%  | $94,050 – $583,750         |
-| 20%  | $583,750+                  |
+| Rate | Married filing jointly | Single | Head of household |
+|------|------------------------|--------|-------------------|
+| 0%   | $0 – $94,050           | $0 – $47,025 | $0 – $63,000 |
+| 15%  | – $583,750             | – $518,900 | – $551,350 |
+| 20%  | above                  | above | above |
 
-LTCG stacks **on top of** ordinary income: the engine fills ordinary brackets first, then the LTCG brackets begin at the sum-of-incomes level. This matches the IRS Qualified Dividends and Capital Gain Tax Worksheet in the 1040 instructions.
+LTCG stacks **on top of** taxable ordinary income on the same return: ordinary brackets fill first, then the LTCG brackets begin at that level (IRS Qualified Dividends and Capital Gain Tax Worksheet). Gains realized earlier in the year are part of the stacking base.
 
 ### 3.2 Application to taxable-brokerage withdrawals
 
-On a withdrawal of size `W` from taxable brokerage:
-
-```
-realized_gain = W × EMBEDDED_GAIN_RATIO
-ordinary_cost_basis_recovered = W × (1 − EMBEDDED_GAIN_RATIO)
-```
-
-`EMBEDDED_GAIN_RATIO` defaults to **0.50** (assumes 50% of balance is unrealized gain at time of withdrawal) and is configurable. Only the gain portion is taxed; the cost basis flows through untaxed.
-
-Short-term capital gains are not modeled — all holdings are assumed long-term by the time of withdrawal.
+On a withdrawal of size `W` from taxable brokerage, the gain is `W × (1 − cost_basis / balance)`; only the gain portion is taxed and the cost basis is reduced pro-rata. Short-term capital gains are not modeled.
 
 ---
 
-## 4. California state tax (2024 MFJ)
+## 4. State income tax (all states + DC, 2024)
 
-### 4.1 California brackets (MFJ)
+`STATE_CHOICE` is a two-letter code (or `"DC"`). `config.state_tax_rules(code, status)` reads the state's row in `state_tax_data.py`:
 
-| Rate  | Taxable income range (MFJ) |
-|-------|----------------------------|
-| 1.0%  | $0 – $21,512               |
-| 2.0%  | $21,512 – $50,998          |
-| 4.0%  | $50,998 – $80,490          |
-| 6.0%  | $80,490 – $111,732         |
-| 8.0%  | $111,732 – $141,212        |
-| 9.3%  | $141,212 – $721,318        |
-| 10.3% | $721,318 – $865,574        |
-| 11.3% | $865,574 – $1,442,628      |
-| 12.3% | $1,442,628+                |
+- **Brackets** by filing status (or a flat rate), applied to state income minus the state's **standard deduction** (`"federal"` = the federal amount) and **personal exemptions** (per person, two on a joint return).
+- **Social Security**: `exempt` (most states), `taxed` (Montana, Utah: the federally taxable part), or exempt below an income limit (Minnesota, New Mexico, Rhode Island, Vermont).
+- **Retirement-income exclusion**: per-person yearly amounts of traditional 401(k)/IRA distributions the state exempts from an age (e.g. Illinois and Mississippi all, Pennsylvania all after 59½, Iowa all at 55+, Georgia $35k at 62 / $65k at 65, New York $20k at 59½, South Carolina $3k / $10k at 65). Roth conversions never qualify.
+- **Capital gains**: taxed as ordinary income, less a state exclusion where one exists (Arkansas 50%, South Carolina 44%, North Dakota 40%, Wisconsin 30%).
+- **Wage quirks**: Pennsylvania taxes 401(k) deferrals; California and New Jersey tax HSA contributions; California State Disability Insurance (1.1% of all wages in 2024) is counted with state tax.
 
-A **1% mental health surtax** applies to CA taxable income over $1,000,000 and is added on top of the bracket rates.
+Each row carries its **tax year** and a **confidence**: `high` (complete within rounding for a typical household), `medium` (rates and brackets right; a credit, phase-out or local tax left out — see the row's note), or `approx` (simplified or uncertain; the app labels the state approximate). As of this version: approximate �� Alabama, Arkansas, Hawaii, Nebraska, Wisconsin. City and county income taxes (Maryland counties, NYC, Ohio/Pennsylvania/Michigan cities, Indiana counties…) are **not** included. `docs/state_tax_research_prompt.md` lists exactly what to verify.
 
-### 4.2 California LTCG treatment
+Legacy values: `"No state tax"` (zero) and `"Other"` (flat `YOUR_MARGINAL_TAX_RATE` above the federal standard deduction, Social Security exempt). Unknown values fall back to `"CA"`. `MODEL_CA_EXEMPTS_SOCIAL_SECURITY = False` (historical name) turns every state's Social Security exemption off.
 
-California **does not** provide preferential rates for long-term capital gains. All capital gains, qualified dividends, and Roth conversions are taxed as **ordinary income** at the bracket rates above.
+### 4.1 Example: California (2024)
 
-California also **does not tax Social Security** benefits.
+| Rate  | Married filing jointly | Single | Head of household |
+|-------|------------------------|--------|-------------------|
+| 1.0%  | $0 – $21,512           | $0 – $10,756 | $0 – $21,527 |
+| 2.0%  | – $50,998              | – $25,499 | – $51,000 |
+| 4.0%  | – $80,490              | – $40,245 | – $65,744 |
+| 6.0%  | – $111,732             | – $55,866 | – $81,364 |
+| 8.0%  | – $141,212             | – $70,606 | – $96,107 |
+| 9.3%  | – $721,318             | – $360,659 | – $490,493 |
+| 10.3% | – $865,574             | – $432,787 | – $588,593 |
+| 11.3% | – $1,442,628           | – $721,314 | – $980,987 |
+| 12.3% | above                  | above | above |
 
-### 4.3 Substituting another state
-
-For users outside California:
-
-- Subclass `CaliforniaTaxBrackets` in `config.py` and override the bracket edges and rates with your state's table; or
-- Set all rates in the bracket list to `0.0` for no-income-tax states (FL, TX, TN, WA, NV, SD, WY, AK, NH for wages only).
-
-The engine does not currently model state-level LTCG preferences, reciprocity, or city income taxes (e.g. NYC, Philadelphia). Adding those requires extending the withdrawal-tax pipeline in `account_simulation.py`.
+Standard deduction $11,080 joint / head of household, $5,540 single; a 1% mental-health surtax applies above $1,000,000 (any status). Capital gains are ordinary income; Social Security is exempt. (The engine previously used the 2023 brackets; the 2024 figures lower CA tax by about $90–$220 a year for a typical household.)
 
 ---
 
@@ -125,77 +121,56 @@ The engine does not currently model state-level LTCG preferences, reciprocity, o
 ### 5.1 Provisional income
 
 ```
-provisional_income = AGI_excluding_SS + 0.5 × SS_benefits + tax_exempt_interest
+provisional_income = AGI_excluding_SS + 0.5 × SS_benefits
 ```
 
-### 5.2 Taxable-SS thresholds (MFJ)
+### 5.2 Thresholds
 
-| Provisional income (MFJ) | Includable in taxable income |
-|--------------------------|------------------------------|
-| < $32,000                | 0%                           |
-| $32,000 – $44,000        | up to 50% of SS              |
-| > $44,000                | up to 85% of SS              |
-
-The precise formula used by the engine (IRS Publication 915 worksheet):
+| Provisional income | MFJ | Single / HOH | Includable |
+|---|---|---|---|
+| below the first | $32,000 | $25,000 | 0% |
+| between | $32,000 – $44,000 | $25,000 – $34,000 | up to 50% |
+| above the second | > $44,000 | > $34,000 | up to 85% |
 
 ```
-lower = max(0, provisional_income − 32,000)        # MFJ
-upper = max(0, provisional_income − 44,000)        # MFJ
-
-taxable_SS = min(
-    0.85 × SS,
-    0.50 × min(SS, lower) + 0.85 × upper + 0.50 × min(6,000, ...)
-)
+taxable_SS = 0                                              if PI ≤ t1
+           = min(0.5 × (PI − t1), 0.5 × SS)                 if t1 < PI ≤ t2
+           = min(0.85 × SS, 0.85 × (PI − t2) + min(0.5 × (t2 − t1), 0.5 × SS))   otherwise
 ```
+
+The thresholds were set in 1983/1993 and are never indexed, so they decay in real terms. On two returns each person's own benefit and income are used. State treatment follows §4.
 
 ### 5.3 Example (MFJ)
 
-- SS benefits: $40,000
-- Other AGI (Traditional withdrawals + LTCG): $60,000
-- Provisional income: $60,000 + 0.5 × $40,000 = $80,000
-- Excess above $44k: $36,000 → 85% × $36,000 = $30,600 potentially taxable
-- Capped at 85% × $40,000 = $34,000
-- **Taxable SS = $30,600 + small 50% tranche from the $32k–$44k band**, rounded.
-
-California excludes the full $40,000 from state taxable income.
+SS $40,000; other AGI $60,000; provisional income $80,000 → 0.85 × 36,000 + 6,000 = $36,600, capped at 0.85 × 40,000 = **$34,000** taxable.
 
 ---
 
 ## 6. Net Investment Income Tax (NIIT)
 
 - **Rate:** 3.8%
-- **MAGI threshold (MFJ):** $250,000
-- **MAGI threshold (Single):** $200,000
+- **MAGI threshold:** $250,000 (MFJ), $200,000 (Single / HOH) — per return, never indexed (decays in real terms)
 
-The tax applies to the **lesser** of:
-
-1. Net investment income (interest, dividends, LTCG, taxable brokerage gains, passive rental income), or
-2. MAGI − threshold.
-
-The engine computes MAGI as AGI plus any excluded foreign earned income (not modeled) and the non-taxable portion of SS, per IRC §1411. NIIT does not apply to distributions from Traditional 401(k) or IRA (those are ordinary income, not investment income), nor to Roth distributions.
+The tax applies to the **lesser** of net investment income (here: realized brokerage gains) and MAGI − threshold. It does not apply to Traditional 401(k)/IRA or Roth distributions.
 
 ---
 
 ## 7. Medicare IRMAA
 
-IRMAA surcharges apply to **Medicare Part B and Part D** premiums starting at age 65, based on **MAGI from two years prior**.
+IRMAA surcharges apply to **Medicare Part B and Part D** premiums starting at age 65. The engine uses the current year's MAGI as a stand-in for the two-year lookback.
 
-### 7.1 2024 IRMAA tiers (MFJ)
+### 7.1 2025 tiers (monthly Part B premium / Part D surcharge, per person)
 
-| MAGI (MFJ)            | Part B monthly surcharge | Part D monthly surcharge | Combined annual surcharge per person |
-|-----------------------|--------------------------|--------------------------|--------------------------------------|
-| ≤ $206,000            | $0.00                    | $0.00                    | $0                                   |
-| $206,001 – $258,000   | $69.90                   | $12.90                   | $994                                 |
-| $258,001 – $322,000   | $174.70                  | $33.30                   | $2,496                               |
-| $322,001 – $386,000   | $279.50                  | $53.80                   | $3,999                               |
-| $386,001 – $750,000   | $384.30                  | $74.20                   | $5,502                               |
-| > $750,000            | $419.30                  | $81.00                   | $6,004                               |
+| MAGI (MFJ) | MAGI (individual) | Part B | Part D |
+|------------|-------------------|--------|--------|
+| < $212,000 | < $106,000 | $185.00 | $0.00 |
+| $212,000+ | $106,000+ | $259.00 | $13.70 |
+| $266,000+ | $133,000+ | $370.00 | $35.30 |
+| $334,000+ | $167,000+ | $480.90 | $57.00 |
+| $400,000+ | $200,000+ | $591.90 | $78.60 |
+| $750,000+ | $500,000+ | $628.90 | $85.80 |
 
-Surcharges are **per person enrolled in Medicare**, so a couple on Medicare pays the surcharge twice.
-
-### 7.2 Two-year lookback
-
-The 2026 IRMAA surcharge is based on 2024 MAGI. The engine maintains a two-year MAGI history per simulation and applies the lookback automatically. In the first two retirement years after age 65, working-years MAGI dominates and often triggers high IRMAA brackets.
+Premiums are **per person enrolled in Medicare**. An unmarried couple's household MAGI is split evenly and each person is tested on the individual tiers. IRMAA tiers are indexed, so they are held flat in the real frame.
 
 ---
 
@@ -209,7 +184,7 @@ The 2026 IRMAA surcharge is based on 2024 MAGI. The engine maintains a two-year 
 | HSA non-qualified before age 65           | 20%                     | Qualified medical is always 0% |
 | HSA non-qualified at or after age 65      | 0% (still ordinary income) | Medical remains tax-free |
 
-Penalties are added to the federal tax bill for that year. They are not deductible against California tax.
+Penalties are added to the federal tax bill for that year. They are not deductible against state tax.
 
 ---
 
@@ -260,7 +235,7 @@ The engine linearly interpolates only at table boundaries; ages not in the table
 
 ### 10.1 Tax treatment
 
-The converted amount is included in **ordinary income** for the conversion year. It flows into the federal and California ordinary-income calculations as if it were a Traditional withdrawal, but with **no 10% early-withdrawal penalty** and **no withholding** assumed.
+The converted amount is included in **ordinary income** for the conversion year. It flows into the federal and state ordinary-income calculations as if it were a Traditional withdrawal, but with **no 10% early-withdrawal penalty** and **no withholding** assumed.
 
 ### 10.2 Five-year rule
 
@@ -268,7 +243,7 @@ The separate 5-year rule for each conversion (restricting penalty-free withdrawa
 
 ### 10.3 Strategic use
 
-See `METHODOLOGY.md` §14 for the conversion policy (bracket-fill up to the 12% ceiling, $100k annual cap, stops at SS claim age).
+See `METHODOLOGY.md` §14 for the conversion policy (fill ordinary income up to the top of the 12% bracket for the filing status — $94,300 / $47,150 / $63,100 — unless `ROTH_CONVERSION_TARGET_BRACKET` is set; $100k annual cap; stops at `ROTH_CONVERSION_STOP_AGE`). An unmarried couple fills each person's own return.
 
 ---
 
@@ -300,4 +275,6 @@ The backdoor Roth pathway uses the IRA limit; no separate cap is enforced for th
 - **SSA POMS RS 00605 and RS 00615** — PIA computation and actuarial adjustments for early/delayed claiming
 - **CMS Medicare IRMAA tables** — annual Part B and Part D surcharge schedules
 - **California Franchise Tax Board Form 540 instructions** — state brackets, standard deduction, mental-health surtax
+- **State revenue department 2024 forms and rate schedules** — the other state rows in `state_tax_data.py` (each row's `confidence` and `note` say how complete it is)
+- **IRS Publication 15 / Topic 560** — FICA rates, the 2024 Social Security wage base, the Additional Medicare Tax
 - **SECURE Act 2.0 (2022)** — RMD start-age increases

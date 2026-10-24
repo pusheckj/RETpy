@@ -197,15 +197,18 @@ class TestLifecycleFeaturesDefaultOff:
         # $24k band, which ignored age (a 64-year-old couple now pays ~$34k) and
         # charged no pre-65 out-of-pocket. Toggle off reproduces the old pin.
         # Previously {45: 0.113, 50: 0.618}.
-        # REBASELINED 2026-10-24: the wedding-year flag (YEARS_UNTIL_WEDDING) is
-        # gone; marriage is the filing status. The default couple files jointly,
-        # so they are married from year 0 and the partner's direct Roth (blocked
-        # for married couples by the MFJ phase-out assumption) stops 3 years
-        # earlier. The planner always ran this way (About you set the flag to 0
-        # for joint filers); only the bare config default had a wedding in year
-        # 3. Verified: the previous engine with YEARS_UNTIL_WEDDING = 0 gives
-        # exactly these numbers. Previously {45: 0.081, 50: 0.512}.
-        assert results == {45: 0.0945, 50: 0.502}
+        # REBASELINED 2026-10-24: real working-year taxes. Take-home used to be
+        # the comp table's hand-set after_tax (80% of pay here) and 80% of the
+        # partner's pay, with 401(k)/HSA contributions funded on top for free.
+        # It is now cfg.working_year_taxes (federal MFJ + California 2024 table
+        # + SDI + FICA) after the pre-tax deferrals; the partner's Roth follows
+        # the income phase-out instead of stopping at the wedding year, and the
+        # California brackets moved from 2023 to 2024 figures. Take-home falls
+        # slightly, so success does. (Removing the wedding-year flag, in the
+        # same release, no longer matters here: its only effect was the
+        # married => no partner Roth rule, which the phase-out replaced.)
+        # Previously {45: 0.081, 50: 0.512}.
+        assert results == {45: 0.066, 50: 0.431}
 
 
 # ==============================================================================

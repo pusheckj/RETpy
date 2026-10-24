@@ -19,16 +19,33 @@ _UI_ONLY_KEYS = {
     "NEW_HOME_DOWN_PCT", "NEW_HOME_ESCROW_PCT",
 }
 
-# Derived from age on every run (sim_runner._recompute_derived). Older saved
-# profiles may still carry them; they're ignored so they can't contradict age.
-_DERIVED_KEYS = {"YOUR_BIRTH_YEAR", "PARTNER_BIRTH_YEAR"}
+# Derived on every run: birth years from age (sim_runner._recompute_derived),
+# the current year from the clock. Older saved profiles may still carry them;
+# they're ignored so they can't contradict age or the calendar.
+_DERIVED_KEYS = {"YOUR_BIRTH_YEAR", "PARTNER_BIRTH_YEAR", "CURRENT_YEAR"}
+
+# Retired engine knobs older saved profiles may still carry. Dropped quietly:
+#   PARTNER_ESTIMATED_TAX_RATE  flat partner tax rate -> real tax rules
+#                               (cfg.working_year_taxes)
+#   PARTNER_401K_MATCH          never read -> PARTNER_401K_MATCH_PCT
+_RETIRED_KEYS = {"PARTNER_ESTIMATED_TAX_RATE", "PARTNER_401K_MATCH"}
+
+# The take-home the Income section used to write into every comp-table row
+# (70% of total comp). A row carrying exactly that value is treated as not set,
+# so the engine computes the real take-home; any other after_tax is an explicit
+# override and is kept.
+LEGACY_AUTO_AFTER_TAX_RATE = 0.70
+
+# The Roth-conversion target the UI used to store for everyone (the top of the
+# 12% bracket for a JOINT return). For other filing statuses it means "the
+# default", which now follows the filing status.
+LEGACY_ROTH_TARGET_MFJ = 94_300
 
 # Quick-income assumptions (used when the user hasn't entered a detailed
 # income breakdown and only supplies a single household income number).
 QUICK_INCOME_PRIMARY_SHARE = 0.55  # primary/partner household income split (55/45)
 QUICK_INCOME_SYNTHETIC_GROWTH = 0.02  # annual real growth rate for the synthesized comp table
-QUICK_INCOME_AFTER_TAX_RATE = 0.70  # fraction of gross comp assumed to survive taxes
-QUICK_INCOME_SAVINGS_RATE = 0.10  # fraction of after-tax comp assumed to be saved
+QUICK_INCOME_SAVINGS_RATE = 0.07  # Manual-mode "saved" per comp row, as a fraction of gross comp
 
 # Default proportions for allocating a single "total savings" number across
 # typical account types (roughly mirrors median US household allocation).
@@ -62,9 +79,18 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
     #    UI-only), so they flow straight through here to reach cfg and drive the
     #    engine's state-tax selection (CA / No state tax / Other flat rate).
     for k, v in user_overrides.items():
-        if k in _UI_ONLY_KEYS or k in _DERIVED_KEYS:
+        if k in _UI_ONLY_KEYS or k in _DERIVED_KEYS or k in _RETIRED_KEYS:
             continue
         out[k] = v
+
+    # 1b. Legacy values that meant "the default" (see the constants above).
+    comp = out.get("YOUR_COMPENSATION_BY_AGE")
+    if isinstance(comp, dict) and comp:
+        out["YOUR_COMPENSATION_BY_AGE"] = _strip_auto_after_tax(comp)
+    status = str(out.get("FILING_STATUS", "Married filing jointly")).strip().lower()
+    if (out.get("ROTH_CONVERSION_TARGET_BRACKET") == LEGACY_ROTH_TARGET_MFJ
+            and not (status.startswith("m") or status == "mfj")):
+        out["ROTH_CONVERSION_TARGET_BRACKET"] = None
 
     # 2. Translate HOUSEHOLD_INCOME_QUICK -> PARTNER_SALARY + default comp table
     #    (only if the user hasn't explicitly set a compensation table)
@@ -74,6 +100,9 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
         has_comp_table = "YOUR_COMPENSATION_BY_AGE" in user_overrides and user_overrides["YOUR_COMPENSATION_BY_AGE"]
         has_partner_salary = "PARTNER_SALARY" in user_overrides
         # Split 50/50 if neither has been manually edited
+        # The quick figure is the WHOLE household income, so the split rows
+        # stand in for every income line: zero the separate other/bonus/RSU
+        # lines they replace, or the engine would add them a second time.
         if not has_comp_table:
             primary = int(income * QUICK_INCOME_PRIMARY_SHARE)  # slight skew to primary
             out["YOUR_COMPENSATION_BY_AGE"] = _synthesize_comp_table(
@@ -82,8 +111,11 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
                 n_rows=15,
                 growth=QUICK_INCOME_SYNTHETIC_GROWTH,
             )
+            out["YOUR_OTHER_INCOME"] = 0
         if not has_partner_salary:
             out["PARTNER_SALARY"] = int(income - int(income * QUICK_INCOME_PRIMARY_SHARE))
+            for k in ("PARTNER_BONUS_AMOUNT", "PARTNER_RSU_AMOUNT", "PARTNER_OTHER_INCOME"):
+                out[k] = 0
 
     # 3. Translate TOTAL_SAVINGS_QUICK -> allocation across accounts
     #    (only if none of the individual account keys were set by the user)
@@ -112,14 +144,27 @@ def _synthesize_comp_table(primary_salary: int, start_age: int, n_rows: int, gro
         age = start_age + offset
         base = int(primary_salary * ((1 + growth) ** offset))
         total = base
-        after_tax = int(total * QUICK_INCOME_AFTER_TAX_RATE)
-        saved = int(after_tax * QUICK_INCOME_SAVINGS_RATE)
         table[age] = {
             "base": base,
             "bonus": 0,
             "rsu_gross": 0,
             "total_comp": total,
-            "after_tax": after_tax,
-            "saved": saved,
+            "saved": int(total * QUICK_INCOME_SAVINGS_RATE),
         }
     return table
+
+
+def _strip_auto_after_tax(comp: dict) -> dict:
+    """Copy of a comp table without the legacy auto-written 70% take-home."""
+    out = {}
+    for age, row in comp.items():
+        if isinstance(row, dict) and "after_tax" in row:
+            try:
+                total = row.get("total_comp", row.get("base", 0))
+                auto = int(int(total) * LEGACY_AUTO_AFTER_TAX_RATE) == int(row["after_tax"])
+            except (TypeError, ValueError):
+                auto = False
+            if auto:
+                row = {k: v for k, v in row.items() if k != "after_tax"}
+        out[age] = row
+    return out

@@ -85,7 +85,7 @@ class TestRothConversionBracketLimits:
         portfolio = create_initial_portfolio()
         portfolio.reset_yearly_income()
         # Manually set income above the 12% bracket ceiling
-        portfolio.year_ordinary_income = cfg.ROTH_CONVERSION_TARGET_BRACKET + 10_000
+        portfolio.year_ordinary_income = cfg.roth_conversion_target() + 10_000
         amount, tax = portfolio.perform_roth_conversion(your_age=55)
         assert amount == 0.0, "Should not convert when bracket is already full"
         assert tax == 0.0
@@ -103,7 +103,7 @@ class TestRothConversionBracketLimits:
         portfolio.reset_yearly_income()
         # Set income partway through 12% bracket
         portfolio.year_ordinary_income = 60_000
-        bracket_room = cfg.ROTH_CONVERSION_TARGET_BRACKET - 60_000  # $34,300
+        bracket_room = cfg.roth_conversion_target() - 60_000  # $34,300
         amount, _ = portfolio.perform_roth_conversion(your_age=55)
         assert amount <= bracket_room + 1, (
             f"Converted ${amount:,.0f} but bracket room was only ${bracket_room:,.0f}"

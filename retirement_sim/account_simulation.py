@@ -14,7 +14,7 @@
 # Standard library imports
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 
 # Third-party imports
 import numpy as np
@@ -232,18 +232,7 @@ def _progressive_tax(brackets: List[Tuple[float, float]], taxable_income: float)
     Returns:
         Total tax owed under the progressive schedule
     """
-    if taxable_income <= 0:
-        return 0
-    tax = 0
-    prev_bracket = 0
-    for bracket_limit, rate in brackets:
-        if taxable_income <= bracket_limit:
-            tax += (taxable_income - prev_bracket) * rate
-            break
-        else:
-            tax += (bracket_limit - prev_bracket) * rate
-            prev_bracket = bracket_limit
-    return tax
+    return cfg.progressive_tax(brackets, taxable_income)
 
 
 class AccountType(Enum):
@@ -268,6 +257,10 @@ class AccountType(Enum):
     HSA = "hsa"
     CASH = "cash"
     COLLEGE_529 = "college_529"
+
+
+# Distributions from these count as retirement income for state exclusions.
+_TRADITIONAL_TYPES = (AccountType.TRADITIONAL_401K, AccountType.TRADITIONAL_IRA)
 
 
 @dataclass
@@ -330,26 +323,19 @@ class TaxBrackets:
 @dataclass
 class CaliforniaTaxBrackets:
     """
-    2024 California state tax brackets for married filing jointly.
+    California's married-filing-jointly schedule (2024, incl. the 1%
+    mental-health surtax above $1M), read from state_tax_data.
 
-    California has one of the most progressive state tax systems,
-    with rates ranging from 1% to 12.3%.
-
-    NOTE: This class is provided as one example of a state-level tax
-    implementation. Users residing in a different state (or country) can
-    subclass this class, or swap it out entirely, to model their own
-    local income tax system. The simulation engine only requires a
-    `calculate_tax(taxable_income)` method that returns the tax owed
-    on a given amount of ordinary taxable income.
+    Kept as a convenience for callers that want the CA joint table directly.
+    The engine itself uses StateIncomeTax, which covers every state, filing
+    status, deduction and retirement-income rule. Exposes the
+    ``calculate_tax(taxable_income)`` interface every state model shares.
 
     Attributes:
         brackets: List of (income_threshold, tax_rate) tuples defining CA tax brackets
     """
-    brackets: List[Tuple[float, float]] = field(default_factory=lambda: [
-        (20_824, 0.01), (49_368, 0.02), (77_918, 0.04),
-        (108_162, 0.06), (136_700, 0.08), (698_274, 0.093),
-        (837_922, 0.103), (1_396_542, 0.113), (float('inf'), 0.123)
-    ])
+    brackets: List[Tuple[float, float]] = field(
+        default_factory=lambda: list(cfg.state_tax_rules("CA", "MFJ")["brackets"]))
 
     def calculate_tax(self, taxable_income: float) -> float:
         """
@@ -381,11 +367,7 @@ class NoStateTax:
 
 @dataclass
 class FlatRateStateTax:
-    """State tax model applying a single flat rate to all taxable income.
-
-    Used for the "Other" state choice, where the user's marginal tax rate
-    stands in for a state-specific progressive schedule we do not model.
-    """
+    """State tax model applying a single flat rate to all taxable income."""
     rate: float = 0.0
 
     def calculate_tax(self, taxable_income: float) -> float:
@@ -394,63 +376,77 @@ class FlatRateStateTax:
         return taxable_income * self.rate
 
 
-def _select_state_tax_brackets():
-    """Choose the state income-tax model from cfg.STATE_CHOICE.
+@dataclass
+class StateIncomeTax:
+    """One STATE return: brackets, deduction and rules for one filing status.
 
-    "CA" (default)     -> CaliforniaTaxBrackets (progressive 2024 schedule)
-    "No state tax"     -> NoStateTax (always zero)
-    "Other"            -> FlatRateStateTax at cfg.YOUR_MARGINAL_TAX_RATE
-
-    Any unrecognized value falls back to CA so existing results are unchanged.
+    Built from ``cfg.state_tax_rules`` (state_tax_data.py: all 50 states + DC,
+    plus "No state tax" and the flat-rate "Other"). ``calculate_tax`` takes
+    income AFTER ``deduction`` (the state's standard deduction plus personal
+    exemptions), like every other bracket model here.
     """
-    choice = getattr(cfg, "STATE_CHOICE", "CA")
-    if choice == "No state tax":
-        return NoStateTax()
-    if choice == "Other":
-        return FlatRateStateTax(rate=getattr(cfg, "YOUR_MARGINAL_TAX_RATE", 0.0))
-    return CaliforniaTaxBrackets()
+    rules: dict
+
+    @property
+    def code(self) -> str:
+        return self.rules["code"]
+
+    @property
+    def deduction(self) -> float:
+        return float(self.rules["deduction"])
+
+    @property
+    def brackets(self) -> List[Tuple[float, float]]:
+        return self.rules["brackets"]
+
+    def calculate_tax(self, taxable_income: float) -> float:
+        return _progressive_tax(self.rules["brackets"], taxable_income)
 
 
-LTCG_BRACKETS = [
-    (94_050, 0.0), (583_750, 0.15), (float('inf'), 0.20)
-]
+def _select_state_tax_brackets(status=None, people=None) -> StateIncomeTax:
+    """The state income-tax model of one return, from cfg.STATE_CHOICE.
+
+    A two-letter code -> that state's table; "No state tax" -> zero; "Other" ->
+    flat cfg.YOUR_MARGINAL_TAX_RATE above the federal standard deduction.
+    Unknown values fall back to CA so existing results are unchanged.
+    ``status``/``people`` default to the active filing status and the return's
+    personal exemptions (two on a joint return with a partner, else one).
+    """
+    status = cfg.normalize_filing_status(status)
+    if people is None:
+        people = 2 if (status == cfg._FILING_MFJ and cfg.has_partner()) else 1
+    return StateIncomeTax(cfg.state_tax_rules(getattr(cfg, "STATE_CHOICE", "CA"),
+                                              status, people=people))
 
 
-def calculate_ltcg_tax(gains: float, other_income: float) -> float:
-    """Calculate long-term capital gains tax with all three brackets (0%, 15%, 20%)."""
+# Federal LTCG brackets, married filing jointly (kept for callers that read the
+# joint table; every status is in cfg.LTCG_BRACKETS_BY_STATUS).
+LTCG_BRACKETS = cfg.LTCG_BRACKETS_BY_STATUS[cfg._FILING_MFJ]
+
+
+def calculate_ltcg_tax(gains: float, other_income: float, status=None) -> float:
+    """Federal long-term capital gains tax (0% / 15% / 20%).
+
+    ``gains`` stack on top of ``other_income`` (TAXABLE ordinary income, after
+    the standard deduction), per the IRS Qualified Dividends and Capital Gain
+    worksheet. ``status`` picks the bracket table (default the active one).
+    """
     if gains <= 0:
         return 0
-
-    total_income = other_income + gains
-
-    # Bracket thresholds for MFJ (2024)
-    zero_bracket_limit = LTCG_BRACKETS[0][0]      # $94,050
-    fifteen_bracket_limit = LTCG_BRACKETS[1][0]  # $583,750
-
-    if total_income <= zero_bracket_limit:
-        # All gains in 0% bracket
-        return 0
-
-    elif total_income <= fifteen_bracket_limit:
-        # Some gains may be in 0%, rest in 15%
-        zero_bracket_room = max(0, zero_bracket_limit - other_income)
-        taxable_at_15 = gains - zero_bracket_room
-        return max(0, taxable_at_15) * 0.15
-
-    else:
-        # Gains span 0%, 15%, and potentially 20% brackets
-        # Calculate room in each bracket based on other_income
-        zero_bracket_room = max(0, zero_bracket_limit - other_income)
-        fifteen_bracket_room = max(0, fifteen_bracket_limit - max(zero_bracket_limit, other_income))
-
-        # Allocate gains to brackets
-        gains_at_0 = min(gains, zero_bracket_room)
-        gains_at_15 = min(gains - gains_at_0, fifteen_bracket_room)
-        gains_at_20 = max(0, gains - gains_at_0 - gains_at_15)
-
-        return (gains_at_0 * 0.0 +
-                gains_at_15 * 0.15 +
-                gains_at_20 * 0.20)
+    brackets = cfg.LTCG_BRACKETS_BY_STATUS[cfg.normalize_filing_status(status)]
+    tax = 0.0
+    lower = 0.0
+    start = max(0.0, other_income)
+    end = start + gains
+    for upper, rate in brackets:
+        lo = max(start, lower)
+        hi = min(end, upper)
+        if hi > lo:
+            tax += (hi - lo) * rate
+        lower = upper
+        if upper >= end:
+            break
+    return tax
 
 
 # Helper: map AccountType to the coarse withdrawal-log category used by the UI.
@@ -554,8 +550,10 @@ class AccountPortfolio:
     Manages multiple accounts with tax-efficient strategies.
 
     Implements realistic tax modeling including:
-    - Federal income tax with standard deduction
-    - California state tax
+    - Federal income tax with standard deduction, by filing status
+    - State income tax (any state, from state_tax_data)
+    - Two separate returns for an unmarried couple, each person's income on
+      their own (the partner's share is tracked in the year_partner_* fields)
     - Social Security taxation (up to 85% taxable)
     - Early withdrawal penalties (10% on 401k/IRA before 59.5)
     - Net Investment Income Tax (NIIT) 3.8% surtax
@@ -564,14 +562,30 @@ class AccountPortfolio:
 
     def __init__(self):
         self.accounts: Dict[str, Account] = {}
+        # Returns filed this year. A married couple or a single person files one
+        # (keyed "you"); an unmarried couple files two -- "you" on
+        # cfg.FILING_STATUS and "partner" as Single -- and each person's income
+        # is taxed on their own return (cfg.files_two_returns).
+        self.two_returns = cfg.files_two_returns()
+        self.return_status = {"you": cfg.return_status("you"),
+                              "partner": cfg.return_status("partner")}
         # Federal brackets selected from cfg.FILING_STATUS (MFJ / Single / HOH).
         # MFJ remains the default (byte-identical to the prior hardcoded table);
         # Single/HOH pull the 2024 IRS schedules so the filing-status selector
         # actually changes federal tax (finding #8).
-        self.federal_tax_brackets = TaxBrackets(brackets=list(cfg.get_federal_brackets()))
-        # State income-tax model, selected from cfg.STATE_CHOICE. CA remains the
-        # default (unchanged results); "No state tax" -> zero, "Other" -> flat rate.
-        self.ca_tax_brackets = _select_state_tax_brackets()
+        self.federal_tax_brackets = TaxBrackets(
+            brackets=list(cfg.get_federal_brackets(self.return_status["you"])))
+        # State income-tax model of the primary return, from cfg.STATE_CHOICE
+        # (any state; "No state tax" -> zero, "Other" -> flat rate). The
+        # attribute keeps its historical name.
+        self.ca_tax_brackets = _select_state_tax_brackets(self.return_status["you"])
+        if self.two_returns:
+            self._partner_federal_brackets = TaxBrackets(
+                brackets=list(cfg.get_federal_brackets(cfg._FILING_SINGLE)))
+            self._partner_state_tax = _select_state_tax_brackets(cfg._FILING_SINGLE, people=1)
+        else:
+            self._partner_federal_brackets = self.federal_tax_brackets
+            self._partner_state_tax = self.ca_tax_brackets
         self.total_taxes_paid = 0.0
         self.total_early_withdrawal_penalties = 0.0
         self.total_niit_paid = 0.0
@@ -619,11 +633,21 @@ class AccountPortfolio:
         self.overspent_years = 0
         self.year_ordinary_income = 0.0
         # Cumulative income recognized this year that the ACTIVE state model
-        # exempts from state tax (currently: CA's Social Security exemption).
-        # Subtracted from year_ordinary_income wherever a STATE (not federal)
-        # taxable base is computed. See _state_taxable_base().
+        # exempts from state tax (Social Security where the state exempts it,
+        # retirement-income exclusions). Subtracted from year_ordinary_income
+        # wherever a STATE (not federal) taxable base is computed. See
+        # _state_taxable_base().
         self.year_state_exempt_income = 0.0
         self.year_investment_income = 0.0  # Track for NIIT calculation
+        # The partner's own-return part of the three totals above (two returns
+        # only; always 0 on a joint or single return). The primary's part is
+        # the total minus this, so code that sets year_ordinary_income directly
+        # keeps attributing it to the primary.
+        self.year_partner_income = 0.0
+        self.year_partner_state_exempt = 0.0
+        self.year_partner_investment = 0.0
+        # Retirement-income exclusion used so far this year, per person.
+        self._retirement_excluded = {"you": 0.0, "partner": 0.0}
         self.total_roth_conversions = 0.0
         self.roth_conversion_taxes = 0.0
         # --- Early-retirement access strategies -----------------------------
@@ -734,35 +758,84 @@ class AccountPortfolio:
         self.year_ordinary_income = 0.0
         self.year_state_exempt_income = 0.0
         self.year_investment_income = 0.0
+        self.year_partner_income = 0.0
+        self.year_partner_state_exempt = 0.0
+        self.year_partner_investment = 0.0
+        self._retirement_excluded = {"you": 0.0, "partner": 0.0}
 
     def update_ages(self, your_age: int):
         """Update tracked ages for standard deduction calculation."""
         self.current_your_age = your_age
         self.current_partner_age = your_age - (cfg.YOUR_AGE - cfg.PARTNER_AGE)
 
-    def get_standard_deduction(self) -> float:
-        """Get standard deduction based on current ages."""
-        return cfg.get_standard_deduction(self.current_your_age, self.current_partner_age)
+    # ------------------------------------------------------------------
+    # Returns: one (joint or single) or two (unmarried couple). ``owner`` is an
+    # account owner ("you"/"partner"); ``ret`` is the return it lands on.
+    # ------------------------------------------------------------------
+    def _return_of(self, owner: str = "you") -> str:
+        return "partner" if (self.two_returns and owner == "partner") else "you"
 
-    def _tracks_state_exemptions(self) -> bool:
-        """Whether the ACTIVE state model honors the state-exemption ledger.
+    def _return_income(self, ret: str = "you") -> float:
+        if ret == "partner":
+            return self.year_partner_income
+        return self.year_ordinary_income - self.year_partner_income
 
-        Gated to real California brackets specifically: "Other" is an
-        intentionally rough flat-rate stand-in for an unmodeled state and must
-        not silently inherit CA's Social-Security exemption.
+    def _return_investment(self, ret: str = "you") -> float:
+        if ret == "partner":
+            return self.year_partner_investment
+        return self.year_investment_income - self.year_partner_investment
+
+    def _federal_model(self, ret: str = "you") -> "TaxBrackets":
+        return self._partner_federal_brackets if ret == "partner" else self.federal_tax_brackets
+
+    def _state_model(self, ret: str = "you"):
+        return self._partner_state_tax if ret == "partner" else self.ca_tax_brackets
+
+    def get_standard_deduction(self, owner: str = "you") -> float:
+        """Federal standard deduction of ``owner``'s return, from current ages."""
+        if not self.two_returns:
+            return cfg.get_standard_deduction(self.current_your_age, self.current_partner_age)
+        if self._return_of(owner) == "partner":
+            return cfg.standard_deduction_for_return(cfg._FILING_SINGLE, [self.current_partner_age])
+        return cfg.standard_deduction_for_return(self.return_status["you"], [self.current_your_age])
+
+    def _state_taxable_base(self, ret: str = "you") -> float:
+        """Ordinary income actually subject to STATE tax this year on a return.
+
+        Equal to the return's ordinary income (the federal-stacking total)
+        minus whatever's been recognized as state-exempt so far (Social
+        Security where the state exempts it, retirement-income exclusions).
+        Federal calculations must keep using the ordinary income directly --
+        this base is state-only.
         """
-        return bool(getattr(cfg, "MODEL_CA_EXEMPTS_SOCIAL_SECURITY", True)) and \
-            isinstance(self.ca_tax_brackets, CaliforniaTaxBrackets)
+        if ret == "partner":
+            return max(0.0, self.year_partner_income - self.year_partner_state_exempt)
+        return max(0.0, (self.year_ordinary_income - self.year_partner_income)
+                   - (self.year_state_exempt_income - self.year_partner_state_exempt))
 
-    def _state_taxable_base(self) -> float:
-        """Ordinary income actually subject to STATE tax this year.
+    def _state_exempt_portion(self, income: float, owner: str, is_social_security: bool,
+                              retirement: bool) -> float:
+        """How much of ``income`` the return's state exempts (pure, no mutation).
 
-        Equal to year_ordinary_income (the federal-stacking total) minus
-        whatever's been recognized as state-exempt so far (currently just
-        taxable Social Security under CA). Federal calculations must keep
-        using year_ordinary_income directly -- this base is state-only.
+        Social Security follows the state's rule (exempt, taxed, or exempt below
+        an income limit); traditional 401(k)/IRA distributions use the owner's
+        remaining yearly retirement-income exclusion at their current age.
         """
-        return max(0.0, self.year_ordinary_income - self.year_state_exempt_income)
+        if income <= 0:
+            return 0.0
+        ret = self._return_of(owner)
+        rules = getattr(self._state_model(ret), "rules", None)
+        if not rules:
+            return 0.0
+        if is_social_security:
+            agi = self._return_income(ret) + self._return_investment(ret) + income
+            return income if cfg.state_exempts_social_security(rules, agi) else 0.0
+        if retirement:
+            who = "partner" if owner == "partner" else "you"
+            age = self.current_partner_age if who == "partner" else self.current_your_age
+            room = cfg.state_retirement_exclusion(rules, age) - self._retirement_excluded[who]
+            return min(income, max(0.0, room))
+        return 0.0
 
     def calculate_federal_tax_with_deduction(self, gross_income: float) -> float:
         """
@@ -775,10 +848,12 @@ class AccountPortfolio:
         taxable_income = max(0, gross_income - standard_deduction)
         return self.federal_tax_brackets.calculate_tax(taxable_income)
 
-    def quote_marginal_tax_on_income(self, income: float, is_state_taxable: bool = True) -> float:
+    def quote_marginal_tax_on_income(self, income: float, is_state_taxable: bool = True,
+                                     owner: str = "you", retirement: bool = False) -> float:
         """
-        Return the marginal federal + CA tax on ``income`` stacked on top of the
-        current ``year_ordinary_income`` WITHOUT mutating any state.
+        Return the marginal federal + state tax on ``income`` stacked on top of
+        the income already recognized on ``owner``'s return this year, WITHOUT
+        mutating any state.
 
         Kept side-effect-free so it can be used for a provisional estimate (e.g.
         sizing withdrawals against a taxable-SS quote) and then again for the
@@ -786,40 +861,40 @@ class AccountPortfolio:
         ``year_ordinary_income``. ``calculate_marginal_tax_on_income`` delegates
         here and adds the side effect.
 
-        ``is_state_taxable=False`` (used only for taxable Social Security under
-        CA, which fully exempts it) computes $0 CA tax on THIS income without
-        touching the federal side -- see ``_state_taxable_base``.
+        ``is_state_taxable=False`` marks the income as taxable Social Security:
+        the state's Social Security rule decides whether it is state-exempt
+        (most states exempt it) without touching the federal side -- see
+        ``_state_taxable_base``. ``retirement=True`` marks a traditional
+        401(k)/IRA distribution, eligible for the state's retirement-income
+        exclusion. ``owner`` picks the return on an unmarried couple's two.
         """
         if income <= 0:
             return 0
 
-        # Get standard deduction
-        std_deduction = self.get_standard_deduction()
+        ret = self._return_of(owner)
+        base = self._return_income(ret)
 
-        # Calculate federal tax using taxable income (after deduction)
-        taxable_before = max(0, self.year_ordinary_income - std_deduction)
-        taxable_after = max(0, self.year_ordinary_income + income - std_deduction)
+        # Federal tax using taxable income (after the standard deduction)
+        std_deduction = self.get_standard_deduction(owner)
+        federal = self._federal_model(ret)
+        taxable_before = max(0, base - std_deduction)
+        taxable_after = max(0, base + income - std_deduction)
+        federal_tax = federal.calculate_tax(taxable_after) - federal.calculate_tax(taxable_before)
 
-        federal_tax = self.federal_tax_brackets.calculate_tax(taxable_after) - \
-                      self.federal_tax_brackets.calculate_tax(taxable_before)
+        # State tax on the non-exempt part, after the state's own deduction.
+        state = self._state_model(ret)
+        state_deduction = getattr(state, "deduction", cfg.CA_STANDARD_DEDUCTION_MFJ_2024)
+        state_base = self._state_taxable_base(ret)
+        taxable_part = income - self._state_exempt_portion(
+            income, owner, not is_state_taxable, retirement)
+        state_taxable_before = max(0, state_base - state_deduction)
+        state_taxable_after = max(0, state_base + taxable_part - state_deduction)
+        state_tax = state.calculate_tax(state_taxable_after) - state.calculate_tax(state_taxable_before)
 
-        # California tax (uses California standard deduction which is lower ~$10k)
-        # For simplicity, we use federal taxable income basis
-        ca_std_deduction = cfg.CA_STANDARD_DEDUCTION_MFJ_2024
-        state_base = self._state_taxable_base()
+        return federal_tax + state_tax
 
-        if (not is_state_taxable) and self._tracks_state_exemptions():
-            ca_tax = 0.0
-        else:
-            ca_taxable_before = max(0, state_base - ca_std_deduction)
-            ca_taxable_after = max(0, state_base + income - ca_std_deduction)
-
-            ca_tax = self.ca_tax_brackets.calculate_tax(ca_taxable_after) - \
-                     self.ca_tax_brackets.calculate_tax(ca_taxable_before)
-
-        return federal_tax + ca_tax
-
-    def calculate_marginal_tax_on_income(self, income: float, is_state_taxable: bool = True) -> float:
+    def calculate_marginal_tax_on_income(self, income: float, is_state_taxable: bool = True,
+                                         owner: str = "you", retirement: bool = False) -> float:
         """
         Calculate marginal tax on additional income with standard deduction, and
         RECOGNIZE that income into ``year_ordinary_income`` (side-effecting).
@@ -827,7 +902,8 @@ class AccountPortfolio:
         The standard deduction is applied to total income before calculating
         the marginal tax on additional income.
 
-        ``is_state_taxable=False`` also recognizes the income into
+        The state-exempt part (Social Security under ``is_state_taxable=False``,
+        a ``retirement`` distribution's exclusion) is also recognized into
         ``year_state_exempt_income`` so LATER same-year income (another
         withdrawal, an LTCG event) correctly computes ITS state tax as if this
         income had never entered the state base.
@@ -835,10 +911,19 @@ class AccountPortfolio:
         if income <= 0:
             return 0
 
-        tax = self.quote_marginal_tax_on_income(income, is_state_taxable=is_state_taxable)
+        exempt = self._state_exempt_portion(income, owner, not is_state_taxable, retirement)
+        tax = self.quote_marginal_tax_on_income(income, is_state_taxable=is_state_taxable,
+                                                owner=owner, retirement=retirement)
+        ret = self._return_of(owner)
         self.year_ordinary_income += income
-        if (not is_state_taxable) and self._tracks_state_exemptions():
-            self.year_state_exempt_income += income
+        if ret == "partner":
+            self.year_partner_income += income
+        if exempt > 0:
+            self.year_state_exempt_income += exempt
+            if ret == "partner":
+                self.year_partner_state_exempt += exempt
+            if retirement:
+                self._retirement_excluded["partner" if owner == "partner" else "you"] += exempt
         return tax
 
     def apply_returns(self, annual_return: float):
@@ -973,33 +1058,48 @@ class AccountPortfolio:
                             # loop — restarts at the bottom of the 0% bracket. The
                             # default portfolio shape (your_brokerage +
                             # partner_brokerage) was claiming the 0% bracket twice.
-                            prior_gains = self.year_investment_income
-                            fed_std_deduction = self.get_standard_deduction()
+                            # Everything below is on the return of the
+                            # account's owner (one return unless an unmarried
+                            # couple files two).
+                            ret = self._return_of(account.owner)
+                            ret_status = self.return_status[ret]
+                            prior_gains = self._return_investment(ret)
+                            fed_std_deduction = self.get_standard_deduction(account.owner)
                             fed_taxable_ordinary = max(
-                                0, self.year_ordinary_income + prior_gains - fed_std_deduction
+                                0, self._return_income(ret) + prior_gains - fed_std_deduction
                             )
-                            federal_ltcg = calculate_ltcg_tax(gains, fed_taxable_ordinary)
+                            federal_ltcg = calculate_ltcg_tax(gains, fed_taxable_ordinary,
+                                                              status=ret_status)
 
-                            # California taxes LTCG as ordinary income
-                            ca_std_deduction = cfg.CA_STANDARD_DEDUCTION_MFJ_2024
-                            ca_base = self._state_taxable_base() + prior_gains
-                            ca_taxable_before = max(0, ca_base - ca_std_deduction)
-                            ca_taxable_after = max(0, ca_base + gains - ca_std_deduction)
-                            ca_ltcg = self.ca_tax_brackets.calculate_tax(ca_taxable_after) - \
-                                      self.ca_tax_brackets.calculate_tax(ca_taxable_before)
+                            # States tax LTCG as ordinary income, less any
+                            # state capital-gains exclusion.
+                            state = self._state_model(ret)
+                            state_gains = gains * (1.0 - float(
+                                getattr(state, "rules", {}).get("ltcg_exclusion", 0.0) or 0.0))
+                            state_deduction = getattr(state, "deduction",
+                                                      cfg.CA_STANDARD_DEDUCTION_MFJ_2024)
+                            state_base = self._state_taxable_base(ret) + prior_gains
+                            state_taxable_before = max(0, state_base - state_deduction)
+                            state_taxable_after = max(0, state_base + state_gains - state_deduction)
+                            state_ltcg = state.calculate_tax(state_taxable_after) - \
+                                state.calculate_tax(state_taxable_before)
 
                             # Track investment income for NIIT
                             self.year_investment_income += gains
+                            if ret == "partner":
+                                self.year_partner_investment += gains
 
-                            # NIIT (3.8% on investment income above $250k MAGI)
-                            total_magi = self.year_ordinary_income + self.year_investment_income
+                            # NIIT (3.8% on investment income above the
+                            # return's MAGI threshold)
+                            total_magi = self._return_income(ret) + self._return_investment(ret)
                             niit = cfg.calculate_niit(
                                 total_magi, gains,
                                 years_from_start=max(0, (self.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
+                                status=ret_status,
                             )
                             self.total_niit_paid += niit
 
-                            tax = federal_ltcg + ca_ltcg + niit
+                            tax = federal_ltcg + state_ltcg + niit
 
                             # Update cost basis
                             if account.balance > withdraw_amount:
@@ -1012,13 +1112,17 @@ class AccountPortfolio:
 
                     elif tax_treatment == "income":
                         # Regular income tax (after 59.5, no penalty)
-                        tax = self.calculate_marginal_tax_on_income(withdraw_amount)
+                        tax = self.calculate_marginal_tax_on_income(
+                            withdraw_amount, owner=account.owner,
+                            retirement=account.account_type in _TRADITIONAL_TYPES)
 
                     elif tax_treatment == "income_early":
                         # Income tax PLUS 10% early withdrawal penalty — unless
                         # an exception applies (Rule of 55 on an employer plan,
                         # or an active 72(t) SEPP schedule).
-                        tax = self.calculate_marginal_tax_on_income(withdraw_amount)
+                        tax = self.calculate_marginal_tax_on_income(
+                            withdraw_amount, owner=account.owner,
+                            retirement=account.account_type in _TRADITIONAL_TYPES)
                         # 72(t) coverage is NOT claimed here. A SEPP exempts only
                         # the SCHEDULED distribution, and that distribution never
                         # reaches this function -- _collect_sepp takes it directly
@@ -1040,7 +1144,8 @@ class AccountPortfolio:
 
                     elif tax_treatment == "hsa_nonmedical":
                         # HSA non-medical before 65: income tax + 20% penalty
-                        tax = self.calculate_marginal_tax_on_income(withdraw_amount)
+                        tax = self.calculate_marginal_tax_on_income(withdraw_amount,
+                                                                    owner=account.owner)
                         if your_age < cfg.EARLY_WITHDRAWAL_AGE_HSA:
                             penalty = cfg.calculate_early_withdrawal_penalty(
                                 withdraw_amount, 'hsa', your_age, is_medical=False
@@ -1219,8 +1324,11 @@ class AccountPortfolio:
             return 0.0, 0.0
         if your_age >= cfg.ROTH_CONVERSION_STOP_AGE:
             return 0.0, 0.0
+        if self.two_returns:
+            return self._perform_roth_conversion_two_returns(your_age)
 
-        bracket_room = max(0, cfg.ROTH_CONVERSION_TARGET_BRACKET - self.year_ordinary_income)
+        bracket_room = max(0, cfg.roth_conversion_target(self.return_status["you"])
+                           - self.year_ordinary_income)
         if bracket_room <= 0:
             return 0.0, 0.0
 
@@ -1280,6 +1388,50 @@ class AccountPortfolio:
         self.total_taxes_paid += tax_paid
 
         return conversion_amount, tax_paid
+
+    def _perform_roth_conversion_two_returns(self, your_age: int) -> Tuple[float, float]:
+        """Roth conversion for an unmarried couple: each person fills THEIR OWN
+        return up to the target for its filing status, converting their own
+        traditional money into their own Roth IRA. The yearly cap
+        (ROTH_CONVERSION_MAX_ANNUAL) is shared by the household."""
+        cap_left = float(cfg.ROTH_CONVERSION_MAX_ANNUAL)
+        total_converted = 0.0
+        total_tax = 0.0
+        roth_by_owner = {
+            acct.owner: name
+            for name, acct in self.accounts.items()
+            if acct.account_type == AccountType.ROTH_IRA
+        }
+        for owner in ("you", "partner"):
+            room = max(0.0, cfg.roth_conversion_target(self.return_status[owner])
+                       - self._return_income(owner))
+            target = min(room, cap_left)
+            if target <= 0:
+                continue
+            converted = 0.0
+            for account in self.accounts.values():
+                if converted >= target:
+                    break
+                if account.owner == owner and account.account_type in _TRADITIONAL_TYPES:
+                    take = min(target - converted, account.balance)
+                    if take > 0:
+                        account.balance -= take
+                        converted += take
+            if converted <= 0:
+                continue
+            roth = roth_by_owner.get(owner) or next(iter(roth_by_owner.values()), None)
+            if roth is not None:
+                self.accounts[roth].balance += converted
+            total_tax += self.calculate_marginal_tax_on_income(converted, owner=owner)
+            total_converted += converted
+            cap_left -= converted
+        if total_converted <= 0:
+            return 0.0, 0.0
+        self.total_roth_conversions += total_converted
+        self.roth_conversion_taxes += total_tax
+        self.roth_conversion_cohorts.append((float(your_age), float(total_converted)))
+        self.total_taxes_paid += total_tax
+        return total_converted, total_tax
 
     def quote_health_insurance_cost(self, your_age: int, modified_agi: float,
                                      inflation_factor: float = 1.0) -> float:
@@ -1579,26 +1731,39 @@ class AccountPortfolio:
 
     def _tax_home_sale_gain(self, gain: float) -> float:
         """Tax on the taxable part of a home-sale gain, stacked on this year's
-        income: the same three pieces as a taxable-account sale in
-        _withdraw_single_pass (federal LTCG, state as ordinary income, NIIT)."""
-        prior_gains = self.year_investment_income
-        fed_taxable_ordinary = max(
-            0, self.year_ordinary_income + prior_gains - self.get_standard_deduction()
-        )
-        federal = calculate_ltcg_tax(gain, fed_taxable_ordinary)
-        ca_std_deduction = cfg.CA_STANDARD_DEDUCTION_MFJ_2024
-        ca_base = self._state_taxable_base() + prior_gains
-        state = (self.ca_tax_brackets.calculate_tax(max(0, ca_base + gain - ca_std_deduction))
-                 - self.ca_tax_brackets.calculate_tax(max(0, ca_base - ca_std_deduction)))
-        self.year_investment_income += gain
-        niit = cfg.calculate_niit(
-            self.year_ordinary_income + self.year_investment_income, gain,
-            years_from_start=max(0, (self.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
-        )
-        self.total_niit_paid += niit
-        tax = federal + state + niit
-        self.total_taxes_paid += tax
-        return tax
+        income: the same pieces as a taxable-account sale in _withdraw_single_pass
+        (federal LTCG by filing status, state as ordinary income less any state
+        capital-gains exclusion, NIIT), on the owner's return. Unmarried
+        co-owners (two returns) each report half."""
+        if gain <= 0:
+            return 0.0
+        shares = [("you", gain / 2.0), ("partner", gain / 2.0)] if self.two_returns else [("you", gain)]
+        total = 0.0
+        for ret, part in shares:
+            status = self.return_status[ret]
+            prior = self._return_investment(ret)
+            fed_taxable_ordinary = max(0, self._return_income(ret) + prior
+                                       - self.get_standard_deduction("partner" if ret == "partner" else "you"))
+            federal = calculate_ltcg_tax(part, fed_taxable_ordinary, status=status)
+            state_model = self._state_model(ret)
+            state_part = part * (1.0 - float(
+                getattr(state_model, "rules", {}).get("ltcg_exclusion", 0.0) or 0.0))
+            deduction = getattr(state_model, "deduction", cfg.CA_STANDARD_DEDUCTION_MFJ_2024)
+            base = self._state_taxable_base(ret) + prior
+            state = (state_model.calculate_tax(max(0, base + state_part - deduction))
+                     - state_model.calculate_tax(max(0, base - deduction)))
+            self.year_investment_income += part
+            if ret == "partner":
+                self.year_partner_investment += part
+            niit = cfg.calculate_niit(
+                self._return_income(ret) + self._return_investment(ret), part,
+                years_from_start=max(0, (self.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
+                status=status,
+            )
+            self.total_niit_paid += niit
+            total += federal + state + niit
+        self.total_taxes_paid += total
+        return total
 
     def _buy_home(self, your_age: int, event: dict) -> None:
         """Buy ``event``'s home: down payment + costs from the portfolio (after
@@ -1692,47 +1857,181 @@ def _contribute_529s(portfolio: AccountPortfolio, amounts) -> None:
             portfolio.contribute(f"child{i}_529", amount)
 
 
+def _your_comp_for_age(your_age: int) -> Dict[str, Optional[float]]:
+    """The primary's comp-table row for ``your_age``: base, wages (total_comp),
+    the Manual-mode ``saved`` figure and the optional explicit ``after_tax``.
+
+    Ages not in the table are projected from the LAST row (not a hard-coded
+    age) by YOUR_SALARY_GROWTH_RATE, so custom tables of any age range work.
+    All zero when the table is empty.
+    """
+    table = cfg.YOUR_COMPENSATION_BY_AGE
+    if not table:
+        return {"base": 0.0, "wages": 0.0, "saved": 0.0, "after_tax": None}
+    if your_age in table:
+        row, growth = table[your_age], 1.0
+    else:
+        last_age = max(table.keys())
+        row = table[last_age]
+        growth = (1 + cfg.YOUR_SALARY_GROWTH_RATE) ** (your_age - last_age)
+    base = float(row.get("base", 0.0) or 0.0)
+    wages = row.get("total_comp")
+    if wages is None:
+        wages = base + float(row.get("bonus", 0.0) or 0.0) + float(row.get("rsu_gross", 0.0) or 0.0)
+    after_tax = row.get("after_tax")
+    return {"base": base * growth, "wages": float(wages) * growth,
+            "saved": float(row.get("saved", 0.0) or 0.0) * growth,
+            "after_tax": None if after_tax is None else float(after_tax) * growth}
+
+
+def working_year_cashflow(your_age: int, partner_working: bool = True,
+                          you_working: bool = True) -> Dict[str, Any]:
+    """One working year's pay, pre-tax savings, taxes and take-home.
+
+    Deterministic (no portfolio, no random draws), so the engine and the UI's
+    per-year charts read the same numbers: simulate_accumulation_year and a
+    partner who keeps working after you retire (_simulate_partner_working_year)
+    use it for their cash flow; utils.sim_runner uses it for the tax and
+    savings charts.
+
+    * Your wages = the comp-table row's total_comp (base + bonus + RSU); your
+      other income = YOUR_OTHER_INCOME (no FICA, while you work).
+    * Partner wages = PARTNER_SALARY + PARTNER_BONUS_AMOUNT + PARTNER_RSU_AMOUNT,
+      grown at PARTNER_SALARY_GROWTH_RATE; plus PARTNER_OTHER_INCOME.
+    * 401(k)/HSA deferrals are capped at the IRS limits and at the pay itself.
+      Each employer match is dollar for dollar on the deferral, up to the match
+      % of base pay -- contributing less than the match % earns less match.
+    * Taxes: cfg.working_year_taxes (federal by filing status, the state's
+      table, FICA per earner; two returns for an unmarried couple).
+    * The partner's direct Roth is limited by the Roth income phase-out of the
+      return it's on (and by earned income), not by being married.
+    * A comp row that sets ``after_tax`` overrides your computed take-home
+      (older profiles); the tax totals reported for that year are scaled to it.
+
+    Pass ``you_working=False`` for a year you're retired but your partner still
+    works, ``partner_working=False`` for a year they've stopped.
+    """
+    years_from_start = your_age - cfg.YOUR_AGE
+    current_year = cfg.CURRENT_YEAR + years_from_start
+    partner_age = your_age - (cfg.YOUR_AGE - cfg.PARTNER_AGE)
+
+    # ----- You -----------------------------------------------------------
+    comp = (_your_comp_for_age(your_age) if you_working
+            else {"base": 0.0, "wages": 0.0, "saved": 0.0, "after_tax": None})
+    base_salary = comp["base"]
+    your_wages = comp["wages"]
+    your_other = float(getattr(cfg, "YOUR_OTHER_INCOME", 0.0) or 0.0) if you_working else 0.0
+    your_401k = your_match = your_after_tax_401k = your_hsa = your_roth = 0.0
+    if you_working:
+        limit_401k = cfg.get_401k_limit(your_age, current_year)
+        desired = float(getattr(cfg, "YOUR_401K_CONTRIBUTION", limit_401k))
+        your_401k = max(0.0, min(desired, limit_401k, your_wages))
+        your_match = min(your_401k, base_salary * cfg.YOUR_401K_MATCH_PCT)
+        # Mega backdoor Roth: after-tax 401(k) up to the 415(c) total-additions
+        # room left after the deferral and the match (see simulate_accumulation_year).
+        after_tax_pct = float(getattr(cfg, "YOUR_AFTER_TAX_401K_PCT", 0.0) or 0.0)
+        if after_tax_pct > 0:
+            room = max(0.0, cfg.get_401k_total_limit(your_age, current_year)
+                       - your_401k - your_match)
+            your_after_tax_401k = min(after_tax_pct * base_salary, room)
+        hsa_limit = cfg.get_hsa_limit(your_age, current_year, is_family=True)
+        desired = float(getattr(cfg, "YOUR_HSA_CONTRIBUTION", hsa_limit))
+        your_hsa = max(0.0, min(desired, hsa_limit, your_wages - your_401k))
+        ira_limit = cfg.get_ira_limit(your_age, current_year)
+        your_roth = max(0.0, min(float(getattr(cfg, "YOUR_BACKDOOR_ROTH", ira_limit)), ira_limit))
+
+    # ----- Partner -------------------------------------------------------
+    partner_base = partner_wages = partner_other = 0.0
+    partner_401k = partner_match = 0.0
+    if partner_working:
+        growth = (1 + cfg.PARTNER_SALARY_GROWTH_RATE) ** years_from_start
+        partner_base = float(cfg.PARTNER_SALARY) * growth
+        partner_wages = (float(cfg.PARTNER_SALARY)
+                         + float(getattr(cfg, "PARTNER_BONUS_AMOUNT", 0.0) or 0.0)
+                         + float(getattr(cfg, "PARTNER_RSU_AMOUNT", 0.0) or 0.0)) * growth
+        partner_other = float(getattr(cfg, "PARTNER_OTHER_INCOME", 0.0) or 0.0)
+        limit_401k = cfg.get_401k_limit(partner_age, current_year)
+        desired = float(getattr(cfg, "PARTNER_401K_CONTRIBUTION", limit_401k))
+        partner_401k = max(0.0, min(desired, limit_401k, partner_wages))
+        partner_match = min(partner_401k, partner_base
+                            * float(getattr(cfg, "PARTNER_401K_MATCH_PCT", 0.0) or 0.0))
+
+    taxes = cfg.working_year_taxes(
+        your_wages, partner_wages,
+        your_other=your_other, partner_other=partner_other,
+        your_401k=your_401k, partner_401k=partner_401k, your_hsa=your_hsa,
+        your_age=your_age, partner_age=partner_age, years_from_start=years_from_start,
+    )
+    two = taxes["two_returns"]
+
+    partner_roth = 0.0
+    if partner_working:
+        ira_limit = cfg.get_ira_limit(partner_age, current_year)
+        desired = max(0.0, min(float(getattr(cfg, "PARTNER_ROTH_CONTRIBUTION", ira_limit)), ira_limit))
+        joint = (not two) and cfg.normalize_filing_status() == cfg._FILING_MFJ
+        magi = taxes["partner"]["agi"] + (0.0 if two else taxes["you"]["agi"])
+        # An IRA contribution needs earned income (a spouse's counts on a joint return).
+        earned = partner_wages + (max(0.0, your_wages - your_roth) if joint else 0.0)
+        partner_roth = min(cfg.roth_ira_allowed(desired, magi, cfg.return_status("partner")),
+                           earned)
+
+    your_take_home = taxes["you"]["take_home"]
+    federal, state, fica = taxes["federal"], taxes["state"], taxes["fica"]
+    if comp["after_tax"] is not None:
+        # Explicit take-home override: report the tax it implies, split like
+        # the rule-based tax.
+        your_take_home = comp["after_tax"]
+        implied = max(0.0, taxes["you"]["gross"] - taxes["you"]["deferrals"] - your_take_home)
+        rule = taxes["you"]["total"]
+        if rule > 0:
+            k = implied / rule
+            federal += taxes["you"]["federal"] * (k - 1)
+            state += taxes["you"]["state"] * (k - 1)
+            fica += taxes["you"]["fica"] * (k - 1)
+        else:
+            federal += implied
+
+    return {
+        "years_from_start": years_from_start, "current_year": current_year,
+        "partner_age": partner_age, "two_returns": two,
+        "base_salary": base_salary, "your_wages": your_wages, "your_other": your_other,
+        "saved": comp["saved"],
+        "your_401k": your_401k, "your_match": your_match,
+        "your_after_tax_401k": your_after_tax_401k, "your_hsa": your_hsa,
+        "your_roth": your_roth,
+        "partner_base": partner_base, "partner_wages": partner_wages,
+        "partner_other": partner_other, "partner_401k": partner_401k,
+        "partner_match": partner_match, "partner_roth": partner_roth,
+        "your_agi": taxes["you"]["agi"], "partner_agi": taxes["partner"]["agi"],
+        "your_take_home": your_take_home,
+        "partner_take_home": taxes["partner"]["take_home"],
+        "federal": federal, "state": state, "fica": fica,
+        "total_tax": federal + state + fica,
+        "gross_income": your_wages + your_other + partner_wages + partner_other,
+        "taxes": taxes,
+    }
+
+
 def _simulate_partner_working_year(
     portfolio: AccountPortfolio, your_age: int, current_year: int,
     years_from_start: int, married: bool,
 ) -> Tuple[float, float, float]:
-    """Run the partner's WORKING-year cash flow: grow their salary, make their
-    pre-tax 401(k) and (while single) Roth contributions, and return their
-    after-tax take-home.
+    """Run the partner's WORKING-year cash flow in a year YOU are retired (the
+    separate-partner-retirement-age feature): make their pre-tax 401(k) +
+    employer match and direct Roth contributions, and return their take-home.
 
-    Extracted verbatim from the accumulation-year partner block so it can be
-    reused in retirement years when the partner is still working after the
-    primary has retired (the separate-partner-retirement-age feature). Returns
-    ``(after_tax, taxable_income, roth_contribution)`` where ``taxable_income``
-    is the partner's MAGI contribution (salary minus pre-tax 401k) and
-    ``roth_contribution`` is the after-tax elective already funded here.
+    Uses working_year_cashflow(you_working=False), so their pay is taxed by the
+    same rules as in your working years. Returns ``(after_tax, taxable_income,
+    roth_contribution)``: ``taxable_income`` is the partner's AGI (pay minus
+    pre-tax 401(k), plus other income) and ``roth_contribution`` the after-tax
+    elective already funded here. ``married`` is ignored (the Roth limit now
+    follows income); it stays in the signature for existing callers.
     """
-    partner_age = your_age - (cfg.YOUR_AGE - cfg.PARTNER_AGE)
-    partner_401k_limit = cfg.get_401k_limit(partner_age, current_year)
-    partner_ira_limit = cfg.get_ira_limit(partner_age, current_year)
-
-    partner_salary = cfg.PARTNER_SALARY * ((1 + cfg.PARTNER_SALARY_GROWTH_RATE) ** years_from_start)
-
-    partner_401k_desired = getattr(cfg, "PARTNER_401K_CONTRIBUTION", partner_401k_limit)
-    partner_401k_contribution = min(float(partner_401k_desired), partner_401k_limit)
-    portfolio.contribute("partner_401k", partner_401k_contribution)
-
-    # Direct Roth only while not married (income below MFJ phase-out).
-    partner_roth_desired = getattr(cfg, "PARTNER_ROTH_CONTRIBUTION", partner_ira_limit)
-    partner_roth_contribution = (
-        0.0 if married else min(float(partner_roth_desired), partner_ira_limit)
-    )
-    if partner_roth_contribution > 0:
-        portfolio.contribute("partner_roth_ira", partner_roth_contribution)
-
-    # Partner after-tax income (reuse the EXISTING legacy math): salary minus
-    # pre-tax 401k, then apply the flat effective tax rate. Partner's personal
-    # spending is NOT subtracted here -- it is already inside
-    # calculate_annual_expenses via PARTNER_OTHER_MONTHLY, so subtracting it
-    # again (as the legacy partner-brokerage branch did) would double-count it.
-    partner_taxable_income = partner_salary - partner_401k_contribution
-    partner_after_tax = partner_taxable_income * (1 - cfg.PARTNER_ESTIMATED_TAX_RATE)
-    return partner_after_tax, partner_taxable_income, partner_roth_contribution
+    cf = working_year_cashflow(your_age, partner_working=True, you_working=False)
+    portfolio.contribute("partner_401k", cf["partner_401k"] + cf["partner_match"])
+    if cf["partner_roth"] > 0:
+        portfolio.contribute("partner_roth_ira", cf["partner_roth"])
+    return cf["partner_take_home"], cf["partner_agi"], cf["partner_roth"]
 
 
 def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annual_return: float,
@@ -1757,9 +2056,6 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     # many purchases preceded it.
     portfolio.reset_yearly_income()
     portfolio.update_ages(your_age)
-    years_from_start = your_age - cfg.YOUR_AGE
-    married = cfg.normalize_filing_status() == cfg._FILING_MFJ
-    current_year = cfg.CURRENT_YEAR + years_from_start
 
     # Coast FIRE: past the coast age the household keeps working just enough to
     # cover expenses, so NO new contributions are made — but nothing is withdrawn
@@ -1771,32 +2067,16 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
         portfolio.coasting = True
         return True
 
-    if your_age in cfg.YOUR_COMPENSATION_BY_AGE:
-        comp = cfg.YOUR_COMPENSATION_BY_AGE[your_age]
-        base_salary = comp['base']
-        saved_after_tax = comp['saved']
-    else:
-        # Project from the LAST age in the table (not a hard-coded 40), so
-        # custom user-provided tables with any age range work correctly.
-        if not cfg.YOUR_COMPENSATION_BY_AGE:
-            base_salary = 0.0
-            saved_after_tax = 0.0
-        else:
-            last_age = max(cfg.YOUR_COMPENSATION_BY_AGE.keys())
-            last_comp = cfg.YOUR_COMPENSATION_BY_AGE[last_age]
-            growth = (1 + cfg.YOUR_SALARY_GROWTH_RATE) ** (your_age - last_age)
-            base_salary = last_comp['base'] * growth
-            saved_after_tax = last_comp['saved'] * growth
+    # This year's pay, pre-tax savings, taxes and take-home for both earners:
+    # one deterministic function shared with the UI (working_year_cashflow).
+    cf = working_year_cashflow(your_age, partner_working=partner_working)
+    base_salary = cf["base_salary"]
+    saved_after_tax = cf["saved"]
 
-    # Get inflation-adjusted contribution limits
-    your_401k_limit = cfg.get_401k_limit(your_age, current_year)
-    your_ira_limit = cfg.get_ira_limit(your_age, current_year)
-    your_hsa_limit = cfg.get_hsa_limit(your_age, current_year, is_family=True)
-
-    # User-1 contributions: respect user-provided values, capped at IRS limits.
-    your_401k_desired = getattr(cfg, "YOUR_401K_CONTRIBUTION", your_401k_limit)
-    your_401k_contribution = min(float(your_401k_desired), your_401k_limit)
-    your_401k_match = base_salary * cfg.YOUR_401K_MATCH_PCT
+    # Your 401(k) deferral (capped at the IRS limit and your pay) plus the
+    # employer match, which only matches what you actually defer.
+    your_401k_contribution = cf["your_401k"]
+    your_401k_match = cf["your_match"]
     portfolio.contribute("your_401k", your_401k_contribution + your_401k_match)
 
     # Mega backdoor Roth: after-tax 401(k) contributions up to the 415(c) total-
@@ -1804,21 +2084,14 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     # in-plan to Roth (routed to the Roth bucket for tax-free growth). Funded from
     # take-home (added to after-tax electives below), so it reallocates savings
     # from the taxable brokerage sweep into Roth. 0% -> no-op / byte-identical.
-    after_tax_pct = float(getattr(cfg, "YOUR_AFTER_TAX_401K_PCT", 0.0) or 0.0)
-    your_after_tax_401k = 0.0
-    if after_tax_pct > 0:
-        total_limit = cfg.get_401k_total_limit(your_age, current_year)
-        after_tax_room = max(0.0, total_limit - your_401k_contribution - your_401k_match)
-        your_after_tax_401k = min(after_tax_pct * base_salary, after_tax_room)
-        if your_after_tax_401k > 0:
-            portfolio.contribute("your_roth_ira", your_after_tax_401k)
+    your_after_tax_401k = cf["your_after_tax_401k"]
+    if your_after_tax_401k > 0:
+        portfolio.contribute("your_roth_ira", your_after_tax_401k)
 
-    your_hsa_desired = getattr(cfg, "YOUR_HSA_CONTRIBUTION", your_hsa_limit)
-    your_hsa_contribution = min(float(your_hsa_desired), your_hsa_limit)
+    your_hsa_contribution = cf["your_hsa"]
     portfolio.contribute("your_hsa", your_hsa_contribution)
 
-    your_backdoor_desired = getattr(cfg, "YOUR_BACKDOOR_ROTH", your_ira_limit)
-    your_roth_contribution = min(float(your_backdoor_desired), your_ira_limit)
+    your_roth_contribution = cf["your_roth"]
 
     # 529 contributions, one per child (elective; funded from after-tax
     # take-home below).
@@ -1833,43 +2106,23 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     # zero and the residual sweep naturally routes everything to the primary.
     # ------------------------------------------------------------------
     if partner_working:
-        partner_after_tax, _partner_taxable, partner_roth_contribution = (
-            _simulate_partner_working_year(
-                portfolio, your_age, current_year, years_from_start, married
-            )
-        )
-    else:
-        partner_after_tax = 0.0
-        _partner_taxable = 0.0
-        partner_roth_contribution = 0.0
+        portfolio.contribute("partner_401k", cf["partner_401k"] + cf["partner_match"])
+        if cf["partner_roth"] > 0:
+            portfolio.contribute("partner_roth_ira", cf["partner_roth"])
+    partner_after_tax = cf["partner_take_home"]
+    partner_roth_contribution = cf["partner_roth"]
 
     # ------------------------------------------------------------------
-    # Recognize this year's WAGE income into the tax year, so any portfolio draw
+    # Recognize this year's income into the tax year, so any portfolio draw
     # later in this function (house-move down payment, car purchase) is taxed at
-    # the household's real MARGINAL rate instead of from a $0 income base.
-    # This does NOT book tax on the wages themselves -- ``year_ordinary_income``
-    # is only a stacking base; take-home is already net of tax via
-    # comp['after_tax'] / the partner's effective rate. Without it, a $200k car
-    # bought at 40 was taxed as if the household had no other income, handing it
-    # the whole 0%-LTCG bracket and the bottom ordinary brackets for free.
+    # the household's real MARGINAL rate instead of from a $0 income base. The
+    # wages' own tax is already netted out of take-home (working_year_cashflow);
+    # this is only the stacking base. An unmarried couple's partner part sits on
+    # the partner's own return.
     # ------------------------------------------------------------------
-    if your_age in cfg.YOUR_COMPENSATION_BY_AGE:
-        _comp = cfg.YOUR_COMPENSATION_BY_AGE[your_age]
-        your_gross_wages = float(_comp.get('total_comp', _comp['base']))
-    elif not cfg.YOUR_COMPENSATION_BY_AGE:
-        your_gross_wages = 0.0
-    else:
-        _last_age = max(cfg.YOUR_COMPENSATION_BY_AGE.keys())
-        _last_comp = cfg.YOUR_COMPENSATION_BY_AGE[_last_age]
-        _growth = (1 + cfg.YOUR_SALARY_GROWTH_RATE) ** (your_age - _last_age)
-        your_gross_wages = float(_last_comp.get('total_comp', _last_comp['base'])) * _growth
-    portfolio.year_ordinary_income = max(
-        0.0,
-        your_gross_wages
-        - your_401k_contribution      # pre-tax elective deferral
-        - your_hsa_contribution       # pre-tax (cafeteria plan)
-        + float(_partner_taxable),    # already net of the partner's pre-tax 401k
-    )
+    portfolio.year_ordinary_income = max(0.0, cf["your_agi"] + cf["partner_agi"])
+    if portfolio.two_returns:
+        portfolio.year_partner_income = max(0.0, cf["partner_agi"])
 
     # ------------------------------------------------------------------
     # Housing timeline (accumulation phase). Executed BEFORE computing living
@@ -1880,22 +2133,10 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     portfolio.apply_housing_events(your_age)
 
     # ------------------------------------------------------------------
-    # Household after-tax income for the year.
-    #   - Your side: comp['after_tax'] already nets bonus + RSU + ALL taxes
-    #     (config.py). Do NOT add YOUR_RSU_AMOUNT again (double-count). When
-    #     past the table, project from the last row by the SAME growth factor
-    #     used for base/saved above.
+    # Household take-home for the year: pay minus pre-tax deferrals minus
+    # federal + state + FICA (or a comp row's explicit after_tax).
     # ------------------------------------------------------------------
-    if your_age in cfg.YOUR_COMPENSATION_BY_AGE:
-        your_after_tax = float(cfg.YOUR_COMPENSATION_BY_AGE[your_age]['after_tax'])
-    elif not cfg.YOUR_COMPENSATION_BY_AGE:
-        your_after_tax = 0.0
-    else:
-        last_age = max(cfg.YOUR_COMPENSATION_BY_AGE.keys())
-        last_comp = cfg.YOUR_COMPENSATION_BY_AGE[last_age]
-        growth = (1 + cfg.YOUR_SALARY_GROWTH_RATE) ** (your_age - last_age)
-        your_after_tax = float(last_comp['after_tax']) * growth
-
+    your_after_tax = cf["your_take_home"]
     household_after_tax = your_after_tax + partner_after_tax
 
     # Living expenses for the WORKING year via the existing helper. The
@@ -2376,6 +2617,7 @@ def _collect_sepp(
     if take <= 0:
         return 0.0, 0.0
     drawn = 0.0
+    drawn_by_owner: Dict[str, float] = {}
     for account in trad:
         if drawn >= take or account.balance <= 0:
             continue
@@ -2383,9 +2625,13 @@ def _collect_sepp(
         amount = min(share, account.balance, take - drawn)
         account.balance -= amount
         drawn += amount
+        drawn_by_owner[account.owner] = drawn_by_owner.get(account.owner, 0.0) + amount
     if portfolio.sepp_carveout_balance is not None:
         portfolio.sepp_carveout_balance = max(0.0, portfolio.sepp_carveout_balance - drawn)
-    tax = portfolio.calculate_marginal_tax_on_income(drawn)
+    # Taxed per owner (their own return / retirement-income exclusion); on one
+    # return the stacked total equals the tax on the sum.
+    tax = sum(portfolio.calculate_marginal_tax_on_income(amount, owner=owner, retirement=True)
+              for owner, amount in drawn_by_owner.items())
     if tax > 0:
         portfolio.total_taxes_paid += tax
     portfolio.total_sepp_distributions += drawn
@@ -2425,7 +2671,8 @@ def _collect_rmds(
                     actual_rmd = min(rmd_amount, account.balance)
                     account.balance -= actual_rmd
                     rmd_total += actual_rmd
-                    rmd_tax += portfolio.calculate_marginal_tax_on_income(actual_rmd)
+                    rmd_tax += portfolio.calculate_marginal_tax_on_income(
+                        actual_rmd, owner=account.owner, retirement=True)
     if rmd_tax > 0:
         portfolio.total_taxes_paid += rmd_tax
     return rmd_total, rmd_tax
@@ -2460,16 +2707,38 @@ def _collect_social_security(
         # Calculate taxable portion of Social Security (up to 85% taxable).
         if ss_income > 0:
             # Use income recognized so far (RMDs) as a lower-bound "other AGI".
-            other_agi = portfolio.year_ordinary_income
-            taxable_ss = cfg.calculate_taxable_social_security(
-                ss_income, other_agi,
-                years_from_start=max(0, your_age - cfg.YOUR_AGE),
-            )
-            # Provisional (non-booking) tax quote to size withdrawals. CA fully
-            # exempts Social Security from state tax.
-            if taxable_ss > 0:
-                ss_tax = portfolio.quote_marginal_tax_on_income(taxable_ss, is_state_taxable=False)
+            # Provisional (non-booking) tax quote to size withdrawals; the
+            # state's Social Security rule applies (most states exempt it).
+            for owner, ss_part in _social_security_by_return(portfolio, ss_income):
+                taxable_ss = cfg.calculate_taxable_social_security(
+                    ss_part, portfolio._return_income(owner),
+                    years_from_start=max(0, your_age - cfg.YOUR_AGE),
+                    status=portfolio.return_status[owner],
+                )
+                if taxable_ss > 0:
+                    ss_tax += portfolio.quote_marginal_tax_on_income(
+                        taxable_ss, is_state_taxable=False, owner=owner)
     return ss_income, ss_tax
+
+
+def _social_security_by_return(portfolio: AccountPortfolio, ss_income: float):
+    """[(owner, benefits)] per tax return: the whole household benefit on one
+    return, or each person's own benefit on an unmarried couple's two.
+
+    The split weights each person's full-retirement-age benefit among those old
+    enough to be claiming (an approximation: it ignores different early/late
+    claiming adjustments between the two)."""
+    if not portfolio.two_returns or ss_income <= 0:
+        return [("you", ss_income)]
+    your_claim = cfg.SS_CLAIM_AGE
+    partner_claim = getattr(cfg, "PARTNER_SS_CLAIM_AGE", None) or your_claim
+    w_you = cfg.YOUR_SS_MONTHLY_FRA if (portfolio.current_your_age or 0) >= your_claim else 0.0
+    w_partner = (cfg.PARTNER_SS_MONTHLY_FRA
+                 if (portfolio.current_partner_age or 0) >= partner_claim else 0.0)
+    total = float(w_you) + float(w_partner)
+    if total <= 0:
+        return [("you", ss_income)]
+    return [("you", ss_income * w_you / total), ("partner", ss_income * w_partner / total)]
 
 
 def _true_up_social_security_tax(
@@ -2491,15 +2760,19 @@ def _true_up_social_security_tax(
     if not cfg.INCLUDE_SOCIAL_SECURITY or ss_income <= 0:
         return 0.0
 
-    other_agi = portfolio.year_ordinary_income
-    taxable_ss = cfg.calculate_taxable_social_security(
-        ss_income, other_agi,
-        years_from_start=max(0, (portfolio.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
-    )
-    if taxable_ss <= 0:
+    ss_tax = 0.0
+    for owner, ss_part in _social_security_by_return(portfolio, ss_income):
+        taxable_ss = cfg.calculate_taxable_social_security(
+            ss_part, portfolio._return_income(owner),
+            years_from_start=max(0, (portfolio.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
+            status=portfolio.return_status[owner],
+        )
+        if taxable_ss > 0:
+            ss_tax += portfolio.calculate_marginal_tax_on_income(
+                taxable_ss, is_state_taxable=False, owner=owner)
+    if ss_tax <= 0:
         return 0.0
 
-    ss_tax = portfolio.calculate_marginal_tax_on_income(taxable_ss, is_state_taxable=False)
     portfolio.total_ss_taxes_paid += ss_tax
     portfolio.total_taxes_paid += ss_tax
     return ss_tax
@@ -2573,9 +2846,9 @@ def _fund_net_expenses(
     WORKING while the primary is retired (separate-partner-retirement-age
     feature); it offsets the withdrawal need just like Social Security / RMD
     proceeds, and any surplus is banked into taxable brokerage by the existing
-    surplus path below. ``partner_magi`` is that partner's earned income added to
-    the Pass-2 ACA/IRMAA MAGI so a working spouse's wages correctly reduce health
-    subsidies. Both default to 0.0 -> byte-identical when the partner isn't
+    surplus path below. ``partner_magi`` is that partner's earned income; it is
+    already part of year_ordinary_income (seeded by simulate_retirement_year),
+    so the Pass-2 ACA/IRMAA MAGI includes it. Both default to 0.0 -> byte-identical when the partner isn't
     working (the household-wide behavior that predates the feature).
 
     Returns (solvent, rmd_total, reinvested_surplus). ``solvent`` is False when
@@ -2670,7 +2943,9 @@ def _fund_net_expenses(
     # the true premium exceeds the provisional one that sized the withdrawals,
     # fund the delta with a supplemental withdrawal so the year stays solvent.
     # ------------------------------------------------------------------
-    actual_magi = portfolio.year_ordinary_income + portfolio.year_investment_income + partner_magi
+    # A working partner's pay is already in year_ordinary_income (seeded at the
+    # start of simulate_retirement_year), so partner_magi is not added again.
+    actual_magi = portfolio.year_ordinary_income + portfolio.year_investment_income
     true_health_insurance = portfolio.quote_health_insurance_cost(
         your_age, actual_magi, healthcare_factor
     )
@@ -2820,6 +3095,14 @@ def simulate_retirement_year(
     if healthcare_factor is None:
         healthcare_factor = inflation_factor
     portfolio.reset_yearly_income()
+    # A partner still working while you're retired: their pay is this year's
+    # first income on the return, so withdrawals, Roth conversions and the
+    # Social Security formula all stack on top of it (their own tax was netted
+    # out of partner_income by working_year_cashflow).
+    if partner_magi > 0:
+        portfolio.year_ordinary_income = float(partner_magi)
+        if portfolio.two_returns:
+            portfolio.year_partner_income = float(partner_magi)
     portfolio.update_ages(your_age)
     portfolio.employer_health_coverage = partner_working and getattr(
         cfg, "PARTNER_EMPLOYER_HEALTH_COVERAGE", False)

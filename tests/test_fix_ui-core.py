@@ -270,7 +270,12 @@ class TestOtherStateTax:
                                        "YOUR_MARGINAL_TAX_RATE": 0.0})["state"]
         ca_hi = derived.compute_taxes({"YOUR_BASE_SALARY": 250_000, "STATE_CHOICE": "CA",
                                        "YOUR_MARGINAL_TAX_RATE": 0.5})["state"]
-        assert ca_lo == ca_hi == pytest.approx(15_525.26, abs=1.0)  # CA schedule
+        # California's 2024 joint schedule above its $11,080 deduction, plus
+        # 1.1% State Disability Insurance on wages (was 15,525.26: the 2023
+        # brackets, no SDI).
+        rules = cfg.state_tax_rules("CA", "MFJ", people=1)
+        expected = cfg.progressive_tax(rules["brackets"], 250_000 - 11_080) + 0.011 * 250_000
+        assert ca_lo == ca_hi == pytest.approx(expected, abs=1.0)
         none = derived.compute_taxes({"YOUR_BASE_SALARY": 250_000,
                                       "STATE_CHOICE": "No state tax",
                                       "YOUR_MARGINAL_TAX_RATE": 0.5})["state"]

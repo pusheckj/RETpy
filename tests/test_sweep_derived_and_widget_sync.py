@@ -112,12 +112,13 @@ class TestComputeTaxes:
     def test_state_code_matches_what_sec_taxes_stores(self):
         """sec_taxes._STATE_TO_CODE emits these codes; compute_taxes must know them."""
         from components.sec_taxes import _STATE_TO_CODE
+        from retirement_sim.state_tax_data import NO_INCOME_TAX
         for code in _STATE_TO_CODE.values():
             t = derived.compute_taxes({"YOUR_BASE_SALARY": 200_000, "STATE_CHOICE": code})
-            if code == "No state tax":
-                assert t["state"] == 0.0
+            if code == "No state tax" or code in NO_INCOME_TAX:
+                assert t["state"] == 0.0, code
             else:
-                assert t["state"] > 0.0
+                assert t["state"] > 0.0, code
 
     def test_other_state_uses_flat_estimate(self):
         income = 200_000
@@ -137,12 +138,16 @@ class TestComputeTaxes:
         couple = derived.compute_taxes({"YOUR_BASE_SALARY": base,
                                         "PARTNER_BASE_SALARY": base})["fica"]
         assert couple > solo
-        assert couple == pytest.approx(2 * (base * 0.062 + base * 0.0145))
+        # Plus the 0.9% Additional Medicare Tax on joint wages over $250k
+        # (now modeled).
+        assert couple == pytest.approx(2 * (base * 0.062 + base * 0.0145)
+                                       + 0.009 * (2 * base - 250_000))
 
     def test_fica_medicare_is_uncapped(self):
         a = derived.compute_taxes({"YOUR_BASE_SALARY": 1_000_000})["fica"]
         b = derived.compute_taxes({"YOUR_BASE_SALARY": 2_000_000})["fica"]
-        assert b - a == pytest.approx(1_000_000 * 0.0145)
+        # 1.45% Medicare + 0.9% Additional Medicare Tax (both above $250k).
+        assert b - a == pytest.approx(1_000_000 * (0.0145 + 0.009))
 
     def test_fica_includes_bonus_and_rsu(self):
         a = derived.compute_taxes({"YOUR_BASE_SALARY": 50_000})["fica"]

@@ -444,11 +444,20 @@ class TestTotalSavingsHelpers:
         monkeypatch.setattr(cfg, "PARTNER_401K_CONTRIBUTION", 5_000)
         monkeypatch.setattr(cfg, "PARTNER_ROTH_CONTRIBUTION", 6_000)
         monkeypatch.setattr(cfg, "PARTNER_ANNUAL_SPENDING", 20_000)
-        monkeypatch.setattr(cfg, "PARTNER_ESTIMATED_TAX_RATE", 0.20)
         salary = 100_000
-        after_tax = (salary - 5_000) * 0.80
+        # Take-home from the real tax rules (the flat 20% partner rate is gone).
+        after_tax = cfg.working_year_taxes(partner_wages=salary, partner_401k=5_000,
+                                           status="S", partner=True)["partner"]["take_home"]
         expected = 5_000 + 6_000 + max(0, after_tax - 6_000 - 20_000)
         assert cfg.calculate_partner_total_savings(salary, 0, married=False) == pytest.approx(expected)
+
+    def test_partner_roth_follows_income_not_marriage(self, monkeypatch):
+        """Marriage no longer zeroes the partner's Roth; the phase-out does."""
+        monkeypatch.setattr(cfg, "PARTNER_401K_CONTRIBUTION", 0)
+        monkeypatch.setattr(cfg, "PARTNER_ROTH_CONTRIBUTION", 7_000)
+        monkeypatch.setattr(cfg, "PARTNER_ANNUAL_SPENDING", 10_000_000)   # no brokerage
+        assert cfg.calculate_partner_total_savings(80_000, 0, married=True) == pytest.approx(7_000)
+        assert cfg.calculate_partner_total_savings(300_000, 0, married=True) == 0.0
 
     def test_partner_savings_floors_brokerage_at_zero(self, monkeypatch):
         monkeypatch.setattr(cfg, "PARTNER_401K_CONTRIBUTION", 1_000)

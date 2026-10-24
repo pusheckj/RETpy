@@ -58,7 +58,6 @@ def _kid(years_until_birth: int, monthly_cost: int) -> dict:
 PROFILES = {
     "Median US 25-year-old household": {
         'YOUR_AGE': 25, 'PARTNER_AGE': 25,
-        'CURRENT_YEAR': 2026,
         'CHILDREN': [_kid(3, 2_100), _kid(6, 1_400)],
         'YOUR_401K': 10_000, 'YOUR_ROTH_IRA': 3_500, 'YOUR_TRADITIONAL_IRA': 0,
         'YOUR_HSA': 500, 'YOUR_BROKERAGE': 2_500, 'YOUR_CASH': 4_000,

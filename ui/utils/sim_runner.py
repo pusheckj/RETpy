@@ -127,6 +127,7 @@ class SavingsContributionYearRow(TypedDict):
     your_aftertax_roth: float
     your_brokerage: float
     partner_401k: float
+    partner_employer_match: float
     partner_roth: float
     partner_brokerage: float
     # Household income that year, for the savings-rate chart. gross_income is
@@ -143,6 +144,7 @@ class TaxYearRow(TypedDict):
     state: float
     ltcg: float
     niit: float
+    fica: float
     gross_income: float
 
 
@@ -1717,8 +1719,9 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
     or the two screens disagree about the same run.
     See ``tests/test_income_parity.py``.
 
-    NOTE: the ``age in comp_by_age`` / ``max(comp_by_age.keys())`` lookups below
-    require INT keys. Profiles are stored as JSON (string keys) and restored by
+    NOTE: the engine's comp-table lookups (``age in table`` /
+    ``max(table.keys())`` in account_simulation._your_comp_for_age, used via
+    working_year_cashflow) require INT keys. Profiles are stored as JSON (string keys) and restored by
     ``utils.profile_io._restore_int_keys``; if that ever regresses this function
     silently falls into its ``else`` branch and reports ZERO income.
 
@@ -1739,35 +1742,10 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
     if end_age <= start_age:
         return []
 
-    comp_by_age = getattr(cfg, "YOUR_COMPENSATION_BY_AGE", {}) or {}
-    last_known_age = max(comp_by_age.keys()) if comp_by_age else start_age
-    salary_growth = float(getattr(cfg, "YOUR_SALARY_GROWTH_RATE", 0.03))
-    partner_growth = float(getattr(cfg, "PARTNER_SALARY_GROWTH_RATE", 0.02))
-
-    your_401k_desired = float(getattr(cfg, "YOUR_401K_CONTRIBUTION", 0))
-    your_match_pct = float(getattr(cfg, "YOUR_401K_MATCH_PCT", 0))
-    your_hsa_total = float(getattr(cfg, "YOUR_HSA_TOTAL", 0))
+    your_hsa_match = float(getattr(cfg, "YOUR_HSA_MATCH", 0) or 0)
     calc_529 = getattr(cfg, "calculate_529_contribution", None)
     calc_expenses = getattr(cfg, "calculate_annual_expenses", None)
-
-    partner_salary_base = float(getattr(cfg, "PARTNER_SALARY", 0))
-    partner_401k = float(getattr(cfg, "PARTNER_401K_CONTRIBUTION", 0))
-    partner_roth_desired = float(getattr(cfg, "PARTNER_ROTH_CONTRIBUTION", 0))
-    married = cfg.normalize_filing_status() == cfg._FILING_MFJ
     partner_spending = float(getattr(cfg, "PARTNER_ANNUAL_SPENDING", 0))
-    partner_tax_rate = float(getattr(cfg, "PARTNER_ESTIMATED_TAX_RATE", 0.2))
-    your_ira_limit_fn = getattr(cfg, "get_ira_limit", None)
-    # finding #9 (backdoor-Roth sub-bug): read the REAL configured desired
-    # contribution (``simulate_accumulation_year`` uses
-    # ``getattr(cfg, "YOUR_BACKDOOR_ROTH", your_ira_limit)``), not a hardcoded
-    # $7,000 -- the base config default is $0 (only the "My situation" profile
-    # happens to set it to $7,000), so the hardcode silently mismatched the
-    # engine's residual/electives for every other profile and desired amount.
-    your_backdoor_desired = getattr(cfg, "YOUR_BACKDOOR_ROTH", None)
-    current_year = int(getattr(cfg, "CURRENT_YEAR", 2024))
-    after_tax_pct = float(getattr(cfg, "YOUR_AFTER_TAX_401K_PCT", 0.0) or 0.0)
-    total_limit_fn = getattr(cfg, "get_401k_total_limit", None)
-    your_401k_limit_fn = getattr(cfg, "get_401k_limit", None)
     savings_mode = str(getattr(cfg, "SAVINGS_MODE", "Auto-allocate (recommended)"))
     your_brokerage_override = getattr(cfg, "YOUR_BROKERAGE_CONTRIBUTION", None)
     _has_partner = cfg.has_partner()
@@ -1792,57 +1770,16 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
 
     out: List[dict] = []
     for age in range(start_age, end_age):
-        # Primary user
-        if age in comp_by_age:
-            base = float(comp_by_age[age].get("base", 0))
-            saved = float(comp_by_age[age].get("saved", 0))
-            your_after_tax = float(comp_by_age[age].get("after_tax", 0))
-            your_gross = float(comp_by_age[age].get("total_comp", base))
-        elif comp_by_age:
-            last_comp = comp_by_age[last_known_age]
-            years_beyond = age - last_known_age
-            factor = (1 + salary_growth) ** max(0, years_beyond)
-            base = float(last_comp.get("base", 0)) * factor
-            saved = float(last_comp.get("saved", 0)) * factor
-            your_after_tax = float(last_comp.get("after_tax", 0)) * factor
-            your_gross = float(last_comp.get("total_comp", last_comp.get("base", 0))) * factor
-        else:
-            base = 0.0
-            saved = 0.0
-            your_after_tax = 0.0
-            your_gross = 0.0
-
-        employer_match = base * your_match_pct
-
-        # Mega backdoor after-tax 401(k) -> Roth (mirrors the engine): fill the
-        # 415(c) room after the employee deferral + employer match, funded from
-        # take-home (an after-tax elective, so it reduces the brokerage sweep).
-        your_after_tax_401k = 0.0
-        if after_tax_pct > 0 and total_limit_fn is not None:
-            yr = current_year + (age - start_age)
-            try:
-                total_limit = float(total_limit_fn(age, yr))
-            except Exception:
-                total_limit = 69000.0
-            # Mirror the engine: cap the employee deferral at the IRS limit before
-            # computing 415(c) room (the engine uses min(desired, limit)).
-            k_limit = float(your_401k_limit_fn(age, yr)) if your_401k_limit_fn else 23000.0
-            capped_401k = min(float(your_401k_desired), k_limit)
-            room = max(0.0, total_limit - capped_401k - employer_match)
-            your_after_tax_401k = min(after_tax_pct * base, room)
-
-        # Backdoor Roth limited by IRA limit for the year (mirrors
-        # simulate_accumulation_year: desired amount defaults to the IRA limit
-        # itself when YOUR_BACKDOOR_ROTH is unset, then both are capped by it).
-        if your_ira_limit_fn is not None:
-            try:
-                ira_cap = float(your_ira_limit_fn(age, current_year + (age - start_age)))
-            except Exception:
-                ira_cap = 7000.0
-        else:
-            ira_cap = 7000.0
-        your_backdoor = float(your_backdoor_desired) if your_backdoor_desired is not None else ira_cap
-        your_roth_contribution = min(your_backdoor, ira_cap)
+        # The engine's own per-year pay, deferrals, match, Roth limits, taxes
+        # and take-home (account_simulation.working_year_cashflow).
+        cf = sim.working_year_cashflow(age, partner_working=_partner_working(age))
+        base = cf["base_salary"]
+        saved = cf["saved"]
+        your_after_tax = cf["your_take_home"]
+        your_gross = cf["your_wages"] + cf["your_other"]
+        employer_match = cf["your_match"]
+        your_after_tax_401k = cf["your_after_tax_401k"]
+        your_roth_contribution = cf["your_roth"]
 
         # 529 (treated as spend — not saved into brokerage)
         contribution_529 = 0.0
@@ -1852,28 +1789,10 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
             except Exception:
                 contribution_529 = 0.0
 
-        # Partner pre-tax/Roth + after-tax income (mirrors
-        # simulate_accumulation_year's partner block).
-        years_from_now = age - start_age
-        partner_salary = partner_salary_base * ((1 + partner_growth) ** max(0, years_from_now))
-        partner_taxable = max(0.0, partner_salary - partner_401k)
-        partner_after_tax = partner_taxable * (1 - partner_tax_rate)
-        # Direct partner Roth is only funded when not married (MFJ income
-        # phase-out) -- see simulate_accumulation_year:
-        # ``0.0 if married else min(partner_roth_desired, ira_limit)``.
-        # Previously this chart used the flat PARTNER_ROTH_CONTRIBUTION
-        # unconditionally, phantom-crediting an elective the engine never
-        # makes (and understating the brokerage sweep by the same amount).
-        partner_roth = 0.0 if married else partner_roth_desired
-
-        # Zero the partner's earnings/contributions once they've retired (feature).
-        partner_401k_year = partner_401k
-        if not _partner_working(age):
-            partner_salary = 0.0
-            partner_taxable = 0.0
-            partner_after_tax = 0.0
-            partner_roth = 0.0
-            partner_401k_year = 0.0
+        partner_salary = cf["partner_wages"] + cf["partner_other"]
+        partner_after_tax = cf["partner_take_home"]
+        partner_roth = cf["partner_roth"]
+        partner_401k_year = cf["partner_401k"]
 
         if savings_mode.startswith("Auto") and calc_expenses is not None:
             # AUTO — same residual sweep as simulate_accumulation_year:
@@ -1933,13 +1852,14 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
 
         out.append({
             "age": int(age),
-            "your_401k": float(your_401k_desired),
+            "your_401k": float(cf["your_401k"]),
             "your_employer_match": float(employer_match),
-            "your_hsa": float(your_hsa_total),
+            "your_hsa": float(cf["your_hsa"] + your_hsa_match),
             "your_roth": float(your_roth_contribution),
             "your_aftertax_roth": float(your_after_tax_401k),
             "your_brokerage": float(your_brokerage),
             "partner_401k": float(partner_401k_year),
+            "partner_employer_match": float(cf["partner_match"]),
             "partner_roth": float(partner_roth),
             "partner_brokerage": float(partner_brokerage),
             # Household income for the savings-rate chart. partner_salary /
@@ -1953,14 +1873,12 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
 def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List[TaxYearRow]:
     """Per-year tax breakdown covering current age through plan end.
 
-    Working-years: total tax = comp['total_comp'] - comp['after_tax'] (the
-    SAME per-age fields the engine's cashflow uses — see
-    ``YOUR_COMPENSATION_BY_AGE`` in config.py), which already reflects bonus +
-    RSU + real effective rate, plus partner tax via
-    ``PARTNER_ESTIMATED_TAX_RATE`` (the same rate the engine applies). Split
-    75/25 into federal/state for display only; the combined dollar total is
-    real (finding #10 — previously used a flat 18%/6% of base-salary-only
-    gross, understating working-years tax by omitting bonus/RSU entirely).
+    Working-years: the engine's own federal / state / FICA split for the year
+    (account_simulation.working_year_cashflow -> cfg.working_year_taxes: real
+    brackets by filing status, the chosen state's table, FICA per earner), on
+    the full pay including bonus + RSU + other income. It used to be the
+    comp table's flat after_tax gap split 75/25 into "federal"/"state", which
+    showed state tax even with no state income tax.
     Retirement-years: REAL taxes from the representative ``withdrawal_log``
     (see ``_median_withdrawal_log`` / engine's per-year tax logging). The log
     only records a combined income-tax total (``total_taxes``, which already
@@ -1984,55 +1902,26 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
 
     taxes_by_age = {int(row.get("age", -1)): row for row in withdrawal_rows}
 
-    comp_by_age = getattr(cfg, "YOUR_COMPENSATION_BY_AGE", {}) or {}
-    last_known_age = max(comp_by_age.keys()) if comp_by_age else start_age
-    salary_growth = float(getattr(cfg, "YOUR_SALARY_GROWTH_RATE", 0.03))
-    partner_growth = float(getattr(cfg, "PARTNER_SALARY_GROWTH_RATE", 0.02))
-    partner_salary_base = float(getattr(cfg, "PARTNER_SALARY", 0))
+    # Partner's own working boundary (separate-partner-retirement-age feature),
+    # as in _approximate_savings_contributions.
+    _pra = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
+    _age_gap = start_age - int(getattr(cfg, "PARTNER_AGE", 0))
+    _has_partner = int(getattr(cfg, "PARTNER_AGE", 0)) > 0
 
     out: List[dict] = []
     for age in ages:
         if age < retirement_age:
-            # Working year: real total tax dollars from the SAME comp-table
-            # fields the engine uses for cashflow (finding #10). comp['after_tax']
-            # already nets federal + state + payroll tax on total_comp (base +
-            # bonus + rsu_gross — see config.py YOUR_COMPENSATION_BY_AGE), so
-            # total_comp - after_tax is the real tax paid, not an 18%-of-base-only
-            # guess. Partner's tax uses the SAME PARTNER_ESTIMATED_TAX_RATE the
-            # engine applies to partner_taxable_income (account_simulation.py).
-            if age in comp_by_age:
-                your_total_comp = float(comp_by_age[age].get("total_comp", 0))
-                your_after_tax = float(comp_by_age[age].get("after_tax", 0))
-            elif comp_by_age:
-                last = comp_by_age[last_known_age]
-                factor = (1 + salary_growth) ** max(0, age - last_known_age)
-                your_total_comp = float(last.get("total_comp", 0)) * factor
-                your_after_tax = float(last.get("after_tax", 0)) * factor
-            else:
-                your_total_comp = 0.0
-                your_after_tax = 0.0
-            your_tax = max(0.0, your_total_comp - your_after_tax)
-
-            partner_salary = partner_salary_base * ((1 + partner_growth) ** max(0, age - start_age))
-            partner_401k = float(getattr(cfg, "PARTNER_401K_CONTRIBUTION", 0))
-            partner_tax_rate = float(getattr(cfg, "PARTNER_ESTIMATED_TAX_RATE", 0.20))
-            partner_tax = max(0.0, partner_salary - partner_401k) * partner_tax_rate
-
-            gross = your_total_comp + partner_salary
-            total_tax = your_tax + partner_tax
-            # Split the real total into federal/state using the same 75/25
-            # (~18%/~6% of a blended 24% effective rate) proportion as before,
-            # now applied to the correct dollar total instead of an
-            # under-counted gross.
-            federal = total_tax * 0.75
-            state = total_tax * 0.25
+            partner_working = (not _has_partner or _pra is None
+                               or (age - _age_gap) < int(_pra))
+            cf = sim.working_year_cashflow(age, partner_working=partner_working)
             out.append({
                 "age": int(age),
-                "federal": float(federal),
-                "state": float(state),
+                "federal": float(cf["federal"]),
+                "state": float(cf["state"]),
                 "ltcg": 0.0,
                 "niit": 0.0,
-                "gross_income": float(gross),
+                "fica": float(cf["fica"]),
+                "gross_income": float(cf["gross_income"]),
             })
         else:
             # Retirement year: real taxes from the representative withdrawal_log
@@ -2071,6 +1960,7 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
                 "state": 0.0,
                 "ltcg": 0.0,
                 "niit": niit,
+                "fica": 0.0,
                 "gross_income": gross_income,
             })
     return out

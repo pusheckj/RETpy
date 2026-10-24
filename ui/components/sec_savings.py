@@ -59,7 +59,8 @@ def render_body(st) -> None:
     overrides = st.session_state.get("user_overrides", {}) or {}
 
     income = compute_total_income(overrides)
-    taxes = compute_taxes(overrides)["total"]
+    # Before pre-tax savings, matching compute_disposable (the pool split below).
+    taxes = compute_taxes(overrides, pretax_savings=False)["total"]
     expenses = compute_expenses_today(overrides)
     disposable = compute_disposable(overrides)
 
@@ -68,7 +69,9 @@ def render_body(st) -> None:
     # narrow sidebar; income/taxes/expenses on one row, disposable on its own.
     row1 = st.columns(3)
     with row1[0]: st.metric("Income", money(income, shorten=True))
-    with row1[1]: st.metric("− Taxes", money(taxes, shorten=True))
+    with row1[1]: st.metric("− Taxes", money(taxes, shorten=True),
+                            help="Before your 401(k)/HSA savings lower it. The Taxes "
+                                 "section shows the tax after them.")
     with row1[2]: st.metric("− Expenses", money(expenses, shorten=True))
     st.metric("= Disposable", money(disposable, shorten=True))
 
@@ -87,6 +90,8 @@ def render_body(st) -> None:
     ensure_default(st, "sv_mode", current_mode)
     mode = st.radio("Allocation strategy", modes, horizontal=False, key="sv_mode")
     set_override(st, "SAVINGS_MODE", mode)
+
+    _render_employer_match(st, overrides)
 
     if mode == "Auto-allocate (recommended)":
         _render_auto(st, disposable, overrides)
@@ -142,23 +147,54 @@ def render_body(st) -> None:
         "After-tax 401(k) → Roth · mega backdoor (% of base pay)",
         min_value=0.0, max_value=20.0, step=0.5, key="sv_after_tax_401k",
         help="Extra after-tax 401(k) contributions converted in-plan to Roth. The engine "
-             "fills the \\$70k (2025) total-401(k) limit after your regular deferral and "
-             "match, funds it from take-home, and grows it tax-free — moving savings from "
-             "your taxable brokerage into Roth. Set 0 if your plan lacks after-tax "
-             "contributions + in-plan Roth conversion.",
+             "fills the total 401(k) limit (employee + employer) left after your regular "
+             "deferral and match, funds it from take-home, and grows it tax-free — moving "
+             "savings from your taxable brokerage into Roth. Set 0 if your plan lacks "
+             "after-tax contributions + in-plan Roth conversion.",
     )
     set_override(st, "YOUR_AFTER_TAX_401K_PCT", atp / 100.0)
     if atp > 0:
+        # Same room as the engine (working_year_cashflow): the 415(c) total
+        # limit minus your deferral and the match it earns.
+        from retirement_sim import config as cfg
+        age = safe_int(get_override(st, "YOUR_AGE", 30), 30)
+        total_limit = int(cfg.get_401k_total_limit(age, cfg.CURRENT_YEAR))
         base_sal = safe_int(get_override(st, "YOUR_BASE_SALARY", 0), 0)
-        match_pct = safe_float(get_override(st, "YOUR_401K_MATCH_PCT", 0.06), 0.06)
-        room = max(0, 70_000 - 23_500 - int(match_pct * base_sal))
+        deferral = min(safe_int(get_override(st, "YOUR_401K_CONTRIBUTION", 0), 0),
+                       int(cfg.get_401k_limit(age, cfg.CURRENT_YEAR)), base_sal)
+        match_pct = safe_float(get_override(st, "YOUR_401K_MATCH_PCT", 0.0), 0.0)
+        match = min(deferral, int(match_pct * base_sal))
+        room = max(0, total_limit - deferral - match)
         est = min(int(atp / 100.0 * base_sal), room)
         est_s = money(est, shorten=True).replace("$", "\\$")
         room_s = money(room, shorten=True).replace("$", "\\$")
+        limit_s = money(total_limit, shorten=True).replace("$", "\\$")
         st.caption(
-            f"≈ {est_s}/yr into Roth (capped at ~{room_s} of 415(c) room after "
-            "deferral + match). Redirects that much from taxable brokerage."
+            f"≈ {est_s}/yr into Roth (capped at ~{room_s}: the {limit_s} total 401(k) "
+            "limit minus your contribution and match). Redirects that much from "
+            "taxable brokerage."
         )
+
+
+def _render_employer_match(st, overrides: dict) -> None:
+    """Employer 401(k) match inputs (yours, and your partner's if any)."""
+    ensure_default(st, "sv_match_pct",
+                   safe_float(get_override(st, "YOUR_401K_MATCH_PCT", 0.0), 0.0) * 100)
+    v = st.number_input(
+        "Your employer's 401(k) match (% of pay)", min_value=0.0, max_value=25.0,
+        step=0.5, format="%.1f", key="sv_match_pct",
+        help="The most your employer adds, as in \"we match up to 4%\". They match "
+             "what you put in, so contributing less than this gets less match.",
+    )
+    set_override(st, "YOUR_401K_MATCH_PCT", float(v) / 100.0)
+    if safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0:
+        ensure_default(st, "sv_partner_match_pct",
+                       safe_float(get_override(st, "PARTNER_401K_MATCH_PCT", 0.0), 0.0) * 100)
+        v = st.number_input(
+            "Partner's employer 401(k) match (% of pay)", min_value=0.0, max_value=25.0,
+            step=0.5, format="%.1f", key="sv_partner_match_pct",
+        )
+        set_override(st, "PARTNER_401K_MATCH_PCT", float(v) / 100.0)
 
 
 def _render_auto(st, disposable: int, overrides: dict) -> None:

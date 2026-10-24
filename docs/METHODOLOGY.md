@@ -105,17 +105,28 @@ Each real-excess category follows an **independent random walk**: each year's dr
 
 Each accumulation year proceeds in the order **returns → contributions** (the standard end-of-period convention). This slightly understates the effective contribution yield versus a beginning-of-period model but is both conventional and conservative.
 
+### 5.0 Take-home pay
+
+Each working year's pay, pre-tax savings and taxes come from one deterministic function, `account_simulation.working_year_cashflow`, which the sidebar's Taxes panel and the tax/savings charts read too:
+
+- **Pay**: your comp-table wages (base + bonus + RSU) plus `YOUR_OTHER_INCOME`; the partner's base + bonus + RSU (grown at their growth rate) plus `PARTNER_OTHER_INCOME`.
+- **Pre-tax deferrals**: 401(k) and HSA, capped at the IRS limits and at the pay itself.
+- **Taxes** (`config.working_year_taxes`): 2024 federal brackets and standard deduction for the filing status; the state's table; FICA per earner (Social Security to the wage base, Medicare, Additional Medicare above $200k/$250k per return). A married couple files one joint return, an unmarried couple two (each taxed on their own pay), and a joint return's income tax is shared between the two in proportion to their taxable income.
+- **Take-home** = pay − deferrals − taxes. A comp row that sets `after_tax` overrides your computed take-home.
+
+The year's taxable pay is also the base that any same-year portfolio draw (a car, a house down payment) stacks on.
+
 ### 5.1 Contribution waterfall
 
 Contributions are directed by a prioritized waterfall tied to the user's gross comp and contribution caps:
 
-1. **401(k)** employee deferral up to the 401(k) limit, plus employer match.
+1. **401(k)** employee deferral up to the 401(k) limit, plus the employer match — dollar for dollar on what you defer, up to the match % of base pay.
 2. **HSA** family contribution (if HDHP-enrolled).
 3. **Backdoor Roth IRA** up to the IRA limit.
 4. **ESPP** up to the configured participation rate.
 5. **Brokerage** (taxable) for any remaining savings capacity.
 
-Partner accounts mirror this structure (partner 401(k), partner Roth IRA). Roth IRA contributions stop automatically after the year the household transitions to Married-Filing-Jointly if combined MAGI exceeds the phase-out ceiling — in that case the engine routes Roth contributions through the backdoor or to brokerage, depending on configuration.
+Partner accounts mirror this structure (partner 401(k) with its own match, partner Roth IRA). The partner's direct Roth contribution is reduced by the Roth income phase-out of the return it's on (joint MAGI on a joint return, their own otherwise); whatever it can't take stays in take-home and is swept into the brokerage. A partner who keeps working after you retire is taxed the same way, and their pay is the first income on the year's return, so your withdrawals and conversions stack on top of it.
 
 ### 5.2 Contribution limit inflation
 
@@ -282,7 +293,7 @@ For users born in 1960 or later, FRA is **67**.
 
 Social Security benefits are entered in today's dollars and, because SS is COLA-indexed, are held **flat in real terms** across the horizon (no growth beyond general CPI).
 
-Up to **85%** of Social Security benefits are includable in federal taxable income, based on the **provisional income** formula (see `TAX_MODEL.md` §5). The provisional-income thresholds ($32k–$44k MFJ) are **frozen-nominal** and are not indexed (see the frozen-nominal-threshold limitation in Section 4), so a larger real share of benefits becomes taxable over time. California does not tax Social Security.
+Up to **85%** of Social Security benefits are includable in federal taxable income, based on the **provisional income** formula (see `TAX_MODEL.md` §5). The provisional-income thresholds ($32k–$44k joint, $25k–$34k single/head of household) are **frozen-nominal** and are not indexed (see the frozen-nominal-threshold limitation in Section 4), so a larger real share of benefits becomes taxable over time. Each state's own rule decides state taxation: most exempt benefits, Montana and Utah tax them, a few exempt them below an income limit. An unmarried couple's benefits are split by each person's benefit amount and taxed on their own returns.
 
 `INCLUDE_SOCIAL_SECURITY` and `SS_CLAIM_AGE` toggle and parameterize this module.
 
@@ -317,7 +328,7 @@ RMDs are treated as mandatory income for the year; if the desired spending is be
 
 When `ENABLE_ROTH_CONVERSION = True`, the engine executes **bracket-filling** Roth conversions during low-income early retirement years:
 
-- Convert Traditional → Roth each year up to the top of the **12% federal bracket** (**$94,300** taxable income MFJ in 2024). Federal brackets are CPI-indexed in reality, so in the all-real frame this ceiling is held flat at its 2024 real value.
+- Convert Traditional → Roth each year until ordinary income reaches the top of the **12% federal bracket** for the filing status (**$94,300** joint, **$47,150** single, **$63,100** head of household in 2024; compared with income before the standard deduction, so the fill is conservative). Federal brackets are CPI-indexed in reality, so in the all-real frame this ceiling is held flat at its 2024 real value. An unmarried couple fills each person's own return from their own traditional balance.
 - Hard cap of **$100,000** per year on any single conversion.
 - Conversions **stop** in the year the household reaches `SS_CLAIM_AGE`, because SS plus RMDs typically push taxable income above the 12% bracket ceiling.
 
@@ -339,8 +350,8 @@ When `USE_HOME_EQUITY_BACKUP = True`, accessible home equity (default **85%** of
 
 - **Normal-distribution returns** under-sample fat tails and skew relative to real markets. Crisis-level drawdowns are reached only via clamping rather than emerging organically from the distribution.
 - **No tax-loss harvesting** is modeled; taxable gains are realized at their embedded-gain ratio on withdrawal.
-- **One filing status for the whole plan** (`FILING_STATUS`) — no wedding, divorce, widow(er) or head-of-household transitions.
-- **Geography:** federal + California state only by default. See `TAX_MODEL.md` §4 for how to substitute another state.
+- **One filing status for the whole plan** (MFJ, Single or head of household; two returns for an unmarried couple). No divorce, widow(er) status or head-of-household transitions.
+- **Geography:** federal + any state or DC (2024 tables, `state_tax_data.py`). City/county income taxes, state credits and itemized deductions are not modeled; some states' figures are labelled approximate. No federal tax credits (e.g. the child tax credit) either.
 - **Not modeled:** inherited IRAs (no 10-year rule accounting), pension income, rental real estate, a second home held at the same time as the main one, annuities, cash-value life insurance, business equity, deferred comp.
 - **Medicare/Medicaid** are modeled as flat age-banded costs; no long-term-care Medicaid spend-down logic, no separate Part A/B/D bracket interaction beyond IRMAA.
 - **State residency is assumed constant.** Changing residency mid-retirement (e.g. moving from CA to a no-tax state) is not modeled.

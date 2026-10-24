@@ -4,11 +4,13 @@ from __future__ import annotations
 try:
     from utils.coerce import safe_float, ensure_default
     from utils.formatting import money, money_md, pct
-    from utils.derived import compute_taxes, compute_total_income
+    from utils.derived import compute_taxes, compute_total_income, files_two_returns
+    from utils import state_choice
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md, pct  # type: ignore
-    from ui.utils.derived import compute_taxes, compute_total_income  # type: ignore
+    from ui.utils.derived import compute_taxes, compute_total_income, files_two_returns  # type: ignore
+    from ui.utils import state_choice  # type: ignore
 
 try:
     from utils.overrides import get_override, set_override
@@ -16,19 +18,39 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
 
 
-_STATE_OPTIONS = ["California", "No state income tax", "Another state (flat rate)"]
-_STATE_TO_CODE = {
-    "California": "CA",
-    "No state income tax": "No state tax",
-    "Another state (flat rate)": "Other",
-}
-_CODE_TO_STATE = {v: k for k, v in _STATE_TO_CODE.items()}
+# Widget label <-> stored STATE_CHOICE (all states + DC, plus the two legacy
+# choices). Kept as module names for callers and tests.
+_STATE_OPTIONS = state_choice.OPTIONS
+_STATE_TO_CODE = {label: state_choice.code_for(label) for label in _STATE_OPTIONS}
+_CODE_TO_STATE = {code: label for label, code in _STATE_TO_CODE.items()}
 
 
 def render_body(st) -> None:
-    overrides = st.session_state.get("user_overrides", {}) or {}
+    # State first, so the figures below already reflect a just-changed choice
+    # (computed before the selector, they lagged one rerun behind it).
+    current_label = state_choice.label_for(get_override(st, "STATE_CHOICE", "CA"))
+    ensure_default(st, "st_state", current_label)
+    if st.session_state.get("st_state") not in _STATE_OPTIONS:
+        st.session_state["st_state"] = current_label
+    state = st.selectbox("State", _STATE_OPTIONS, key="st_state",
+                         help="Where you live, for state income tax. Every state uses "
+                              "its own tax table.")
+    code = state_choice.code_for(state)
+    set_override(st, "STATE_CHOICE", code)
+    st.caption(state_choice.caption_for(code))
 
-    # Computed display
+    if state == state_choice.FLAT_LABEL:
+        ensure_default(st, "st_marginal",
+                       float(safe_float(get_override(st, "YOUR_MARGINAL_TAX_RATE", 0.05), 0.05)) * 100)
+        r = st.slider("State income tax rate (%)",
+                      min_value=0.0, max_value=15.0, step=0.5,
+                      key="st_marginal",
+                      help="A flat state tax on income above the federal standard "
+                           "deduction. 5% is a middle-of-the-road guess.")
+        set_override(st, "YOUR_MARGINAL_TAX_RATE", r / 100)
+
+    # This year's tax on your pay -- the same function the simulation uses.
+    overrides = st.session_state.get("user_overrides", {}) or {}
     income = compute_total_income(overrides)
     taxes = compute_taxes(overrides)
 
@@ -42,55 +64,43 @@ def render_body(st) -> None:
         st.metric("State", money(taxes["state"], shorten=True))
     row2 = st.columns(2)
     with row2[0]:
-        st.metric("FICA", money(taxes["fica"], shorten=True))
+        st.metric("FICA", money(taxes["fica"], shorten=True),
+                  help="Social Security and Medicare tax taken from pay.")
     with row2[1]:
         st.metric("Effective rate", pct(taxes["effective_rate"]))
 
     if income > 0:
         st.caption(
             f"**Total tax: {money_md(taxes['total'], shorten=True)}** on "
-            f"{money_md(income, shorten=True)} household income."
+            f"{money_md(income, shorten=True)} household income this year. "
+            "The simulation uses these same numbers."
         )
+        if files_two_returns(overrides):
+            st.caption("You're not married, so each of you files your own return "
+                       "and is taxed on your own income.")
     else:
         st.caption("Enter income above to see your tax estimate.")
-
-    # State selector
-    current_code = str(get_override(st, "STATE_CHOICE", "CA"))
-    current_label = _CODE_TO_STATE.get(current_code, "California")
-    if current_label not in _STATE_OPTIONS:
-        current_label = "California"
-    ensure_default(st, "st_state", current_label)
-    state = st.selectbox("State", _STATE_OPTIONS, key="st_state",
-                         help="California uses its 2024 brackets. For another state, "
-                              "set its income tax rate below; it's applied as a flat rate.")
-    set_override(st, "STATE_CHOICE", _STATE_TO_CODE[state])
-
-    if state == "Another state (flat rate)":
-        ensure_default(st, "st_marginal",
-                       float(safe_float(get_override(st, "YOUR_MARGINAL_TAX_RATE", 0.05), 0.05)) * 100)
-        r = st.slider("State income tax rate (%)",
-                      min_value=0.0, max_value=15.0, step=0.5,
-                      key="st_marginal",
-                      help="A flat state tax on taxable income. Look up your state's rate; "
-                           "5% is a middle-of-the-road guess.")
-        set_override(st, "YOUR_MARGINAL_TAX_RATE", r / 100)
 
     # What's modeled
     with st.expander("What's modeled", expanded=False):
         st.markdown(
-            "- **Federal**: 2024 IRS brackets (MFJ if married, else Single), "
-            "with standard deduction (\\$29,200 MFJ / \\$14,600 Single).\n"
-            "- **State**: California 2024 brackets / no state tax / a flat rate you set (5% to start).\n"
-            "- **FICA**: 7.65% on wages up to \\$168,600, 1.45% above "
-            "(Social Security + Medicare).\n"
-            "- **Not modeled here**: NIIT, AMT, capital-gains tax (handled in retirement), "
-            "self-employment tax."
+            "- **Federal**: 2024 brackets and standard deduction for your filing "
+            "status (\\$29,200 married / \\$14,600 single / \\$21,900 head of household). "
+            "An unmarried couple files two returns.\n"
+            "- **State**: your state's 2024 brackets, deductions and exemptions, "
+            "including whether it taxes Social Security and retirement income. "
+            "City and county income taxes are not included.\n"
+            "- **FICA**: 7.65% of pay up to \\$168,600 per person, 1.45% above, "
+            "plus 0.9% on pay over \\$200,000 (\\$250,000 married).\n"
+            "- **Pre-tax savings**: 401(k) and HSA contributions lower your income "
+            "tax (not FICA, for the 401(k)).\n"
+            "- **Not modeled**: tax credits (such as the child tax credit), "
+            "itemized deductions, AMT, self-employment tax."
         )
 
     st.caption(
-        "These estimate pre-retirement working years. Retirement taxes "
-        "(LTCG, RMDs, Social Security) are computed by the simulator "
-        "using full 2024 IRS rules."
+        "Retirement-year taxes (withdrawals, Social Security, Roth conversions) "
+        "are computed by the simulation year by year with the same rules."
     )
 
 

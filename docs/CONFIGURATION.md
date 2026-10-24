@@ -30,7 +30,7 @@ All dollar values in the config are in **today's dollars** unless otherwise note
 |---|---|---|
 | `YOUR_AGE` | `25` | Your current age. Drives every age-dependent calculation. |
 | `PARTNER_AGE` | `25` | Spouse/partner current age. `0` = a single household: the engine then has no partner accounts, pay, contributions or Social Security (`has_partner()`), whatever partner numbers the profile still carries. |
-| `CURRENT_YEAR` | `2026` | Baseline calendar year for the simulation. |
+| `CURRENT_YEAR` | this year | Read from the clock (`datetime.date.today().year`). A `CURRENT_YEAR` saved in an older profile is ignored. |
 | `YOUR_BIRTH_YEAR` | derived | `CURRENT_YEAR − YOUR_AGE` (likewise `PARTNER_BIRTH_YEAR`). Sets the SECURE 2.0 RMD start age (73 if born 1951–1959, else 75). Not an input. |
 | `PARTNER_BIRTH_YEAR` | `2001` | Same purpose for partner. |
 | `PLAN_UNTIL_AGE` | `95` | Your plan-until age. Run longer if longevity is a concern — about 30–40% of couples have one spouse living past 90. |
@@ -126,13 +126,19 @@ Income is specified age-by-age through some cutoff (default: age 40), then proje
 ```python
 YOUR_COMPENSATION_BY_AGE = {
     31: {"base": 200_000, "bonus": 20_000, "rsu_gross": 150_000,
-         "total_comp": 370_000, "after_tax": 240_000, "saved": 130_000},
+         "total_comp": 370_000, "saved": 130_000},
     32: {...},
     # ... continue through the last age you want to hard-code
 }
 ```
 
-Required keys per age: `base`, `bonus`, `rsu_gross`, `total_comp`, `after_tax`, `saved`. The `saved` number is what gets contributed to taxable accounts after living expenses — this is the load-bearing field for savings projections.
+Keys per age: `base`, `bonus`, `rsu_gross`, `total_comp` (the wages that are taxed) and `saved` (the brokerage contribution in *Manual* savings mode only; *Auto* modes invest whatever is left after spending).
+
+Take-home is **computed**, not entered: `working_year_taxes()` applies the 2024 federal brackets and standard deduction for your filing status, your state's table, FICA per earner (6.2% up to the $168,600 wage base, 1.45% Medicare, 0.9% above $200k/$250k), after your pre-tax 401(k) and HSA contributions. A row may still carry an `after_tax` value to force a known take-home (pay after taxes **and** after 401(k)/HSA deferrals); older profiles whose rows hold the app's old automatic 70% figure have it removed on load so the computed value is used.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `YOUR_OTHER_INCOME` | `$0` | Taxable income that isn't pay (rent, interest, side work). Taxed as ordinary income, no FICA, flat in today's dollars, received only while you work. |
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -146,15 +152,17 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 
 | Parameter | Default | Description |
 |---|---|---|
-| `PARTNER_SALARY` | `$42,000` | Current salary. |
+| `PARTNER_SALARY` | `$42,000` | Current base salary. |
+| `PARTNER_BONUS_AMOUNT`, `PARTNER_RSU_AMOUNT` | `$0` | Added to base as wages (FICA applies), grown with the salary. |
+| `PARTNER_OTHER_INCOME` | `$0` | Non-wage income, as `YOUR_OTHER_INCOME`. |
 | `PARTNER_SALARY_GROWTH_RATE` | `0.04` | Annual real salary growth. |
 
 ### Your contributions
 
 | Parameter | Default | Description |
 |---|---|---|
-| `YOUR_401K_CONTRIBUTION` | `$23,000` | Your annual 401(k) deferral. Capped by `get_401k_limit()`. |
-| `YOUR_401K_MATCH_PCT` | `0.06` | Employer match as a fraction of base salary (6% = full match up to 6%). |
+| `YOUR_401K_CONTRIBUTION` | `$23,000` | Your annual 401(k) deferral. Capped by `get_401k_limit()` and by your pay. |
+| `YOUR_401K_MATCH_PCT` | `0.06` | Employer match: dollar for dollar on your deferral, up to this fraction of base salary. The match is `min(your 401(k) contribution, pct x base)`, so contributing less than the match % earns less match. Set in the Savings section. |
 | `YOUR_HSA_CONTRIBUTION` | `$7,550` | Your HSA contribution. |
 | `YOUR_HSA_MATCH` | `$750` | Employer HSA contribution. |
 | `YOUR_BACKDOOR_ROTH` | `$7,000` | Annual backdoor Roth IRA conversion. |
@@ -166,10 +174,9 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 | Parameter | Default | Description |
 |---|---|---|
 | `PARTNER_401K_CONTRIBUTION` | `$23,000` | Partner 401(k) contribution. |
-| `PARTNER_401K_MATCH` | `$0` | Flat-dollar employer match. Set `0` if no match. |
-| `PARTNER_ROTH_CONTRIBUTION` | `$7,000` | Partner Roth IRA contribution. Auto-stops after marriage if joint income exceeds Roth limits. |
+| `PARTNER_401K_MATCH_PCT` | `0.0` | Partner's employer match, same rule as `YOUR_401K_MATCH_PCT`. (Replaces the never-used `PARTNER_401K_MATCH`.) |
+| `PARTNER_ROTH_CONTRIBUTION` | `$7,000` | Partner direct Roth IRA contribution, reduced by the 2024 Roth income phase-out of the return it's on (joint MAGI $230k–$240k; single/HOH $146k–$161k) and limited to earned income. Marriage alone no longer stops it. |
 | `PARTNER_ANNUAL_SPENDING` | `$24,000` | Partner's personal spending — kept separate from household expenses. |
-| `PARTNER_ESTIMATED_TAX_RATE` | `0.25` | Effective federal+state rate used to estimate partner's take-home. |
 
 ---
 
@@ -312,25 +319,39 @@ Social Security benefits are entered in today's dollars. Because SS is COLA-inde
 
 ## 9. Tax configuration
 
+All tables are 2024 figures held flat in today's dollars (statutory thresholds that are never indexed decay; see METHODOLOGY §4). Every filing-status-dependent table follows `FILING_STATUS` ("Married filing jointly" / "Single" / "Head of household").
+
 | Parameter | Default | Description |
 |---|---|---|
-| `STANDARD_DEDUCTION_MFJ_2024` | `$29,200` | MFJ standard deduction. CPI-indexed in reality, so held flat at its 2024 real value in the all-real frame. Age-65+ adds `$1,550` per spouse via `ADDITIONAL_STD_DEDUCTION_65_PLUS`. |
-| `YOUR_MARGINAL_TAX_RATE` | `0.05` | Flat **state** income tax rate, used only when `STATE_CHOICE = "Other"` (the app's *Another state (flat rate)*). It used to default to 0.22, a federal + state + payroll estimate, which charged every "Other" state 22%. |
+| `FILING_STATUS` | MFJ | Selects the federal and state brackets, standard deductions, LTCG brackets, Social Security taxability thresholds, NIIT and Additional Medicare thresholds, IRMAA tiers, the Roth IRA phase-out and the Roth conversion target. |
+| `STANDARD_DEDUCTION_BY_STATUS` | $29,200 / $14,600 / $21,900 | Federal standard deduction. Age 65+ adds $1,550 per spouse (joint) or $1,950 (single/HOH). |
+| `LTCG_BRACKETS_BY_STATUS` | 0% to $94,050 / $47,025 / $63,000 | 15% to $583,750 / $518,900 / $551,350, then 20%. |
+| `SS_WAGE_BASE` | `$168,600` | Social Security wage base, per earner. With `SOCIAL_SECURITY_TAX_RATE` 6.2%, `MEDICARE_TAX_RATE` 1.45%, `ADDITIONAL_MEDICARE_TAX_RATE` 0.9% above `ADDITIONAL_MEDICARE_THRESHOLD_BY_STATUS` ($250k joint / $200k otherwise, per return). |
+| `ROTH_IRA_PHASEOUT_BY_STATUS` | $230k–$240k joint, $146k–$161k others | Direct Roth IRA phase-out (partner's Roth). |
+| `YOUR_MARGINAL_TAX_RATE` | `0.05` | Flat **state** rate for `STATE_CHOICE = "Other"` (the app's *Another state (flat rate)*), applied above the federal standard deduction, Social Security exempt. |
+
+**Unmarried couples.** With a partner in the plan (`PARTNER_AGE > 0`) and a status other than MFJ, the household files **two returns**: you on `FILING_STATUS` (Single or Head of household), your partner as Single. Wages, withdrawals, RMDs, Roth conversions, capital gains and Social Security are each taxed on their owner's return (`files_two_returns()`, `return_status()`).
 
 ### State tax
 
-`CaliforniaTaxBrackets` holds 2024 CA brackets. If you live in another state, replace this class with your state's brackets, or set the class to a zero-bracket schedule to simulate a no-income-tax state (FL, TX, WA, etc.). CA also taxes LTCG as ordinary income (~9.3%); other states vary.
+`STATE_CHOICE` is a two-letter code for any state or `"DC"`, read from `retirement_sim/state_tax_data.py`: brackets by filing status, standard deduction, personal exemptions, whether Social Security is taxed (exempt, taxed, or exempt below an income limit), retirement-income exclusions by age, state capital-gains exclusions, and quirks (Pennsylvania taxes 401(k) deferrals; California and New Jersey tax HSA contributions; California SDI 1.1% of wages). Each row carries its tax year and a confidence level (`high`, `medium`, or `approx`, which the app labels as approximate). City/county income taxes, credits and itemized deductions are not modeled. To verify or refresh the table, see [`state_tax_research_prompt.md`](state_tax_research_prompt.md).
+
+Legacy values still work: `"CA"`, `"No state tax"` (zero) and `"Other"` (flat rate). Unknown values fall back to CA. `MODEL_CA_EXEMPTS_SOCIAL_SECURITY` (historical name) switches every state's Social Security exemption off when set `False`.
 
 ### NIIT
 
 | Parameter | Default | Description |
 |---|---|---|
-| `NIIT_THRESHOLD_MFJ` | `$250,000` | MAGI threshold for Net Investment Income Tax. |
-| `NIIT_RATE` | `0.038` | 3.8% surtax on investment income above the threshold. Affects high-income households during accumulation and early retirement. |
+| `NIIT_THRESHOLD_MFJ` / `NIIT_THRESHOLD_SINGLE` | `$250,000` / `$200,000` | MAGI threshold of the return. |
+| `NIIT_RATE` | `0.038` | 3.8% surtax on investment income above the threshold. |
 
 ### Medicare IRMAA
 
-`MEDICARE_IRMAA_BRACKETS_MFJ` lists income thresholds and monthly Part B/D surcharges. Triggered at age 65 based on MAGI from two years prior. Only affects high-income retirees; under $206k MAGI you'll pay the base Part B premium with no surcharge.
+`MEDICARE_IRMAA_BRACKETS_MFJ` and `MEDICARE_IRMAA_BRACKETS_SINGLE` (2025 CMS tiers: $212k / $106k first surcharge). An unmarried couple's household MAGI is split evenly and each person is tested on the individual tiers.
+
+### Roth conversion target
+
+`ROTH_CONVERSION_TARGET_BRACKET` defaults to `None`: fill ordinary income up to the top of the 12% bracket for the filing status ($94,300 joint, $47,150 single, $63,100 head of household; `ROTH_CONVERSION_TARGET_BY_STATUS`). A number applies to every return. A saved $94,300 under a non-joint status is treated as the old default and follows the status.
 
 ### Early withdrawal
 
