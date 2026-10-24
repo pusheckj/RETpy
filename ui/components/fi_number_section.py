@@ -12,10 +12,12 @@ import plotly.graph_objects as go
 
 try:
     from utils.formatting import money
+    from utils.household import has_partner, plan_end_text
     from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
     from utils.sim_runner import run_networth_analysis, _hashable
 except ImportError:  # pragma: no cover
     from ui.utils.formatting import money  # type: ignore
+    from ui.utils.household import has_partner, plan_end_text  # type: ignore
     from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
     from ui.utils.sim_runner import run_networth_analysis, _hashable  # type: ignore
 
@@ -38,16 +40,17 @@ def render(st, results: dict = None) -> None:
     st.markdown('<div class="mc-section">Net worth to retire</div>', unsafe_allow_html=True)
     overrides = st.session_state.get("user_overrides", {}) or {}
 
-    couple = int(overrides.get("PARTNER_AGE", 0) or 0) > 0
+    # Household size as the simulation sees it (cfg.has_partner for these inputs).
+    couple = has_partner(overrides)
     st.caption(
         "Instead of *when* you can retire, this finds the **investable portfolio** that "
         "lets you stop. "
-        + ("Both of you keep" if couple else "You keep")
-        + " working and contributing until the balance first hits a target, then retire "
+        + ("You both keep" if couple else "You keep")
+        + " working and saving until the balance first reaches a target, then retire "
         "that year. Your **number** is the smallest target that still meets your success "
         "threshold. Excludes home equity and earmarked 529 college funds"
-        + ("; assumes both partners work until the target (no separate partner retirement "
-           "age)." if couple else ".")
+        + ("; assumes you both work until the target and retire together (your "
+           "partner's separate retirement age isn't used here)." if couple else ".")
     )
     # Orient the reader: three tiles answer the same question three ways, and a
     # first-time user otherwise can't tell which number to trust.
@@ -105,10 +108,10 @@ def render(st, results: dict = None) -> None:
         st.warning("Your inputs changed since this was calculated — click "
                    "**Calculate my number** to refresh.")
 
-    _render_result(st, fi)
+    _render_result(st, fi, couple)
 
 
-def _render_result(st, fi: dict) -> None:
+def _render_result(st, fi: dict, couple: bool = False) -> None:
     num = fi.get("fi_number")
     age = fi.get("fi_median_retire_age")
     lo_age = fi.get("fi_age_low")
@@ -117,42 +120,53 @@ def _render_result(st, fi: dict) -> None:
     target = float(fi.get("target_success", 0.80))
     already = bool(fi.get("already_fi"))
     curve = fi.get("success_by_networth", []) or []
+    cap = int(fi.get("max_work_age", 70))
 
     has_range = (lo_age is not None and hi_age is not None and hi_age > lo_age)
+    # No tested target met the goal: say so in words, with the numbers that
+    # explain it, instead of "above range" / "—".
+    not_reached = (not already) and num is None
+    top = max((c["networth"] for c in curve), default=0.0)
+    best = max((c["success"] for c in curve), default=0.0)
 
     cols = st.columns(3)
     with cols[0]:
-        st.metric(
-            "Net worth to retire",
-            money(cur, shorten=True) if already else (money(num, shorten=True) if num else "above range"),
-            help=(f"Your current investable portfolio ({money(cur, shorten=True)}) already "
-                  f"clears the {target:.0%} target — you're at or past your number."
-                  if already else
-                  f"Smallest investable portfolio with ≥{target:.0%} success, retiring "
-                  "the moment you reach it."),
-        )
+        if already:
+            st.metric("Net worth to retire", money(cur, shorten=True),
+                      help=f"Your current investable portfolio ({money(cur, shorten=True)}) "
+                           f"already clears the {target:.0%} target — you're at or past "
+                           "your number.")
+        elif not_reached:
+            st.metric("Net worth to retire", f"Over {money(top, shorten=True)}",
+                      help=f"None of the targets tried, up to {money(top, shorten=True)}, "
+                           f"reached your {target:.0%} goal.")
+        else:
+            st.metric("Net worth to retire", money(num, shorten=True),
+                      help=f"Smallest investable portfolio with ≥{target:.0%} success, "
+                           "retiring the moment you reach it.")
     with cols[1]:
         if already:
             st.metric("When you could stop", "Now",
                       help="Retiring today already meets your success target.")
+        elif not_reached:
+            st.metric("Best success found", f"{best:.0%}",
+                      help="The highest success rate any tested target reached.")
         else:
             st.metric(
                 "Typically reached at age", f"{age:.0f}" if age else "—",
                 help=(f"Median age you reach that number at today's savings rate"
-                      + (f"; most paths land between {lo_age:.0f} and {hi_age:.0f}." if has_range else ".")),
+                      + (f"; most paths land between {lo_age:.0f} and {hi_age:.0f}."
+                         if has_range else ".")),
             )
     with cols[2]:
         if already:
             st.metric("Status", "You're there",
                       help=f"Current investable portfolio: {money(cur, shorten=True)}")
-        elif num is None:
+        elif not_reached:
             # The sweep never met the success target, even at the top of the range —
-            # the household is the FURTHEST from FI, not "there". Don't collapse this
-            # into the gap<=0 "You're there" case.
-            st.metric("Status", "Above range",
-                      help="No swept net-worth target met your success threshold. Your "
-                           "number is beyond the tested range — lower spending, raise "
-                           "savings, or extend the work-cap age, then recalculate.")
+            # the household is the FURTHEST from FI, not "there".
+            st.metric("Status", "Not reached",
+                      help="No tested target met your success goal.")
         else:
             gap = num - cur
             st.metric(
@@ -160,6 +174,19 @@ def _render_result(st, fi: dict) -> None:
                 money(gap, shorten=True) if gap > 0 else "You're there",
                 help=f"Current investable portfolio: {money(cur, shorten=True)}",
             )
+    if not_reached:
+        # Why a bigger target stops helping: the largest targets aren't reached
+        # before the work cap, so those runs retire at the cap with less.
+        capped = bool(curve) and (curve[-1].get("median_retire_age") or 0) >= cap
+        st.info(
+            f"No target up to {money(top, shorten=True)} reached your {target:.0%} goal; the "
+            f"best was {best:.0%}. "
+            + (f"The biggest targets usually aren't reached before age {cap}, the latest "
+               "this check lets you work, so those runs retire then with less. "
+               if capped else "")
+            + "To get there: spend less in retirement, save more now, or lower the "
+            "success goal, then recalculate."
+        )
 
     xs = [c["networth"] for c in curve]
     ys = [c["success"] * 100 for c in curve]
@@ -201,7 +228,9 @@ def _render_result(st, fi: dict) -> None:
 
     st.caption(
         "Each point: keep working until the investable portfolio first reaches that target, "
-        "then both retire and draw down to the plan-end age. Because retirement age is *earned* "
+        f"then {'you both retire' if couple else 'retire'} and draw down until "
+        f"{plan_end_text(st.session_state.get('user_overrides', {}) or {})}. "
+        "Because retirement age is *earned* "
         "(you stop when you hit the number), reaching it **earlier** — in a strong market — means "
         "a longer retirement to fund and a **lower** success rate than this headline; reaching it "
         "later is safer. Assumes today's spending, savings rate, and returns — "

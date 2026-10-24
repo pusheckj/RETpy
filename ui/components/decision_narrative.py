@@ -12,10 +12,12 @@ from __future__ import annotations
 
 try:
     from utils.coerce import safe_int
+    from utils.household import plan_end_ages
     from utils.formatting import pct
     from components import bridge_years_gauge, first_decade_stress
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
+    from ui.utils.household import plan_end_ages  # type: ignore
     from ui.utils.formatting import pct  # type: ignore
     from ui.components import bridge_years_gauge, first_decade_stress  # type: ignore
 
@@ -26,7 +28,7 @@ def render(st, results: dict = None) -> None:
 
     overrides = st.session_state.get("user_overrides", {}) or {}
     retire_age = safe_int(overrides.get("TARGET_RETIREMENT_AGE", 55), 55)
-    plan_until = safe_int(overrides.get("PLAN_UNTIL_AGE", 90), 90)
+    plan_until = plan_end_ages(overrides)[0]  # when the plan ends (cfg.plan_end_age)
 
     parts = []
 

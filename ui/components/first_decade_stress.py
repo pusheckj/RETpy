@@ -14,10 +14,12 @@ import plotly.graph_objects as go
 
 try:
     from utils.coerce import safe_int
+    from utils.household import plan_end_ages
     from utils.formatting import money
     from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
+    from ui.utils.household import plan_end_ages  # type: ignore
     from ui.utils.formatting import money  # type: ignore
     from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
 
@@ -72,7 +74,7 @@ def render(st, results: dict = None, chart_key: str = "first_decade_stress") -> 
     overrides = st.session_state.get("user_overrides", {}) or {}
     current_age = safe_int(overrides.get("YOUR_AGE", 25), 25)
     retire_age = safe_int(overrides.get("TARGET_RETIREMENT_AGE", 55), 55)
-    plan_until = safe_int(overrides.get("PLAN_UNTIL_AGE", 90), 90)
+    plan_until = plan_end_ages(overrides)[0]  # when the plan ends (cfg.plan_end_age)
 
     by_age = {int(r["age"]): r for r in rows}
     # Retirement horizon only (the sequence-risk story starts at retirement).

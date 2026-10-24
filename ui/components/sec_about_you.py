@@ -15,6 +15,11 @@ except ImportError:  # pragma: no cover
     from ui.utils.household import (HOUSEHOLDS, JUST_ME, SPOUSE, MFJ, SINGLE, HOH,  # type: ignore
                                     UNMARRIED_FILING, household_of, clear_partner)
 
+try:
+    from utils.household import plan_end_text
+except ImportError:  # pragma: no cover
+    from ui.utils.household import plan_end_text  # type: ignore
+
 from retirement_sim.config import plan_end_age
 
 
@@ -133,13 +138,14 @@ def render_body(st) -> None:
         p_until = st.slider("Partner's plan-until age", min_value=75, max_value=100, step=1,
                             key="ay_partner_plan_until", help="The same, in your partner's age.")
         set_override(st, "PARTNER_PLAN_UNTIL_AGE", safe_int(p_until))
-        end = plan_end_age(st.session_state.get("user_overrides", {}) or {})
-        st.caption(f"The plan runs until you're {end} and your partner is "
-                   f"{end - (your_age - partner_age)}.")
-    if plan_until <= target:
+        # Whoever is covered longer sets the end; every result uses this horizon.
+        st.caption(f"The plan runs until "
+                   f"{plan_end_text(st.session_state.get('user_overrides', {}) or {})}.")
+    end = plan_end_age(st.session_state.get("user_overrides", {}) or {})
+    if end <= target:
         st.warning(
-            f"Plan-until age ({plan_until}) is not after target retirement age ({target}). "
-            "Increase it so the model has a retirement period to simulate."
+            f"The plan ends when you're {end}, which is not after your target retirement "
+            f"age ({target}). Raise the plan-until age so there's a retirement to simulate."
         )
 
 

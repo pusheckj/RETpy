@@ -287,3 +287,131 @@ def test_a_sample_path_that_ran_out_is_drawn_red():
           "sample_successes": [False, True]}
     # The failed path's last recorded balance is $40k, not $0: the flag decides.
     assert [bad for _, bad in sample_outcomes(pr)] == [True, False]
+
+
+# ---------------------------------------------------------------------------
+# #9 One plan horizon: the age the simulation runs to (cfg.plan_end_age)
+# ---------------------------------------------------------------------------
+COUPLE = {"YOUR_AGE": 32, "PARTNER_AGE": 27, "PLAN_UNTIL_AGE": 95,
+          "PARTNER_PLAN_UNTIL_AGE": 95, "TARGET_RETIREMENT_AGE": 40,
+          "FILING_STATUS": "Married filing jointly"}
+SINGLE = {"YOUR_AGE": 32, "PARTNER_AGE": 0, "PLAN_UNTIL_AGE": 95,
+          "PARTNER_PLAN_UNTIL_AGE": None, "TARGET_RETIREMENT_AGE": 40,
+          "FILING_STATUS": "Single"}
+
+
+def test_plan_end_ages_follow_the_engine():
+    from utils.household import plan_end_ages, plan_end_text
+    assert plan_end_ages(COUPLE) == (cfg.plan_end_age(COUPLE), 95) == (100, 95)
+    assert plan_end_text(COUPLE) == "you're 100 and your partner is 95"
+    assert plan_end_ages(SINGLE) == (95, None)
+    assert plan_end_text(SINGLE) == "you're 95"
+
+
+def _component_script():
+    import importlib
+    import os
+    import sys
+    sys.path.insert(0, os.environ["CONSISTENT_TEST_UI_DIR"])
+    import streamlit as st
+    name, fn = os.environ["CONSISTENT_TEST_COMPONENT"].split(":")
+    mod = importlib.import_module("components." + name)
+    results = st.session_state.get("_results")
+    if fn == "render_body":
+        mod.render_body(st)
+    elif results is not None:
+        mod.render(st, results=results)
+    else:
+        mod.render(st)
+
+
+def _render(monkeypatch, component: str, overrides: dict, **state):
+    from streamlit.testing.v1 import AppTest
+    monkeypatch.setenv("CONSISTENT_TEST_UI_DIR", _UI)
+    monkeypatch.setenv("CONSISTENT_TEST_COMPONENT", component)
+    monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "0")
+    at = AppTest.from_function(_component_script, default_timeout=60)
+    at.session_state["user_overrides"] = dict(overrides)
+    for k, v in state.items():
+        at.session_state[k] = v
+    at.run()
+    assert not at.exception, at.exception
+    return at
+
+
+def _texts(at) -> str:
+    parts = [c.value for c in at.caption] + [m.value for m in at.markdown]
+    parts += [str(m.label) + " " + str(m.value) + " " + str(m.help or "") for m in at.metric]
+    parts += [i.value for i in at.info] + [w.value for w in at.warning]
+    return " ".join(parts).replace("\\$", "$")
+
+
+@pytest.mark.parametrize("household, end, partner_text", [
+    (COUPLE, 100, "you're 100 and your partner is 95"),
+    (SINGLE, 95, None),
+])
+def test_every_screen_shows_the_same_horizon(monkeypatch, household, end, partner_text):
+    import json
+    about = _render(monkeypatch, "sec_about_you:render_body", household)
+    if partner_text:
+        assert f"The plan runs until {partner_text}." in _texts(about)
+    else:
+        assert "partner is" not in _texts(about)
+
+    snap = {"PLAN_END_AGE": cfg.plan_end_age(household), "NUM_SIMULATIONS": 100,
+            "YOUR_AGE": household["YOUR_AGE"], "PARTNER_AGE": household["PARTNER_AGE"],
+            "PLAN_UNTIL_AGE": household["PLAN_UNTIL_AGE"]}
+    results = {"config_snapshot": snap, "primary_result": {
+        "retirement_age": 40, "median_final": 1e6, "p10_final": 1e5, "success_rate": 0.9}}
+    tiles = _texts(_render(monkeypatch, "stats_row:render", household, _results=results))
+    assert f"at plan end (age {end})" in tiles and f"until you're {end}" in tiles
+    assert ("partner 95" in tiles) == bool(partner_text)
+
+    life = _render(monkeypatch, "life_expectancy_section:render", household)
+    assert f"(you're {end})" in _texts(life)
+    spec = json.loads(life.get("plotly_chart")[0].proto.spec)
+    notes = [a.get("text", "") for a in spec["layout"].get("annotations", [])]
+    assert f"plan ends {end}" in notes
+
+    from utils.validation import validate_run_inputs
+    assert validate_run_inputs(household, end - 1) == []
+    assert validate_run_inputs(household, end) != []
+
+
+# ---------------------------------------------------------------------------
+# #8 Net worth to retire: wording by household, a plain "not reached" state
+# ---------------------------------------------------------------------------
+def _fi_result(reached: bool) -> dict:
+    curve = [{"networth": 2e5 + i * 1e5, "success": min(0.57, 0.05 * i),
+              "median_retire_age": min(70, 45 + 2 * i), "p10_retire_age": None,
+              "p90_retire_age": None} for i in range(14)]
+    return {"fi_number": 1.2e6 if reached else None,
+            "fi_median_retire_age": 52.0 if reached else None,
+            "fi_age_low": None, "fi_age_high": None, "already_fi": False,
+            "target_success": 0.80, "current_investable": 2e5,
+            "success_by_networth": curve, "max_work_age": 70}
+
+
+@pytest.mark.parametrize("household, couple", [(COUPLE, True), (SINGLE, False)])
+def test_fi_wording_follows_the_household(monkeypatch, household, couple):
+    at = _render(monkeypatch, "fi_number_section:render", household,
+                 fi_result=_fi_result(reached=True), n_simulations=100)
+    text = _texts(at)
+    assert ("You both keep working" in text) == couple
+    assert ("You keep working" in text) == (not couple)
+    assert ("you both retire" in text) == couple
+    if not couple:
+        assert "both" not in text.lower().replace("both answer", "")
+
+
+def test_fi_not_reached_is_explained(monkeypatch):
+    at = _render(monkeypatch, "fi_number_section:render", SINGLE,
+                 fi_result=_fi_result(reached=False), n_simulations=100)
+    tiles = {m.label: m.value for m in at.metric}
+    assert tiles["Net worth to retire"] == "Over $1.5M"
+    assert tiles["Best success found"] == "57%"
+    assert tiles["Status"] == "Not reached"
+    assert "Typically reached at age" not in tiles
+    text = _texts(at)
+    assert "above range" not in text.lower()
+    assert "before age 70" in text and "best was 57%" in text
