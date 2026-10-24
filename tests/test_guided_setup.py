@@ -115,7 +115,7 @@ def _walk_to(at, step_title):
     answers = {
         "About you": lambda: (at.number_input(key="gs_age").set_value(31),
                               at.radio(key="gs_household").set_value(gs.JUST_ME)),
-        "Kids": lambda: (at.number_input(key="gs_kids_have").set_value(0),
+        "Children": lambda: (at.number_input(key="gs_kids_have").set_value(0),
                          at.number_input(key="gs_kids_plan").set_value(0)),
         "Where you live": lambda: at.selectbox(key="gs_state").set_value("California"),
         "Your income": lambda: at.number_input(key="gs_salary").set_value(
@@ -152,7 +152,7 @@ def test_a_value_typed_right_before_next_is_kept(wizard):
 
 def test_just_me_clears_the_sample_partner(wizard):
     at = wizard()
-    _walk_to(at, "Kids")
+    _walk_to(at, "Children")
     ov = at.session_state["user_overrides"]
     assert ov["PARTNER_AGE"] == 0 and ov["PARTNER_401K"] == 0 and ov["FILING_STATUS"] == "Single"
 
@@ -161,7 +161,7 @@ def test_kids_any_number(wizard):
     """One child is one child (the old step stored a phantom second child at
     $0), and three born plus two planned are five."""
     at = wizard()
-    _walk_to(at, "Kids")
+    _walk_to(at, "Children")
     assert not any("up to two" in c.value for c in at.caption)
     at.number_input(key="gs_kids_have").set_value(1).run()
     at.number_input(key="gs_kid0_age").set_value(6)
@@ -185,7 +185,7 @@ def test_kids_any_number(wizard):
 
 def test_kids_need_every_age_and_at_most_six(wizard):
     at = wizard()
-    _walk_to(at, "Kids")
+    _walk_to(at, "Children")
     at.number_input(key="gs_kids_have").set_value(2).run()
     at.number_input(key="gs_kid0_age").set_value(4)
     at.number_input(key="gs_kids_plan").set_value(0)
@@ -307,7 +307,7 @@ def test_keep_amounts_mode_in_the_savings_section(monkeypatch):
 
 def test_single_parent_files_head_of_household(wizard):
     at = wizard()
-    _walk_to(at, "Kids")                                      # "Just me" on step one
+    _walk_to(at, "Children")                                      # "Just me" on step one
     at.number_input(key="gs_kids_have").set_value(1).run()
     at.number_input(key="gs_kid0_age").set_value(7)
     at.number_input(key="gs_kids_plan").set_value(0)

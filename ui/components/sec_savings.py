@@ -5,14 +5,14 @@ try:
     from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money, money_md
     from utils.derived import (
-        KEEP_AMOUNTS_MODE, SAVINGS_MODES,
+        KEEP_AMOUNTS_MODE, SAVINGS_MODES, SAVINGS_MODE_LABELS,
         sidebar_savings_budget, custom_pct_defaults, custom_pct_amounts, pct_widget_key,
     )
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.derived import (  # type: ignore
-        KEEP_AMOUNTS_MODE, SAVINGS_MODES,
+        KEEP_AMOUNTS_MODE, SAVINGS_MODES, SAVINGS_MODE_LABELS,
         sidebar_savings_budget, custom_pct_defaults, custom_pct_amounts, pct_widget_key,
     )
 
@@ -91,7 +91,8 @@ def render_body(st) -> None:
     if current_mode not in modes:
         current_mode = modes[0]
     ensure_default(st, "sv_mode", current_mode)
-    mode = st.radio("Allocation strategy", modes, horizontal=False, key="sv_mode")
+    mode = st.radio("Allocation strategy", modes, horizontal=False, key="sv_mode",
+                    format_func=lambda m: SAVINGS_MODE_LABELS.get(m, m))
     set_override(st, "SAVINGS_MODE", mode)
 
     _render_employer_match(st, overrides)

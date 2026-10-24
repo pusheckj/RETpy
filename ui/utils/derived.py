@@ -362,6 +362,11 @@ KEEP_AMOUNTS_MODE = "Auto-invest what's left (keep my amounts)"
 CUSTOM_PCT_MODE = "Custom %"
 MANUAL_MODE = "Manual amounts"
 SAVINGS_MODES = [AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, CUSTOM_PCT_MODE, MANUAL_MODE]
+# DISPLAY names for the two auto modes (the stored values above must not change:
+# saved profiles hold them). Use these wherever a mode is shown to the user.
+AUTO_ALLOCATE_LABEL = "Fill tax-advantaged accounts first (recommended)"
+KEEP_AMOUNTS_LABEL = "Keep my amounts, invest the rest"
+SAVINGS_MODE_LABELS = {AUTO_ALLOCATE_MODE: AUTO_ALLOCATE_LABEL, KEEP_AMOUNTS_MODE: KEEP_AMOUNTS_LABEL}
 
 # Contribution keys in the Savings section's order, and the Savings widgets
 # that hold them a rerun before user_overrides does.
