@@ -1011,7 +1011,7 @@ def main() -> None:
                     _lazy_ph("ret_more", 700)
             _sec_ret_more()
         else:
-            _run_hint("your earliest retirement age, success probability, and portfolio projection")
+            _run_hint("your earliest retirement age, success rate, and portfolio projection")
 
     # ==================== 1b. NET WORTH TO RETIRE (FI number) ====================
     # "How much do we need?" (net-worth trigger) as a complement to "when?".

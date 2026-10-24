@@ -58,7 +58,7 @@ def render(st, results: dict, chart_key: str = "income_sources_main") -> None:
     fig.update_layout(
         barmode="stack",
         title=dict(
-            text="<b>Retirement income composition</b><br><span style='font-size:13px;color:#64748b;'>Annual drawdown by source (median year across runs)</span>",
+            text="<b>Retirement income composition</b><br><span style='font-size:13px;color:#64748b;'>Annual drawdown by source (each age's median across runs that last the whole plan)</span>",
             x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
         ),
         height=360,

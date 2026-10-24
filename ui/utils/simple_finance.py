@@ -1,4 +1,4 @@
-"""Everyday money math for the simple "Get my money in order" page.
+"""Everyday money math for the simple "Money check-up" page.
 
 Pure functions only (no Streamlit), so everything here is unit-testable and
 instant. Four checks:

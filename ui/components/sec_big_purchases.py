@@ -405,7 +405,7 @@ def render_body(st) -> None:
             except Exception:
                 pass
             st.caption("See **What if → Mortgage paydown** for what this does to your "
-                       "success probability.")
+                       "success rate.")
         else:
             set_override(st, "EXTRA_MORTGAGE_PAYMENT_START_AGE", None)
             st.caption("Set an amount to model paying the mortgage down faster. "

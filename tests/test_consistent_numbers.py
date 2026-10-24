@@ -484,7 +484,7 @@ def test_fi_not_reached_is_explained(monkeypatch):
     at = _render(monkeypatch, "fi_number_section:render", SINGLE,
                  fi_result=_fi_result(reached=False), n_simulations=100)
     tiles = {m.label: m.value for m in at.metric}
-    assert tiles["Net worth to retire"] == "Over $1.5M"
+    assert tiles["Portfolio needed to retire"] == "Over $1.5M"
     assert tiles["Best success found"] == "57%"
     assert tiles["Status"] == "Not reached"
     assert "Typically reached at age" not in tiles

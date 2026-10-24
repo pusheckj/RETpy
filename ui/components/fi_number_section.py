@@ -37,7 +37,7 @@ _FRESH_HELP = ("This number reflects your current inputs. Change a sidebar "
 
 
 def render(st, results: dict = None) -> None:
-    st.markdown('<div class="mc-section">Net worth to retire</div>', unsafe_allow_html=True)
+    st.markdown('<div class="mc-section">Portfolio needed to retire</div>', unsafe_allow_html=True)
     overrides = st.session_state.get("user_overrides", {}) or {}
 
     # Household size as the simulation sees it (cfg.has_partner for these inputs).
@@ -132,16 +132,16 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
     cols = st.columns(3)
     with cols[0]:
         if already:
-            st.metric("Net worth to retire", money(cur, shorten=True),
+            st.metric("Portfolio needed to retire", money(cur, shorten=True),
                       help=f"Your current investable portfolio ({money(cur, shorten=True)}) "
                            f"already clears the {target:.0%} target — you're at or past "
                            "your number.")
         elif not_reached:
-            st.metric("Net worth to retire", f"Over {money(top, shorten=True)}",
+            st.metric("Portfolio needed to retire", f"Over {money(top, shorten=True)}",
                       help=f"None of the targets tried, up to {money(top, shorten=True)}, "
                            f"reached your {target:.0%} goal.")
         else:
-            st.metric("Net worth to retire", money(num, shorten=True),
+            st.metric("Portfolio needed to retire", money(num, shorten=True),
                       help=f"Smallest investable portfolio with ≥{target:.0%} success, "
                            "retiring the moment you reach it.")
     with cols[1]:
@@ -217,7 +217,7 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
             x=0.0, xanchor="left", font=dict(size=16),
         ),
         height=380, margin=dict(l=50, r=40, t=80, b=50),
-        xaxis=dict(title="Investable net worth at retirement", tickformat="$,.2~s",
+        xaxis=dict(title="Investable portfolio at retirement", tickformat="$,.2~s",
                    gridcolor="#f1f5f9", zeroline=False, tickfont=dict(color="#64748b")),
         yaxis=dict(title="Success rate (%)", range=[0, 100], gridcolor="#f1f5f9",
                    zeroline=False, tickfont=dict(color="#64748b")),

@@ -22,10 +22,11 @@ except ImportError:  # pragma: no cover
 
 
 def render(st) -> None:
-    st.markdown('<div class="mc-section">Life expectancy</div>', unsafe_allow_html=True)
+    st.markdown('<div class="mc-section">Your life expectancy</div>', unsafe_allow_html=True)
     overrides = st.session_state.get("user_overrides", {}) or {}
     st.caption(
-        "Your lifespan as a **distribution**, adjusted for personal risk factors. This is what "
+        "Your lifespan as a **distribution**, adjusted for your personal risk factors (your own, not "
+        "a partner's). This is what "
         "sets how long your money must last — the safe move is to plan to a high percentile, not "
         "the average. Educational actuarial estimate (Gompertz mortality with relative-risk "
         "multipliers from public epidemiology), **not medical advice**."
@@ -39,7 +40,7 @@ def render(st) -> None:
     with top[1]:
         default_age = safe_int(overrides.get("YOUR_AGE", 40), 40)
         st.session_state.setdefault("le_age", default_age)
-        current_age = st.number_input("Current age", min_value=18, max_value=100, step=1,
+        current_age = st.number_input("Your current age", min_value=18, max_value=100, step=1,
                                       key="le_age", help="Life expectancy is computed conditional "
                                       "on being alive at this age.")
 
