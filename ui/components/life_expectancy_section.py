@@ -82,6 +82,7 @@ def render(st) -> None:
         st.metric("Outlive your plan", f"{reach_plan:.0%}",
                   delta="risk" if reach_plan >= 0.25 else "low",
                   delta_color=("inverse" if reach_plan >= 0.25 else "normal"),
+                  delta_arrow=("up" if reach_plan >= 0.25 else "down"),
                   help=f"Chance you're still alive when the plan ends (you're {plan_until}). "
                        "If high, your plan may end while you're still spending.")
 

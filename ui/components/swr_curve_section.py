@@ -45,7 +45,7 @@ def render(st, results: dict = None) -> None:
         "40+ year horizon that the generic 4% rule ignores."
     )
     st.caption(
-        ":gray[Third view of the same plan: **Retirement** gives the earliest age, "
+        "Third view of the same plan: **Retirement** gives the earliest age, "
         "**Net worth to retire** gives the portfolio you need, and this gives the "
         "spending that portfolio supports.]"
     )
@@ -128,6 +128,7 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
         st.metric("Headroom", f"{gap:+.1%}" if gap is not None else "—",
                   delta=("cushion" if (gap or 0) >= 0 else "overspending") if gap is not None else None,
                   delta_color=("normal" if (gap or 0) >= 0 else "inverse"),
+                  delta_arrow=("up" if (gap or 0) >= 0 else "down"),
                   help="Safe rate minus your rate. Positive = room to spend more; negative = at risk.")
 
     if swr_rate is None:

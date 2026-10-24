@@ -1628,3 +1628,81 @@ footer { display: none !important; }
 .st-key-mc-loading { max-width: 420px; margin: 20vh auto 0; text-align: center; }
 .mc-loading { color: var(--mc-muted); font-size: 16px; }
 
+
+/* =========================================================
+   Planner polish: equal-height stat tiles, one control shape in the top card,
+   a symmetric mode switch, a compact top card on tablets.
+   ========================================================= */
+/* Loading screen: its escape-hatch button only appears if the browser is slow
+   to answer (never as a faint leftover once the planner is up). */
+.st-key-mc-loading .stButton { opacity: 0; pointer-events: none; animation: mcShowLate 0s 6s forwards; }
+@keyframes mcShowLate { to { opacity: 1; pointer-events: auto; } }
+
+/* Stat tiles: every tile in a row is as tall as the tallest, tops aligned. */
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.mc-stat-card):not(:has([data-testid="stPlotlyChart"])) { align-items: stretch !important; }
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.mc-stat-card):not(:has([data-testid="stPlotlyChart"])) > [data-testid="stColumn"] { display: flex; }
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.mc-stat-card):not(:has([data-testid="stPlotlyChart"])) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] { flex: 1 1 auto; }
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card),
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) [data-testid="stMarkdownContainer"],
+.mc-stat-wrap { height: 100%; }
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) { flex: 1 1 auto; }
+/* Streamlit's -16px markdown bottom margin made the 100%-high card overflow its slot into the next row. */
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
+.mc-stat-card { box-sizing: border-box; }
+/* Labels stay on one line (no "NON-/RETIREMENT"); tighter tracking on narrow tiles. */
+.mc-stat-card > div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.05em !important; }
+@media (max-width: 1100px) { .mc-stat-card > div:first-child { font-size: 11px !important; letter-spacing: 0.03em !important; } }
+@media (max-width: 640px) { .mc-stat-card > div:first-child { white-space: normal; } }
+
+/* Segmented radios (mode switch, .mc-seg): Streamlit leaves a margin where the
+   radio circle was, so the text sat 8px off-centre in its segment. */
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label > div:last-child { margin-left: 0 !important; }
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label { justify-content: center; }
+
+/* Top card: every control is the same pill (switch, Up to date, select, Settings). */
+.st-key-mc-topbar [data-testid="stButtonGroup"] [role="radiogroup"],
+.st-key-mc-topbar [data-testid="stButtonGroup"] > div:not([data-testid]) { border-radius: 999px !important; }
+.st-key-mc-topbar [data-testid="stButtonGroup"] button { border-radius: 999px !important; min-height: 36px; }
+.st-key-mc-topbar [data-testid^="stBaseButton"],
+.st-key-mc-topbar [data-testid="stPopoverButton"] { border-radius: 999px !important; min-height: 40px; }
+
+/* Tablets: the top card scrolls away like on phones (it took ~25% of the
+   screen), and Settings keeps its natural width instead of a full row. */
+@media (max-width: 900px) {
+    [data-testid="stLayoutWrapper"]:has(> [data-testid="stVerticalBlock"].st-key-mc-topbar) { position: static; }
+}
+@media (min-width: 641px) and (max-width: 1240px) {
+    section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(2) {
+        flex: 1 1 0 !important; width: auto !important; min-width: 0;
+    }
+    section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3) {
+        flex: 0 0 124px !important; width: 124px !important; min-width: 0;
+    }
+    section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(4) {
+        flex: 0 0 124px !important; width: 124px !important; min-width: 0;
+    }
+    .st-key-mc-topbar [data-baseweb="select"] > div { padding: 4px 6px !important; }
+    .st-key-mc-topbar [data-baseweb="select"] > div > div:first-child { padding: 8px 2px 8px 6px !important; }
+    .st-key-mc-topbar .stButton > button, .st-key-mc-topbar [data-testid="stPopoverButton"] { padding-left: 8px; padding-right: 8px; }
+}
+
+/* Wrapped stat-tile rows (tablet/phone) keep a gap so tiles never touch. */
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.mc-stat-card) { row-gap: 12px; }
+
+/* Metrics: the delta chip sits right under its value (Streamlit leaves a big gap). */
+[data-testid="stMetric"] { gap: 0; }
+[data-testid="stMetricDelta"] { margin-top: 2px; }
+/* A disabled button ("Number up to date") must still be readable. */
+.stButton > button:disabled, .stButton > button[disabled] {
+    color: var(--mc-ink) !important; opacity: 0.75; border-color: var(--mc-tile-border);
+}
+
+/* Sidebar: the three-way scenario switch stays on one row, and widget labels in
+   side-by-side columns reserve two lines (bottom-aligned) so paired inputs line up. */
+section[data-testid="stSidebar"] [role="radiogroup"].mc-seg { display: flex !important; flex-wrap: nowrap !important; width: 100%; gap: 0; padding: 2px !important; box-sizing: border-box; }
+section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label { flex: 1 1 auto; padding: 7px 2px !important; white-space: nowrap; text-align: center; }
+section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label p { font-size: 12.5px !important; white-space: nowrap; }
+section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidgetLabel"] {
+    min-height: 2.6em; display: flex; align-items: flex-end;
+}
+section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidgetLabel"] p { font-size: 14px; line-height: 1.25; }

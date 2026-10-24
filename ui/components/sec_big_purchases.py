@@ -292,7 +292,7 @@ def render_body(st) -> None:
                                     "the chosen age.")
     set_override(st, "CAR_RECURRING_ENABLED", bool(recurring_on))
     if recurring_on:
-        c3, c4, c5 = st.columns(3)
+        c3, c4 = st.columns(2)
         with c3:
             ensure_default(st, "bp_car_recurring_start",
                            safe_int(get_override(st, "CAR_RECURRING_START_AGE", 40), 40))
@@ -305,12 +305,11 @@ def render_body(st) -> None:
             v = st.number_input("Every N years", min_value=1, max_value=30,
                                 step=1, key="bp_car_recurring_every")
             set_override(st, "CAR_RECURRING_EVERY_YEARS", safe_int(v))
-        with c5:
-            ensure_default(st, "bp_car_recurring_amount",
-                           safe_int(get_override(st, "CAR_RECURRING_AMOUNT", 40_000), 40_000))
-            v = st.number_input("Amount ($)", min_value=0, max_value=500_000,
-                                step=1_000, key="bp_car_recurring_amount")
-            set_override(st, "CAR_RECURRING_AMOUNT", safe_int(v))
+        ensure_default(st, "bp_car_recurring_amount",
+                       safe_int(get_override(st, "CAR_RECURRING_AMOUNT", 40_000), 40_000))
+        v = st.number_input("Amount ($)", min_value=0, max_value=500_000,
+                            step=1_000, key="bp_car_recurring_amount")
+        set_override(st, "CAR_RECURRING_AMOUNT", safe_int(v))
         st.caption("Replaces the car every N years starting at the given age, "
                    "paid from the portfolio.")
 

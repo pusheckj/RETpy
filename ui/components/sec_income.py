@@ -189,9 +189,9 @@ def render_body(st) -> None:
             df, num_rows="dynamic", width="stretch", key="si_comp_editor",
             column_config={
                 "age": st.column_config.NumberColumn("Age", min_value=18, max_value=80, step=1),
-                "base": st.column_config.NumberColumn("Base", min_value=0, step=1_000, format="$%d"),
-                "bonus": st.column_config.NumberColumn("Bonus", min_value=0, step=500, format="$%d"),
-                "rsu_gross": st.column_config.NumberColumn("RSU", min_value=0, step=1_000, format="$%d"),
+                "base": st.column_config.NumberColumn("Base", min_value=0, step=1_000, format="dollar"),
+                "bonus": st.column_config.NumberColumn("Bonus", min_value=0, step=500, format="dollar"),
+                "rsu_gross": st.column_config.NumberColumn("RSU", min_value=0, step=1_000, format="dollar"),
             },
         )
 

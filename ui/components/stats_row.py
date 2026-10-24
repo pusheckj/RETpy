@@ -56,11 +56,11 @@ def render(st, results: dict) -> None:
     if success >= 0.8:
         success_cls, success_color, success_tag = "mc-good", "#059669", "✓ On track"
     elif success >= 0.6:
-        success_cls, success_color, success_tag = "mc-warn", "#d97706", "! Borderline"
+        success_cls, success_color, success_tag = "mc-warn", "#d97706", "Borderline"
     else:
         success_cls, success_color, success_tag = "mc-bad", "#dc2626", "✕ At risk"
     if p10 < 1_000_000:
-        p10_cls, p10_color, p10_tag = "mc-warn", "#d97706", "! Thin cushion"
+        p10_cls, p10_color, p10_tag = "mc-warn", "#d97706", "Thin cushion"
     else:
         p10_cls, p10_color, p10_tag = "", "#0f172a", ""
 

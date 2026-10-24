@@ -105,9 +105,16 @@ def render(st, results: dict = None, chart_key: str = "spending_range_main") -> 
 
         mode_label = "future (nominal) dollars" if future else "today's dollars"
         unit = "$, nominal" if future else "$, today"
-        # Clip the point-cloud axis to the p90-based range (matching the box plot)
-        # so a few outlier paths don't flatten the violin.
-        y_cap = 1.15 * max([v for v in p90 if v] or [1.0]) if points_mode else None
+        # Zoom the y-axis onto the data. From $0 the boxes were a few pixels tall
+        # (spending barely moves between runs next to its own level), so frame the
+        # p10-p90 spread with 10% padding and at least a quarter of the top value
+        # as span, so a tiny spread isn't blown up into a dramatic one.
+        hi_v = max([v for v in p90 if v] or [1.0])
+        lo_v = min(p10) if p10 else 0.0
+        span = max(hi_v - lo_v, 0.25 * hi_v)
+        mid = (hi_v + lo_v) / 2.0
+        y_lo = max(0.0, mid - span / 2.0 - 0.1 * span)
+        y_hi = mid + span / 2.0 + 0.1 * span
         fig.update_layout(
             title=dict(
                 text="<b>Spending range across market scenarios</b><br>"
@@ -119,8 +126,8 @@ def render(st, results: dict = None, chart_key: str = "spending_range_main") -> 
             xaxis=dict(title="Age", gridcolor="#f1f5f9", zeroline=False,
                        tickfont=dict(color="#64748b"), fixedrange=False),
             yaxis=dict(title=f"Annual spending ({unit})", gridcolor="#f1f5f9", zeroline=False,
-                       rangemode="tozero", tickformat="$,.3~s", tickfont=dict(color="#64748b"),
-                       range=([0, y_cap] if points_mode else None)),
+                       tickformat="$,.3~s", tickfont=dict(color="#64748b"),
+                       range=[y_lo, y_hi]),
             showlegend=False, dragmode="pan", boxgap=0.2,
             transition=(dict(duration=0) if points_mode
                         else dict(duration=350, easing="cubic-in-out")),
@@ -147,7 +154,8 @@ def render(st, results: dict = None, chart_key: str = "spending_range_main") -> 
             "line is the median. Spending is flat while you're working, then **fans out in retirement** as the "
             "**spending guardrails** raise or cut discretionary spending in response to how markets treated the "
             f"portfolio. {based_on} · guardrail-adjusted living spending "
-            "(healthcare and long-term care are modeled separately and excluded here)."
+            "(healthcare and long-term care are modeled separately and excluded here). "
+            "The vertical axis is zoomed to the spending range, so it does not start at $0."
         )
 
     # Rendered directly (not in st.fragment) so is_dark()/style_fig() see the theme.

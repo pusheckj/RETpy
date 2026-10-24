@@ -55,10 +55,10 @@ def render(st, results: dict = None) -> None:
     # Orient the reader: three tiles answer the same question three ways, and a
     # first-time user otherwise can't tell which number to trust.
     st.caption(
-        ":gray[The same plan, asked three ways — **Retirement** answers *when* "
+        "The same plan, asked three ways — **Retirement** answers *when* "
         "(earliest age), this section answers *how much* (the portfolio you need), "
         "and **Safe withdrawal rate** answers *how much can I spend* once you stop. "
-        "They're consistent: hit this number and the earliest age is the year you hit it.]"
+        "They're consistent: hit this number and the earliest age is the year you hit it."
     )
 
     n_sims = int(st.session_state.get("n_simulations", 1000))
