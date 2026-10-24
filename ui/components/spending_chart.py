@@ -33,9 +33,9 @@ except ImportError:  # pragma: no cover
     )
 
 try:
-    from utils.plot_theme import style_fig, assign_colors, series_color, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, assign_colors, series_color, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import style_fig, assign_colors, series_color, PLOTLY_CONFIG, is_dark
+    from ui.utils.plot_theme import style_fig, show_chart, assign_colors, series_color, PLOTLY_CONFIG, is_dark
 
 
 # Category keys in stacking order (housing first, then declared spending
@@ -514,7 +514,7 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
         mortgage_color = "#60a5fa" if is_dark(st) else "#1d4ed8"
         mode = st.radio(
             "Dollars",
-            options=["Today's dollars", "Future (nominal) dollars"],
+            options=["Today's $", "Future $"],
             horizontal=True, key=f"{chart_key}_dollars_mode",
             label_visibility="collapsed",
         )
@@ -542,14 +542,7 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
                 yaxis_title="Annual spending ($, today)",
                 st=st,
             )
-        fig = style_fig(fig, st)
-        st.plotly_chart(
-            fig, width="stretch",
-            # Theme is part of the key so switching light<->dark forces a fresh
-            # element (uirevision would otherwise keep the stale line color).
-            key=f"{chart_key}_{'nominal' if future else 'today'}_{'dk' if is_dark(st) else 'lt'}",
-            config=PLOTLY_CONFIG,
-        )
+        show_chart(st, fig, f"{chart_key}_{'nominal' if future else 'today'}_{'dk' if is_dark(st) else 'lt'}", PLOTLY_CONFIG)
 
         base_caption = (
             "Stacked bars show each category's annual spending, including "

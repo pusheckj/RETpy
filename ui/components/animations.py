@@ -681,6 +681,12 @@ _ANIM_JS = """
         nav.scrollTo({left: Math.max(0, x), behavior: reduce ? 'auto' : 'smooth'});
       } else if(!on && a.hasAttribute('aria-current')){ a.removeAttribute('aria-current'); }
     });
+    // Nothing active (top of the page): the chip row starts at its first chip,
+    // not wherever a previous scroll or focus left it.
+    if(!cur){
+      var first = b.querySelector('[data-mc-jump]'), row = first && first.parentElement;
+      if(row && row.scrollLeft > 0) row.scrollTo({left: 0, behavior: 'auto'});
+    }
   }
   // Fold long explanations to three lines on phones; a tap opens/closes them.
   // Marked with a data attribute (not a class) so React re-renders don't drop it.

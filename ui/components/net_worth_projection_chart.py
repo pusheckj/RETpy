@@ -452,17 +452,11 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
     )
 
     try:
-        from utils.plot_theme import style_fig
+        from utils.plot_theme import style_fig, show_chart
     except ImportError:
-        from ui.utils.plot_theme import style_fig
-    fig = style_fig(fig, st)
+        from ui.utils.plot_theme import style_fig, show_chart
 
-    st.plotly_chart(
-        fig,
-        width="stretch",
-        key=chart_key,
-        config=PLOTLY_CONFIG,
-    )
+    show_chart(st, fig, chart_key, PLOTLY_CONFIG)
     st.caption(
         f"Real (inflation-adjusted) return: investment accounts "
         f"{_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['investment']*100:.1f}%, "

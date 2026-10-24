@@ -270,7 +270,9 @@ def test_savings_tiles_bars_and_rate_are_one_sum(monkeypatch):
     assert tiles["Year 1 savings rate"] == f"{first_rate:.1f}%"
     assert "Mode" not in tiles
 
-    bars, rate = (_chart_spec(c) for c in at.get("plotly_chart"))
+    # Every chart is drawn twice (regular + phone variant): check the regular ones.
+    specs = [_chart_spec(c) for c in at.get("plotly_chart")]
+    bars, rate = specs[0], specs[2]
     assert rate["data"][0]["y"][0] == pytest.approx(first_rate)
     stacked = {t["name"]: t["y"] for t in bars["data"] if t.get("type") == "bar"}
     assert sum(ys[0] for ys in stacked.values()) == pytest.approx(year_savings(rows[0]))

@@ -123,7 +123,7 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
             x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
         ),
         height=420,
-        margin=dict(l=50, r=200, t=80, b=50),
+        margin=dict(l=50, r=80, t=80, b=50),
         xaxis=dict(title="Age", gridcolor="#f1f5f9", zeroline=False,
                    tickfont=dict(color="#64748b"), fixedrange=False),
         yaxis=dict(
@@ -155,17 +155,11 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
     )
 
     try:
-        from utils.plot_theme import style_fig, PLOTLY_CONFIG
+        from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG
     except ImportError:
-        from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG
-    fig = style_fig(fig, st)
+        from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG
 
-    st.plotly_chart(
-        fig,
-        width="stretch",
-        key=f"{chart_key}_{'dk' if dark else 'lt'}",
-        config=PLOTLY_CONFIG,
-    )
+    show_chart(st, fig, f"{chart_key}_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
 
     st.caption(
         "Stacked bars show **where each year's savings goes**, as the simulation "

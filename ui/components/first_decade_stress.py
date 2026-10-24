@@ -16,12 +16,12 @@ try:
     from utils.coerce import safe_int
     from utils.household import plan_end_ages
     from utils.formatting import money
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
     from ui.utils.household import plan_end_ages  # type: ignore
     from ui.utils.formatting import money  # type: ignore
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
 
 
 def compute_unlucky_summary(results: dict, retire_age: int, plan_until: int) -> dict | None:
@@ -132,8 +132,7 @@ def render(st, results: dict = None, chart_key: str = "first_decade_stress") -> 
         showlegend=True,
         dragmode="pan", uirevision="keep",
     )
-    fig = style_fig(fig, st)
-    st.plotly_chart(fig, width="stretch", key=f"{chart_key}_{'dk' if dark else 'lt'}", config=PLOTLY_CONFIG)
+    show_chart(st, fig, f"{chart_key}_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
 
     # Divergence table for the first-decade milestones.
     import pandas as pd

@@ -84,7 +84,10 @@ CONCEPT_INDEX = {
     "401(k)": 0, "Roth IRA": 1, "Traditional IRA": 4, "HSA": 6,
     "Taxable brokerage": 11, "Cash": 3, "Home equity": 7, "Retirement": 0,
     "401(k) match": 9, "Salary": 2, "Social Security": 5,
-    "Bonus": 10, "RSU": 8, "Other income": 1, "RMD": 5,
+    "Bonus": 10, "RSU": 4, "Other income": 1, "RMD": 5,
+    # After-tax 401(k) -> Roth sits beside "Your 401(k)" in the savings stack, so
+    # it must not share its teal (it used to resolve to the 401(k) concept).
+    "After-tax Roth": 7,
 }
 _OWNER_PREFIXES = ("your ", "partner ", "their ")
 
@@ -98,6 +101,8 @@ def concept_of(name: str):
             break
     if "conversion" in n:
         return None
+    if "after-tax" in n:
+        return "After-tax Roth"
     if "401" in n and "match" in n:
         return "401(k) match"
     if "401" in n:
@@ -164,8 +169,14 @@ def _font_family(st) -> str:
     return opt[1] if opt else _FONT_FAMILY
 
 
-_TITLE_CHARS = 38   # bold 16px title line: ~330px, fits a phone-width chart
-_SUB_CHARS = 46     # 12-13px subtitle lines
+# Title/subtitle wrap widths (characters). A Plotly figure never knows its
+# rendered width, so every chart is drawn twice (see show_chart): a regular
+# version for wide screens and a compact one for phones. Regular: the title has
+# the card minus the modebar (~700px). Compact: ~300px, one bold line of
+# ~34 characters; subtitles are dropped there (the caption under each chart says
+# the same) so nothing is clipped.
+_TITLE_CHARS = {False: 64, True: 34}
+_SUB_CHARS = {False: 100, True: 46}
 _LEGEND_ASSUMED_PX = 330  # conservative chart width when estimating legend rows
 
 
@@ -173,9 +184,9 @@ def _set_margin(fig, **new) -> None:
     """Apply margins; grow a fixed figure height by the same amount so the plot
     area keeps the size the chart was designed with."""
     m = fig.layout.margin
-    grow = sum(max(0, v - (getattr(m, k) or 0)) for k, v in new.items() if k in ("t", "b"))
+    grow = sum(v - (getattr(m, k) or 0) for k, v in new.items() if k in ("t", "b"))
     fig.update_layout(margin=new)
-    if grow and fig.layout.height:
+    if grow and fig.layout.height:  # keeps the plot area the same size
         fig.update_layout(height=fig.layout.height + grow)
 
 
@@ -188,25 +199,27 @@ def _legend_entries(fig) -> list:
             if getattr(tr, "showlegend", None) is not False and getattr(tr, "name", None)]
 
 
-def _legend_rows(fig) -> int:
+def _legend_rows(fig, compact: bool = False) -> int:
     """Legend rows Plotly will draw. 0 when there is no legend (a lone trace
-    gets none by default). With >=4 entries the legend uses a fixed 2-column
-    grid (see style_fig), so rows = ceil(n/2) at ANY chart width; fewer entries
-    flow in one line, wrapping only at phone width (estimated)."""
+    gets none by default). Compact (phone): one entry per row. Otherwise with
+    >=4 entries the legend uses a fixed 2-column grid (see style_fig), so
+    rows = ceil(n/2) at ANY chart width; fewer entries flow in one line."""
     import math
     names = _legend_entries(fig)
     n = len(names)
     if n == 0 or (n == 1 and getattr(fig.layout, "showlegend", None) is not True):
         return 0
+    if compact:
+        return n
     if n >= 4:
         return math.ceil(n / 2)
     return max(1, math.ceil(sum(len(x) * 6.3 + 40 for x in names) / _LEGEND_ASSUMED_PX))
 
 
-def _wrap_title(fig) -> None:
-    """Wrap long title/subtitle lines with <br> (Plotly never wraps titles, so
-    on a phone they were cut off at the chart edge) and grow the top margin to
-    fit the extra lines."""
+def _wrap_title(fig, compact: bool = False) -> None:
+    """Wrap long title/subtitle lines with <br> (Plotly never wraps titles) and
+    grow the top margin to fit the extra lines. Compact figures drop subtitle
+    lines altogether."""
     import re
     import textwrap
     try:
@@ -217,8 +230,10 @@ def _wrap_title(fig) -> None:
         return
     out, height = [], 0
     for i, line in enumerate(re.split(r"<br\s*/?>", txt)):
+        if compact and i > 0:
+            break
         m = re.match(r"^((?:<[^>]+>)*)([^<]*)((?:</[^>]+>)*)$", line)
-        limit = _TITLE_CHARS if i == 0 else _SUB_CHARS
+        limit = _TITLE_CHARS[compact] if i == 0 else _SUB_CHARS[compact]
         if m and len(m.group(2)) > limit:
             pre, inner, post = m.groups()
             pieces = textwrap.wrap(inner, limit)
@@ -232,11 +247,93 @@ def _wrap_title(fig) -> None:
     # into the reserved margin instead of being centred over the plot.
     fig.update_layout(title=dict(text="<br>".join(out), yref="container", y=1,
                                  yanchor="top", pad=dict(t=14)))
-    _set_margin(fig, t=max(fig.layout.margin.t or 0, 36 + height))
+    if compact:
+        _set_margin(fig, t=14 + height + 22)
+    else:
+        _set_margin(fig, t=max(fig.layout.margin.t or 0, 36 + height))
 
 
-def style_fig(fig, st):
-    """Mutate `fig` with theme-aware colors and return it."""
+def _x_extent(fig):
+    """(lo, hi) of the x data / explicit x range, or None when not numeric."""
+    rng = fig.layout.xaxis.range
+    if rng is not None and len(rng) == 2:
+        try:
+            return float(rng[0]), float(rng[1])
+        except (TypeError, ValueError):
+            return None  # date axis
+    lo = hi = None
+    for tr in fig.data or []:
+        xs = getattr(tr, "x", None)
+        try:
+            vals = [float(x) for x in xs if x is not None] if xs is not None else []
+        except (TypeError, ValueError):
+            return None
+        if vals:
+            lo = min(vals) if lo is None else min(lo, min(vals))
+            hi = max(vals) if hi is None else max(hi, max(vals))
+    return (lo, hi) if lo is not None and hi > lo else None
+
+
+def _lift_vline_labels(fig, compact: bool) -> None:
+    """Move the labels of vertical reference lines ("Retire @ 60", "Retirement
+    (age 40)") from inside the plot, where they sat on top of the data and the
+    top y tick, to the strip just above it. Each label is anchored to the side
+    of its line that faces the plot centre (so none runs off the edge), and a
+    label that would collide with the previous one is lifted one row higher."""
+    ext = _x_extent(fig)
+    anns = [a for a in (fig.layout.annotations or [])
+            if a.xref == "x" and str(a.yref or "").endswith("domain") and a.y in (1, 1.0)
+            and isinstance(a.x, (int, float))]
+    if not anns or ext is None:
+        return
+    lo, hi = ext
+    plot_w = 250 if compact else 700
+    prev_end, level, max_level = -1.0, 0, 0
+    for a in sorted(anns, key=lambda a: a.x):
+        frac = (a.x - lo) / (hi - lo)
+        right = frac > 0.6
+        width = len(str(a.text)) * 6.0 / plot_w
+        start, end = (frac - width, frac) if right else (frac, frac + width)
+        level = (level + 1) if start < prev_end else 0
+        prev_end = max(prev_end, end) if level else end
+        max_level = max(max_level, level)
+        a.update(yref="paper", y=1, yanchor="bottom", yshift=1 + 15 * level,
+                 xanchor="right" if right else "left", xshift=-3 if right else 3,
+                 showarrow=False)
+    m = fig.layout.margin
+    _set_margin(fig, t=max((m.t or 0) + 15 * max_level, 28 + 15 * max_level))
+
+
+def _fit_age_axis(fig) -> None:
+    """Pin a numeric "Age" x-axis to the data. Plotly otherwise anchors on 0
+    when a bar/annotation/shape is present, squashing the plot into the right
+    part of a narrow chart."""
+    try:
+        if str(fig.layout.xaxis.title.text) != "Age" or fig.layout.xaxis.range is not None:
+            return
+    except Exception:
+        return
+    lo = hi = None
+    for tr in fig.data or []:
+        xs = getattr(tr, "x", None)
+        if xs is None or len(xs) == 0:
+            continue
+        try:
+            vals = [float(x) for x in xs if x is not None]
+        except (TypeError, ValueError):
+            return  # categorical x: leave alone
+        if not vals:
+            continue
+        pad = 0.5 if getattr(tr, "type", "") == "bar" else 0.0
+        lo = min(vals) - pad if lo is None else min(lo, min(vals) - pad)
+        hi = max(vals) + pad if hi is None else max(hi, max(vals) + pad)
+    if lo is not None and hi > lo:
+        fig.update_xaxes(range=[lo, hi])
+
+
+def style_fig(fig, st, compact: bool = False):
+    """Mutate `fig` with theme-aware colors and return it. ``compact`` is the
+    phone variant (single-column legend, one-line title, no subtitle)."""
     dark = is_dark(st)
     fam = _font_family(st)
 
@@ -287,15 +384,17 @@ def style_fig(fig, st):
         # whenever the plot height differs from what the offset was tuned for.
         layout_kwargs["legend"] = dict(
             orientation="h", yref="container", yanchor="bottom", y=0.0,
-            xref="paper", xanchor="left", x=0.0,
+            xref="container" if compact else "paper", xanchor="left", x=0.0,
             font=dict(family=fam, color=text_color,
                       size=10.5 if len(_legend_entries(fig)) >= 4 else 11.5),
             itemsizing="constant",
             # >=4 entries: exactly two columns (half the plot width each), so the
             # row count - and so the bottom margin we reserve - does not depend on
-            # the unknown rendered width.
-            **(dict(entrywidthmode="fraction", entrywidth=0.5)
-               if len(_legend_entries(fig)) >= 4 else {}),
+            # the unknown rendered width. Compact (phone): one column, because
+            # half of a ~300px chart is too narrow for names like "Partner taxable
+            # brokerage" (they truncated or overprinted).
+            **(dict(entrywidthmode="fraction", entrywidth=1.0 if compact else 0.5)
+               if len(_legend_entries(fig)) >= 4 or compact else {}),
         )
     fig.update_layout(**layout_kwargs)
 
@@ -308,15 +407,35 @@ def style_fig(fig, st):
         except Exception:
             cur_r = cur_b = None
         new_r = 30 if (cur_r is None or cur_r >= 150) else cur_r
+        if compact:  # the legend is clipped to the plot width: don't waste it on a gutter
+            new_r = min(new_r, 60)
         # Room for tick labels (+ the x-axis title if any) and then the legend rows.
+        rows = _legend_rows(fig, compact)
+        if compact and rows:
+            # The x-axis title would sit between the ticks and the legend (they
+            # collided); the caption and tick values carry the axis meaning.
+            fig.update_xaxes(title_text=None)
         axis_h = 64 if _has_title(getattr(fig.layout.xaxis, "title", None)) else 40
-        rows = _legend_rows(fig)
-        new_b = max(cur_b or 0, axis_h + rows * 20 + 14) if rows else cur_b
+        need_b = axis_h + rows * 20 + 14
+        # Compact: exact (the legend is one column of known length, and any more
+        # leaves a gap); regular: never less than the chart asked for.
+        new_b = (need_b if compact else max(cur_b or 0, need_b)) if rows else cur_b
         _set_margin(fig, r=new_r, **({"b": new_b} if new_b is not None else {}))
         fig.update_xaxes(automargin=True)
         fig.update_yaxes(automargin=True)
 
-    _wrap_title(fig)
+    if compact:
+        # Right-hand axis title + a wide gutter squeezed a ~300px plot (and the
+        # legend, which is clipped to the plot width); the legend already names
+        # the series, so keep only the ticks.
+        try:
+            if fig.layout.yaxis2.title.text:
+                fig.update_layout(yaxis2_title_text=None)
+        except Exception:
+            pass
+    _wrap_title(fig, compact)
+    _fit_age_axis(fig)
+    _lift_vline_labels(fig, compact)
 
     # Theme the title font ONLY when a title actually exists. Setting title_font
     # on a title-less figure makes Plotly render a literal "undefined" title.
@@ -375,6 +494,26 @@ def style_fig(fig, st):
             pass
 
     return fig
+
+
+def show_chart(st, fig, key: str, config: dict | None = None) -> None:
+    """Draw a chart twice - regular and phone-compact - and let theme.css show
+    the one that fits (the server can't know a visitor's width; see
+    ``style_fig``). ``fig`` is a Figure, or ``build(compact) -> Figure`` when
+    the phone version needs different content (fewer points, shorter labels).
+    The regular chart keeps ``key``; the compact one is ``{key}_compact``.
+    """
+    import copy
+    config = PLOTLY_CONFIG if config is None else config
+    build = fig if callable(fig) else (lambda compact, _f=fig: copy.deepcopy(_f))
+    if not hasattr(st, "container"):  # stub st (tests / print): regular chart only
+        st.plotly_chart(style_fig(build(False), st), width="stretch", config=config, key=key)
+        return
+    with st.container(key=f"mc-wide-{key}"):
+        st.plotly_chart(style_fig(build(False), st), width="stretch", config=config, key=key)
+    with st.container(key=f"mc-narrow-{key}"):
+        st.plotly_chart(style_fig(build(True), st, compact=True), width="stretch",
+                        config=config, key=f"{key}_compact")
 
 
 def beeswarm_xy(values, x_center: float, half_width: float = 0.42, n_bins: int = 30):

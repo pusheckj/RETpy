@@ -1149,7 +1149,7 @@ footer { display: none !important; }
 
     .mc-topbar { gap: 6px 14px; }
     .mc-topbar-title { font-size: 20px; }
-    .mc-topbar-metric-label { font-size: 10px; letter-spacing: 0.03em; }
+    .mc-topbar-metric-label { font-size: 11px; letter-spacing: 0.02em; }
     .mc-topbar-metric-value { font-size: 18px; }
 
     /* Big numbers sized for a phone. */
@@ -1192,15 +1192,9 @@ footer { display: none !important; }
     [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-wide-"]) { display: none; }
     [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-narrow-"]) { display: block; }
 
-    /* Chart subtitles can't wrap and ran off the edge: keep the title line
-       (the caption under each chart explains it), and drop the toolbar icons
-       that crowded the title (pinch-zoom does the job on a phone). */
-    .js-plotly-plot .gtitle > tspan.line ~ tspan.line { display: none; }
+    /* Compact charts (plot_theme.show_chart) carry no subtitle, so only the
+       toolbar icons that crowded the title go (pinch-zoom does the job). */
     .js-plotly-plot .modebar-container { display: none !important; }
-    /* A legend under the plot collided with the x-axis title ("Age" over
-       "Home equity"); on charts that have a legend the tick values and the
-       caption carry the axis meaning. */
-    .js-plotly-plot:has(g.legend) .g-xtitle { display: none; }
 }
 
 /* =========================================================
@@ -1645,14 +1639,38 @@ section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.mc-stat-car
 [data-testid="stColumn"] .stElementContainer:has(.mc-stat-card),
 [data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) [data-testid="stMarkdownContainer"],
 .mc-stat-wrap { height: 100%; }
-[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) { flex: 1 1 auto; }
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) { flex: 1 1 auto; display: flex; flex-direction: column; }
+/* The markdown wrappers between the element slot and the card were plain blocks,
+   so the card stopped at its own content height (125px in a 144px slot). Make
+   each wrapper fill the slot; the card (height: 100%) then does too. */
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) > [data-testid="stMarkdown"] { flex: 1 1 auto; display: flex; }
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) > [data-testid="stMarkdown"] > div { flex: 1 1 auto; }
+[data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) [data-testid="stMarkdownContainer"] { flex: 1 1 auto; }
 /* Streamlit's -16px markdown bottom margin made the 100%-high card overflow its slot into the next row. */
 [data-testid="stColumn"] .stElementContainer:has(.mc-stat-card) [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
-.mc-stat-card { box-sizing: border-box; }
+.mc-stat-card { box-sizing: border-box; height: 100%; }
 /* Labels stay on one line (no "NON-/RETIREMENT"); tighter tracking on narrow tiles. */
 .mc-stat-card > div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.05em !important; }
 @media (max-width: 1100px) { .mc-stat-card > div:first-child { font-size: 11px !important; letter-spacing: 0.03em !important; } }
-@media (max-width: 640px) { .mc-stat-card > div:first-child { white-space: normal; } }
+@media (max-width: 640px) { .mc-stat-card > div:first-child { white-space: normal; font-size: 12px !important; letter-spacing: 0.02em !important; } }
+
+/* Metric rows without cards: a label that wraps to two lines pushed ITS value
+   4-12px below its neighbours'. Stretch the columns and bottom-align the
+   label/value stack so every value in a row shares one baseline. */
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(.mc-stat-card)):not(:has([data-testid="stPlotlyChart"])) { align-items: stretch !important; }
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(.mc-stat-card)):not(:has([data-testid="stPlotlyChart"])) > [data-testid="stColumn"] { display: flex; }
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(.mc-stat-card)):not(:has([data-testid="stPlotlyChart"])) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] { flex: 1 1 auto; }
+[data-testid="stColumn"] .stElementContainer:has(> [data-testid="stMetric"]) { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-testid="stColumn"] [data-testid="stMetric"] { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-testid="stColumn"] [data-testid="stMetric"] > div { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-end; }
+
+/* Animated numbers (.mc-odo) and plain-text values (e.g. "Historical") sat on
+   different baselines: the odometer inherited the 1.6 body line-height while a
+   text value used "normal", a 5-7px height difference. One line-height for both. */
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] > div,
+[data-testid="stMetricValue"] .mc-odo,
+[data-testid="stMetricValue"] .mc-odo-sep { line-height: 1.25 !important; }
 
 /* Segmented radios (mode switch, .mc-seg): Streamlit leaves a margin where the
    radio circle was, so the text sat 8px off-centre in its segment. */
@@ -1728,3 +1746,6 @@ section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidget
 .st-key-mc-setup-root [data-testid="stElementContainer"]:has([data-testid="stCaptionContainer"]) { margin-top: -10px; }
 /* Brand eyebrow reads "RETpy" (not RET.PY). */
 .mc-welcome-kicker { text-transform: none !important; }
+/* Sidebar tables: the hover toolbar (download / search / fullscreen) covers the
+   first column headers in the narrow sidebar. */
+section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: none !important; }

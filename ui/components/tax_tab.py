@@ -218,16 +218,10 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1.0, bgcolor="rgba(0,0,0,0)", font=dict(color="#64748b", size=12)),
     )
     try:
-        from utils.plot_theme import style_fig
+        from utils.plot_theme import style_fig, show_chart
     except ImportError:
-        from ui.utils.plot_theme import style_fig
-    fig = style_fig(fig, st)
-    st.plotly_chart(
-        fig,
-        width="stretch",
-        config=PLOTLY_CONFIG,
-        key=chart_key,
-    )
+        from ui.utils.plot_theme import style_fig, show_chart
+    show_chart(st, fig, chart_key, PLOTLY_CONFIG)
 
     two_returns = (" You're not married, so each of you files your own return."
                    if ctx["two_returns"] else "")

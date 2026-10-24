@@ -266,13 +266,10 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
             showlegend=False,
         )
         try:
-            from utils.plot_theme import style_fig
+            from utils.plot_theme import style_fig, show_chart
         except ImportError:  # pragma: no cover
-            from ui.utils.plot_theme import style_fig  # type: ignore
-        fig = style_fig(fig, st)
-        st.plotly_chart(fig, width="stretch",
-                        config={"displayModeBar": False},
-                        key="sv_auto_alloc_chart")
+            from ui.utils.plot_theme import style_fig, show_chart  # type: ignore
+        show_chart(st, fig, "sv_auto_alloc_chart", {"displayModeBar": False})
 
     # Summary line: every dollar left to save is placed.
     total = sum(allocation.values()) + sum(set_aside.values())

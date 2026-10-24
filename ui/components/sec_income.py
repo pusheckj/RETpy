@@ -126,7 +126,7 @@ def render_body(st) -> None:
     cols = st.columns(3, gap="small")
     with cols[0]: st.metric("You", money(you_total, shorten=True))
     with cols[1]: st.metric("Partner", money(p_total, shorten=True))
-    with cols[2]: st.metric("Household", money(household_total, shorten=True))
+    with cols[2]: st.metric("Total", money(household_total, shorten=True))
 
     # Comp table editor (advanced)
     with st.expander("Edit compensation table", expanded=False):

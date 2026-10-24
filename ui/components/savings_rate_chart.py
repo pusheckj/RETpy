@@ -13,10 +13,10 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 try:
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
     from components.savings_rate_inputs import year_savings
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
     from ui.components.savings_rate_inputs import year_savings  # type: ignore
 
 
@@ -69,7 +69,9 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
     ))
     fig.add_hline(
         y=avg, line_dash="dash", line_color=ref_color,
-        annotation_text=f"Avg {avg:.1f}%", annotation_position="top left",
+        # In the right margin, level with the line: inside the plot it sat on
+        # top of whichever bars happen to be tallest.
+        annotation_text=f"Avg {avg:.1f}%", annotation_position="right",
         annotation_font=dict(size=11, color=ref_color),
     )
     fig.update_layout(
@@ -80,7 +82,7 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
             x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
         ),
         height=380,
-        margin=dict(l=50, r=40, t=80, b=50),
+        margin=dict(l=50, r=76, t=80, b=50),
         xaxis=dict(title="Age", gridcolor="#f1f5f9", zeroline=False,
                    tickfont=dict(color="#64748b"), fixedrange=False),
         yaxis=dict(title="Savings rate (%)", gridcolor="#f1f5f9", zeroline=False,
@@ -88,8 +90,7 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
         showlegend=False, hovermode="x unified", dragmode="pan", bargap=0.2,
         uirevision="keep",
     )
-    fig = style_fig(fig, st)
-    st.plotly_chart(fig, width="stretch", key=chart_key, config=PLOTLY_CONFIG)
+    show_chart(st, fig, chart_key, PLOTLY_CONFIG)
 
     tail = (
         "take-home (after-tax) income. This runs higher than the pre-tax view because "

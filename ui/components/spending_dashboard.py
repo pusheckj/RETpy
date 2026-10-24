@@ -39,7 +39,7 @@ try:
                                       REASON_WORK_TRAVEL, REASON_BOUGHT_FOR_OTHERS,
                                       REASON_PAID_BACK_FOR_OTHERS, WORK_TRAVEL_REASONS)
     from utils.hosting import is_hosted
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
     from utils.formatting import money, money_md
     from utils.derived import compute_expenses_today
     from utils.expense_categories import (CATEGORIES, HOUSING, HOUSING_KEYS, HOUSING_STATEMENT,
@@ -50,7 +50,7 @@ except ImportError:  # pragma: no cover
                                          REASON_WORK_TRAVEL, REASON_BOUGHT_FOR_OTHERS,
                                          REASON_PAID_BACK_FOR_OTHERS, WORK_TRAVEL_REASONS)
     from ui.utils.hosting import is_hosted  # type: ignore
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.derived import compute_expenses_today  # type: ignore
     from ui.utils.expense_categories import (CATEGORIES, HOUSING, HOUSING_KEYS,  # type: ignore
@@ -584,13 +584,8 @@ def sync_control(st, data: Dict, key: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _chart(st, build, key: str, config: dict) -> None:
-    """Draw ``build(compact)`` twice — the regular chart and a phone version —
-    and let theme.css show the one that fits the screen (the server can't know
-    a visitor's width). The regular chart keeps the original widget key."""
-    with st.container(key=f"mc-wide-{key}"):
-        st.plotly_chart(style_fig(build(False), st), width="stretch", config=config, key=key)
-    with st.container(key=f"mc-narrow-{key}"):
-        st.plotly_chart(style_fig(build(True), st), width="stretch", config=config, key=f"{key}_compact")
+    """Regular + phone version of a chart (see plot_theme.show_chart)."""
+    show_chart(st, build, key, config)
 
 
 def _label_color(hex_color: str) -> str:

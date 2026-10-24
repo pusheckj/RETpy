@@ -4,9 +4,9 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 try:
-    from utils.plot_theme import style_fig, concept_color, PLOTLY_CONFIG
+    from utils.plot_theme import style_fig, show_chart, concept_color, PLOTLY_CONFIG
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import style_fig, concept_color, PLOTLY_CONFIG
+    from ui.utils.plot_theme import style_fig, show_chart, concept_color, PLOTLY_CONFIG
 
 
 def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> None:
@@ -138,9 +138,8 @@ def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> No
         uirevision="keep",
     )
 
-    fig = style_fig(fig, st)
 
-    st.plotly_chart(fig, width="stretch", key=chart_key, config=PLOTLY_CONFIG)
+    show_chart(st, fig, chart_key, PLOTLY_CONFIG)
     st.caption(
         "Each bar is the median year across the simulated runs that last the plan: "
         "the fraction of the portfolio withdrawn that year, split by account type in "

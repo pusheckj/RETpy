@@ -7,6 +7,7 @@ for _p in (_ROOT, os.path.join(_ROOT, "ui")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import re
 import plotly.graph_objects as go
 from utils import plot_theme as pt
 
@@ -51,8 +52,18 @@ def test_legend_is_container_anchored_with_bottom_margin():
 
 def test_long_title_is_wrapped_and_top_margin_grows():
     fig = go.Figure(go.Bar(x=[1], y=[1]))
-    fig.update_layout(title=dict(text="<b>" + "Word " * 12 + "</b><br><span>" + "sub " * 30 + "</span>"),
+    fig.update_layout(title=dict(text="<b>" + "Word " * 20 + "</b><br><span>" + "sub " * 40 + "</span>"),
                       height=400, margin=dict(t=80))
     pt.style_fig(fig, _St())
     assert fig.layout.title.text.count("<br>") >= 3
     assert fig.layout.margin.t > 80
+
+
+def test_compact_title_drops_subtitle_and_wraps_to_phone_width():
+    fig = go.Figure(go.Bar(x=[1], y=[1]))
+    fig.update_layout(title=dict(text="<b>" + "Word " * 12 + "</b><br><span>sub</span>"),
+                      height=400, margin=dict(t=80))
+    pt.style_fig(fig, _St(), compact=True)
+    lines = fig.layout.title.text.split("<br>")
+    assert len(lines) >= 2 and "sub" not in fig.layout.title.text
+    assert all(len(re.sub(r"<[^>]+>", "", l)) <= pt._TITLE_CHARS[True] for l in lines)

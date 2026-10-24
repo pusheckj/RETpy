@@ -16,11 +16,11 @@ import plotly.graph_objects as go
 
 try:
     from utils.sim_runner import run_full_analysis, _hashable
-    from utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
     from utils.coerce import safe_int, safe_float
 except ImportError:  # pragma: no cover
     from ui.utils.sim_runner import run_full_analysis, _hashable  # type: ignore
-    from ui.utils.plot_theme import style_fig, PLOTLY_CONFIG, is_dark  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
     from ui.utils.coerce import safe_int, safe_float  # type: ignore
 
 _SCENARIOS = ["conservative", "historical", "pessimistic"]
@@ -243,8 +243,7 @@ def _render_plot(st, stored: dict) -> None:
                    tickfont=dict(color="#64748b")),
         showlegend=True, dragmode="pan", uirevision="keep",
     )
-    fig = style_fig(fig, st)
-    st.plotly_chart(fig, width="stretch", key=f"wifc_curve_{'dk' if dark else 'lt'}", config=PLOTLY_CONFIG)
+    show_chart(st, fig, f"wifc_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
     st.caption(
         "The dotted **Alternate** line reflects the levers above; the solid **Current plan** line is your "
         "sidebar inputs. Where a line first crosses the target, that's the earliest age you could retire under "
