@@ -1262,6 +1262,9 @@ footer { display: none !important; }
         min-width: 0;
         overflow-x: auto;              /* its own scroller: swipes sideways */
         scrollbar-width: none;
+        padding-right: 28px;           /* last chip can scroll clear of the fade */
+        -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+        mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
     }
     .mc-phonebar-chips::-webkit-scrollbar { display: none; }
     .mc-phonebar-chips a {

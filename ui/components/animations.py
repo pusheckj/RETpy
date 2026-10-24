@@ -43,9 +43,9 @@ _ANIM_CSS = """
 .mc-stat-card.mc-tilting::after{ opacity:1; }
 .mc-stat-card > *{ position: relative; z-index:1; }
 section[data-testid="stSidebar"] [data-testid="stExpander"]{ transition: transform .15s ease; }
-section[data-testid="stSidebar"] [data-testid="stExpander"]:hover{ transform: translateX(4px); }
+@media (hover: hover){ section[data-testid="stSidebar"] [data-testid="stExpander"]:hover{ transform: translateX(4px); } }
 section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stExpanderIcon"]{ transition: transform .3s cubic-bezier(.22,1,.36,1); }
-section[data-testid="stSidebar"] [data-testid="stExpander"]:hover [data-testid="stExpanderIcon"]{ transform: scale(1.14); }
+@media (hover: hover){ section[data-testid="stSidebar"] [data-testid="stExpander"]:hover [data-testid="stExpanderIcon"]{ transform: scale(1.14); } }
 
 /* Primary / Run button (⑥): play-icon + label nudge on hover, gentle press on
    active — transform only. */
@@ -121,7 +121,10 @@ section[data-testid="stSidebar"] [data-testid="stExpander"]:hover [data-testid="
 @keyframes mcCheckPop{ 0%{transform:scale(.7)} 60%{transform:scale(1.12)} 100%{transform:scale(1)} }
 
 /* ---------------- Tooltip / toast (㉘㉗) ---------------- */
-[data-baseweb="tooltip"], [data-testid="stTooltipContent"]{
+/* Animate the INNER content only: [data-baseweb="tooltip"] is positioned by
+   popper via an inline transform, and a fill-forwards `transform: none`
+   keyframe on it overrides that and pins the tooltip to the page's top-left. */
+[data-testid="stTooltipContent"]{
   animation: mcTipIn .16s ease-out both; transform-origin: top center; }
 @keyframes mcTipIn{ 0%{opacity:0;transform:scale(.92) translateY(-2px)} 100%{opacity:1;transform:none} }
 [data-testid="stToast"]{ animation: mcToastIn .38s cubic-bezier(.22,.61,.36,1) both; }

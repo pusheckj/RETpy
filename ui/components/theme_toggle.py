@@ -187,9 +187,11 @@ details summary,
     border-color: #47434f !important;
     color: #e8e3da !important;
 }
-summary:hover,
-[data-testid="stExpander"] summary:hover {
-    background-color: #3d3947 !important;
+@media (hover: hover) {
+    summary:hover,
+    [data-testid="stExpander"] summary:hover {
+        background-color: #3d3947 !important;
+    }
 }
 
 /* Inputs: number_input, text_input, text_area */
@@ -332,10 +334,41 @@ button[data-testid="stNumberInputStepDown"] {
     color: #a89f95 !important;
 }
 
+/* st.segmented_control: unselected segments default to the light theme's cream
+   surface; give them the dark tile with muted text (selected keeps its teal). */
+[data-testid="stBaseButton-segmented_control"] {
+    background-color: var(--mc-tile) !important;
+    border-color: var(--mc-tile-border) !important;
+}
+[data-testid="stBaseButton-segmented_control"],
+[data-testid="stBaseButton-segmented_control"] p { color: var(--mc-muted) !important; }
+[data-testid="stBaseButton-segmented_controlActive"] p { color: #2dd4bf !important; }
+@media (hover: hover) {
+    [data-testid="stBaseButton-segmented_control"]:hover { background-color: #3d3947 !important; }
+    [data-testid="stBaseButton-segmented_control"]:hover p { color: var(--mc-ink) !important; }
+}
+
+/* Help tooltips: the popup box defaults to the light cream surface (the text
+   was already light, so it vanished); "?" icons need more presence on dark. */
+[data-baseweb="tooltip"] > div {
+    background-color: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+}
+[data-testid="stTooltipContent"],
+[data-testid="stTooltipContent"] * { color: var(--mc-ink) !important; }
+[data-testid="stTooltipIcon"] svg { color: var(--mc-muted) !important; opacity: 1 !important; }
+
 /* Data editor */
 [data-testid="stDataFrame"],
 [data-testid="stDataEditor"] {
     background-color: #2a2733 !important;
+}
+/* st.dataframe draws on a canvas using the (light) config theme, which CSS
+   can't recolor; invert it (hue-rotate keeps the accents' hues) so cells,
+   header and text follow the dark theme. */
+[data-testid="stDataFrame"] [data-testid="stDataFrameResizable"],
+[data-testid="stDataEditor"] [data-testid="stDataFrameResizable"] {
+    filter: invert(0.92) hue-rotate(180deg);
 }
 
 /* Divider */
