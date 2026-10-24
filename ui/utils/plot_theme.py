@@ -252,7 +252,10 @@ def _x_extent(fig):
     """(lo, hi) of the x data / explicit x range, or None when not numeric."""
     rng = fig.layout.xaxis.range
     if rng is not None and len(rng) == 2:
-        return float(rng[0]), float(rng[1])
+        try:
+            return float(rng[0]), float(rng[1])
+        except (TypeError, ValueError):
+            return None  # date axis
     lo = hi = None
     for tr in fig.data or []:
         xs = getattr(tr, "x", None)
@@ -498,6 +501,9 @@ def show_chart(st, fig, key: str, config: dict | None = None) -> None:
     import copy
     config = PLOTLY_CONFIG if config is None else config
     build = fig if callable(fig) else (lambda compact, _f=fig: copy.deepcopy(_f))
+    if not hasattr(st, "container"):  # stub st (tests / print): regular chart only
+        st.plotly_chart(style_fig(build(False), st), width="stretch", config=config, key=key)
+        return
     with st.container(key=f"mc-wide-{key}"):
         st.plotly_chart(style_fig(build(False), st), width="stretch", config=config, key=key)
     with st.container(key=f"mc-narrow-{key}"):

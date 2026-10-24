@@ -358,7 +358,7 @@ def test_savings_projection_cum_line_is_theme_aware():
     # The line must use the computed color, not the hardcoded near-black.
     assert re.search(r"line=dict\(color=cum_color", src)
     # And the chart key must carry the theme so uirevision doesn't keep it.
-    assert re.search(r"key=f\"\{chart_key\}_\{'dk' if dark else 'lt'\}\"", src)
+    assert re.search(r"f\"\{chart_key\}_\{'dk' if dark else 'lt'\}\"", src)
 
 
 # ==========================================================================
@@ -614,7 +614,7 @@ def test_first_decade_subtitle_wraps_and_header_is_short():
     assert len(lines) >= 3
     for i, line in enumerate(lines):
         visible = re.sub(r"<[^>]+>", "", line)
-        assert len(visible) <= (pt._TITLE_CHARS if i == 0 else pt._SUB_CHARS), line
+        assert len(visible) <= (pt._TITLE_CHARS[False] if i == 0 else pt._SUB_CHARS[False]), line
     assert '"Unlucky (P10)"' in src, "long dataframe header was clipped"
     assert "10th percentile (unlucky)" not in src, "legend name still too long"
 
