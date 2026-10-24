@@ -600,12 +600,21 @@ def test_first_decade_subtitle_wraps_and_header_is_short():
     src = _read("ui", "components", "first_decade_stress.py")
     title = re.search(r"text=\"<b>First-decade stress[^\"]*\"(?:\s*\"[^\"]*\")*", src, re.S)
     assert title, "title block not found"
-    # The subtitle span must contain an explicit line break.
-    span = src[title.start():title.end()]
-    assert span.count("<br>") >= 2, (
-        "a single-line subtitle measured ~778px inside a 732px chart at 1280 "
-        "and the SVG clipped it mid-word"
-    )
+    # Titles are wrapped centrally by plot_theme.style_fig (Plotly never wraps
+    # them): no rendered title/subtitle line may exceed the safe width, which
+    # replaces the old hand-placed <br> that guarded against the 778px clip.
+    import plotly.graph_objects as go
+    from utils import plot_theme as pt
+    text = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', src[title.start():title.end()])[0:])
+    text = text.replace("text=", "", 1)
+    fig = go.Figure()
+    fig.update_layout(title=dict(text=text), height=400, margin=dict(t=100))
+    pt._wrap_title(fig)
+    lines = re.split(r"<br>", fig.layout.title.text)
+    assert len(lines) >= 3
+    for i, line in enumerate(lines):
+        visible = re.sub(r"<[^>]+>", "", line)
+        assert len(visible) <= (pt._TITLE_CHARS if i == 0 else pt._SUB_CHARS), line
     assert '"Unlucky (P10)"' in src, "long dataframe header was clipped"
     assert "10th percentile (unlucky)" not in src, "legend name still too long"
 

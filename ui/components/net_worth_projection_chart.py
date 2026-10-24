@@ -35,9 +35,9 @@ except ImportError:  # pragma: no cover
 
 
 try:
-    from utils.plot_theme import assign_colors, PLOTLY_CONFIG
+    from utils.plot_theme import concept_color, PLOTLY_CONFIG
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import assign_colors, PLOTLY_CONFIG  # type: ignore
+    from ui.utils.plot_theme import concept_color, PLOTLY_CONFIG  # type: ignore
 
 
 # Account display order (bottom → top of stack) and keys. Colors are
@@ -47,11 +47,11 @@ ACCOUNTS = [
     ("Your Roth IRA",      "YOUR_ROTH_IRA",        "YOUR_BACKDOOR_ROTH",            None),
     ("Your Traditional IRA","YOUR_TRADITIONAL_IRA", None,                           None),
     ("Your HSA",           "YOUR_HSA",             "YOUR_HSA_CONTRIBUTION",         None),
-    ("Your Brokerage",     "YOUR_BROKERAGE",       "YOUR_BROKERAGE_CONTRIBUTION",   None),
+    ("Your taxable brokerage", "YOUR_BROKERAGE",       "YOUR_BROKERAGE_CONTRIBUTION",   None),
     ("Your Cash",          "YOUR_CASH",            None,                            None),
     ("Partner 401(k)",     "PARTNER_401K",         "PARTNER_401K_CONTRIBUTION",     None),
     ("Partner Roth IRA",   "PARTNER_ROTH_IRA",     "PARTNER_ROTH_CONTRIBUTION",     None),
-    ("Partner Brokerage",  "PARTNER_BROKERAGE",    "PARTNER_BROKERAGE_CONTRIBUTION",None),
+    ("Partner taxable brokerage", "PARTNER_BROKERAGE",    "PARTNER_BROKERAGE_CONTRIBUTION",None),
     ("Partner Cash",       "PARTNER_CASH",         None,                            None),
     ("Home equity",        "_HOME_EQUITY",         None,                            None),  # special-cased
 ]
@@ -149,7 +149,7 @@ def _vacation_outlay(overrides: dict, age: int, retirement_age: int) -> float:
         return float(cfg.calculate_retirement_vacation(age, retirement_age))
 
 
-_DRAW_ORDER_TAIL = ("Partner Cash", "Your Brokerage", "Partner Brokerage",
+_DRAW_ORDER_TAIL = ("Partner Cash", "Your taxable brokerage", "Partner taxable brokerage",
                     "Your 401(k)", "Partner 401(k)")
 
 
@@ -374,7 +374,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
     fig = go.Figure()
     # Assign palette colors in series order (bottom → top of stack) at render
     # time so we read the user's active palette.
-    account_colors = assign_colors([label for label, _, _, _ in ACCOUNTS], st)
+    account_colors = {label: concept_color(label, st) for label, _, _, _ in ACCOUNTS}
     for label, _, _, _ in ACCOUNTS:
         ys = proj["by_account"][label]
         if not any(v > 0 for v in ys):

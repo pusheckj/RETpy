@@ -40,9 +40,9 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
 
 try:
-    from utils.plot_theme import series_color
+    from utils.plot_theme import series_color, concept_color
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import series_color  # type: ignore
+    from ui.utils.plot_theme import series_color, concept_color  # type: ignore
 
 
 # Visualization order + colors. Keys here are stable labels used by the
@@ -52,10 +52,10 @@ ALLOCATION_ORDER = [
     ("Your 401(k) match",    "YOUR_401K_MATCH_DERIVED",         "you"),
     ("Your HSA",             "YOUR_HSA_CONTRIBUTION",           "you"),
     ("Your Roth (backdoor)", "YOUR_BACKDOOR_ROTH",              "you"),
-    ("Your brokerage",       "YOUR_BROKERAGE_CONTRIBUTION",     "you"),
+    ("Your taxable brokerage","YOUR_BROKERAGE_CONTRIBUTION",     "you"),
     ("Partner 401(k)",       "PARTNER_401K_CONTRIBUTION",       "partner"),
     ("Partner Roth IRA",     "PARTNER_ROTH_CONTRIBUTION",       "partner"),
-    ("Partner brokerage",    "PARTNER_BROKERAGE_CONTRIBUTION",  "partner"),
+    ("Partner taxable brokerage","PARTNER_BROKERAGE_CONTRIBUTION",  "partner"),
 ]
 
 def get_allocation_colors(st) -> dict:
@@ -63,7 +63,7 @@ def get_allocation_colors(st) -> dict:
     so allocation colors follow the user's palette and stay consistent with the
     projection chart. Read at render time so it reacts to the palette picker.
     """
-    return {label: series_color(i, st) for i, (label, _, _) in enumerate(ALLOCATION_ORDER)}
+    return {label: concept_color(label, st, fallback=series_color(i, st)) for i, (label, _, _) in enumerate(ALLOCATION_ORDER)}
 
 
 def _allocation_for_year(user_overrides: dict, age_offset: int) -> dict:
@@ -93,10 +93,10 @@ def _allocation_for_year(user_overrides: dict, age_offset: int) -> dict:
         "Your 401(k) match":    your_match,
         "Your HSA":             your_hsa,
         "Your Roth (backdoor)": your_roth,
-        "Your brokerage":       your_brk,
+        "Your taxable brokerage":       your_brk,
         "Partner 401(k)":       partner_401k,
         "Partner Roth IRA":     partner_roth,
-        "Partner brokerage":    partner_brk,
+        "Partner taxable brokerage":    partner_brk,
     }
 
 
@@ -175,7 +175,7 @@ def render_body(st) -> None:
         _account_input(st, "Partner Roth IRA ($/yr)", "sr_partner_roth",
                        "PARTNER_ROTH_CONTRIBUTION", 0, 10_000, 500)
     with col4:
-        _account_input(st, "Partner brokerage ($/yr)", "sr_partner_brk",
+        _account_input(st, "Partner taxable brokerage ($/yr)", "sr_partner_brk",
                        "PARTNER_BROKERAGE_CONTRIBUTION", 0, 500_000, 1_000)
 
     # Inflation toggle

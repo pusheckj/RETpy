@@ -66,7 +66,8 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
         ),
         height=440,
         margin=dict(l=50, r=30, t=80, b=50),
-        xaxis=dict(title="Age", zeroline=False),
+        xaxis=dict(title="Age", zeroline=False,
+                   range=[min(p[0][0] for p in paths if p), max(p[-1][0] for p in paths if p)]),
         yaxis=dict(title="Portfolio value", zeroline=False, tickformat="$,.3~s"),
         hovermode="closest",
     )

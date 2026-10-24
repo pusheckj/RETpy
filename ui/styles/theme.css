@@ -367,6 +367,16 @@ section[data-testid="stSidebar"] .stTextInput input {
     min-height: 44px;
 }
 
+/* Multiselect matches the selectbox (white field, soft border); a smaller
+   radius than the pill so wrapped chips don't poke out of the corners. */
+.stMultiSelect [data-baseweb="select"] > div {
+    background-color: #ffffff;
+    border: 1px solid var(--mc-tile-border);
+    border-radius: 22px;
+    padding: 4px 14px;
+    min-height: 44px;
+}
+
 .stNumberInput input:focus,
 .stTextInput input:focus,
 .stTextArea textarea:focus {

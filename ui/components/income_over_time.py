@@ -39,9 +39,9 @@ except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, as_fraction
 
 try:
-    from utils.plot_theme import style_fig, assign_colors, PLOTLY_CONFIG
+    from utils.plot_theme import style_fig, concept_color, PLOTLY_CONFIG
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import style_fig, assign_colors, PLOTLY_CONFIG
+    from ui.utils.plot_theme import style_fig, concept_color, PLOTLY_CONFIG
 
 
 # --- Ordered source labels (stacking order, bottom -> top). Working-years
@@ -324,7 +324,7 @@ def build_figure(
     if roth_conversion is not None and any((v or 0) > 0 for v in roth_conversion):
         fig.add_trace(go.Scatter(
             x=ages, y=roth_conversion,
-            name="Roth conversion (transfer, not income)",
+            name="Roth conversion (transfer)",
             mode="lines+markers",
             line=dict(color="#7c3aed", dash="dot", width=2),
             marker=dict(size=5, symbol="diamond", color="#7c3aed"),
@@ -379,7 +379,7 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
     inflation_rate = as_fraction(overrides.get("EXPECTED_INFLATION", 0.0275), 0.0275)
 
     # Assign palette colors at render time so they follow the runtime palette.
-    colors = assign_colors(_ALL_LABELS, st)
+    colors = {l: concept_color(l, st) for l in _ALL_LABELS}
 
     ages = list(range(current_age, plan_until + 1))
     if not ages:

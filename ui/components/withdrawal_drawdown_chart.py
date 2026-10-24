@@ -4,9 +4,9 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 try:
-    from utils.plot_theme import style_fig, assign_colors, PLOTLY_CONFIG
+    from utils.plot_theme import style_fig, concept_color, PLOTLY_CONFIG
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import style_fig, assign_colors, PLOTLY_CONFIG
+    from ui.utils.plot_theme import style_fig, concept_color, PLOTLY_CONFIG
 
 
 def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> None:
@@ -53,7 +53,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> No
         ("Roth", "roth"),
         ("HSA", "hsa"),
     ]
-    colors = assign_colors([label for label, _ in sources], st)
+    colors = {label: concept_color(label, st) for label, _ in sources}
     # The forced band is a CONSTRAINT, not a portfolio choice — give it a fixed
     # amber rather than a categorical palette color so it reads as "imposed".
     _RMD_LABEL = "RMD (IRS-forced)"
@@ -111,7 +111,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> No
             for d, r in zip(conversion_dollars, rows)
         ]
         fig.add_trace(go.Scatter(
-            x=ages, y=conversion_pcts, name="Roth conversion (transfer, not spending)",
+            x=ages, y=conversion_pcts, name="Roth conversion (transfer)",
             mode="lines+markers", line=dict(color="#7c3aed", dash="dot", width=2),
             marker=dict(size=5, symbol="diamond"),
             customdata=conversion_dollars,

@@ -58,10 +58,10 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
         "Your 401(k) match",
         "Your HSA",
         "Your Roth (backdoor)",
-        "Your brokerage",
+        "Your taxable brokerage",
         "Partner 401(k)",
         "Partner Roth IRA",
-        "Partner brokerage",
+        "Partner taxable brokerage",
     ]
 
     # KPI strip
@@ -70,7 +70,7 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
     today_total = sum(first_breakdown.values())
     today_tax_adv = sum(
         v for k, v in first_breakdown.items()
-        if k not in ("Your brokerage", "Partner brokerage", "Your 401(k) match")
+        if k not in ("Your taxable brokerage", "Partner taxable brokerage", "Your 401(k) match")
     )
     with cols[0]:
         st.metric("Mode", str(overrides.get("SAVINGS_RATE_MODE", "percent")).title())
@@ -104,7 +104,7 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
     fig.add_trace(go.Scatter(
         x=ages,
         y=cumulative,
-        name="Cumulative (no growth)",
+        name="Cumulative total",
         mode="lines",
         line=dict(color=cum_color, width=2.5, dash="dot"),
         hovertemplate="Age %{x}<br>Cumulative: $%{y:,.0f}<extra></extra>",

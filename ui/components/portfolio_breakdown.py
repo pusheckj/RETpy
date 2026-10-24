@@ -7,9 +7,9 @@ from utils.formatting import money
 
 # #7: shared pastel palette for consistent, softer chart series colors.
 try:
-    from utils.plot_theme import PALETTE, assign_colors, is_dark
+    from utils.plot_theme import PALETTE, assign_colors, concept_color, is_dark
 except ImportError:
-    from ui.utils.plot_theme import PALETTE, assign_colors, is_dark
+    from ui.utils.plot_theme import PALETTE, assign_colors, concept_color, is_dark
 
 
 def _get_value(user_overrides: dict, key: str, default: float = 0.0) -> float:
@@ -168,11 +168,11 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         "Your Roth IRA": _get_value(user_overrides, "YOUR_ROTH_IRA"),
         "Your Traditional IRA": _get_value(user_overrides, "YOUR_TRADITIONAL_IRA"),
         "Your HSA": _get_value(user_overrides, "YOUR_HSA"),
-        "Your Brokerage": _get_value(user_overrides, "YOUR_BROKERAGE"),
+        "Your taxable brokerage": _get_value(user_overrides, "YOUR_BROKERAGE"),
         "Your Cash": _get_value(user_overrides, "YOUR_CASH"),
         "Partner 401(k)": _get_value(user_overrides, "PARTNER_401K"),
         "Partner Roth IRA": _get_value(user_overrides, "PARTNER_ROTH_IRA"),
-        "Partner Brokerage": _get_value(user_overrides, "PARTNER_BROKERAGE"),
+        "Partner taxable brokerage": _get_value(user_overrides, "PARTNER_BROKERAGE"),
         "Partner Cash": _get_value(user_overrides, "PARTNER_CASH"),
     }
     home_value = _get_value(user_overrides, "HOME_VALUE")
@@ -186,7 +186,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         + accounts["Your HSA"] + accounts["Partner 401(k)"] + accounts["Partner Roth IRA"]
     )
     _today_nonret = (
-        accounts["Your Brokerage"] + accounts["Partner Brokerage"]
+        accounts["Your taxable brokerage"] + accounts["Partner taxable brokerage"]
         + accounts["Your Cash"] + accounts["Partner Cash"]
     )
     _today_net_worth = sum(accounts.values()) + _today_home_equity
@@ -223,7 +223,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         accounts["Your 401(k)"], accounts["Your Roth IRA"], accounts["Your Traditional IRA"], accounts["Your HSA"],
         accounts["Partner 401(k)"], accounts["Partner Roth IRA"],
     ])
-    taxable_sum = accounts["Your Brokerage"] + accounts["Partner Brokerage"]
+    taxable_sum = accounts["Your taxable brokerage"] + accounts["Partner taxable brokerage"]
     cash_sum = accounts["Your Cash"] + accounts["Partner Cash"]
     net_worth = sum(accounts.values()) + home_equity
 
@@ -282,28 +282,25 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         category_labels = ["Retirement", "Taxable brokerage", "Cash", "Home equity"]
         category_values = [retirement_sum, taxable_sum, cash_sum, home_equity]
         # #7: pastel palette, assigned by category name for consistency.
-        _cat_map = assign_colors(category_labels, st)
-        category_colors = [_cat_map[name] for name in category_labels]
+        category_colors = [concept_color(name, st) for name in category_labels]
         fig1 = go.Figure(data=[go.Pie(
             labels=category_labels, values=category_values,
             hole=0.5, marker=dict(colors=category_colors, line=dict(color="#ffffff", width=2)),
             textinfo="none", hovertemplate="<b>%{label}</b><br>%{value:$,.0f}<br>%{percent}<extra></extra>",
-            # Donut in the LEFT ~half so the legend has room on the RIGHT.
-            domain=dict(x=[0.0, 0.48], y=[0.0, 1.0]),
+            # Full-width donut; legend BELOW so long names never clip on a phone.
+            domain=dict(x=[0.0, 1.0], y=[0.26, 1.0]),
         )])
         fig1.update_layout(
             title=dict(text="<b>By category</b>", x=0.0, xanchor="left", y=0.97, yanchor="top", font=dict(size=15)),
             # Fixed height matches the "By account" bar card (340) so the two
-            # cards align. width="content" below keeps Plotly from autosize-growing
-            # the SVG height; the CARD is stretched to the column via theme.css.
-            width=440, height=340, autosize=False,
+            # cards align; the CARD is stretched to the column via theme.css.
+            height=340,
             margin=dict(l=10, r=10, t=56, b=18),
             # $ total centered in the donut hole. xanchor=center so x is the text
-            # CENTER (the default auto-anchor pushed it right); x = the donut's
-            # center = the middle of the left-0.54 domain (0.27).
-            annotations=[dict(text=money(net_worth, shorten=True), x=0.24, xanchor="center", y=0.5, yanchor="middle", font=dict(size=18, family="Inter"), showarrow=False)],
+            # CENTER; x/y = the donut's center (domain x 0-1, y 0.26-1).
+            annotations=[dict(text=money(net_worth, shorten=True), x=0.5, xanchor="center", y=0.63, yanchor="middle", font=dict(size=18, family="Inter"), showarrow=False)],
             # Legend vertically centered on the RIGHT.
-            legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=0.52,
+            legend=dict(orientation="h", yanchor="top", y=0.22, xanchor="center", x=0.5,
                         font=dict(size=12.5), itemsizing="constant"),
             uirevision="keep",
         )
@@ -312,23 +309,22 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         except ImportError:
             from ui.utils.plot_theme import style_fig
         fig1 = style_fig(fig1, st)
-        st.plotly_chart(fig1, width="content", key=f"{chart_key}_category", config={"displayModeBar": False})
+        st.plotly_chart(fig1, width="stretch", key=f"{chart_key}_category", config={"displayModeBar": False})
 
     with pie_cols[1]:
         # #17: "By account" as a HORIZONTAL BAR chart, sorted by value descending.
         # #7: pastel palette, assigned by account name for consistency.
         acct_labels, acct_values, acct_colors = [], [], []
         all_names = list(accounts.keys()) + ["Home equity"]
-        _acct_map = assign_colors(all_names, st)
         for name, val in accounts.items():
             if val > 0:
                 acct_labels.append(name)
                 acct_values.append(val)
-                acct_colors.append(_acct_map[name])
+                acct_colors.append(concept_color(name, st))
         if home_equity > 0:
             acct_labels.append("Home equity")
             acct_values.append(home_equity)
-            acct_colors.append(_acct_map["Home equity"])
+            acct_colors.append(concept_color("Home equity", st))
 
         if not acct_values:
             st.info("No account balances to display. Enter your current balances in the sidebar.")
@@ -351,13 +347,13 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         )])
         fig2.update_layout(
             title=dict(text="<b>By account</b>", x=0.0, xanchor="left", y=0.97, yanchor="top", font=dict(size=15)),
-            height=340, margin=dict(l=20, r=40, t=64, b=20),
+            height=340, margin=dict(l=20, r=56, t=64, b=30),
             bargap=0.35, showlegend=False,
             uirevision="keep",
         )
         # Headroom on the x-axis so the outside $ labels are not clipped.
         _max = max(bar_values) if bar_values else 0
-        fig2.update_xaxes(tickformat="$,.3~s", range=[0, _max * 1.18] if _max else None)
+        fig2.update_xaxes(tickformat="$,.3~s", nticks=4, tickangle=0, range=[0, _max * 1.4] if _max else None)
         fig2.update_yaxes(tickfont=dict(size=13), automargin=True)
         try:
             from utils.plot_theme import style_fig

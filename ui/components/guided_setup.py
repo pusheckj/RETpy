@@ -399,13 +399,13 @@ _YOUR_ACCOUNTS = [
     ("gs_roth", "YOUR_ROTH_IRA", "Roth IRA"),
     ("gs_trad", "YOUR_TRADITIONAL_IRA", "Traditional IRA"),
     ("gs_hsa_bal", "YOUR_HSA", "HSA (health savings account)"),
-    ("gs_brk", "YOUR_BROKERAGE", "Regular investment account"),
+    ("gs_brk", "YOUR_BROKERAGE", "Taxable brokerage account"),
     ("gs_cash", "YOUR_CASH", "Checking and savings"),
 ]
 _PARTNER_ACCOUNTS = [
     ("gs_p401k", "PARTNER_401K", "Their 401(k) or 403(b)"),
     ("gs_proth", "PARTNER_ROTH_IRA", "Their Roth IRA"),
-    ("gs_pbrk", "PARTNER_BROKERAGE", "Their investment account"),
+    ("gs_pbrk", "PARTNER_BROKERAGE", "Their taxable brokerage account"),
     ("gs_pcash", "PARTNER_CASH", "Their checking and savings"),
 ]
 
