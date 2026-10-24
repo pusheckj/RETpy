@@ -262,8 +262,10 @@ def savings_budget(overrides: dict, custom_pcts: Dict[str, float] = None) -> Dic
     the simulation has to fund by selling investments).
 
     Returns {"income", "taxes" (a compute_taxes dict), "expenses",
-    "disposable" (int), "amounts" (account amounts for that left),
-    "set_aside" ({label: dollars})}.
+    "disposable" (int), "amounts", "set_aside" ({label: dollars})}.
+    ``amounts`` are this year's contributions as the simulation makes them:
+    in the two auto modes the brokerage keys are its sweep of everything left
+    (not a floor to store -- see sec_savings._render_auto).
     """
     income = compute_total_income(overrides)
     expenses = compute_expenses_today(overrides)
@@ -301,9 +303,20 @@ def savings_budget(overrides: dict, custom_pcts: Dict[str, float] = None) -> Dic
     deferral = amounts.get("YOUR_401K_CONTRIBUTION", overrides.get("YOUR_401K_CONTRIBUTION", 0))
     set_aside = {COLLEGE_529_LABEL: college,
                  AFTER_TAX_401K_LABEL: after_tax_401k_this_year(overrides, safe_int(deferral, 0))}
+    set_aside = {k: v for k, v in set_aside.items() if v > 0}
+    if mode == KEEP_AMOUNTS_MODE:
+        # Your amounts stay; the simulation invests the rest in the brokerage.
+        kept = {k: max(0, safe_int(overrides.get(k, 0), 0)) for k in CONTRIBUTION_KEYS
+                if "BROKERAGE" not in k}
+        if safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0:
+            kept["PARTNER_ROTH_CONTRIBUTION"] = int(min(
+                kept["PARTNER_ROTH_CONTRIBUTION"], partner_roth_allowed(overrides, kept)))
+        else:
+            kept["PARTNER_401K_CONTRIBUTION"] = kept["PARTNER_ROTH_CONTRIBUTION"] = 0
+        sweep = int(max(0.0, left - sum(kept.values()) - sum(set_aside.values())))
+        amounts = {**kept, **split_brokerage(sweep, overrides, kept, sum(set_aside.values()))}
     return {"income": income, "taxes": taxes, "expenses": expenses,
-            "disposable": left, "amounts": amounts,
-            "set_aside": {k: v for k, v in set_aside.items() if v > 0}}
+            "disposable": left, "amounts": amounts, "set_aside": set_aside}
 
 
 # IRS limits (2024)
@@ -361,6 +374,8 @@ _MANUAL_WIDGETS = {
     "YOUR_401K_CONTRIBUTION": "sv_manual_your_401k",
     "YOUR_HSA_CONTRIBUTION": "sv_manual_your_hsa",
     "PARTNER_401K_CONTRIBUTION": "sv_manual_partner_401k",
+    "YOUR_BACKDOOR_ROTH": "sv_manual_your_roth",
+    "PARTNER_ROTH_CONTRIBUTION": "sv_manual_partner_roth",
 }
 
 
@@ -443,6 +458,58 @@ def partner_roth_allowed(overrides: dict, amounts: dict) -> float:
     return max(0.0, min(allowed, earned))
 
 
+def split_brokerage(remaining: int, overrides: dict, allocated: dict,
+                    set_aside: float = 0) -> Dict[str, int]:
+    """Split ``remaining`` between your and your partner's brokerage.
+
+    The couple SPLITS EXPENSES EVENLY, so each person covers HALF of household
+    expenses from their own take-home and banks their OWN remainder in their
+    OWN brokerage -> the residual lands MOSTLY in the higher earner's account
+    (entirely, if the other's take-home only covers their half), NOT 50/50.
+    The same split as the simulation's sweep
+    (account_simulation.simulate_accumulation_year): each person's take-home
+    after the 401(k)/HSA in ``allocated`` and their own Roth (and, for you,
+    the 529 and after-tax 401(k) in ``set_aside``). Falls back to an even
+    split only when no per-person income breakdown is available.
+    """
+    has_partner = safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0
+    out = {"YOUR_BROKERAGE_CONTRIBUTION": 0, "PARTNER_BROKERAGE_CONTRIBUTION": 0}
+    if remaining > 0:
+        if has_partner:
+            your_gross = sum(safe_int(overrides.get(k, 0), 0) for k in
+                             ("YOUR_BASE_SALARY", "YOUR_BONUS_AMOUNT", "YOUR_RSU_AMOUNT", "YOUR_OTHER_INCOME"))
+            partner_gross = sum(safe_int(overrides.get(k, 0), 0) for k in
+                                ("PARTNER_BASE_SALARY", "PARTNER_BONUS_AMOUNT", "PARTNER_RSU_AMOUNT", "PARTNER_OTHER_INCOME"))
+            exp = float(compute_expenses_today(overrides))
+            if bool(overrides.get("PRIMARY_PAYS_HOUSING", False)):
+                # Primary covers the full mortgage; only the rest is split evenly.
+                mortgage = 12.0 * safe_int(overrides.get("MORTGAGE_MONTHLY", 0), 0)
+                rest = max(0.0, exp - mortgage)
+                your_exp = mortgage + 0.5 * rest
+                partner_exp = 0.5 * rest
+            else:
+                your_exp = partner_exp = 0.5 * exp
+            pay = cfg.working_year_taxes(**_working_tax_inputs({**overrides, **allocated}))
+            your_cap = max(0.0, pay["you"]["take_home"]
+                           - float(allocated.get("YOUR_BACKDOOR_ROTH", 0)) - float(set_aside))
+            partner_cap = max(0.0, pay["partner"]["take_home"]
+                              - float(allocated.get("PARTNER_ROTH_CONTRIBUTION", 0)))
+            your_left = max(0.0, your_cap - your_exp)
+            partner_left = max(0.0, partner_cap - partner_exp)
+            leftover_total = your_left + partner_left
+            if your_gross + partner_gross <= 0:
+                your_amt = remaining // 2            # no breakdown -> keep even split
+            elif leftover_total > 0:
+                your_amt = int(round(remaining * your_left / leftover_total))
+            else:
+                your_amt = remaining                 # neither covers their half -> primary banks it
+            out["YOUR_BROKERAGE_CONTRIBUTION"] = your_amt
+            out["PARTNER_BROKERAGE_CONTRIBUTION"] = remaining - your_amt
+        else:
+            out["YOUR_BROKERAGE_CONTRIBUTION"] = remaining
+    return out
+
+
 def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0) -> Dict[str, int]:
     """Default allocation rule: max tax-advantaged first, residual to brokerage.
 
@@ -515,48 +582,9 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
 
     remaining = max(0, remaining - int(round(set_aside)))
 
-    # 6. Brokerage (residual). The couple SPLITS EXPENSES EVENLY, so each person
-    #    covers HALF of household expenses from their own take-home and banks
-    #    their OWN remainder in their OWN brokerage -> the residual lands MOSTLY
-    #    in the higher earner's account (entirely, if the other's take-home only
-    #    covers their half), NOT 50/50. The same split as the simulation's sweep
-    #    (account_simulation.simulate_accumulation_year): each person's
-    #    take-home after their own Roth (and, for you, the 529 and after-tax
-    #    401(k) in ``set_aside``). Falls back to an even split only when no
-    #    per-person income breakdown is available.
+    # 6. Brokerage (residual), split between you as the simulation splits it.
     if remaining > 0:
-        if has_partner:
-            your_gross = sum(safe_int(overrides.get(k, 0), 0) for k in
-                             ("YOUR_BASE_SALARY", "YOUR_BONUS_AMOUNT", "YOUR_RSU_AMOUNT", "YOUR_OTHER_INCOME"))
-            partner_gross = sum(safe_int(overrides.get(k, 0), 0) for k in
-                                ("PARTNER_BASE_SALARY", "PARTNER_BONUS_AMOUNT", "PARTNER_RSU_AMOUNT", "PARTNER_OTHER_INCOME"))
-            exp = float(compute_expenses_today(overrides))
-            if bool(overrides.get("PRIMARY_PAYS_HOUSING", False)):
-                # Primary covers the full mortgage; only the rest is split evenly.
-                mortgage = 12.0 * safe_int(overrides.get("MORTGAGE_MONTHLY", 0), 0)
-                rest = max(0.0, exp - mortgage)
-                your_exp = mortgage + 0.5 * rest
-                partner_exp = 0.5 * rest
-            else:
-                your_exp = partner_exp = 0.5 * exp
-            pay = cfg.working_year_taxes(**_working_tax_inputs({**overrides, **allocated}))
-            your_cap = max(0.0, pay["you"]["take_home"]
-                           - allocated["YOUR_BACKDOOR_ROTH"] - float(set_aside))
-            partner_cap = max(0.0, pay["partner"]["take_home"]
-                              - allocated["PARTNER_ROTH_CONTRIBUTION"])
-            your_left = max(0.0, your_cap - your_exp)
-            partner_left = max(0.0, partner_cap - partner_exp)
-            leftover_total = your_left + partner_left
-            if your_gross + partner_gross <= 0:
-                your_amt = remaining // 2            # no breakdown -> keep even split
-            elif leftover_total > 0:
-                your_amt = int(round(remaining * your_left / leftover_total))
-            else:
-                your_amt = remaining                 # neither covers their half -> primary banks it
-            allocated["YOUR_BROKERAGE_CONTRIBUTION"] = your_amt
-            allocated["PARTNER_BROKERAGE_CONTRIBUTION"] = remaining - your_amt
-        else:
-            allocated["YOUR_BROKERAGE_CONTRIBUTION"] = remaining
+        allocated.update(split_brokerage(remaining, overrides, allocated, set_aside))
 
     return allocated
 

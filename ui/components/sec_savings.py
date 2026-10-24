@@ -209,9 +209,14 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
     allocation = budget["amounts"]
     set_aside = budget.get("set_aside", {})
 
-    # Push the auto-derived amounts into user_overrides so the simulator picks them up.
+    # Push the auto-derived amounts into user_overrides so the simulator picks
+    # them up -- except the brokerage. Like "keep my amounts", the simulation
+    # invests everything left each year (its brokerage sweep), so the figure
+    # shown is this year's sweep, not a minimum to store: stored, the engine
+    # enforces it as a floor in EVERY working year and sells investments to
+    # fund it whenever a later year leaves less (a new home, children).
     for key, amount in allocation.items():
-        set_override(st, key, int(amount))
+        set_override(st, key, 0 if "BROKERAGE" in key else int(amount))
 
     st.caption(
         "Fills accounts in order: **401(k) → HSA → IRA/Roth → Brokerage "

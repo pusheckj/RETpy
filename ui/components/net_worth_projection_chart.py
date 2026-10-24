@@ -24,13 +24,15 @@ try:
     from utils.coerce import safe_int, safe_float
     from utils.derived import (advance_mortgage_with_extra, current_mortgage_terms,
                                mortgage_payment, housing_timeline,
-                               extra_mortgage_for_age as _extra_for_age)
+                               extra_mortgage_for_age as _extra_for_age,
+                               savings_budget, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
     from utils.formatting import money
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float  # type: ignore
     from ui.utils.derived import (advance_mortgage_with_extra,  # type: ignore
                                   current_mortgage_terms, mortgage_payment, housing_timeline,
-                                  extra_mortgage_for_age as _extra_for_age)
+                                  extra_mortgage_for_age as _extra_for_age,
+                                  savings_budget, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
     from ui.utils.formatting import money  # type: ignore
 
 
@@ -75,8 +77,10 @@ def _expected_return_for(account_label: str, scenario_returns: dict) -> float:
     return scenario_returns["investment"]
 
 
-def _employer_match(overrides: dict, age_offset: int) -> float:
-    """Approximate annual employer 401(k) match in real dollars."""
+def _employer_match(overrides: dict, age_offset: int, deferral: float = None) -> float:
+    """Approximate annual employer 401(k) match in real dollars: dollar for
+    dollar on your ``deferral``, up to the match % of base pay -- the
+    simulation's rule (account_simulation.working_year_cashflow)."""
     base = safe_int(overrides.get("YOUR_BASE_SALARY", 0), 0)
     if base == 0:
         # fall back to a 55% slice of household income
@@ -84,7 +88,9 @@ def _employer_match(overrides: dict, age_offset: int) -> float:
     growth = safe_float(overrides.get("YOUR_SALARY_GROWTH_RATE", 0.02), 0.02)
     salary = base * ((1 + growth) ** age_offset)
     match_pct = safe_float(overrides.get("YOUR_401K_MATCH_PCT", 0.04), 0.04)
-    return salary * match_pct
+    if deferral is None:
+        return salary * match_pct
+    return min(float(deferral), salary * match_pct)
 
 
 # --- Big-purchase / goal event helpers -------------------------------------
@@ -210,6 +216,13 @@ def project_net_worth(user_overrides: dict) -> dict:
     start_age = safe_int(user_overrides.get("YOUR_AGE", 25), 25)
     retirement_age = safe_int(user_overrides.get("TARGET_RETIREMENT_AGE", 60), 60)
     n_years = max(1, retirement_age - start_age + 1)
+
+    # Contributions: the stored amounts, except in the two auto modes, where
+    # the simulation invests everything left in the brokerage (no stored
+    # brokerage figure): use this year's amounts as the Savings section shows them.
+    contributions = dict(user_overrides)
+    if user_overrides.get("SAVINGS_MODE") in (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE):
+        contributions.update(savings_budget(user_overrides)["amounts"])
 
     scenario = str(user_overrides.get("ACTIVE_RETURN_SCENARIO", "historical")).lower()
     if scenario not in _SCENARIO_RETURNS:
@@ -345,7 +358,7 @@ def project_net_worth(user_overrides: dict) -> dict:
             r = _expected_return_for(label, scenario_returns)
             contribution = 0.0
             if contrib_key is not None and offset < n_years - 1:
-                contribution = float(safe_int(user_overrides.get(contrib_key, 0), 0))
+                contribution = float(safe_int(contributions.get(contrib_key, 0), 0))
                 # NOTE: deliberately NOT scaled by SAVINGS_INFLATION_ADJUST.
                 # This loop grows balances at _SCENARIO_RETURNS, which are REAL
                 # (inflation-adjusted) returns — see the chart caption. In a real
@@ -358,7 +371,7 @@ def project_net_worth(user_overrides: dict) -> dict:
                 # is what actually matches the simulation.
                 # Add employer match to Your 401(k)
                 if contrib_key == "YOUR_401K_CONTRIBUTION":
-                    contribution += _employer_match(user_overrides, offset)
+                    contribution += _employer_match(user_overrides, offset, contribution)
             balances[label] = balances[label] * (1 + r) + contribution
 
     return {"ages": ages, "by_account": by_account}

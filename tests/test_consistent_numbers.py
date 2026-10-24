@@ -1,9 +1,17 @@
 """One figure per concept: the numbers different sections show for the same
 thing agree (or are labelled as different things).
 
-* Savings vs Taxes: the Savings summary's tax is the Taxes section's tax, which
-  is the simulation's first working year (working_year_cashflow), and "left to
-  save" is what the simulation saves that year.
+* #10 Savings vs Taxes: the Savings summary's tax is the Taxes section's tax,
+  which is the simulation's first working year (working_year_cashflow); "left
+  to save" is what the simulation saves that year, and the auto allocation is
+  its per-account split (no stored brokerage floor).
+* #6 Savings tiles, stacked bars and savings-rate bars are one sum of the
+  simulation's contributions; the employer match is the engine's.
+* #7 The final-balance table and the stat tiles describe every run; #16 the
+  spending range covers the same runs as the success rate.
+* #9 Every screen shows the horizon the simulation runs to (cfg.plan_end_age).
+* #8 Net worth to retire: wording follows the household; "not reached" is
+  explained.
 """
 import os
 import sys
@@ -37,6 +45,12 @@ def _ui_shaped(name: str) -> dict:
     return ov
 
 
+def _as_stored(amounts: dict) -> dict:
+    """What the Savings section stores in the auto modes: the account amounts,
+    with no brokerage floor (the simulation sweeps what's left)."""
+    return {k: (0 if "BROKERAGE" in k else v) for k, v in amounts.items()}
+
+
 def _comp_table(age: int, base: int) -> dict:
     """A one-row comp table, as the Income section writes it for this base pay."""
     return {int(age): {"base": base, "bonus": 0, "rsu_gross": 0, "total_comp": base, "saved": 0}}
@@ -66,11 +80,41 @@ def _own_savings(row: dict, hsa_match: float) -> float:
 # #10 Savings summary vs Taxes section
 # ---------------------------------------------------------------------------
 class TestSavingsAndTaxesAgree:
+    def test_auto_allocate_stores_no_brokerage_floor(self, monkeypatch):
+        """A stored brokerage figure is a floor the simulation enforces in every
+        working year, selling investments to fund it when a later year leaves
+        less (here the move to a bigger home at 36). Auto-allocate stores none,
+        so each year's savings is exactly what's left that year."""
+        from streamlit.testing.v1 import AppTest
+        monkeypatch.setenv("CONSISTENT_TEST_UI_DIR", _UI)
+        ov = _ui_shaped("sample_household")
+        at = AppTest.from_function(_sidebar_script, default_timeout=60)
+        at.session_state["user_overrides"] = dict(ov)
+        at.run()
+        assert not at.exception, at.exception
+        stored = dict(at.session_state["user_overrides"])
+        assert stored["YOUR_BROKERAGE_CONTRIBUTION"] == 0
+        assert stored["PARTNER_BROKERAGE_CONTRIBUTION"] == 0
+        assert stored["YOUR_401K_CONTRIBUTION"] > 0
+        original = sr._apply_overrides(sr.build_config_overrides(stored))
+        try:
+            for age in range(cfg.YOUR_AGE, int(stored["TARGET_RETIREMENT_AGE"])):
+                cf = asim.working_year_cashflow(age)
+                living = cfg.calculate_annual_expenses(age, 1.0, childcare_factor=1.0)
+                electives = (cf["your_roth"] + cf["your_after_tax_401k"] + cf["partner_roth"]
+                             + cfg.calculate_529_contribution(age))
+                left = cf["your_take_home"] + cf["partner_take_home"] - living - electives
+                row = sr._approximate_savings_contributions(age + 1)[-1]
+                assert row["your_brokerage"] + row["partner_brokerage"] == pytest.approx(
+                    max(0.0, left), abs=1.0), age
+        finally:
+            sr._restore_overrides(original)
+
     @pytest.mark.parametrize("name", FIXTURES)
     def test_one_tax_figure_and_it_is_the_engines(self, name):
         ov = _ui_shaped(name)
         budget = derived.sidebar_savings_budget({"user_overrides": ov})
-        ov.update(budget["amounts"])               # what the Savings section writes
+        ov.update(_as_stored(budget["amounts"]))   # what the Savings section writes
         taxes_section = derived.sidebar_savings_budget({"user_overrides": ov})["taxes"]
         cf, _, _, _ = _engine_year_one(ov)
         assert budget["taxes"]["total"] == pytest.approx(taxes_section["total"], abs=0.01)
@@ -83,7 +127,7 @@ class TestSavingsAndTaxesAgree:
         if not str(ov.get("SAVINGS_MODE", "")).startswith("Auto"):
             pytest.skip("only the auto modes save everything that's left")
         budget = derived.sidebar_savings_budget({"user_overrides": ov})
-        ov.update(budget["amounts"])
+        ov.update(_as_stored(budget["amounts"]))
         _, rows, hsa_match, college = _engine_year_one(ov)
         saved = _own_savings(rows[0], hsa_match) + college
         if rows[0]["your_brokerage"] + rows[0]["partner_brokerage"] > 0:
@@ -93,15 +137,22 @@ class TestSavingsAndTaxesAgree:
             # and sells investments for the gap, so it saves more than is left.
             assert saved >= budget["disposable"]
 
-    @pytest.mark.parametrize("name", ["sample_household", "couple_three_kids", "single_renter"])
-    def test_auto_allocation_is_the_simulations_split(self, name):
-        """Each account in the Savings section's Auto-allocate bar is what the
+    @pytest.mark.parametrize("name, mode", [
+        ("sample_household", derived.AUTO_ALLOCATE_MODE),
+        ("couple_three_kids", derived.AUTO_ALLOCATE_MODE),
+        ("single_renter", derived.AUTO_ALLOCATE_MODE),
+        ("couple_three_kids", derived.KEEP_AMOUNTS_MODE),
+        ("sample_household", derived.KEEP_AMOUNTS_MODE),
+    ])
+    def test_allocation_is_the_simulations_split(self, name, mode):
+        """Each account in the Savings section's allocation is what the
         simulation puts there in year 1 (Roth phase-out and the brokerage split
         between the two of you included), so it matches the Savings chart."""
         ov = _ui_shaped(name)
-        ov["SAVINGS_MODE"] = derived.AUTO_ALLOCATE_MODE
+        ov["SAVINGS_MODE"] = mode
         budget = derived.savings_budget(ov)
-        ov.update(budget["amounts"])
+        if mode == derived.AUTO_ALLOCATE_MODE:
+            ov.update(_as_stored(budget["amounts"]))
         _, rows, hsa_match, _ = _engine_year_one(ov)
         row, a = rows[0], budget["amounts"]
         pairs = [("YOUR_401K_CONTRIBUTION", row["your_401k"]),
@@ -125,10 +176,10 @@ class TestSavingsAndTaxesAgree:
                   YOUR_COMPENSATION_BY_AGE=_comp_table(ov["YOUR_AGE"], 200_000))
         budget = derived.savings_budget(ov)
         assert derived.AFTER_TAX_401K_LABEL in budget["set_aside"]
-        ov.update(budget["amounts"])
+        ov.update(_as_stored(budget["amounts"]))
         _, rows, hsa_match, _ = _engine_year_one(ov)
-        floor = ov["YOUR_BROKERAGE_CONTRIBUTION"]
-        assert rows[0]["your_brokerage"] >= floor - 1
+        assert rows[0]["your_brokerage"] == pytest.approx(
+            budget["amounts"]["YOUR_BROKERAGE_CONTRIBUTION"], abs=1.0)
         assert rows[0]["your_aftertax_roth"] == pytest.approx(
             budget["set_aside"][derived.AFTER_TAX_401K_LABEL])
         placed = sum(budget["amounts"].values()) + sum(budget["set_aside"].values())
