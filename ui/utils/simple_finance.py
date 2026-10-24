@@ -429,7 +429,7 @@ def priority_ladder(inputs: Dict[str, Any], today: Optional[date] = None) -> Lis
     moderate = _sorted_debts(i["debts"], MODERATE_APR_PCT, HIGH_APR_PCT)
     mod_total = sum(d["balance"] for d in moderate)
     steps.append(LadderStep(
-        8, "moderate_debt", f"Moderate-interest debt ({MODERATE_APR_PCT:g}-{HIGH_APR_PCT:g}%)",
+        8, "moderate_debt", f"Moderate-interest debt ({MODERATE_APR_PCT:g}\u2011{HIGH_APR_PCT:g}%)",
         "pending" if moderate else "done", mod_total,
         f"{money(mod_total)} to pay off" if moderate else "None",
         "A judgment call: paying it off is a sure return at that rate, investing may "

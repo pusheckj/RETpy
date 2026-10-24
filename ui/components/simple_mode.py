@@ -42,7 +42,7 @@ _TEAL, _SLATE = "#0d9488", "#7a8db3"
 
 SIMPLE_CSS = """
 /* ---------- Simple mode ("Get my money in order") ---------- */
-.simple-sub { color: var(--mc-muted); font-size: 15px; line-height: 1.45; margin: -8px 0 6px; }
+.simple-sub { color: var(--mc-muted); font-size: 15px; line-height: 1.45; margin: -8px 0 18px; }
 .simple-group { font-weight: 700; font-size: 15px; color: var(--mc-ink); margin: 6px 0 -4px; }
 .simple-kpi-value { font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em;
     color: var(--mc-ink); margin: 6px 0 8px; }
@@ -111,6 +111,18 @@ SIMPLE_CSS = """
 .simple-bar-target { position: absolute; top: -4px; bottom: -4px; width: 3px; border-radius: 2px;
     background: var(--mc-ink); }
 .simple-bar-note { font-size: 13.5px; line-height: 1.4; color: var(--mc-muted); }
+
+/* Debt rows: the Name box and Remove button match the number inputs (pill, same border). */
+[class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"] {
+    border: 1px solid rgba(120, 96, 52, 0.12) !important; border-radius: 999px !important;
+    box-shadow: none !important; }
+[class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"] input { border: 0 !important; }
+[class*="st-key-simple-debt-"] [data-testid="stColumn"] button[kind] { border-radius: 999px; }
+/* Result cards in one row share a height. */
+[data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] > [class*="st-key-mc-tile-simple-"]) > [data-testid="stVerticalBlock"],
+[data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] > [class*="st-key-mc-tile-simple-"]) > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"],
+.st-key-mc-tile-simple-rate, .st-key-mc-tile-simple-fund { height: 100%; }
+.simple-meter-tick span { font-size: 12px; }
 
 /* Debt rows: keep balance / APR / minimum side by side on a phone. */
 @media (max-width: 640px) {
@@ -294,17 +306,17 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
             n1, n2 = st.columns([4, 1], vertical_alignment="bottom")
             n1.text_input("Name", key=_debt_key(i, "name"), max_chars=sf.DEBT_NAME_MAX_LEN)
             n2.button("Remove", key=f"simple_debt_rm_{i}", on_click=_remove_debt,
-                      args=(ss, i), help="Remove this debt")
+                      args=(ss, i), help="Remove this debt", width="stretch")
             b, a, m = st.columns(3)
-            b.number_input("Balance $", min_value=0.0, max_value=sf.BALANCE_MAX, step=100.0,
+            b.number_input("Balance", min_value=0.0, max_value=sf.BALANCE_MAX, step=100.0,
                            format="%.0f", key=_debt_key(i, "balance"),
-                           help="How much you owe now.")
-            a.number_input("APR %", min_value=0.0, max_value=sf.PCT_MAX, step=0.25,
+                           help="How much you owe now.", icon=_DOLLAR)
+            a.number_input("APR", min_value=0.0, max_value=sf.PCT_MAX, step=0.25,
                            format="%.2f", key=_debt_key(i, "apr_pct"),
-                           help="The yearly interest rate on your statement.")
-            m.number_input("Min $/mo", min_value=0.0, max_value=sf.MONTHLY_MAX, step=10.0,
+                           help="The yearly interest rate on your statement.", icon=_PCT)
+            m.number_input("Min per month", min_value=0.0, max_value=sf.MONTHLY_MAX, step=10.0,
                            format="%.0f", key=_debt_key(i, "min_payment"),
-                           help="The minimum payment due each month.")
+                           help="The minimum payment due each month.", icon=_DOLLAR)
     if len(inputs["debts"]) < sf.MAX_DEBTS:
         st.button("Add a debt", key="simple_debt_add", icon=":material/add:",
                   on_click=_add_debt, args=(ss,))
@@ -373,7 +385,7 @@ def _render_ladder(st, steps: List[sf.LadderStep]) -> None:
         cards = []
         for s in steps:
             tone = {"current": "current", "done": "good"}.get(s.status, "")
-            label = sf.STATUS_LABELS[s.status] + (" ✓" if s.status == "done" else "")
+            label = sf.STATUS_LABELS[s.status]
             num = "✓" if s.status == "done" else str(s.number)
             detail = f'<div class="simple-step-detail">{_h(s.detail)}</div>' if s.detail else ""
             target = ("" if s.status == "skip" else

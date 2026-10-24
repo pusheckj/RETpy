@@ -44,6 +44,8 @@ except ImportError:  # pragma: no cover
 STATE = "setup"
 _DOLLAR = ":material/attach_money:"
 _PCT = ":material/percent:"
+# Required questions start blank (with this hint); optional amounts start at 0.
+_REQUIRED = "Required"
 
 # Where-you-live choices: every state + DC (by name), then a flat-rate fallback.
 # Saved legacy values ("CA", "No state tax", "Other") map onto these.
@@ -162,26 +164,30 @@ def _money(st, key: str, label: str, saved: Any, first: Any, hi: int = s2f.BALAN
            step: int = 100) -> None:
     _seed(st, key, None if saved is None else int(_num(saved)),
           None if first is None else int(_num(first)))
-    st.number_input(label, min_value=0, max_value=hi, step=step, key=key, icon=_DOLLAR)
+    st.number_input(label, min_value=0, max_value=hi, step=step, key=key, icon=_DOLLAR,
+                    placeholder=_REQUIRED if first is None else None)
 
 
 def _pct(st, key: str, label: str, saved: Any, first: Any) -> None:
     _seed(st, key, None if saved is None else round(_num(saved), 1),
           None if first is None else round(_num(first), 1))
     st.number_input(label, min_value=0.0, max_value=100.0, step=0.5, format="%.1f",
-                    key=key, icon=_PCT)
+                    key=key, icon=_PCT, placeholder=_REQUIRED if first is None else None)
 
 
 def _whole(st, key: str, label: str, saved: Any, first: Any, lo: int, hi: int) -> None:
     def ok(v):
         return None if v is None else int(min(max(_num(v, lo), lo), hi))
     _seed(st, key, ok(saved), ok(first))
-    st.number_input(label, min_value=lo, max_value=hi, step=1, key=key)
+    st.number_input(label, min_value=lo, max_value=hi, step=1, key=key,
+                    placeholder=_REQUIRED if first is None else None)
 
 
 def _choice(st, key: str, label: str, options: List[str], saved: Any, first: Any,
-            horizontal: bool = False) -> Optional[str]:
+            horizontal: Optional[bool] = None) -> Optional[str]:
     _seed(st, key, saved if saved in options else None, first if first in options else None)
+    if horizontal is None:      # short options sit in one row, long ones stack
+        horizontal = sum(len(o) for o in options) <= 40
     return st.radio(label, options, key=key, horizontal=horizontal)
 
 
@@ -593,14 +599,14 @@ def draw_spending(st) -> None:
     else:
         _cue(st, "About how much do you spend each month? Your bank or card app's spending "
                  "summary helps. Rough numbers are fine. Leave out housing (the previous step) and "
-                 "money you save.")
+                 "money you save. Each box starts at a typical amount: change any that don't fit.")
     cats = _shown_categories(st)
-    cols = st.columns(2)
-    for i, cat in enumerate(cats):
-        with cols[i % 2]:
-            _money(st, "gs_spend_" + cat.key, cat.label, ov.get(cat.key), ov.get(cat.key, cat.default),
-                   hi=cat.max_value, step=cat.step)
-            _cue(st, _SPEND_HINTS.get(cat.key, ""))
+    for row in range(0, len(cats), 2):      # one row of columns per pair, so the boxes line up
+        for col, cat in zip(st.columns(2), cats[row:row + 2]):
+            with col:
+                _money(st, "gs_spend_" + cat.key, cat.label, ov.get(cat.key),
+                       ov.get(cat.key, cat.default), hi=cat.max_value, step=cat.step)
+                _cue(st, _SPEND_HINTS.get(cat.key, ""))
     total = sum(_num(_val(st, "gs_spend_" + cat.key)) for cat in cats)
     line = f"**{money_md(total)} a month**, plus {money_md(housing)} for housing."
     if c:
@@ -796,10 +802,12 @@ def render(st) -> None:
             if i > 0:
                 st.button("Back", key="gs_back", on_click=_go, args=(st, -1),
                           icon=":material/arrow_back:")
-            st.button("Skip for now", key="gs_skip", on_click=_skip, args=(st,), type="tertiary",
-                      help="Go straight to the planner. Unanswered questions keep sample "
-                           "numbers until you finish setting up.")
             last = i == len(STEPS) - 1
+            if not last:
+                st.button("Skip for now", key="gs_skip", on_click=_skip, args=(st,),
+                          type="tertiary",
+                          help="Go straight to the planner. Unanswered questions keep sample "
+                               "numbers until you finish setting up.")
             st.button("Show my results" if last else "Next", key="gs_next", on_click=_go,
                       args=(st, 1), type="primary",
                       icon=":material/check:" if last else ":material/arrow_forward:")

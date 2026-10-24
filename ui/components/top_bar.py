@@ -15,6 +15,7 @@ a literal code block (this bit us in what_if_pane).
 """
 from __future__ import annotations
 
+from html import escape
 from typing import Any, Dict, Optional
 
 # Dual-import shim so the module works whether imported as `components.top_bar`
@@ -154,7 +155,8 @@ def render(st, results: Optional[dict] = None,
            settings_render=None,
            view_render=None,
            in_card: bool = False,
-           control_slots=None) -> None:
+           control_slots=None,
+           title: str = "Retirement Monte Carlo") -> None:
     """Render the sticky top bar.
 
     Layout is a keyed ``st.container`` (the sticky element — it lives in the
@@ -184,7 +186,7 @@ def render(st, results: Optional[dict] = None,
 
     html_parts = []
     html_parts.append('<div class="mc-topbar">')
-    html_parts.append('<span class="mc-topbar-title">Retirement Monte Carlo</span>')
+    html_parts.append(f'<span class="mc-topbar-title">{escape(title)}</span>')
     html_parts.append(_metric_html("Name(s)", names))
     html_parts.append(_metric_html("Net worth", net_worth_str))
     html_parts.append(_metric_html("Income", income_str))

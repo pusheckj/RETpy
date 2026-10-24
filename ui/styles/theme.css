@@ -1425,8 +1425,8 @@ footer { display: none !important; }
     width: 0;
     overflow: hidden;
 }
-.st-key-mc-welcome { max-width: 920px; margin: 4vh auto 0; }
-.mc-welcome-head { text-align: center; margin-bottom: 8px; }
+.st-key-mc-welcome { max-width: 920px; margin: 10vh auto 0; }   /* centred a little above the middle */
+.mc-welcome-head { text-align: center; margin-bottom: 20px; }
 .mc-welcome-kicker {
     font-size: 13px; font-weight: 700; letter-spacing: 0.14em;
     text-transform: uppercase; color: var(--mc-teal);
@@ -1442,8 +1442,8 @@ footer { display: none !important; }
     height: 100%;
 }
 .mc-welcome-card h3 { margin: 0 0 6px; font-size: 22px; color: var(--mc-ink); }
-.mc-welcome-card p { margin: 0 0 6px; line-height: 1.5; color: var(--mc-muted); }
-.mc-welcome-privacy { text-align: center; font-size: 14px; color: var(--mc-muted); margin-top: 10px; }
+.mc-welcome-card p { margin: 0 0 18px; line-height: 1.5; color: var(--mc-muted); }   /* air above the button */
+.mc-welcome-privacy { text-align: center; font-size: 14px; color: var(--mc-muted); margin-top: 20px; }
 .st-key-mc-simple-root { max-width: 980px; margin: 0 auto; }
 @media (max-width: 640px) {
     /* No sidebar on these pages, so no reopen button to clear at the top. */
@@ -1479,10 +1479,20 @@ footer { display: none !important; }
     font-size: 13px; font-weight: 700; letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--mc-teal); margin-bottom: -8px;
 }
-.mc-setup-intro { color: var(--mc-muted); font-size: 15px; line-height: 1.45; margin: -6px 0 4px; }
+.mc-setup-intro { color: var(--mc-muted); font-size: 15px; line-height: 1.45; margin: 4px 0 14px; }
 .st-key-mc-setup [data-testid="stCaptionContainer"] { margin-top: -10px; }
-.st-key-mc-setup-nav { margin-top: 8px; gap: 8px; }
+.st-key-mc-setup-nav { margin-top: 12px; gap: 8px; }
 .st-key-mc-setup-nav > :last-child { margin-left: auto; }          /* Next sits on the right */
+/* "Skip for now" joins Next on the right, as a quiet underlined link. */
+.st-key-mc-setup-nav > .st-key-gs_skip { margin-left: auto; }
+.st-key-mc-setup-nav > .st-key-gs_skip + .st-key-gs_next { margin-left: 0; }
+.st-key-gs_skip button { color: var(--mc-muted); text-decoration: underline; text-underline-offset: 3px;
+    padding: 0 12px; }
+.st-key-gs_skip button:hover { color: var(--mc-ink); }
+/* Spending-view chips: Trends' picker has the same flat look as Include's. */
+.st-key-sp_cat [data-testid="stButtonGroup"] > div:not([data-testid]),
+.st-key-sp_groups [data-testid="stButtonGroup"] > div:not([data-testid]) {
+    background: transparent !important; box-shadow: none !important; padding: 0 !important; }
 .st-key-mc-setup-banner {
     background: var(--mc-tile) !important;
     border: 1px solid var(--mc-tile-border) !important;

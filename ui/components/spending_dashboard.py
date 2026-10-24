@@ -604,7 +604,7 @@ def pie_figure(avg: pd.Series, dark: bool, compact: bool = False) -> go.Figure:
     vals = vals[vals > 0]
     labels = [f"{g}  {money(v)}" for g, v in vals.items()]
     fig = go.Figure(go.Pie(
-        labels=labels, values=list(vals.values), sort=False, direction="clockwise", hole=0.62,
+        labels=labels, values=list(vals.values), sort=False, direction="clockwise", hole=0.7,
         domain=dict(x=[0.12, 0.88], y=[0.36, 1.0]) if compact else dict(x=[0.0, 0.42], y=[0.0, 1.0]),
         marker=dict(colors=[_SERIES[dark][GROUPS.index(g)] for g in vals.index],
                     line=dict(color=_SURFACE[dark], width=2),
@@ -620,10 +620,10 @@ def pie_figure(avg: pd.Series, dark: bool, compact: bool = False) -> go.Figure:
                               else dict(x=0.45, y=0.5, yanchor="middle", font=dict(size=11.5))),
                       margin=dict(t=10, b=10, l=10, r=_CARD_CLIP),
                       # True total (a bucket netting negative can't be a slice but still counts).
-                      annotations=[dict(text=f"<b>{money(avg.sum())}</b><br>per month",
+                      annotations=[dict(text=f"<b>{money(avg.sum())}</b><br><span style='font-size:11px'>per month</span>",
                                         x=0.5 if compact else 0.21, y=0.68 if compact else 0.5,
                                         xref="paper", yref="paper", showarrow=False,
-                                        font=dict(size=13, color=_INK[dark]))])
+                                        font=dict(size=14, color=_INK[dark]))])
     return fig
 
 
@@ -824,7 +824,8 @@ def _ranked_lists(st, tx: pd.DataFrame, start: pd.Period, end: pd.Period, catego
     most frequent merchants (easier to scan than a wide table)."""
     s = counted(tx)
     s = s[(s["month"] >= start) & (s["month"] <= end) & (s["category"] == category)]
-    buys = s[(s["kind"] == "spend") & (s["amount"] < 0)]
+    # Fixed monthly estimates are repeated placeholders, not purchases: leave them out.
+    buys = s[(s["kind"] == "spend") & (s["amount"] < 0) & (s["account"] != ESTIMATE_SOURCE)]
     left, right = st.columns(2)
     with left:
         st.markdown("**Largest purchases**")
@@ -852,19 +853,19 @@ def render(st, **_kwargs) -> None:
     title, gear = st.columns([6, 1], vertical_alignment="bottom")
     title.markdown('<div class="mc-section">Spending</div>', unsafe_allow_html=True)
     if folder_ok:                                    # local folder: as before
-        with gear.popover("Data", width="stretch"):
+        with gear.popover("Statements", width="stretch"):
             _settings_form(st, data_dir, True)
         data = load(data_dir)
     elif store["files"] or store["rules"]:
         # Panel first, so Clear stays reachable even if the files can't be processed.
-        with gear.popover("Data", width="stretch"):
+        with gear.popover("Statements", width="stretch"):
             _upload_panel(st, store)
             _settings_form(st, data_dir, False)      # local only: can still pick a folder
         try:
             data = _uploaded_data(st)
         except Exception as exc:  # untrusted files must not take the tab down
             st.error(f"These files couldn't be processed ({type(exc).__name__}: {exc}). "
-                     "Clear them under Data and try again.")
+                     "Clear them under Statements and try again.")
             return
         if data["rules_error"]:
             st.warning(data["rules_error"])
