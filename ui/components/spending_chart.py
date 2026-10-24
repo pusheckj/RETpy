@@ -514,7 +514,7 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
         mortgage_color = "#60a5fa" if is_dark(st) else "#1d4ed8"
         mode = st.radio(
             "Dollars",
-            options=["Today's dollars", "Future (nominal) dollars"],
+            options=["Today's $", "Future $"],
             horizontal=True, key=f"{chart_key}_dollars_mode",
             label_visibility="collapsed",
         )

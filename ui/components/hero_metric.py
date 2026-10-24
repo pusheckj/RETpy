@@ -37,7 +37,7 @@ def render(st, results: dict) -> None:
 
     st.markdown(
         f'''
-        <div class="mc-card" style="display: flex; align-items: center; justify-content: space-between; padding: 32px 40px; margin-bottom: 24px;">
+        <div class="mc-card" style="display: flex; align-items: flex-start; justify-content: space-between; padding: 32px 40px; margin-bottom: 24px;">
             <div>
                 <div class="mc-hero-label" style="font-size: 13px; color: #64748b; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;">
                     Earliest retirement age

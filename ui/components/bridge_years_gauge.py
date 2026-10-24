@@ -18,11 +18,11 @@ import plotly.graph_objects as go
 try:
     from utils.coerce import safe_int
     from utils.formatting import money
-    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, series_color
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, series_color, concept_color
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
     from ui.utils.formatting import money  # type: ignore
-    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, series_color  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, series_color, concept_color  # type: ignore
 
 _EARLY_AGE = 59.5
 
@@ -113,9 +113,10 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
     fig = go.Figure()
     # Stacked accessible "fuel" (bottom -> top): cash, taxable, Roth.
     for label, series, color in [
-        ("Cash", cash, series_color(0, st)),
-        ("Taxable brokerage", taxable, "#0d9488" if not dark else "#14b8a6"),
-        ("Roth (basis, approx.)", roth, series_color(1, st)),
+        # Shared concept colors: the same account is the same color in every chart.
+        ("Cash", cash, concept_color("Cash", st)),
+        ("Taxable brokerage", taxable, concept_color("Taxable brokerage", st)),
+        ("Roth (basis, approx.)", roth, concept_color("Roth IRA", st)),
     ]:
         fig.add_trace(go.Scatter(
             x=ages, y=series, mode="lines", line=dict(width=0.5, color=color),

@@ -84,7 +84,10 @@ CONCEPT_INDEX = {
     "401(k)": 0, "Roth IRA": 1, "Traditional IRA": 4, "HSA": 6,
     "Taxable brokerage": 11, "Cash": 3, "Home equity": 7, "Retirement": 0,
     "401(k) match": 9, "Salary": 2, "Social Security": 5,
-    "Bonus": 10, "RSU": 8, "Other income": 1, "RMD": 5,
+    "Bonus": 10, "RSU": 4, "Other income": 1, "RMD": 5,
+    # After-tax 401(k) -> Roth sits beside "Your 401(k)" in the savings stack, so
+    # it must not share its teal (it used to resolve to the 401(k) concept).
+    "After-tax Roth": 7,
 }
 _OWNER_PREFIXES = ("your ", "partner ", "their ")
 
@@ -98,6 +101,8 @@ def concept_of(name: str):
             break
     if "conversion" in n:
         return None
+    if "after-tax" in n:
+        return "After-tax Roth"
     if "401" in n and "match" in n:
         return "401(k) match"
     if "401" in n:

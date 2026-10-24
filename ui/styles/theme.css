@@ -1149,7 +1149,7 @@ footer { display: none !important; }
 
     .mc-topbar { gap: 6px 14px; }
     .mc-topbar-title { font-size: 20px; }
-    .mc-topbar-metric-label { font-size: 10px; letter-spacing: 0.03em; }
+    .mc-topbar-metric-label { font-size: 11px; letter-spacing: 0.02em; }
     .mc-topbar-metric-value { font-size: 18px; }
 
     /* Big numbers sized for a phone. */
@@ -1652,7 +1652,25 @@ section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.mc-stat-car
 /* Labels stay on one line (no "NON-/RETIREMENT"); tighter tracking on narrow tiles. */
 .mc-stat-card > div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.05em !important; }
 @media (max-width: 1100px) { .mc-stat-card > div:first-child { font-size: 11px !important; letter-spacing: 0.03em !important; } }
-@media (max-width: 640px) { .mc-stat-card > div:first-child { white-space: normal; } }
+@media (max-width: 640px) { .mc-stat-card > div:first-child { white-space: normal; font-size: 12px !important; letter-spacing: 0.02em !important; } }
+
+/* Metric rows without cards: a label that wraps to two lines pushed ITS value
+   4-12px below its neighbours'. Stretch the columns and bottom-align the
+   label/value stack so every value in a row shares one baseline. */
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(.mc-stat-card)):not(:has([data-testid="stPlotlyChart"])) { align-items: stretch !important; }
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(.mc-stat-card)):not(:has([data-testid="stPlotlyChart"])) > [data-testid="stColumn"] { display: flex; }
+section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(.mc-stat-card)):not(:has([data-testid="stPlotlyChart"])) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] { flex: 1 1 auto; }
+[data-testid="stColumn"] .stElementContainer:has(> [data-testid="stMetric"]) { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-testid="stColumn"] [data-testid="stMetric"] { flex: 1 1 auto; display: flex; flex-direction: column; }
+[data-testid="stColumn"] [data-testid="stMetric"] > div { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-end; }
+
+/* Animated numbers (.mc-odo) and plain-text values (e.g. "Historical") sat on
+   different baselines: the odometer inherited the 1.6 body line-height while a
+   text value used "normal", a 5-7px height difference. One line-height for both. */
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] > div,
+[data-testid="stMetricValue"] .mc-odo,
+[data-testid="stMetricValue"] .mc-odo-sep { line-height: 1.25 !important; }
 
 /* Segmented radios (mode switch, .mc-seg): Streamlit leaves a margin where the
    radio circle was, so the text sat 8px off-centre in its segment. */
@@ -1706,3 +1724,7 @@ section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidget
     min-height: 2.6em; display: flex; align-items: flex-end;
 }
 section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidgetLabel"] p { font-size: 14px; line-height: 1.25; }
+
+/* Sidebar tables: the hover toolbar (download / search / fullscreen) covers the
+   first column headers in the narrow sidebar. */
+section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: none !important; }

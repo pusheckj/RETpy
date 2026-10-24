@@ -410,7 +410,7 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
         # Dollars-mode toggle (real vs nominal), keyed uniquely per chart instance.
         mode = st.radio(
             "Dollars",
-            options=["Today's dollars", "Future (nominal) dollars"],
+            options=["Today's $", "Future $"],
             horizontal=True,
             key=f"{chart_key}_dollars_mode",
             label_visibility="collapsed",

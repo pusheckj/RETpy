@@ -42,7 +42,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
         c1, c2 = st.columns(2)
         with c1:
             mode = st.radio(
-                "Dollars", options=["Today's dollars", "Future (nominal) dollars"],
+                "Dollars", options=["Today's $", "Future $"],
                 horizontal=True, key=f"{chart_key}_dollars", label_visibility="collapsed",
             )
         with c2:
