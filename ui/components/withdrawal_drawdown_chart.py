@@ -142,8 +142,9 @@ def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> No
 
     st.plotly_chart(fig, width="stretch", key=chart_key, config=PLOTLY_CONFIG)
     st.caption(
-        "Each bar shows what fraction of the portfolio is withdrawn from each account "
-        "type that year. The rate trends toward 0% in later years because the portfolio "
+        "Each bar is the median year across the simulated runs that last the plan: "
+        "the fraction of the portfolio withdrawn that year, split by account type in "
+        "those runs' average mix. The rate trends toward 0% in later years because the portfolio "
         "grows faster than spending (and Social Security covers part of the need) — a "
         "sign of an over-funded plan, not a data gap. The dotted purple line (if shown) "
         "is Roth conversions — money moved from Traditional to Roth accounts, not spent."

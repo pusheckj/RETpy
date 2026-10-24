@@ -15,7 +15,10 @@ Two phases share a single age axis:
 
   * RETIREMENT YEARS (retirement_age .. plan_until): enriched from Monte Carlo
     results when available — ``results['primary_result']['income_sources_by_year']``
-    (Social Security + portfolio drawdown by source). With no results, Social
+    (Social Security + portfolio drawdown by source: each age's MEDIAN draw
+    across the runs that last the plan, split in their average source mix --
+    see ``utils.sim_runner._median_withdrawal_log_from_data``; the caption from
+    ``retirement_caption`` says so). With no results, Social
     Security is still shown deterministically via
     ``cfg.calculate_social_security`` (guarded), and a caption invites the user
     to run the sim for the full drawdown breakdown.
@@ -53,7 +56,7 @@ _WORKING_LABELS = [
     "Your bonus",
     "Your RSU",
     "Your other income",
-    "Partner base",
+    "Partner base salary",
     "Partner bonus",
     "Partner RSU",
     "Partner other",
@@ -260,7 +263,7 @@ def build_income_series(
         # who retires first drops to zero on time.
         if _partner_working(age):
             pb, pbo, pr_, po = _partner_income_for_age(overrides, age, current_age, partner_growth)
-            series["Partner base"][i] = pb
+            series["Partner base salary"][i] = pb
             series["Partner bonus"][i] = pbo
             series["Partner RSU"][i] = pr_
             series["Partner other"][i] = po
@@ -367,6 +370,23 @@ def build_figure(
     return fig
 
 
+def retirement_caption(results: dict | None) -> str:
+    """What the retirement-year bars are: each age's median draw across runs,
+    not one run's (whose long-term-care years or giant forced RMDs would read
+    as the typical plan)."""
+    if not results:
+        return "Run the simulation to see retirement portfolio drawdown by source."
+    basis = (results.get("primary_result", {}) or {}).get("withdrawals_basis") or {}
+    n = safe_int(basis.get("n_runs"), 0)
+    runs = f"{n:,} simulated runs" if n else "simulated runs"
+    who = (f"the {runs} that last the whole plan" if basis.get("survivors_only", True)
+           else f"all {runs} (none last the whole plan)")
+    return (f"Retirement years show the median year across {who}, split by source "
+            "in their average mix. Costs that hit only some runs, such as a year of "
+            "long-term care or a large required minimum distribution, count toward "
+            "the success rate but aren't drawn as the typical year.")
+
+
 def render(st, results: dict = None, chart_key: str = "income_over_time_main") -> None:
     overrides = st.session_state.get("user_overrides", {}) or {}
 
@@ -446,8 +466,7 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
 
         st.plotly_chart(fig, config=PLOTLY_CONFIG, key=chart_key, width="stretch")
 
-        if not results:
-            st.caption("Run the simulation to see retirement portfolio drawdown by source.")
+        st.caption(retirement_caption(results))
 
     # Isolate the dollars toggle in a fragment so switching modes reruns only
     # this chart, not the whole app. Fall back to an inline call if the running

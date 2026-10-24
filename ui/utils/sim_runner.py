@@ -1112,37 +1112,91 @@ def _run_calls(job: Dict[str, Any], indices: List[int], progress_callback=None) 
     return out
 
 
+# Withdrawal buckets that add up to a log row's ``total`` (traditional is split
+# into discretionary + spent-RMD so ``traditional == chosen + rmd_spent`` holds).
+_WD_BUCKETS = ("cash", "taxable", "traditional_chosen", "rmd_spent", "roth", "hsa")
+# Fields summarized by their own per-age median.
+_WD_MEDIAN_FIELDS = ("portfolio_value", "total_taxes", "ss_tax", "niit", "penalties",
+                     "rmd_gross", "roth_conversion", "roth_conversion_tax")
+
+
+def _f(row: dict, key: str) -> float:
+    return float(row.get(key, 0.0) or 0.0)
+
+
+def _bucket_parts(row: dict) -> List[float]:
+    """A log row's draws by ``_WD_BUCKETS``. Rows from before the engine split
+    traditional count it all as discretionary (as the drawdown chart does)."""
+    if "traditional_chosen" in row:
+        chosen, rmd = _f(row, "traditional_chosen"), _f(row, "rmd_spent")
+    else:
+        chosen, rmd = _f(row, "traditional"), 0.0
+    return [_f(row, "cash"), _f(row, "taxable"), chosen, rmd, _f(row, "roth"), _f(row, "hsa")]
+
+
+def _withdrawal_pool(n: int, successes) -> List[int]:
+    """Runs the per-year withdrawal statistic is taken over: the ones that last
+    the plan (a depleted run's log stops early), or every run if none do."""
+    survivors = [i for i in range(n) if successes[i]]
+    return survivors if survivors else list(range(n))
+
+
+def _withdrawals_basis(successes) -> dict:
+    """What ``withdrawals_by_year`` summarizes, for the chart captions."""
+    successes = list(successes or [])
+    pool = _withdrawal_pool(len(successes), successes)
+    return {"n_runs": len(pool), "survivors_only": any(successes)}
+
+
 def _median_withdrawal_log_from_data(paths, logs, successes=None) -> List[dict]:
-    """Like ``_median_withdrawal_log`` but takes per-path withdrawal LOGS (lists
-    of plain dicts) instead of portfolio objects — the parallel workers return
-    picklable logs, not portfolios. Same survivor-preference + depletion guard.
+    """Per-age withdrawal breakdown across simulated runs (per-path LOGS, as the
+    parallel workers return them), shaped like a ``withdrawal_log``.
+
+    For each age: ``total`` is the MEDIAN of the runs' totals, split by source
+    in the runs' average mix (each run's share of its own total, averaged with
+    equal weight, so a huge year in one run cannot dominate the split); taxes,
+    portfolio value, RMD and Roth-conversion amounts are their own medians.
+    Buckets add up to ``total`` and ``traditional == traditional_chosen +
+    rmd_spent``, like an engine row. The statistic is taken over the runs that
+    last the plan (every run if none do).
+
+    One representative run used to be shown instead: its one-off years (a
+    long-term-care year, a giant forced RMD on a lucky path) then read as the
+    typical plan.
     """
     if not paths or not logs:
         return []
     n = min(len(paths), len(logs))
     if successes is None:
-        successes = [None] * n
-    candidates = [i for i in range(n) if paths[i]]
-    if not candidates:
-        return []
-    survivors = [i for i in candidates if successes[i]] if any(
-        s is not None for s in successes[:n]
-    ) else candidates
-    pool = survivors if survivors else candidates
-    finals = np.array([paths[i][-1][1] for i in pool], dtype=float)
-    median_val = float(np.median(finals))
-    best_i = pool[int(np.argmin(np.abs(finals - median_val)))]
-    log = logs[best_i] or []
+        successes = [True] * n
+    usable = [i for i in range(n) if paths[i] and logs[i]]
+    pool = [usable[j] for j in _withdrawal_pool(len(usable), [successes[i] for i in usable])]
+    by_age: Dict[int, List[dict]] = {}
+    for i in pool:
+        for src in logs[i]:
+            by_age.setdefault(int(src["age"]), []).append(src)
+
     rows: List[dict] = []
-    for src in log:
-        row = dict(src)
-        pv = float(row.get("portfolio_value", 0.0) or 0.0)
-        total = float(row.get("total", 0.0) or 0.0)
-        if pv <= max(1.0, total):
-            row["depleted"] = True
-            row["withdrawal_pct"] = min(float(row.get("withdrawal_pct", 0.0) or 0.0), 1.0)
-        else:
-            row.setdefault("depleted", False)
+    for age in sorted(by_age):
+        year = by_age[age]
+        total = float(np.median([_f(r, "total") for r in year]))
+        shares = [[p / s for p in parts] for parts in map(_bucket_parts, year)
+                  if (s := sum(parts)) > 0]
+        mix = np.mean(shares, axis=0) if shares else np.zeros(len(_WD_BUCKETS))
+        row = {"age": age}
+        row.update({k: float(total * m) for k, m in zip(_WD_BUCKETS, mix)})
+        row["traditional"] = row["traditional_chosen"] + row["rmd_spent"]
+        row["total"] = total
+        row.update({k: float(np.median([_f(r, k) for r in year])) for k in _WD_MEDIAN_FIELDS})
+        row["rmd_gross"] = max(row["rmd_gross"], row["rmd_spent"])
+        pv = row["portfolio_value"]
+        row["withdrawal_pct"] = total / max(1.0, pv)
+        # A negligible pre-withdrawal balance makes the fraction meaningless:
+        # flag the year and cap it rather than paint a spurious ~100%+ bar.
+        row["depleted"] = pv <= max(1.0, total)
+        if row["depleted"]:
+            row["withdrawal_pct"] = min(row["withdrawal_pct"], 1.0)
+        row["n_paths"] = len(year)
         rows.append(row)
     return rows
 
@@ -1271,6 +1325,7 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
         "taxes_by_year": taxes_by_year,
         "savings_contributions_by_year": savings_contributions_by_year,
         "withdrawals_by_year": withdrawals_by_year,
+        "withdrawals_basis": _withdrawals_basis(det_successes),
         "spending_by_year": spending_by_year,
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, logs, retirement_age),
@@ -1374,13 +1429,9 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
     allocation_by_year = _compute_allocation_by_year(median_traj, retirement_age)
     savings_contributions_by_year = _approximate_savings_contributions(retirement_age)
 
-    # Pick a representative SURVIVING simulation (median final balance among the
-    # paths that lasted the full horizon) and expose its per-year withdrawal_log.
-    # A depleted path's log stops early and its last year spikes toward ~100% as
-    # the portfolio hits zero, so we deliberately avoid it — the breakdown must
-    # span retirement_age..the plan end. income_sources_by_year and
-    # taxes_by_year for retirement years are derived directly from this same log
-    # so all three charts stay internally consistent.
+    # Per-age median withdrawal breakdown across the runs that last the plan.
+    # income_sources_by_year and taxes_by_year for retirement years derive from
+    # these same rows so the three charts stay internally consistent.
     withdrawals_by_year = _median_withdrawal_log(paths, portfolios, successes)
 
     income_sources_by_year = _approximate_income_sources(withdrawals_by_year, retirement_age)
@@ -1409,6 +1460,7 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
         "taxes_by_year": taxes_by_year,
         "savings_contributions_by_year": savings_contributions_by_year,
         "withdrawals_by_year": withdrawals_by_year,
+        "withdrawals_basis": _withdrawals_basis(successes),
         "spending_by_year": spending_by_year,
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, wlogs, retirement_age),
@@ -1610,73 +1662,17 @@ def _accessible_percentiles(bytype_logs: List[List[dict]], withdrawal_logs: List
 
 
 def _median_withdrawal_log(paths, portfolios, successes=None) -> List[dict]:
-    """Select a REPRESENTATIVE, full-horizon simulation and return its
-    ``portfolio.withdrawal_log`` as a list of plain dicts.
-
-    We prefer a SURVIVING path — one that lasted from ``retirement_age`` through
-    the plan end (``cfg.plan_end_age()``) — and among survivors pick the one
-    whose final balance is closest to the survivors' median. A depleted path's
-    log stops early (its last year spikes toward ~100% as the portfolio hits
-    zero), so choosing it would truncate the withdrawal chart and paint a
-    spurious 100% bar. Only if NO path
-    survives do we fall back to the closest-to-median path overall.
-
-    This gives the UI a single, internally-consistent per-year withdrawal
-    breakdown (one simulation path) rather than a cross-sim average that
-    wouldn't correspond to a real scenario.
-    """
-    if not paths or not portfolios:
-        return []
-
-    n = min(len(paths), len(portfolios))
-    if successes is None:
-        successes = [None] * n
-
-    # Candidate indices: those with a usable portfolio + trajectory.
-    candidates = [
-        i for i in range(n)
-        if portfolios[i] is not None and paths[i]
-    ]
-    if not candidates:
-        return []
-
-    # Prefer survivors (paths that lasted the full horizon). When the success
-    # flag isn't available, treat every usable candidate as eligible.
-    survivors = [i for i in candidates if successes[i]] if any(
-        s is not None for s in successes[:n]
-    ) else candidates
-    pool = survivors if survivors else candidates
-
-    finals = np.array([paths[i][-1][1] for i in pool], dtype=float)
-    median_val = float(np.median(finals))
-    best_i = pool[int(np.argmin(np.abs(finals - median_val)))]
-
-    chosen = portfolios[best_i]
-    log = getattr(chosen, "withdrawal_log", None) or []
-    # Shallow-copy each row so downstream mutations can't affect the portfolio,
-    # and guard the withdrawal % so a near-zero (depleted) portfolio does not
-    # emit a spurious ~100% bar. If the pre-withdrawal balance is negligible
-    # relative to the amount withdrawn, the fraction is meaningless — cap it and
-    # flag the row as a depletion year so the chart can annotate rather than
-    # render a bogus full-height stack.
-    rows: List[dict] = []
-    for src in log:
-        row = dict(src)
-        pv = float(row.get("portfolio_value", 0.0) or 0.0)
-        total = float(row.get("total", 0.0) or 0.0)
-        if pv <= max(1.0, total):
-            row["depleted"] = True
-            row["withdrawal_pct"] = min(float(row.get("withdrawal_pct", 0.0) or 0.0), 1.0)
-        else:
-            row.setdefault("depleted", False)
-        rows.append(row)
-    return rows
+    """``_median_withdrawal_log_from_data`` for the serial path, which holds
+    portfolio objects rather than plain logs."""
+    logs = [list(getattr(p, "withdrawal_log", None) or []) if p is not None else []
+            for p in (portfolios or [])]
+    return _median_withdrawal_log_from_data(paths, logs, successes)
 
 
 def _approximate_income_sources(withdrawal_rows: List[dict], retirement_age: int) -> List[IncomeSourceYearRow]:
-    """Real per-year retirement income breakdown from the representative
-    ``withdrawal_log`` (see ``_median_withdrawal_log``), plus real Social
-    Security income for the same path.
+    """Per-year retirement income breakdown from the per-age median
+    withdrawal rows (see ``_median_withdrawal_log_from_data``), plus Social
+    Security income (deterministic, the same in every run).
 
     Account draws are mapped directly from the log (no hardcoded split).
     ``cash`` draws are folded into ``taxable`` — both are already-taxed
@@ -1914,8 +1910,8 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
     the full pay including bonus + RSU + other income. It used to be the
     comp table's flat after_tax gap split 75/25 into "federal"/"state", which
     showed state tax even with no state income tax.
-    Retirement-years: REAL taxes from the representative ``withdrawal_log``
-    (see ``_median_withdrawal_log`` / engine's per-year tax logging). The log
+    Retirement-years: the engine's logged taxes, as the per-age median across
+    runs (see ``_median_withdrawal_log_from_data``). The log
     only records a combined income-tax total (``total_taxes``, which already
     nets out federal + state + LTCG + Roth-conversion + RMD + SS tax minus
     penalties) plus the separable ``niit``; there is no per-year federal/state/
@@ -1959,9 +1955,8 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
                 "gross_income": float(cf["gross_income"]),
             })
         else:
-            # Retirement year: real taxes from the representative withdrawal_log
-            # row for this age (falls back to zeros if the log doesn't cover it,
-            # e.g. the representative path failed/ended before this age).
+            # Retirement year: the median withdrawal row's logged taxes for this
+            # age (zeros if no run covers it, e.g. every run ended earlier).
             # gross_income = withdrawals (already includes RMDs) + real SS income,
             # since SS is a separate income source netted out of `total` upstream.
             row = taxes_by_age.get(age)
