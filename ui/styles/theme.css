@@ -1454,6 +1454,16 @@ footer { display: none !important; }
     .mc-welcome-head h1 { font-size: 26px; }
 }
 
+/* Welcome cards: as tall as the taller one, buttons on one line at the bottom. */
+[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [class*="st-key-mc-welcome-"]) {
+    align-items: stretch;
+}
+[data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] > [class*="st-key-mc-welcome-"]) > [data-testid="stVerticalBlock"],
+[data-testid="stColumn"]:has([class*="st-key-mc-welcome-"]) [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-welcome-"]) {
+    height: 100%;
+}
+[class*="st-key-mc-welcome-"] > .stElementContainer:has(.stButton) { margin-top: auto; }
+
 /* ---------- Version switch + guided setup (app._mode_switch, components.guided_setup) ---------- */
 .st-key-mc-mode-switch { margin-bottom: 4px; }
 /* Planner: in the 48px top gutter (out of the flow), so the top card keeps the
