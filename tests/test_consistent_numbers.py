@@ -93,6 +93,29 @@ class TestSavingsAndTaxesAgree:
             # and sells investments for the gap, so it saves more than is left.
             assert saved >= budget["disposable"]
 
+    @pytest.mark.parametrize("name", ["sample_household", "couple_three_kids", "single_renter"])
+    def test_auto_allocation_is_the_simulations_split(self, name):
+        """Each account in the Savings section's Auto-allocate bar is what the
+        simulation puts there in year 1 (Roth phase-out and the brokerage split
+        between the two of you included), so it matches the Savings chart."""
+        ov = _ui_shaped(name)
+        ov["SAVINGS_MODE"] = derived.AUTO_ALLOCATE_MODE
+        budget = derived.savings_budget(ov)
+        ov.update(budget["amounts"])
+        _, rows, hsa_match, _ = _engine_year_one(ov)
+        row, a = rows[0], budget["amounts"]
+        pairs = [("YOUR_401K_CONTRIBUTION", row["your_401k"]),
+                 ("YOUR_HSA_CONTRIBUTION", row["your_hsa"] - hsa_match),
+                 ("YOUR_BACKDOOR_ROTH", row["your_roth"]),
+                 ("PARTNER_401K_CONTRIBUTION", row["partner_401k"]),
+                 ("PARTNER_ROTH_CONTRIBUTION", row["partner_roth"]),
+                 ("YOUR_BROKERAGE_CONTRIBUTION", row["your_brokerage"]),
+                 ("PARTNER_BROKERAGE_CONTRIBUTION", row["partner_brokerage"])]
+        for key, engine in pairs:
+            assert a[key] == pytest.approx(engine, abs=1.0), key
+        assert budget["set_aside"].get(derived.AFTER_TAX_401K_LABEL, 0.0) == pytest.approx(
+            row["your_aftertax_roth"])
+
     def test_mega_backdoor_and_529_are_paid_before_the_brokerage(self):
         """Auto-allocate's brokerage share must not exceed the simulation's sweep:
         the engine treats it as a floor and would sell investments to fund it."""

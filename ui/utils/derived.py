@@ -92,9 +92,8 @@ def compute_taxes(overrides: dict, pretax_savings: bool = True) -> Dict[str, flo
     "state" includes state payroll tax (California SDI).
 
     ``pretax_savings`` (default True) lowers taxable income by the 401(k)/HSA
-    contributions, as the simulation does. compute_disposable passes False:
-    its pool is what the auto-allocation splits INTO those accounts, so it
-    can't depend on them.
+    contributions in ``overrides``, as the simulation does. (savings_budget
+    works out those contributions and this tax together.)
     """
     income = compute_total_income(overrides)
     if income <= 0:
@@ -426,6 +425,24 @@ def sidebar_savings_budget(state) -> Dict[str, object]:
     return savings_budget(overrides, custom_pcts=pcts)
 
 
+def partner_roth_allowed(overrides: dict, amounts: dict) -> float:
+    """Your partner's direct Roth IRA this year, as the simulation allows it
+    (account_simulation.working_year_cashflow): the IRA limit, reduced by the
+    Roth income phase-out of the return their income is on (MAGI after the
+    401(k)/HSA ``amounts``), and no more than the earned income behind it."""
+    partner_age = safe_int(overrides.get("PARTNER_AGE", 0), 0)
+    kw = _working_tax_inputs({**overrides, **amounts})
+    t = cfg.working_year_taxes(**kw)
+    two = t["two_returns"]
+    magi = t["partner"]["agi"] + (0.0 if two else t["you"]["agi"])
+    joint = (not two) and kw["status"] == cfg.normalize_filing_status("MFJ")
+    your_roth = float(amounts.get("YOUR_BACKDOOR_ROTH", 0) or 0)
+    earned = kw["partner_wages"] + (max(0.0, kw["your_wages"] - your_roth) if joint else 0.0)
+    allowed = cfg.roth_ira_allowed(get_limit("ira", partner_age), magi,
+                                   cfg.return_status("partner", kw["status"], kw["partner"]))
+    return max(0.0, min(allowed, earned))
+
+
 def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0) -> Dict[str, int]:
     """Default allocation rule: max tax-advantaged first, residual to brokerage.
 
@@ -438,7 +455,7 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
       2. Partner 401(k) → IRS limit (if partner exists)
       3. Your HSA family → IRS limit (only if HSA-eligible — assume yes if user has any HSA balance)
       4. Your IRA / backdoor Roth → IRS limit
-      5. Partner IRA → IRS limit
+      5. Partner IRA → IRS limit, less any Roth income phase-out
       6. Your brokerage → fills remainder (split 50/50 with partner if partner exists)
 
     Returns a dict with keys matching the simulator's contribution config keys:
@@ -488,9 +505,10 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
         allocated["YOUR_BACKDOOR_ROTH"] = fill
         remaining -= fill
 
-    # 5. IRA (partner)
+    # 5. IRA (partner): a direct Roth, so only what the simulation allows at
+    #    this income (the rest goes to the brokerage, as it does there).
     if has_partner and remaining > 0:
-        cap = get_limit("ira", partner_age)
+        cap = int(partner_roth_allowed(overrides, allocated))
         fill = min(cap, remaining)
         allocated["PARTNER_ROTH_CONTRIBUTION"] = fill
         remaining -= fill
@@ -498,11 +516,14 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
     remaining = max(0, remaining - int(round(set_aside)))
 
     # 6. Brokerage (residual). The couple SPLITS EXPENSES EVENLY, so each person
-    #    covers HALF of household expenses from their own income and banks their
-    #    OWN remainder in their OWN brokerage -> the residual lands MOSTLY in the
-    #    higher earner's account (entirely, if the other's income only covers their
-    #    half), NOT 50/50. Falls back to an even split only when no per-person
-    #    income breakdown is available.
+    #    covers HALF of household expenses from their own take-home and banks
+    #    their OWN remainder in their OWN brokerage -> the residual lands MOSTLY
+    #    in the higher earner's account (entirely, if the other's take-home only
+    #    covers their half), NOT 50/50. The same split as the simulation's sweep
+    #    (account_simulation.simulate_accumulation_year): each person's
+    #    take-home after their own Roth (and, for you, the 529 and after-tax
+    #    401(k) in ``set_aside``). Falls back to an even split only when no
+    #    per-person income breakdown is available.
     if remaining > 0:
         if has_partner:
             your_gross = sum(safe_int(overrides.get(k, 0), 0) for k in
@@ -518,8 +539,13 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
                 partner_exp = 0.5 * rest
             else:
                 your_exp = partner_exp = 0.5 * exp
-            your_left = max(0.0, your_gross - your_exp)
-            partner_left = max(0.0, partner_gross - partner_exp)
+            pay = cfg.working_year_taxes(**_working_tax_inputs({**overrides, **allocated}))
+            your_cap = max(0.0, pay["you"]["take_home"]
+                           - allocated["YOUR_BACKDOOR_ROTH"] - float(set_aside))
+            partner_cap = max(0.0, pay["partner"]["take_home"]
+                              - allocated["PARTNER_ROTH_CONTRIBUTION"])
+            your_left = max(0.0, your_cap - your_exp)
+            partner_left = max(0.0, partner_cap - partner_exp)
             leftover_total = your_left + partner_left
             if your_gross + partner_gross <= 0:
                 your_amt = remaining // 2            # no breakdown -> keep even split

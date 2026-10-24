@@ -222,17 +222,28 @@ class TestValidateRunInputs:
         errs = validate_run_inputs({"YOUR_AGE": 40, "PLAN_UNTIL_AGE": 90}, 30)
         assert len(errs) == 1 and "below your current age" in errs[0]
 
+    # The horizon is when the plan ends (cfg.plan_end_age), so these name the
+    # household: with no PARTNER_AGE the config's default partner would count.
     def test_plan_until_equal_to_target_errors(self):
-        errs = validate_run_inputs({"YOUR_AGE": 30, "PLAN_UNTIL_AGE": 45}, 45)
+        errs = validate_run_inputs({"YOUR_AGE": 30, "PARTNER_AGE": 0, "PLAN_UNTIL_AGE": 45}, 45)
         assert len(errs) == 1 and "must be after" in errs[0]
 
+    def test_a_younger_partner_extends_the_horizon(self):
+        """Your plan-until age equals the target, but the plan runs until your
+        5-years-younger partner reaches theirs: there is a retirement to model."""
+        ov = {"YOUR_AGE": 30, "PARTNER_AGE": 25, "PLAN_UNTIL_AGE": 45,
+              "PARTNER_PLAN_UNTIL_AGE": 45}
+        assert validate_run_inputs(ov, 45) == []
+        assert validate_run_inputs(ov, 50) != []
+
     def test_both_problems_reported_together(self):
-        errs = validate_run_inputs({"YOUR_AGE": 50, "PLAN_UNTIL_AGE": 40}, 45)
+        errs = validate_run_inputs({"YOUR_AGE": 50, "PARTNER_AGE": 0, "PLAN_UNTIL_AGE": 40}, 45)
         assert len(errs) == 2
 
     def test_none_target_only_checks_horizon(self):
-        assert validate_run_inputs({"YOUR_AGE": 30, "PLAN_UNTIL_AGE": 31}, None) == []
-        errs = validate_run_inputs({"YOUR_AGE": 30, "PLAN_UNTIL_AGE": 30}, None)
+        single = {"YOUR_AGE": 30, "PARTNER_AGE": 0}
+        assert validate_run_inputs({**single, "PLAN_UNTIL_AGE": 31}, None) == []
+        errs = validate_run_inputs({**single, "PLAN_UNTIL_AGE": 30}, None)
         assert len(errs) == 1 and "after your current age" in errs[0]
 
     def test_string_ages_are_accepted(self):
