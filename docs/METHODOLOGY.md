@@ -127,7 +127,7 @@ IRS contribution limits are CPI-indexed in reality, so in the all-real frame the
 
 Each retirement year proceeds in this order:
 
-1. **Compute gross annual expenses** — sum of housing, food, transport, healthcare (age-banded), child costs (each child in `CHILDREN` costs their own monthly amount from birth until their own leave-home age), college (paid first from that child's own 529), leisure, and discretionary.
+1. **Compute gross annual expenses** — sum of housing, food, transport, healthcare (age-banded), child costs (each child in `CHILDREN` costs their own monthly amount from birth until their own leave-home age), college (paid first from that child's own 529), leisure, and discretionary (see 6.1 and 6.2 for housing and the retirement lifestyle phases).
 2. **Apply dynamic spending adjustments** (Section 8) if enabled.
 3. **Apply return-based spending adjustments** (Section 9) if enabled.
 4. **Subtract Social Security** income for both spouses, if each has reached their claim age.
@@ -135,6 +135,45 @@ Each retirement year proceeds in this order:
 6. **Compute net withdrawal** needed from the portfolio = expenses + taxes − SS − RMD surplus.
 7. **Withdraw from accounts** in the tax-efficient order described in Section 7.
 8. **Apply investment returns** to remaining balances at year end.
+
+### 6.1 Housing timeline
+
+Housing starts from today's home: an owner pays the all-in mortgage payment
+until the loan is gone, then property tax + insurance (`HOME_CARRYING_COST_PCT`
+of the home's value); a renter pays `SPEND_RENT_MONTHLY`. `HOME_EVENTS` adds
+dated moves (the old single house move becomes one of them), applied at the start
+of their year in both phases, before that year's expenses:
+
+- **Sell** (any move while owning): proceeds = value − loan left (the tracked,
+  amortized balance) − selling costs − tax, into cash. The gain over the cost
+  basis above $250,000 per owner ($500,000 married filing jointly; unmarried
+  partners are taken as co-owners) is a long-term gain stacked on the year's
+  income (federal LTCG, state, NIIT).
+- **Buy**: the down payment (price − loan) and costs come out of savings; the new
+  loan is amortized at its own rate, its all-in payment replaces the old housing
+  cost, and the accessible-equity reserve restarts at the down payment. Rent stops.
+- **Sell and rent**: costs come out of savings; there is no home, loan or equity
+  afterwards, and the new rent is paid every year from then on.
+
+Home values are held flat in today's dollars, so a home bought in the plan sells
+for what it cost (no real gain). The ownership test for the exclusion (two of
+the last five years) is assumed met. A sale in a retirement year is taxed
+before that year's other income is counted, as the down payment always was.
+
+### 6.2 Retirement lifestyle
+
+Spending is higher in the first years of retirement and lower later:
+
+- **Go-go years:** +$10,000 a year for two adults (two-thirds of that for one
+  person, since shared costs like lodging don't halve) from retirement until 70,
+  or for 5 years when retiring after 65.
+- **Later years:** living spending 15% lower from 75, or from 10 years after
+  retiring when that is later. Housing is not reduced.
+
+All of these are inputs (Retirement goals). The lifecycle presets use the same
+phases: the travel boom's +50% discretionary covers the go-go years, its −20%
+and the conservative preset's −30% start with the later years, and empty-nest
+spending (−25%) starts once the last child has left home.
 
 ---
 
@@ -208,12 +247,17 @@ Healthcare costs are age-banded (values below are in today's dollars) and, in th
 | Age band         | Annual cost (today's $) | Notes                                     |
 |------------------|-------------------------|-------------------------------------------|
 | Pre-retirement   | $6,000                  | Employer-subsidized premiums + OOP        |
-| Early retirement (50–64) | $24,000         | Legacy flat band; unused by default (see below) |
+| Early retirement (to 64) | $24,000         | Legacy flat band; unused by default (see below) |
 | Medicare base (65–74)    | $8,000          | Part B + Part D + supplement              |
 | Medicare mid (75–84)     | $12,000         | Increased OOP, supplement drift           |
 | Medicare late (85+)      | $18,000         | Home care, Part A coinsurance, drugs      |
 
-**Pre-65 marketplace years** (`MODEL_ACA_AGE_RATED = True`, default) are priced per member rather than from the flat band: each pre-Medicare adult pays the benchmark Silver premium for their age (federal 3:1 age curve, `ACA_BENCHMARK_MONTHLY_AT_40` at 40), each child at home pays `ACA_CHILD_MONTHLY`, and the premium tax credit caps the household's cost at MAGI × the 2026 applicable percentage (2.10%–9.96%), with no credit at or above 400% of the household-size FPL. Each member also carries `ACA_OOP_PER_PERSON_ANNUAL` out-of-pocket, net of the living base's `SPEND_HEALTH_MONTHLY`. While a partner is still working after the primary retires, their employer plan covers the household and no marketplace cost is charged. In years when one spouse is on Medicare and the other is not, the Medicare all-in floor applies to the Medicare spouse's share before the other's marketplace cost is added.
+The bands are for a couple. Each covered adult is charged half a band for their
+own age, so a single person pays one share and an age-gapped couple pays one
+share of each person's band. Covered adults are you and a partner whenever there
+is one (`PARTNER_AGE > 0`), married or not.
+
+**Pre-65 marketplace years** (`MODEL_ACA_AGE_RATED = True`, default) are priced per member rather than from the flat band: each pre-Medicare adult pays the benchmark Silver premium for their age (federal 3:1 age curve, `ACA_BENCHMARK_MONTHLY_AT_40` at 40, an input because prices vary widely by region), each child at home pays `ACA_CHILD_MONTHLY`, and the premium tax credit caps the household's cost at MAGI × the 2026 applicable percentage (2.10%–9.96%), with no credit at or above 400% of the household-size FPL. Each member also carries `ACA_OOP_PER_PERSON_ANNUAL` out-of-pocket, net of the living base's `SPEND_HEALTH_MONTHLY`. While a partner is still working after the primary retires, their employer plan covers the household and no marketplace cost is charged. In years when one spouse is on Medicare and the other is not, the Medicare all-in floor applies to the Medicare spouse's share before the other's marketplace cost is added.
 
 **IRMAA surcharges** are added on top for years in which MAGI (from 2 years prior) exceeds the $206,000 MFJ threshold. See `TAX_MODEL.md` §7 for the IRMAA bracket table.
 
@@ -297,7 +341,7 @@ When `USE_HOME_EQUITY_BACKUP = True`, accessible home equity (default **85%** of
 - **No tax-loss harvesting** is modeled; taxable gains are realized at their embedded-gain ratio on withdrawal.
 - **One filing status for the whole plan** (`FILING_STATUS`) — no wedding, divorce, widow(er) or head-of-household transitions.
 - **Geography:** federal + California state only by default. See `TAX_MODEL.md` §4 for how to substitute another state.
-- **Not modeled:** inherited IRAs (no 10-year rule accounting), pension income, rental real estate, annuities, cash-value life insurance, business equity, deferred comp.
+- **Not modeled:** inherited IRAs (no 10-year rule accounting), pension income, rental real estate, a second home held at the same time as the main one, annuities, cash-value life insurance, business equity, deferred comp.
 - **Medicare/Medicaid** are modeled as flat age-banded costs; no long-term-care Medicaid spend-down logic, no separate Part A/B/D bracket interaction beyond IRMAA.
 - **State residency is assumed constant.** Changing residency mid-retirement (e.g. moving from CA to a no-tax state) is not modeled.
 - **Sequence-of-returns risk** is captured by Monte Carlo but not separately reported. Users concerned about SORR should inspect the distribution of failures by retirement-year cohort.

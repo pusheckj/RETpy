@@ -27,12 +27,6 @@ from retirement_sim import mc_jobs
 from utils.config_builder import build_config_overrides
 from utils.config_builder import _UI_ONLY_KEYS as _BUILDER_UI_ONLY_KEYS
 
-# Single source of truth for the lifecycle-preset -> {category: {age: mult}}
-# mapping (finding #11). Reused so the ENGINE honors the exact same pattern the
-# spending chart renders, instead of re-deriving it.
-from components.spending_inputs import compute_lifecycle_multipliers as _compute_lifecycle_multipliers
-from components.spending_inputs import first_child_window as _first_child_window
-
 logger = logging.getLogger(__name__)
 
 # The engine reads one shared ``retirement_sim.config`` module, and a run works by
@@ -226,8 +220,9 @@ def _recompute_derived(original: dict) -> None:
         "STOCK_VOLATILITY", "BOND_VOLATILITY",
         # Annual health premiums derived from the monthly overrides (finding #12).
         "ACA_BASE_ANNUAL_PREMIUM", "MEDICARE_ANNUAL_PREMIUM",
-        # Lifecycle multiplier dict derived from the preset name (finding #11).
-        "SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE",
+        # Lifecycle preset: the explicit-dict override is cleared, the empty-nest
+        # age follows the children inputs (finding #11).
+        "SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE", "SPEND_EMPTY_NEST_AGE",
         # Birth years (and the primary's RMD start age) follow from age.
         "YOUR_BIRTH_YEAR", "PARTNER_BIRTH_YEAR", "RMD_START_AGE",
     ]
@@ -335,22 +330,17 @@ def _recompute_derived(original: dict) -> None:
         cfg.MEDICARE_ANNUAL_PREMIUM = cfg.MEDICARE_MONTHLY_PREMIUM * 12
 
     # finding #11 (SPENDING LIFECYCLE PRESET) — the UI writes only the preset
-    # NAME (SPEND_LIFECYCLE_PRESET); the per-age multiplier dict the engine
-    # consumes (cfg.SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE) is derived live in the UI
-    # via compute_lifecycle_multipliers. Recompute it here from the SAME helper
-    # so the engine honors the exact pattern the spending chart shows. Reuses the
-    # UI helper (single source of truth for the preset -> multiplier mapping).
+    # NAME (SPEND_LIFECYCLE_PRESET) and the engine computes the multipliers per
+    # year from it (cfg.lifecycle_multiplier), because the retirement-relative
+    # ages depend on the retirement age being simulated, which a dict built here
+    # can't know. Clear the explicit-dict override so a stale one saved in an old
+    # profile can't win, and re-derive config.py's SPEND_EMPTY_NEST_AGE (the age
+    # the last child has left) from the children inputs.
     if hasattr(cfg, "SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE"):
-        preset = str(getattr(cfg, "SPEND_LIFECYCLE_PRESET", "Flat (no change)"))
-        yufc, leave_age = _first_child_window(cfg.CHILDREN)
-        cfg.SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE = _compute_lifecycle_multipliers(
-            preset=preset,
-            current_age=int(getattr(cfg, "YOUR_AGE", 25)),
-            retirement_age=int(getattr(cfg, "YOUR_AGE", 25)),
-            plan_until_age=int(cfg.plan_end_age()),
-            years_until_first_child=yufc,
-            child_leaves_home_age=leave_age,
-        )
+        cfg.SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE = {}
+    if callable(getattr(cfg, "empty_nest_age", None)):
+        cfg.SPEND_EMPTY_NEST_AGE = cfg.empty_nest_age(
+            end_age=cfg.plan_end_age() if callable(getattr(cfg, "plan_end_age", None)) else None)
 
     # Totals
     acct_retirement_keys = ["YOUR_401K", "YOUR_ROTH_IRA", "YOUR_TRADITIONAL_IRA", "YOUR_HSA", "PARTNER_401K", "PARTNER_ROTH_IRA"]
@@ -803,7 +793,8 @@ LIFECYCLE_TOGGLE_KEYS = (
 
 
 def active_lifecycle_toggles(user_overrides: dict) -> List[str]:
-    """Return the subset of ``LIFECYCLE_TOGGLE_KEYS`` that are truthy.
+    """Return the subset of ``LIFECYCLE_TOGGLE_KEYS`` that are truthy, plus
+    "HOME_EVENTS" when the plan has planned home moves.
 
     Falls back to ``cfg``'s default for a key the caller hasn't overridden,
     so this reflects the toggle state that will actually be simulated.
@@ -813,6 +804,8 @@ def active_lifecycle_toggles(user_overrides: dict) -> List[str]:
         value = user_overrides.get(key, getattr(cfg, key, False))
         if bool(value):
             active.append(key)
+    if user_overrides.get("HOME_EVENTS", getattr(cfg, "HOME_EVENTS", None)):
+        active.append("HOME_EVENTS")
     return active
 
 
@@ -875,8 +868,8 @@ def run_whatif_delta(
     return whatif_from(user_overrides, scenario, baseline)
 
 def whatif_baseline_overrides(user_overrides: dict) -> dict:
-    """The same plan with every lifecycle toggle off."""
-    return {**user_overrides, **{key: False for key in LIFECYCLE_TOGGLE_KEYS}}
+    """The same plan with every lifecycle toggle off and no planned moves."""
+    return {**user_overrides, **{key: False for key in LIFECYCLE_TOGGLE_KEYS}, "HOME_EVENTS": []}
 
 
 def whatif_from(user_overrides: dict, scenario: Dict[str, Any], baseline: Dict[str, Any]) -> Dict[str, Any]:
@@ -2121,15 +2114,16 @@ _MORTGAGE_CACHE: Dict[tuple, Any] = {}
 
 def has_mortgage_to_prepay() -> bool:
     """Is there a loan for extra principal to pay down (cfg must be configured)?
-    Today's mortgage, or the new one from a planned house move; and the engine
+    Today's mortgage, or one from any planned purchase in the housing timeline
+    (cfg.housing_events: a renter buying with a loan counts); and the engine
     must be tracking the balance (TRACK_HOME_EQUITY_PAYDOWN), or extra payments
     change nothing."""
     if not getattr(cfg, "TRACK_HOME_EQUITY_PAYDOWN", False):
         return False
     if float(getattr(cfg, "MORTGAGE_BALANCE", 0) or 0) > 0:
         return True
-    return bool(getattr(cfg, "HOUSE_MOVE_ENABLED", False)) and \
-        float(getattr(cfg, "NEW_MORTGAGE_BALANCE", 0) or 0) > 0
+    return any(e["action"] != cfg.HOME_SELL_RENT and e["loan"] > 0
+               for e in cfg.housing_events())
 
 
 def plan_mortgage_paydown(

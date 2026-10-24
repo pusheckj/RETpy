@@ -16,6 +16,7 @@ TOGGLE_LABELS = {
     "CAR_ONETIME_ENABLED": "One-time car purchase",
     "CAR_RECURRING_ENABLED": "Recurring car purchases",
     "HOUSE_MOVE_ENABLED": "House move",
+    "HOME_EVENTS": "Home moves",
     "RETIREMENT_VACATION_ENABLED": "Retirement vacation spending",
 }
 

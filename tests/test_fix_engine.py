@@ -296,15 +296,21 @@ class TestHealthInsurancePerPerson:
         )
 
     def test_single_filer_pays_one_medicare_premium(self, cfg_sandbox):
-        """A single filer must be billed HALF what an equivalent couple is billed."""
+        """A single person must be billed HALF what an equivalent couple is billed.
+
+        "Single" is no partner (PARTNER_AGE 0, the cfg.has_partner contract).
+        This used to be modelled as filing status Single with a 70-year-old
+        partner, which is an unmarried couple: both of them need coverage, so
+        they are now billed like the married couple."""
         cfg_sandbox.FILING_STATUS = "Married filing jointly"
         couple = self._quote(cfg_sandbox, 70, 70)
         cfg_sandbox.FILING_STATUS = "Single"
-        single = self._quote(cfg_sandbox, 70, 70)
+        single = self._quote(cfg_sandbox, 70, 0)
         assert single == pytest.approx(0.5 * couple), (
             f"single filer charged {single:,.0f} vs couple {couple:,.0f} "
             "-- two Medicare premiums for one person"
         )
+        assert self._quote(cfg_sandbox, 70, 70) == pytest.approx(couple)   # unmarried pair
 
 
 # ===========================================================================

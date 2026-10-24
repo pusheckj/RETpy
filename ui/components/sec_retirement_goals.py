@@ -37,6 +37,64 @@ def _ss_factor(claim_age: int) -> float:
     return 0.70 + (1.0 - 0.70) * (claim_age - 62) / 5.0  # pragma: no cover
 
 
+def _lifestyle(st, overrides: dict) -> None:
+    """Go-go years extra and the later-years drop (cfg.EARLY_RETIREMENT_LEISURE_*,
+    LATE_RETIREMENT_*). The extra follows household size until you change it."""
+    _section_label(st, "Early and later retirement")
+    adults = 2 if safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0 else 1
+    auto = int(round(cfg.default_retirement_leisure(adults))) if cfg else 10_000
+    if get_override(st, "EARLY_RETIREMENT_LEISURE_INCREASE", None) is None:
+        st.session_state["rg_leisure_amount"] = auto       # not chosen yet: follow the household
+
+    def _chosen():
+        set_override(st, "EARLY_RETIREMENT_LEISURE_INCREASE",
+                     safe_int(st.session_state.get("rg_leisure_amount"), auto))
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.number_input("Extra for travel and hobbies ($/yr)", min_value=0, max_value=200_000,
+                        step=1_000, key="rg_leisure_amount", on_change=_chosen,
+                        help="Most people spend more in the first years of retirement. "
+                             "Starts at about $10,000 a year for a couple, two-thirds of "
+                             "that for one person.")
+    with c2:
+        ensure_default(st, "rg_leisure_until",
+                       safe_int(get_override(st, "EARLY_RETIREMENT_LEISURE_UNTIL_AGE", 70), 70))
+        v = st.number_input("Until age", min_value=50, max_value=100, step=1,
+                            key="rg_leisure_until")
+        set_override(st, "EARLY_RETIREMENT_LEISURE_UNTIL_AGE", safe_int(v))
+    c3, c4 = st.columns(2)
+    with c3:
+        ensure_default(st, "rg_late_pct", int(round(safe_float(
+            get_override(st, "LATE_RETIREMENT_LEISURE_DECREASE", 0.15), 0.15) * 100)))
+        v = st.slider("Spend less later (%)", min_value=0, max_value=50, step=5,
+                      key="rg_late_pct",
+                      help="Day-to-day spending usually falls as you age. Housing "
+                           "costs stay the same.")
+        set_override(st, "LATE_RETIREMENT_LEISURE_DECREASE", v / 100)
+    with c4:
+        ensure_default(st, "rg_late_from",
+                       safe_int(get_override(st, "LATE_RETIREMENT_START_AGE", 75), 75))
+        v = st.number_input("From age", min_value=55, max_value=100, step=1,
+                            key="rg_late_from")
+        set_override(st, "LATE_RETIREMENT_START_AGE", safe_int(v))
+
+    # The ages the engine will actually use for the retirement age you're planning.
+    ret = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60)
+    amount = get_override(st, "EARLY_RETIREMENT_LEISURE_INCREASE", None)
+    amount = auto if amount is None else safe_int(amount)
+    end = max(safe_int(get_override(st, "EARLY_RETIREMENT_LEISURE_UNTIL_AGE", 70), 70),
+              ret + safe_int(getattr(cfg, "RETIREMENT_LEISURE_MIN_YEARS", 5), 5))
+    late = max(safe_int(get_override(st, "LATE_RETIREMENT_START_AGE", 75), 75),
+               ret + safe_int(getattr(cfg, "LATE_RETIREMENT_MIN_YEARS", 10), 10))
+    pct_less = safe_float(get_override(st, "LATE_RETIREMENT_LEISURE_DECREASE", 0.15), 0.15)
+    extra = (f"extra {money_md(amount)}/yr until {end}" if amount > 0 and end > ret
+             else "no extra spending")
+    st.caption(f"Retiring at {ret}: {extra}, then {pct_less:.0%} less from {late} "
+               "(housing excluded). A late retirement still gets 5 years of extra, "
+               "and the drop waits until 10 years after you retire.")
+
+
 def render_body(st) -> None:
     overrides = st.session_state.get("user_overrides", {}) or {}
 
@@ -69,6 +127,8 @@ def render_body(st) -> None:
                    f"inflated each year.")
     else:
         st.caption("Same as today's expenses, inflation-adjusted each year.")
+
+    _lifestyle(st, overrides)
 
     # ----- Social Security -----
     _section_label(st, "Social Security")

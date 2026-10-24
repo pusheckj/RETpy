@@ -71,9 +71,49 @@ Add fields for partner Traditional IRA or HSA if relevant by copying the pattern
 |---|---|---|
 | `HOME_VALUE` | `$700,000` | Current market value. Held flat in real terms (housing real-excess rate is 0%). |
 | `MORTGAGE_BALANCE` | `$500,000` | Outstanding principal. |
+| `MORTGAGE_RATE_FOR_PAYOFF` | `0.065` | The current loan's fixed rate (the app's *Mortgage interest rate*). The balance is amortized at it, so it sets how fast equity builds and what is left to repay at a sale. |
+| `HOME_COST_BASIS` | `None` | What you paid for today's home (plus improvements), for tax on its sale. `None` = its value, i.e. no taxable gain. |
 | `HOME_EQUITY_ACCESSIBLE_PCT` | `0.85` | Fraction of equity recoverable after selling costs (agent fees, transfer taxes). Only used if `USE_HOME_AS_BACKUP = True`. |
 
-`HOME_EQUITY` is auto-computed as `HOME_VALUE - MORTGAGE_BALANCE`.
+`HOME_EQUITY` is auto-computed as `HOME_VALUE - MORTGAGE_BALANCE`. A renter sets
+`HOME_VALUE = 0`, `MORTGAGE_MONTHLY = 0` and `SPEND_RENT_MONTHLY`.
+
+### Housing timeline: buy, move, downsize
+
+`HOME_EVENTS` lists what changes later, each at an age of yours (the app's
+*Big purchases → Home moves*). Empty = stay put. One home at a time.
+
+```python
+HOME_EVENTS = [
+    {"age": 30, "action": "buy", "price": 450_000, "down_pct": 0.20,
+     "rate": 0.065, "years": 30, "costs": 10_000},          # renter buys
+    {"age": 45, "action": "sell_buy", "price": 800_000, "down_pct": 0.25,
+     "rate": 0.055, "years": 15, "selling_cost_pct": 0.06},  # move / upgrade / downsize
+    {"age": 72, "action": "sell_rent", "rent": 2_500, "costs": 5_000},  # sell, then rent
+]
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `age`, `action` | required | `buy`, `sell_buy` or `sell_rent`. Any purchase sells the home you own first. |
+| `price`, `down_pct` | — , `0.20` | Purchase price and down payment. `loan` may be given instead of `down_pct`. |
+| `rate`, `years` | `MORTGAGE_RATE_FOR_PAYOFF`, `30` | The new loan. |
+| `monthly` | derived | All-in payment: level P&I + `price × HOME_CARRYING_COST_PCT / 12`. |
+| `costs` | `HOUSE_MOVING_COSTS` | Buying and moving costs, paid from savings. |
+| `selling_cost_pct` | `HOME_SELLING_COST_PCT` | Agent fees and closing costs on a sale. |
+| `rent` | `0` | `sell_rent` only: monthly rent from then on (today's dollars). |
+
+At a sale, proceeds (value − loan left − selling costs − tax) go into cash. The
+gain above `HOME_SALE_EXCLUSION_SINGLE` ($250,000 per owner) or
+`HOME_SALE_EXCLUSION_MFJ` ($500,000 married filing jointly) is taxed as a
+long-term gain; unmarried partners are taken to own the home together ($250,000
+each). Rent stops once you buy; owner costs stop once you sell to rent.
+
+The single house move of older plans (`HOUSE_MOVE_ENABLED`, `HOUSE_MOVE_AGE`,
+`NEW_HOME_VALUE`, `NEW_MORTGAGE_BALANCE`, `NEW_MORTGAGE_MONTHLY`,
+`NEW_MORTGAGE_YEARS`, `NEW_MORTGAGE_RATE`) still works: `cfg.housing_events()`
+turns it into one more event with exactly those numbers. The app shows it in the
+moves list the first time the plan is opened.
 
 ---
 
@@ -168,12 +208,28 @@ The engine opens one 529 per child (`child1_529`, `child2_529`, …).
 | Parameter | Default | Description |
 |---|---|---|
 | `BASE_RETIREMENT_EXPENSES_NO_MORTGAGE` | auto-computed | Sum of `YOUR_OTHER_ANNUAL + UTILITIES_ANNUAL + PARTNER_ANNUAL_SPENDING`. Don't edit directly — change the inputs. |
-| `EARLY_RETIREMENT_LEISURE_INCREASE` | `$10,000` | Extra annual spending ages 50–70 (travel, hobbies). |
-| `LATE_RETIREMENT_LEISURE_DECREASE` | `0.15` | 15% reduction in discretionary spending after age 75 as activity drops off. |
+| `EARLY_RETIREMENT_LEISURE_INCREASE` | `None` | Extra $/yr for travel and hobbies early in retirement. `None` = $10,000 for two adults, two-thirds of that for one. |
+| `EARLY_RETIREMENT_LEISURE_UNTIL_AGE` | `70` | The extra runs from retirement until this age... |
+| `RETIREMENT_LEISURE_MIN_YEARS` | `5` | ...and for at least this many years after a late retirement. |
+| `LATE_RETIREMENT_LEISURE_DECREASE` | `0.15` | Later-years reduction of living spending. Housing (payment, rent, tax + insurance) is not reduced. |
+| `LATE_RETIREMENT_START_AGE` | `75` | The reduction starts at this age... |
+| `LATE_RETIREMENT_MIN_YEARS` | `10` | ...or this many years after retiring, whichever is later. |
+
+All six are inputs in the app's *Retirement goals* section. Retiring at 65 or
+earlier gives the old fixed ages (extra until 70, reduction from 75).
+
+`SPEND_LIFECYCLE_PRESET` moves food/discretionary spending by age: the travel
+boom (+50% discretionary) runs over the same early-retirement years and its
+"quieter later" (−20%) and the conservative preset (−30%) start with the
+later-years reduction; empty-nest is +30% while any child is at home and −25%
+once the last has left (`SPEND_EMPTY_NEST_AGE`, derived from the children).
 
 ### Healthcare by age
 
-`HEALTHCARE_COSTS_BY_AGE` maps life stage to annual healthcare cost (today's dollars, couple):
+`HEALTHCARE_COSTS_BY_AGE` maps life stage to annual healthcare cost (today's
+dollars, for a couple: `HEALTHCARE_BAND_ADULTS = 2`). Each covered adult is
+charged half a band for their own age, so one person pays one share. A partner
+is covered whenever there is one (`PARTNER_AGE > 0`), married or not.
 
 | Key | Default | Covers |
 |---|---|---|
@@ -340,8 +396,8 @@ Applied in addition to guardrails.
 |---|---|---|
 | `ACA_ENABLED` | `True` | Model pre-65 ACA marketplace costs. |
 | `MODEL_ACA_AGE_RATED` | `True` | Price each marketplace member by age (federal 3:1 curve) plus children at home; subsidy from household-size FPL with the 400% cliff. `False` = legacy flat household premium. |
-| `ACA_BENCHMARK_MONTHLY_AT_40` | `$650` | Benchmark (second-lowest) Silver premium for a 40-year-old. Adjust for your region from healthcare.gov. |
-| `ACA_CHILD_MONTHLY` | `$390` | Benchmark premium per child at home. |
+| `ACA_BENCHMARK_MONTHLY_AT_40` | `$650` | Benchmark (second-lowest) Silver premium for a 40-year-old, before subsidy (2026 San Diego, close to the US average of about $625). An input in the app's Assumptions panel: look yours up by ZIP code at healthcare.gov. |
+| `ACA_CHILD_MONTHLY` | `$390` | Benchmark premium per child at home (also an input). |
 | `ACA_OOP_PER_PERSON_ANNUAL` | `$1,500` | Out-of-pocket per marketplace member, net of `SPEND_HEALTH_MONTHLY` so it isn't counted twice. |
 | `PARTNER_EMPLOYER_HEALTH_COVERAGE` | `True` | While a partner keeps working after you retire, their employer plan covers the household: no marketplace cost. Put the payroll premium in the living-expense base. |
 | `ACA_BASE_MONTHLY_PREMIUM` | `$2,000` | Legacy path only: unsubsidized household premium. |

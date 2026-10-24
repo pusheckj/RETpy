@@ -23,13 +23,13 @@ except ImportError:  # pragma: no cover
 try:
     from utils.coerce import safe_int, safe_float
     from utils.derived import (advance_mortgage_with_extra, current_mortgage_terms,
-                               mortgage_payment,
+                               mortgage_payment, housing_timeline,
                                extra_mortgage_for_age as _extra_for_age)
     from utils.formatting import money
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float  # type: ignore
     from ui.utils.derived import (advance_mortgage_with_extra,  # type: ignore
-                                  current_mortgage_terms, mortgage_payment,
+                                  current_mortgage_terms, mortgage_payment, housing_timeline,
                                   extra_mortgage_for_age as _extra_for_age)
     from ui.utils.formatting import money  # type: ignore
 
@@ -182,27 +182,6 @@ def _cfg_default(key, fallback):
     return getattr(cfg, key, fallback) if cfg is not None else fallback
 
 
-def _house_move_params(overrides: dict) -> dict | None:
-    """Return the house-move parameters if enabled, else None. Values come from
-    ``user_overrides`` (fallback: cfg defaults)."""
-    enabled = bool(overrides.get("HOUSE_MOVE_ENABLED",
-                                 _cfg_default("HOUSE_MOVE_ENABLED", False)))
-    if not enabled:
-        return None
-    return {
-        "age": safe_int(overrides.get("HOUSE_MOVE_AGE",
-                                      _cfg_default("HOUSE_MOVE_AGE", 45)), 45),
-        "new_home_value": safe_int(overrides.get("NEW_HOME_VALUE",
-                                                 _cfg_default("NEW_HOME_VALUE", 1_000_000)), 1_000_000),
-        "new_mortgage_balance": safe_int(overrides.get("NEW_MORTGAGE_BALANCE",
-                                                       _cfg_default("NEW_MORTGAGE_BALANCE", 700_000)), 700_000),
-        "selling_cost_pct": safe_float(overrides.get("HOME_SELLING_COST_PCT",
-                                                     _cfg_default("HOME_SELLING_COST_PCT", 0.06)), 0.06),
-        "moving_costs": safe_int(overrides.get("HOUSE_MOVING_COSTS",
-                                               _cfg_default("HOUSE_MOVING_COSTS", 10_000)), 10_000),
-    }
-
-
 def _ov_hash(d):
     """Hashable key for a user-overrides dict (primitives kept; others stringified)."""
     return tuple(sorted(
@@ -253,7 +232,7 @@ def project_net_worth(user_overrides: dict) -> dict:
     by_account = {label: [] for label, _, _, _ in ACCOUNTS}
     ages = []
 
-    house = _house_move_params(user_overrides)
+    events = housing_timeline(user_overrides)    # buy / sell and buy / sell and rent
     cash_label = "Your Cash"
     home_label = "Home equity"
 
@@ -261,6 +240,7 @@ def project_net_worth(user_overrides: dict) -> dict:
     # net worth (see the snapshot below). Rate/P&I are inferred from the stored
     # all-in payment, with escrow removed first.
     _home_value = float(safe_int(user_overrides.get("HOME_VALUE", 0), 0))
+    _sale_value = _home_value          # the value a sale's costs are charged on
     _cur = current_mortgage_terms(user_overrides)
     _mort_balance = float(_cur["balance"])
     _mort_rate = float(_cur["rate"])
@@ -273,9 +253,9 @@ def project_net_worth(user_overrides: dict) -> dict:
         # --- Big-purchase / goal events happen "in this year" so the bend is
         # visible at this age. Applied BEFORE the snapshot so the drop/jump
         # shows up on the projected line without needing a Run. ---
-        # House move: realize net cash flow into cash, switch home equity to
-        # the new home.
-        if house is not None and age == house["age"]:
+        # Housing events: realize the net cash flow into cash and switch the
+        # tracked property + loan (none after a sale to rent).
+        for ev in (e for e in events if e["age"] == age):
             # Equity must come from the CURRENTLY tracked value/principal, not
             # from balances[home_label] -- that dict entry is last year's
             # snapshot, taken before this year's appreciation, amortization and
@@ -283,13 +263,23 @@ def project_net_worth(user_overrides: dict) -> dict:
             # extra principal (charged to cash, never credited to the sale
             # proceeds): a measured $30k vanished at the move.
             old_equity = max(0.0, _home_value - _mort_balance)
-            new_equity = max(0.0, float(house["new_home_value"] - house["new_mortgage_balance"]))
-            # Selling costs are charged against the CURRENT home's value input.
-            old_home_value = safe_int(user_overrides.get("HOME_VALUE", 0), 0)
-            selling_costs = old_home_value * house["selling_cost_pct"]
+            # Selling costs are charged against the home's entered value.
+            selling_costs = _sale_value * ev["selling_cost_pct"]
+            if ev["action"] == "sell_rent":
+                new_equity = 0.0
+                _home_value = _sale_value = 0.0
+                _mort_balance = _mort_pi = 0.0
+            else:
+                new_equity = max(0.0, ev["price"] - ev["loan"])
+                # Swap the tracked property + loan over to the new house so the
+                # new mortgage starts amortizing from this age.
+                _home_value = _sale_value = float(ev["price"])
+                _mort_balance = float(ev["loan"])
+                _mort_rate = float(ev["rate"])
+                _mort_pi = mortgage_payment(_mort_balance, _mort_rate, ev["years"])
             # Net cash flow = sale proceeds (old equity, net of selling costs)
             # − down payment on the new home (new equity) − moving costs.
-            net_cash_flow = old_equity - selling_costs - new_equity - house["moving_costs"]
+            net_cash_flow = old_equity - selling_costs - new_equity - ev["costs"]
             if net_cash_flow >= 0:
                 balances[cash_label] += net_cash_flow
             else:
@@ -298,16 +288,6 @@ def project_net_worth(user_overrides: dict) -> dict:
                 # would hand back the unfunded part as free net worth.
                 _draw_from_balances(balances, -net_cash_flow, cash_label)
             balances[home_label] = new_equity
-            # Swap the tracked property + loan over to the new house so the
-            # new mortgage starts amortizing from this age.
-            _home_value = float(house["new_home_value"])
-            _mort_balance = float(house["new_mortgage_balance"])
-            _cur_rate = safe_float(user_overrides.get("MORTGAGE_RATE_FOR_PAYOFF", 0.065), 0.065)
-            _mort_rate = safe_float(user_overrides.get("NEW_MORTGAGE_RATE", _cur_rate), _cur_rate)
-            _mort_pi = mortgage_payment(
-                _mort_balance, _mort_rate,
-                safe_int(user_overrides.get("NEW_MORTGAGE_YEARS", 30), 30),
-            )
 
         # Car purchases: cash outlay drawn from cash, then other liquid accounts.
         car = _car_outlay(user_overrides, age)

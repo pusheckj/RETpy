@@ -738,7 +738,9 @@ def rent_annual(your_age: int) -> float:
 
     Rent is a constant (today's-dollars) living cost that runs for the whole
     horizon (renters do not "pay off" housing the way owners retire a mortgage).
-    Owners return 0 here because their housing is the mortgage term.
+    Owners return 0 here because their housing is the mortgage term. A planned
+    purchase (HOME_EVENTS) ends it: the engine then swaps this whole housing
+    term for its own (``AccountPortfolio.housing_expense_for_age``).
     """
     if is_renter():
         return SPEND_RENT_MONTHLY * 12
@@ -759,8 +761,7 @@ def home_carrying_cost_annual(home_value: float) -> float:
 
 def owner_housing_annual(your_age: int) -> float:
     """Config-path owner housing at ``your_age``: the all-in mortgage while it is
-    being paid, else the carrying cost of HOME_VALUE. The engine swaps this for
-    ``AccountPortfolio.housing_expense_for_age`` when its own loan state is live.
+    being paid, else the carrying cost of HOME_VALUE (no rent).
     """
     if has_mortgage(your_age):
         return MORTGAGE_ANNUAL
@@ -771,7 +772,9 @@ def housing_annual(your_age: int) -> float:
     """Config-path housing term ``calculate_annual_expenses`` adds at ``your_age``
     (today's dollars): the all-in mortgage while it is being paid, else rent
     (renters) plus the owner's post-payoff carrying cost. Single source for both
-    the expense total and the guardrails' fixed housing slice.
+    the expense total and the guardrails' fixed housing slice. It describes
+    today's home for the whole plan; with a housing timeline the engine replaces
+    it year by year with ``AccountPortfolio.housing_expense_for_age``.
     """
     if has_mortgage(your_age):
         return MORTGAGE_ANNUAL
@@ -801,12 +804,56 @@ HEALTHCARE_INCREASE_ANNUAL = 12_000
 MEDICARE_AGE = 65
 HEALTHCARE_INCREASE_PRE_MEDICARE = 15_000
 
-# Hobby/leisure increase in early retirement, then taper in later years.
-EARLY_RETIREMENT_LEISURE_INCREASE = 10_000
-LATE_RETIREMENT_LEISURE_DECREASE = 0.15  # 15% less activity spending after 75
+# Retirement lifestyle: extra travel/hobby spending in the first years of
+# retirement ("go-go years"), then lower day-to-day spending in later years.
+# The app's Retirement goals section sets all of these.
+#
+# Extra $/yr (today's dollars). None = by household size: $10,000 for two
+# adults, two-thirds of that for one (shared costs like lodging don't halve).
+EARLY_RETIREMENT_LEISURE_INCREASE = None
+# The extra lasts from retirement until this age, and at least
+# RETIREMENT_LEISURE_MIN_YEARS when you retire late.
+EARLY_RETIREMENT_LEISURE_UNTIL_AGE = 70
+RETIREMENT_LEISURE_MIN_YEARS = 5
+# From this age (at least LATE_RETIREMENT_MIN_YEARS after retiring) living
+# spending is LATE_RETIREMENT_LEISURE_DECREASE lower. Housing is not reduced:
+# a mortgage or rent doesn't shrink because you travel less.
+LATE_RETIREMENT_LEISURE_DECREASE = 0.15
+LATE_RETIREMENT_START_AGE = 75
+LATE_RETIREMENT_MIN_YEARS = 10
+_LEISURE_TWO_ADULTS = 10_000
+_LEISURE_ONE_ADULT_SHARE = 2.0 / 3.0
 
 # Legacy name for notebook compatibility
 LATE_RETIREMENT_EXPENSE_REDUCTION = LATE_RETIREMENT_LEISURE_DECREASE
+
+
+def default_retirement_leisure(adults: int) -> float:
+    """The go-go extra used when none is set, for a household of ``adults``."""
+    return _LEISURE_TWO_ADULTS * (1.0 if adults >= 2 else _LEISURE_ONE_ADULT_SHARE)
+
+
+def retirement_leisure_increase() -> float:
+    """Extra early-retirement spending per year (today's dollars)."""
+    if EARLY_RETIREMENT_LEISURE_INCREASE is not None:
+        return float(EARLY_RETIREMENT_LEISURE_INCREASE)
+    return default_retirement_leisure(2 if has_partner() else 1)
+
+
+def retirement_leisure_end_age(retirement_age=None) -> int:
+    """First age WITHOUT the go-go extra. ``None`` = the plain age rule."""
+    end = int(EARLY_RETIREMENT_LEISURE_UNTIL_AGE)
+    if retirement_age is not None:
+        end = max(end, int(retirement_age) + int(RETIREMENT_LEISURE_MIN_YEARS))
+    return end
+
+
+def late_retirement_start_age(retirement_age=None) -> int:
+    """First age with the later-years spending reduction."""
+    start = int(LATE_RETIREMENT_START_AGE)
+    if retirement_age is not None:
+        start = max(start, int(retirement_age) + int(LATE_RETIREMENT_MIN_YEARS))
+    return start
 
 # -----------------------------------------------------------------------------
 # DYNAMIC SPENDING ADJUSTMENT (Guardrails)
@@ -975,41 +1022,112 @@ def retirement_living_base() -> float:
 # -----------------------------------------------------------------------------
 # SPENDING LIFECYCLE PRESET (finding #11)
 # -----------------------------------------------------------------------------
-# The UI "lifecycle pattern" preset (travel boom / conservative senior /
-# empty-nest) computes per-category, per-age multipliers via the UI helper
-# ``compute_lifecycle_multipliers``. sim_runner copies the resulting
-# {category: {age: multiplier}} dict onto SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE so
-# the ENGINE can honor the same pattern the spending chart shows. Real cfg
-# attributes so both the preset name and the derived multipliers reach the
-# engine (were dropped by the hasattr() gate in sim_runner._apply_overrides).
+# The UI "lifecycle pattern" preset moves food / discretionary spending by age:
+#   travel boom      discretionary +50% from retirement until the go-go years
+#                    end (retirement_leisure_end_age), -20% from the later-years
+#                    age (late_retirement_start_age);
+#   conservative     discretionary -30% from the later-years age;
+#   empty-nest       food + discretionary +30% while any child is at home, -25%
+#                    once the last one has left (SPEND_EMPTY_NEST_AGE).
+# The engine reads the preset NAME and computes the multiplier per year
+# (lifecycle_multiplier), because the retirement-relative ages depend on the
+# retirement age being simulated. The spending chart uses the same function.
+# SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE ({category: {age: multiplier}}) is an
+# explicit override for direct engine use; when non-empty it replaces the
+# preset. sim_runner clears it so a stale dict in an old profile can't win.
 SPEND_LIFECYCLE_PRESET = "Flat (no change)"
 SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE = {}
 
+LIFECYCLE_TRAVEL_BOOM = "Early-retirement travel boom, quieter later"
+LIFECYCLE_SENIOR = "Conservative senior years"
+LIFECYCLE_EMPTY_NEST = "Children then empty-nest"
+_LIFECYCLE_CATEGORIES = ("SPEND_FOOD_MONTHLY", "SPEND_DISCRETIONARY_MONTHLY")
 
-def lifecycle_spend_delta_annual(your_age: int, inflation_factor: float = 1.0) -> float:
+
+def empty_nest_age(start_age=None, end_age=None):
+    """First age (yours) after the last child has left home, or None without
+    children. Children who left before today count, so a household whose kids
+    are grown is an empty nest from the start."""
+    start = int(YOUR_AGE if start_age is None else start_age)
+    end = int(PLAN_UNTIL_AGE if end_age is None else end_age)
+    last = None
+    for age in range(start - 60, end + 1):
+        if children_at_home_ages(age):
+            last = age
+    return None if last is None else last + 1
+
+
+# Derived from the children inputs (sim_runner._recompute_derived recomputes it).
+SPEND_EMPTY_NEST_AGE = empty_nest_age()
+
+
+def lifecycle_multiplier(category: str, your_age: int, retirement_age=None,
+                         preset=None, retired: bool = True, kids_at_home=None,
+                         empty_nest_from=...) -> float:
+    """Multiplier the lifecycle ``preset`` applies to ``category`` at ``your_age``.
+
+    ``retirement_age`` None = unknown: the go-go window then needs ``retired``
+    and the later-years age falls back to the plain age rule. ``kids_at_home``
+    and ``empty_nest_from`` default to children_at_home_ages / SPEND_EMPTY_NEST_AGE.
+    """
+    preset = SPEND_LIFECYCLE_PRESET if preset is None else preset
+    if preset == LIFECYCLE_EMPTY_NEST:
+        if category not in _LIFECYCLE_CATEGORIES:
+            return 1.0
+        if kids_at_home is None:
+            kids_at_home = bool(children_at_home_ages(your_age))
+        if kids_at_home:
+            return 1.30
+        nest = SPEND_EMPTY_NEST_AGE if empty_nest_from is ... else empty_nest_from
+        return 0.75 if nest is not None and your_age >= nest else 1.0
+    if category != "SPEND_DISCRETIONARY_MONTHLY":
+        return 1.0
+    later = your_age >= late_retirement_start_age(retirement_age)
+    if preset == LIFECYCLE_TRAVEL_BOOM:
+        go_go = (retired and your_age < retirement_leisure_end_age(retirement_age)
+                 and (retirement_age is None or your_age >= retirement_age))
+        return 1.50 if go_go else (0.80 if later else 1.0)
+    if preset == LIFECYCLE_SENIOR:
+        return 0.70 if later else 1.0
+    return 1.0
+
+
+def lifecycle_spend_delta_annual(your_age: int, inflation_factor: float = 1.0,
+                                 retirement_age=None, retired: bool = True) -> float:
     """Annual living-expense delta from the lifecycle preset at ``your_age``.
 
-    Reads SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE ({category: {age: multiplier}}) —
-    the SAME dict the spending chart consumes — and, for each affected SPEND_*
-    category, returns the dollar change relative to today's spending:
+    For each category the preset touches (food / discretionary), the dollar
+    change relative to today's spending:
         sum over categories of  monthly*12 * (multiplier(age) - 1.0)
-    A multiplier of 1.0 (or a missing age) contributes 0. Only the granular
-    SPEND_* categories the preset touches (food / discretionary) move; every
-    other category and the partner base are untouched. Scaled by
-    ``inflation_factor`` so it grows in step with the base it adjusts.
+    A non-empty SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE supplies the multipliers
+    instead (missing ages = 1.0). Every other category and the partner base are
+    untouched. Scaled by ``inflation_factor`` so it grows in step with the base
+    it adjusts.
     """
     mults = SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE
-    if not mults:
-        return 0.0
     delta = 0.0
-    for category, by_age in mults.items():
-        if not by_age:
-            continue
+    if mults:
+        for category, by_age in mults.items():
+            if not by_age:
+                continue
+            monthly = globals().get(category)
+            if monthly is None:
+                continue
+            multiplier = by_age.get(your_age, by_age.get(int(your_age), 1.0))
+            delta += float(monthly) * 12.0 * (float(multiplier) - 1.0)
+        return delta * inflation_factor
+    preset = SPEND_LIFECYCLE_PRESET
+    if preset not in (LIFECYCLE_TRAVEL_BOOM, LIFECYCLE_SENIOR, LIFECYCLE_EMPTY_NEST):
+        return 0.0
+    kids = bool(children_at_home_ages(your_age)) if preset == LIFECYCLE_EMPTY_NEST else None
+    for category in _LIFECYCLE_CATEGORIES:
         monthly = globals().get(category)
         if monthly is None:
             continue
-        multiplier = by_age.get(your_age, by_age.get(int(your_age), 1.0))
-        delta += float(monthly) * 12.0 * (float(multiplier) - 1.0)
+        multiplier = lifecycle_multiplier(category, your_age, retirement_age, preset,
+                                          retired, kids_at_home=kids)
+        if multiplier != 1.0:
+            delta += float(monthly) * 12.0 * (multiplier - 1.0)
     return delta * inflation_factor
 
 
@@ -1018,6 +1136,7 @@ def calculate_annual_expenses(
     inflation_factor: float = 1.0,
     childcare_factor: float = None,
     retirement: bool = False,
+    retirement_age: int = None,
 ) -> float:
     """
     Calculate total annual expenses for a given age, accounting for:
@@ -1036,7 +1155,8 @@ def calculate_annual_expenses(
 
     ``retirement`` selects the retirement living base (RETIREMENT_SPENDING_MODE:
     same / % of today / absolute). Working years pass retirement=False and keep
-    today's living base unchanged.
+    today's living base unchanged. ``retirement_age`` places the lifecycle
+    preset's retirement-relative ages (None = the plain age rule).
     """
     if childcare_factor is None:
         childcare_factor = inflation_factor
@@ -1057,7 +1177,7 @@ def calculate_annual_expenses(
     # Spending lifecycle preset: food/discretionary +/- by age (finding #11).
     # Applied as a real dollar delta on the general (inflation-adjusted) side so
     # the engine matches the pattern the spending chart already shows.
-    total += lifecycle_spend_delta_annual(your_age, inflation_factor)
+    total += lifecycle_spend_delta_annual(your_age, inflation_factor, retirement_age, retirement)
 
     return total
 
@@ -1886,7 +2006,9 @@ MEDICARE_ANNUAL_PREMIUM = MEDICARE_MONTHLY_PREMIUM * 12
 # HEALTHCARE COST MODEL BY AGE
 # =============================================================================
 # Age-based healthcare cost model for more realistic modeling.
-# All values in today's dollars for a couple.
+# All values in today's dollars for a couple (HEALTHCARE_BAND_ADULTS people);
+# the engine charges each covered adult their share by their OWN age
+# (healthcare_cost_per_adult), so one person pays half a band.
 
 HEALTHCARE_COSTS_BY_AGE = {
     'pre_retirement': 6_000,      # Employer-subsidized (pre-retirement)
@@ -1895,6 +2017,7 @@ HEALTHCARE_COSTS_BY_AGE = {
     'medicare_mid': 12_000,       # Medicare (ages 75-84)
     'medicare_late': 18_000,      # Medicare + more care (ages 85+)
 }
+HEALTHCARE_BAND_ADULTS = 2
 
 # WIRED 2026-09-21 (was a DEAD INPUT for the whole life of the project).
 #
@@ -1975,6 +2098,11 @@ def calculate_healthcare_cost(your_age: int, is_retired: bool, inflation_factor:
         base_cost = HEALTHCARE_COSTS_BY_AGE['medicare_late']
 
     return base_cost * inflation_factor
+
+
+def healthcare_cost_per_adult(age: int, inflation_factor: float = 1.0) -> float:
+    """One retired adult's share of the couple band for their own ``age``."""
+    return calculate_healthcare_cost(age, True, inflation_factor) / HEALTHCARE_BAND_ADULTS
 
 # =============================================================================
 # LONG-TERM CARE (LTC) MODELING
@@ -2099,7 +2227,11 @@ def calculate_aca_premium(modified_agi: float, family_size: int = 4) -> float:
 # False -> the legacy flat-band path above, byte-identical to before.
 MODEL_ACA_AGE_RATED = True
 
-ACA_BENCHMARK_MONTHLY_AT_40 = 650   # benchmark (2nd-lowest) silver, San Diego 2026, age 40 (approx.)
+# Benchmark (second-lowest-cost Silver) premiums before subsidy, today's $/mo.
+# The app's Assumptions panel sets both. 650 is the 2026 figure for San Diego,
+# close to the 2026 US average for a 40-year-old (about $625); prices vary a lot
+# by region, so look yours up by ZIP code at healthcare.gov.
+ACA_BENCHMARK_MONTHLY_AT_40 = 650   # one 40-year-old; other ages via ACA_AGE_CURVE
 ACA_CHILD_MONTHLY = 390             # per child under ACA_CHILD_RATE_UNDER_AGE
 ACA_CHILD_RATE_UNDER_AGE = 21       # federal curve rates members under 21 at the child rate
 ACA_OOP_PER_PERSON_ANNUAL = 1_500   # deductibles/copays per marketplace member, today's $
@@ -2373,7 +2505,36 @@ def calculate_car_purchase(age: int) -> float:
 
     return total
 
-# --- House move: sell current home, buy new home, switch mortgage ----------
+# --- Housing timeline: buy, move, downsize ----------------------------------
+# Today's home is described above: HOME_VALUE / MORTGAGE_* for an owner (rate:
+# MORTGAGE_RATE_FOR_PAYOFF), SPEND_RENT_MONTHLY for a renter. HOME_EVENTS lists
+# what changes later, each at an age of yours. Empty list = stay put. The
+# household holds one home at a time.
+#   {"age": 30, "action": "buy", "price": 450_000, "down_pct": 0.20,
+#    "rate": 0.065, "years": 30, "costs": 10_000}
+#       buy a home (sells the current one first if you own then);
+#   {"age": 45, "action": "sell_buy", ...same fields as buy...,
+#    "selling_cost_pct": 0.06}
+#       sell the home you own and buy another (move, upgrade, downsize);
+#   {"age": 72, "action": "sell_rent", "rent": 2_500, "costs": 5_000}
+#       sell the home and rent from then on (rent is monthly, today's dollars).
+# Optional on a purchase: "loan" (instead of down_pct) and "monthly" (the
+# all-in payment; derived from loan, rate, term and HOME_CARRYING_COST_PCT when
+# left out). Missing costs / selling_cost_pct use HOUSE_MOVING_COSTS /
+# HOME_SELLING_COST_PCT. Normalized by housing_events().
+HOME_EVENTS = []
+
+# What you paid for today's home (plus improvements), for tax on its sale.
+# None = its current value, i.e. no taxable gain (the prior assumption). The
+# gain above the exclusion (home_sale_exclusion) is taxed as a long-term gain.
+# A home bought through HOME_EVENTS has its price as basis; the engine holds
+# home values flat in today's dollars, so those sales have no real gain.
+HOME_COST_BASIS = None
+HOME_SALE_EXCLUSION_SINGLE = 250_000   # per owner (IRC 121)
+HOME_SALE_EXCLUSION_MFJ = 500_000      # married filing jointly
+
+# Legacy single house move (plans saved before HOME_EVENTS). Still honoured:
+# housing_events() turns it into one more event, so old plans keep their results.
 HOUSE_MOVE_ENABLED = False
 HOUSE_MOVE_AGE = 45
 NEW_HOME_VALUE = 1_000_000
@@ -2383,15 +2544,12 @@ NEW_MORTGAGE_YEARS = 30
 HOME_SELLING_COST_PCT = 0.06  # Realtor fees + closing costs on the sale
 HOUSE_MOVING_COSTS = 10_000   # Movers, buy-side closing costs, etc.
 
-# Assumed fixed mortgage APR used ONLY to estimate the remaining principal of
-# the CURRENT loan at the moment of a house move. The engine does not carry an
-# amortization schedule (it only knows the monthly payment and the payoff age),
-# so we reconstruct the outstanding balance as the present value of the
-# remaining fixed monthly payments discounted at this rate. For a standard
-# fully-amortizing fixed-rate loan this PV *is* the exact outstanding principal;
-# choosing a representative rate keeps the approximation honest. 6.5% is a
-# reasonable multi-decade average for a 30-year fixed mortgage. It is the
-# CURRENT loan's rate: set it to your actual rate for accurate equity paydown.
+# The CURRENT loan's fixed rate (the app's "Mortgage interest rate" input).
+# The engine amortizes the balance you entered at this rate, so it drives how
+# fast equity builds and what is left to repay when you sell. When paydown
+# tracking is off it is also the rate used to rebuild the remaining principal
+# from the payment (estimate_remaining_mortgage_principal). 6.5% is a
+# reasonable multi-decade average for a 30-year fixed mortgage.
 MORTGAGE_RATE_FOR_PAYOFF = 0.065
 
 # Rate on the NEW loan taken out at HOUSE_MOVE_AGE (lifecycle house move);
@@ -2403,6 +2561,105 @@ NEW_MORTGAGE_RATE = None
 def new_mortgage_rate() -> float:
     """The new loan's rate (falls back to the current loan's)."""
     return MORTGAGE_RATE_FOR_PAYOFF if NEW_MORTGAGE_RATE is None else float(NEW_MORTGAGE_RATE)
+
+
+HOME_BUY = "buy"
+HOME_SELL_BUY = "sell_buy"
+HOME_SELL_RENT = "sell_rent"
+_HOME_ACTIONS = (HOME_BUY, HOME_SELL_BUY, HOME_SELL_RENT)
+
+
+def _num(value, default: float) -> float:
+    try:
+        return default if value is None else float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def level_payment(balance: float, annual_rate: float, years: int) -> float:
+    """Level monthly principal + interest retiring ``balance`` over ``years``."""
+    balance, years = max(0.0, _num(balance, 0.0)), int(_num(years, 0))
+    if balance <= 0 or years <= 0:
+        return 0.0
+    r = max(0.0, _num(annual_rate, 0.0)) / 12.0
+    n = years * 12
+    return balance / n if r <= 0 else balance * r / (1.0 - (1.0 + r) ** -n)
+
+
+def housing_events(source=None) -> list:
+    """HOME_EVENTS plus the legacy single house move, normalized and sorted by age.
+
+    Each event comes back with every field resolved: age, action, costs,
+    selling_cost_pct, and either rent (sell_rent) or price / loan / rate /
+    years / monthly (a purchase; monthly is the all-in payment). Malformed
+    entries are skipped. ``source`` is an optional mapping read before this
+    module's globals, so the UI can resolve a plan from its overrides without
+    touching config.
+    """
+    if source is None:
+        get = globals().get
+    else:
+        def get(key, default=None):
+            value = source.get(key)
+            return globals().get(key, default) if value is None else value
+    raw = list(get("HOME_EVENTS", None) or [])
+    if get("HOUSE_MOVE_ENABLED", False):
+        owns = (_num(get("HOME_VALUE", 0), 0.0) > 0
+                or _num(get("MORTGAGE_MONTHLY", 0), 0.0) > 0)
+        rate = get("NEW_MORTGAGE_RATE", None)
+        raw.append({
+            "age": get("HOUSE_MOVE_AGE", 45),
+            "action": HOME_SELL_BUY if owns else HOME_BUY,
+            "price": get("NEW_HOME_VALUE", 0), "loan": get("NEW_MORTGAGE_BALANCE", 0),
+            "rate": get("MORTGAGE_RATE_FOR_PAYOFF", 0.065) if rate is None else rate,
+            "years": get("NEW_MORTGAGE_YEARS", 30),
+            "monthly": get("NEW_MORTGAGE_MONTHLY", 0),
+        })
+    out = []
+    for e in raw:
+        if not isinstance(e, dict) or str(e.get("action")) not in _HOME_ACTIONS:
+            continue
+        try:
+            age = int(e["age"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        ev = {
+            "age": age, "action": str(e["action"]),
+            "costs": max(0.0, _num(e.get("costs"), _num(get("HOUSE_MOVING_COSTS", 0), 0.0))),
+            "selling_cost_pct": max(0.0, _num(e.get("selling_cost_pct"),
+                                              _num(get("HOME_SELLING_COST_PCT", 0.06), 0.06))),
+        }
+        if ev["action"] == HOME_SELL_RENT:
+            ev["rent"] = max(0.0, _num(e.get("rent"), 0.0))
+        else:
+            price = max(0.0, _num(e.get("price"), 0.0))
+            rate = max(0.0, _num(e.get("rate"), _num(get("MORTGAGE_RATE_FOR_PAYOFF", 0.065), 0.065)))
+            years = max(0, int(_num(e.get("years"), 30)))
+            if e.get("loan") is None:
+                down = min(max(_num(e.get("down_pct"), 0.20), 0.0), 1.0)
+                loan = price * (1.0 - down)
+            else:
+                loan = max(0.0, _num(e.get("loan"), 0.0))
+            monthly = e.get("monthly")
+            if monthly is None:
+                escrow = price * max(0.0, _num(get("HOME_CARRYING_COST_PCT", 0.0135), 0.0135)) / 12.0
+                monthly = level_payment(loan, rate, years) + escrow
+            ev.update(price=price, loan=loan, rate=rate, years=years,
+                      monthly=max(0.0, _num(monthly, 0.0)))
+        out.append(ev)
+    out.sort(key=lambda ev: ev["age"])
+    return out
+
+
+def home_sale_exclusion() -> float:
+    """Gain on selling your main home that escapes tax: $500k married filing
+    jointly, $250k for one owner. Unmarried partners are taken to own the home
+    together, so each excludes $250k of their half."""
+    if not has_partner():
+        return float(HOME_SALE_EXCLUSION_SINGLE)
+    if normalize_filing_status() == _FILING_MFJ:
+        return float(HOME_SALE_EXCLUSION_MFJ)
+    return 2.0 * float(HOME_SALE_EXCLUSION_SINGLE)
 
 # -----------------------------------------------------------------------------
 # EXTRA MORTGAGE PRINCIPAL (early payoff)

@@ -289,20 +289,27 @@ class TestLifecyclePreset:
         assert hasattr(cfg, "SPEND_LIFECYCLE_PRESET")
         assert hasattr(cfg, "SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE")
 
-    def test_recompute_derives_multiplier_dict_from_preset(self):
-        # sim_runner must derive the {category: {age: mult}} dict from the preset
-        # NAME (reusing compute_lifecycle_multipliers) so the engine can honor it.
+    def test_engine_reads_the_preset_name(self):
+        # The engine computes the multipliers from the preset NAME per year
+        # (cfg.lifecycle_multiplier): its later-years age depends on the
+        # retirement age being simulated, which a dict derived in sim_runner
+        # (what this test used to check) could not know. sim_runner now clears
+        # that dict so a stale one in an old profile can't override the preset.
         original = sr._apply_overrides({
             "SPEND_LIFECYCLE_PRESET": "Conservative senior years",
+            "SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE": {"SPEND_FOOD_MONTHLY": {80: 9.0}},
         })
         try:
-            mults = cfg.SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE
-            # Conservative senior: discretionary 0.70 at age 75+.
-            disc = mults.get("SPEND_DISCRETIONARY_MONTHLY", {})
-            assert disc.get(75) == pytest.approx(0.70)
+            assert cfg.SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE == {}
+            disc = "SPEND_DISCRETIONARY_MONTHLY"
+            # Conservative senior: discretionary 0.70 from 75 ...
+            assert cfg.lifecycle_multiplier(disc, 75, retirement_age=60) == pytest.approx(0.70)
+            assert cfg.lifecycle_multiplier(disc, 74, retirement_age=60) == 1.0
+            # ... or 10 years after a late retirement.
+            assert cfg.lifecycle_multiplier(disc, 75, retirement_age=70) == 1.0
+            assert cfg.lifecycle_multiplier(disc, 80, retirement_age=70) == pytest.approx(0.70)
         finally:
             sr._restore_overrides(original)
-        # Restore reverts the dict to the module default (empty).
         assert cfg.SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE == {}
 
     def test_lifecycle_delta_changes_expenses(self):

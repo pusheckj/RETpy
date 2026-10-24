@@ -166,11 +166,12 @@ def test_big_mortgage_year_cuts_only_nonhousing():
 def test_after_payoff_carrying_cost_is_fixed():
     _owner(years=5)
     _force_adjustment(0.80)
-    for age in (cfg.YOUR_AGE + 5, cfg.YOUR_AGE + 30, 80):   # 80: 75+ scaling
+    for age in (cfg.YOUR_AGE + 5, cfg.YOUR_AGE + 30, 80):   # 80: later years
         expenses = sim.calculate_retirement_expenses(age, IF, age)
         housing = sim._retirement_housing_expense(age)
-        late = (1 - cfg.LATE_RETIREMENT_LEISURE_DECREASE) if age >= 75 else 1.0
-        assert housing == pytest.approx(1_000_000 * PCT * late)  # _owner's home
+        # The later-years drop used to scale housing by 0.85 too; property tax
+        # and insurance don't fall because you travel less, so it no longer does.
+        assert housing == pytest.approx(1_000_000 * PCT)  # _owner's home
         cut = expenses - _guard(expenses, age)
         assert cut == pytest.approx(
             0.20 * cfg.DISCRETIONARY_EXPENSE_RATIO * (expenses - housing))

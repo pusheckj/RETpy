@@ -1,11 +1,11 @@
-"""Section: Big purchases & goals — car, house move, retirement vacation.
+"""Section: Big purchases & goals — car, home moves, retirement vacation.
 
-Three optional lifecycle events, each OFF by default so the baseline
+Optional lifecycle events, each OFF / empty by default so the baseline
 simulation is unaffected until a user explicitly opts in:
   - Car: one-time purchase and/or recurring replacement (paid cash from
     the portfolio).
-  - House move: sell the current home, buy a new one, switch the ongoing
-    mortgage.
+  - Home moves: a list of dated events (cfg.HOME_EVENTS) — buy a home, sell
+    and buy another, sell and rent. Today's home is set in Expenses.
   - Retirement vacation: extra "go-go years" spending from retirement
     until a chosen slow-down age.
 """
@@ -24,15 +24,237 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
 
 try:
-    from utils.derived import new_home_financing, implied_mortgage_rate
+    from utils.derived import housing_timeline
 except ImportError:  # pragma: no cover
-    from ui.utils.derived import new_home_financing, implied_mortgage_rate  # type: ignore
+    from ui.utils.derived import housing_timeline  # type: ignore
+
+# Plain-language choices for a move, by what you have just before it.
+_RENTING_CHOICES = ("Buy a home", "Move to another rental")
+_OWNING_CHOICES = ("Sell and buy another home", "Sell and rent")
+_MEDIAN_HOME_PRICE = 420_000      # US median existing-home price, a starting point
 
 
 def _section_label(st, txt):
     st.markdown(f'<div style="font-size: 13px; color: #64748b; text-transform: uppercase; '
                 f'letter-spacing: 0.05em; margin: 12px 0 6px 0;">{txt}</div>',
                 unsafe_allow_html=True)
+
+
+def _migrate_legacy_move(st) -> None:
+    """Show an old plan's single house move (HOUSE_MOVE_*) in the moves list.
+
+    It becomes one HOME_EVENTS entry carrying the plan's exact loan and payment,
+    so its results don't move, and the old switch is turned off."""
+    ov = st.session_state.get("user_overrides", {}) or {}
+    if not ov.get("HOUSE_MOVE_ENABLED"):
+        return
+    legacy = housing_timeline({**ov, "HOME_EVENTS": []})
+    for e in legacy:
+        e["down_pct"] = round(1.0 - e["loan"] / e["price"], 4) if e["price"] > 0 else 0.0
+    events = sorted(list(ov.get("HOME_EVENTS") or []) + legacy, key=lambda e: e.get("age", 0))
+    set_override(st, "HOME_EVENTS", events)
+    set_override(st, "HOUSE_MOVE_ENABLED", False)
+
+
+def _clear_move_widgets(st) -> None:
+    for k in [k for k in list(st.session_state.keys())
+              if isinstance(k, str) and k.startswith("bp_ev")]:
+        del st.session_state[k]
+
+
+def _events(st) -> list:
+    return [dict(e) for e in (get_override(st, "HOME_EVENTS", None) or []) if isinstance(e, dict)]
+
+
+def _owns_after(st, events, upto: int) -> bool:
+    """Owning (True) or renting just before events[upto], in age order."""
+    ov = st.session_state.get("user_overrides", {}) or {}
+    owns = safe_int(ov.get("HOME_VALUE", 0), 0) > 0 or safe_int(ov.get("MORTGAGE_MONTHLY", 0), 0) > 0
+    target = events[upto]
+    for j, e in sorted(enumerate(events), key=lambda je: (safe_int(je[1].get("age"), 0), je[0])):
+        if e is target:
+            break
+        owns = e.get("action") != "sell_rent"
+    return owns
+
+
+def _add_move(st) -> None:
+    events = _events(st)
+    your_age = safe_int(get_override(st, "YOUR_AGE", 30), 30)
+    last = max([safe_int(e.get("age"), your_age) for e in events] + [your_age])
+    owns = (_owns_after(st, events + [{"age": 10 ** 6}], len(events)) if events else
+            safe_int(get_override(st, "HOME_VALUE", 0), 0) > 0
+            or safe_int(get_override(st, "MORTGAGE_MONTHLY", 0), 0) > 0)
+    price = safe_int(get_override(st, "HOME_VALUE", 0), 0) if owns else 0
+    events.append({"age": last + 5, "action": "sell_buy" if owns else "buy",
+                   "price": price or _MEDIAN_HOME_PRICE, "down_pct": 0.20,
+                   "rate": 0.065, "years": 30,
+                   "costs": safe_int(get_override(st, "HOUSE_MOVING_COSTS", 10_000), 10_000),
+                   "selling_cost_pct": safe_float(get_override(st, "HOME_SELLING_COST_PCT", 0.06), 0.06)})
+    set_override(st, "HOME_EVENTS", events)
+    _clear_move_widgets(st)
+
+
+def _remove_move(st, i: int) -> None:
+    events = _events(st)
+    if 0 <= i < len(events):
+        events.pop(i)
+    set_override(st, "HOME_EVENTS", events)
+    _clear_move_widgets(st)
+
+
+def _num_input(st, label, key, value, **kw):
+    ensure_default(st, key, value)
+    return st.number_input(label, key=key, **kw)
+
+
+def _move_row(st, i: int, event: dict, owns_before: bool) -> dict:
+    """Inputs for one move; returns the event to store."""
+    choices = _OWNING_CHOICES if owns_before else _RENTING_CHOICES
+    ensure_default(st, f"bp_ev{i}_kind", 1 if event.get("action") == "sell_rent" else 0)
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        kind = st.selectbox("Move", (0, 1), key=f"bp_ev{i}_kind",
+                            format_func=lambda k: choices[k])
+    with c2:
+        age = _num_input(st, "At age", f"bp_ev{i}_age", safe_int(event.get("age"), 40),
+                         min_value=18, max_value=100, step=1)
+    out = {"age": safe_int(age), "costs": event.get("costs"),
+           "selling_cost_pct": event.get("selling_cost_pct")}
+    if kind == 1:
+        out["action"] = "sell_rent"
+        c3, c4 = st.columns(2)
+        with c3:
+            out["rent"] = safe_int(_num_input(st, "New rent ($/mo)", f"bp_ev{i}_rent",
+                                              safe_int(event.get("rent"), 2_000),
+                                              min_value=0, max_value=50_000, step=50))
+        with c4:
+            out["costs"] = safe_int(_num_input(st, "Moving costs ($)", f"bp_ev{i}_costs",
+                                               safe_int(event.get("costs"), 5_000),
+                                               min_value=0, max_value=200_000, step=1_000))
+    else:
+        out["action"] = "sell_buy" if owns_before else "buy"
+        price0 = safe_int(event.get("price"), _MEDIAN_HOME_PRICE)
+        down0 = event.get("down_pct")
+        if down0 is None:
+            loan0 = safe_float(event.get("loan"), price0 * 0.8)
+            down0 = 1.0 - loan0 / price0 if price0 > 0 else 0.2
+        rate0 = safe_float(event.get("rate"), 0.065)
+        years0 = safe_int(event.get("years"), 30)
+        c3, c4 = st.columns(2)
+        with c3:
+            price = safe_int(_num_input(st, "Home price ($)", f"bp_ev{i}_price", price0,
+                                        min_value=0, max_value=20_000_000, step=10_000))
+            down = _num_input(st, "Down payment (%)", f"bp_ev{i}_down",
+                              round(safe_float(down0, 0.2) * 100, 2), min_value=0.0,
+                              max_value=100.0, step=1.0,
+                              help="Below 20% typically adds PMI, which this model "
+                                   "does not charge separately.") / 100
+            costs = safe_int(_num_input(st, "Buying and moving costs ($)", f"bp_ev{i}_costs",
+                                        safe_int(event.get("costs"), 10_000),
+                                        min_value=0, max_value=500_000, step=1_000))
+        with c4:
+            rate = _num_input(st, "Mortgage rate (%)", f"bp_ev{i}_rate",
+                              round(rate0 * 100, 3), min_value=0.0, max_value=20.0,
+                              step=0.125, format="%.3f") / 100
+            years = safe_int(_num_input(st, "Loan term (years)", f"bp_ev{i}_years", years0,
+                                        min_value=1, max_value=40, step=1))
+        out.update(price=price, down_pct=round(down, 6), rate=round(rate, 6), years=years,
+                   costs=costs)
+        # A move carried over from an old plan keeps its exact loan and payment
+        # until one of its numbers is edited.
+        same = (price == price0 and abs(down - safe_float(down0, 0.2)) < 5e-5
+                and abs(rate - rate0) < 5e-7 and years == years0)
+        if same and event.get("loan") is not None and event.get("monthly") is not None:
+            out.update(loan=event["loan"], monthly=event["monthly"])
+    if owns_before:
+        out["selling_cost_pct"] = round(_num_input(
+            st, "Selling costs (%)", f"bp_ev{i}_sell",
+            round(safe_float(event.get("selling_cost_pct"),
+                             safe_float(get_override(st, "HOME_SELLING_COST_PCT", 0.06), 0.06)) * 100, 2),
+            min_value=0.0, max_value=20.0, step=0.5,
+            help="Agent fees and closing costs on the sale.") / 100, 6)
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def _move_summary(st, event: dict, owns_before: bool) -> None:
+    """One plain line on what the move does, from the engine's own resolution."""
+    ov = st.session_state.get("user_overrides", {}) or {}
+    resolved = housing_timeline({**ov, "HOUSE_MOVE_ENABLED": False, "HOME_EVENTS": [event]})
+    if not resolved:
+        return
+    e = resolved[0]
+    if e["age"] < safe_int(ov.get("YOUR_AGE", e["age"]), e["age"]):
+        st.caption(":orange[This age has already passed, so the move won't happen.]")
+    sale = "Sell your home, then " if owns_before else ""
+    if e["action"] == "sell_rent":
+        st.caption(f"{sale}rent for {money_md(e['rent'])}/mo from {e['age']}.")
+        return
+    down = max(0.0, e["price"] - e["loan"])
+    # NOTE: escape every literal "$" -- money_md does it; Streamlit's markdown
+    # renders $...$ as LaTeX math.
+    st.caption(f"{sale}buy for {money_md(e['price'])}: {money_md(down)} down, loan "
+               f"{money_md(e['loan'])}, {money_md(e['monthly'])}/mo with tax and insurance.")
+    if e["loan"] > 0:
+        payoff = e["age"] + e["years"]
+        ret = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60)
+        if payoff > ret:
+            st.warning(
+                f"This loan is paid off at **{payoff}**, **{payoff - ret} years into "
+                f"retirement** (you target {ret}). Those payments come out of your "
+                f"savings. A shorter term costs more per month while you're earning "
+                f"but often lets you retire *sooner*, so it's worth testing both."
+            )
+
+
+def _home_moves(st) -> None:
+    """Planned moves: buy, sell and buy, sell and rent (cfg.HOME_EVENTS)."""
+    _section_label(st, "Home moves")
+    _migrate_legacy_move(st)
+    ov = st.session_state.get("user_overrides", {}) or {}
+    owns_today = safe_int(ov.get("HOME_VALUE", 0), 0) > 0 or safe_int(ov.get("MORTGAGE_MONTHLY", 0), 0) > 0
+    st.caption("Today you " + (f"own a home worth {money_md(safe_int(ov.get('HOME_VALUE', 0), 0))}"
+                               if owns_today else
+                               f"rent for {money_md(safe_int(ov.get('SPEND_RENT_MONTHLY', 0), 0))}/mo")
+               + " (set in Expenses). Add a move to buy, sell or start renting later.")
+    events = _events(st)
+    stored = []
+    for i, event in enumerate(events):
+        with st.container(border=True):
+            owns_before = _owns_after(st, stored + events[i:], i)   # this run's edits so far
+            new_event = _move_row(st, i, event, owns_before)
+            _move_summary(st, new_event, owns_before)
+            st.button("Remove this move", key=f"bp_ev{i}_del", type="tertiary",
+                      on_click=_remove_move, args=(st, i))
+        stored.append(new_event)
+    if stored != events:
+        set_override(st, "HOME_EVENTS", stored)
+    st.button("Add a move", key="bp_add_move", on_click=_add_move, args=(st,),
+              icon=":material/add_home:")
+
+    buys = [e for e in stored if e.get("action") != "sell_rent"]
+    if buys:
+        ensure_default(st, "bp_new_home_escrow_pct",
+                       safe_float(get_override(st, "NEW_HOME_ESCROW_PCT", 0.0135), 0.0135) * 100)
+        v = st.number_input("Property tax + insurance (%/yr)", min_value=0.0, max_value=5.0,
+                            step=0.05, key="bp_new_home_escrow_pct",
+                            help="Percent of the home's value per year, added to the "
+                                 "monthly payment and kept once the loan is paid off. "
+                                 "CA is roughly 1.1% tax + 0.25% insurance.")
+        set_override(st, "NEW_HOME_ESCROW_PCT", v / 100)
+    if owns_today and stored:
+        value = safe_int(ov.get("HOME_VALUE", 0), 0)
+        basis = get_override(st, "HOME_COST_BASIS", None)
+        ensure_default(st, "bp_home_cost_basis", value if basis is None else safe_int(basis))
+        v = safe_int(st.number_input(
+            "What you paid for your home ($)", min_value=0, max_value=20_000_000, step=10_000,
+            key="bp_home_cost_basis",
+            help="Include improvements. When you sell, a gain above $250,000 per owner "
+                 "($500,000 for a married couple) is taxed. Leave it at the home's "
+                 "value if you're not sure."))
+        set_override(st, "HOME_COST_BASIS", None if v == value else v)
+    st.caption("Sale money (price − loan left − selling costs − any tax) goes into your "
+               "savings; down payments and moving costs come out of them.")
 
 
 def render_body(st) -> None:
@@ -94,130 +316,8 @@ def render_body(st) -> None:
 
     st.divider()
 
-    # ===== House move =====
-    _section_label(st, "House move")
-
-    ensure_default(st, "bp_house_move_enable",
-                   bool(get_override(st, "HOUSE_MOVE_ENABLED", False)))
-    house_on = st.toggle("Plan a house move",
-                           key="bp_house_move_enable",
-                           help="Sell the current home, buy a new one, and switch "
-                                "the mortgage payment/payoff at the chosen age.")
-    set_override(st, "HOUSE_MOVE_ENABLED", bool(house_on))
-    if house_on:
-        # The loan balance and monthly payment are DERIVED from price / down
-        # payment / rate / term / escrow rather than typed in separately. They
-        # used to be independent free-text fields, so raising the home price left
-        # the loan and payment costing the OLD house — the model then reported a
-        # materially better result than the purchase deserved (e.g. 80.4% for a
-        # $1.6M buy that really scores 78.0%, flipping a "meets your 80% target"
-        # verdict into a miss).
-        #
-        # Seed the rate / down % from a plan saved BEFORE these fields existed so
-        # it keeps producing its original payment instead of jumping to a new
-        # default rate.
-        _price_seed = safe_int(get_override(st, "NEW_HOME_VALUE", 1_000_000), 1_000_000)
-        _years_seed = safe_int(get_override(st, "NEW_MORTGAGE_YEARS", 30), 30)
-        _escrow_seed = safe_float(get_override(st, "NEW_HOME_ESCROW_PCT", 0.0135), 0.0135)
-        if get_override(st, "NEW_MORTGAGE_RATE", None) is None:
-            _bal = safe_float(get_override(st, "NEW_MORTGAGE_BALANCE", 0), 0.0)
-            _mo = safe_float(get_override(st, "NEW_MORTGAGE_MONTHLY", 0), 0.0)
-            if _price_seed > 0 and _bal > 0 and _mo > 0:
-                _pi = max(0.0, _mo - _price_seed * _escrow_seed / 12.0)
-                set_override(st, "NEW_MORTGAGE_RATE",
-                             round(implied_mortgage_rate(_bal, _pi, _years_seed), 5))
-                set_override(st, "NEW_HOME_DOWN_PCT",
-                             round(max(0.0, 1.0 - _bal / _price_seed), 4))
-            else:
-                set_override(st, "NEW_MORTGAGE_RATE", 0.065)
-
-        c6, c7 = st.columns(2)
-        with c6:
-            ensure_default(st, "bp_house_move_age",
-                           safe_int(get_override(st, "HOUSE_MOVE_AGE", 45), 45))
-            v = st.number_input("Move age", min_value=18, max_value=100,
-                                step=1, key="bp_house_move_age")
-            set_override(st, "HOUSE_MOVE_AGE", safe_int(v))
-            ensure_default(st, "bp_new_home_value",
-                           safe_int(get_override(st, "NEW_HOME_VALUE", 1_000_000), 1_000_000))
-            v = st.number_input("New home value ($)", min_value=0, max_value=20_000_000,
-                                step=10_000, key="bp_new_home_value")
-            set_override(st, "NEW_HOME_VALUE", safe_int(v))
-            ensure_default(st, "bp_new_home_down_pct",
-                           safe_float(get_override(st, "NEW_HOME_DOWN_PCT", 0.20), 0.20) * 100)
-            v = st.number_input("Down payment (%)", min_value=0.0, max_value=100.0,
-                                step=1.0, key="bp_new_home_down_pct",
-                                help="Below 20% typically adds PMI, which this model "
-                                     "does not charge separately.")
-            set_override(st, "NEW_HOME_DOWN_PCT", v / 100)
-        with c7:
-            ensure_default(st, "bp_new_mortgage_rate",
-                           safe_float(get_override(st, "NEW_MORTGAGE_RATE", 0.065), 0.065) * 100)
-            v = st.number_input("Mortgage rate (%)", min_value=0.0, max_value=20.0,
-                                step=0.125, format="%.3f", key="bp_new_mortgage_rate")
-            set_override(st, "NEW_MORTGAGE_RATE", v / 100)
-            ensure_default(st, "bp_new_mortgage_years",
-                           safe_int(get_override(st, "NEW_MORTGAGE_YEARS", 30), 30))
-            v = st.number_input("New mortgage term (years)", min_value=1, max_value=40,
-                                step=1, key="bp_new_mortgage_years")
-            set_override(st, "NEW_MORTGAGE_YEARS", safe_int(v))
-            ensure_default(st, "bp_new_home_escrow_pct",
-                           safe_float(get_override(st, "NEW_HOME_ESCROW_PCT", 0.0135), 0.0135) * 100)
-            v = st.number_input("Property tax + insurance (%/yr)", min_value=0.0, max_value=5.0,
-                                step=0.05, key="bp_new_home_escrow_pct",
-                                help="Percent of home value per year, added to the "
-                                     "monthly payment. CA is roughly 1.1% tax + "
-                                     "0.25% insurance.")
-            set_override(st, "NEW_HOME_ESCROW_PCT", v / 100)
-
-        # Write the engine-facing keys from the derived figures.
-        fin = new_home_financing(st.session_state.get("user_overrides", {}) or {})
-        set_override(st, "NEW_MORTGAGE_BALANCE", int(round(fin["loan"])))
-        set_override(st, "NEW_MORTGAGE_MONTHLY", int(round(fin["monthly"])))
-        # NOTE: escape every literal "$" as "\$" — Streamlit's markdown renders
-        # $...$ as LaTeX math, which silently mangled this caption into
-        # "Loan 800,000∗∗after∗∗200,000" on the first attempt.
-        st.caption(
-            f"Loan **\\${fin['loan']:,.0f}** after **\\${fin['down_payment']:,.0f}** down · "
-            f"**\\${fin['monthly']:,.0f}/mo** all-in "
-            f"(\\${fin['principal_interest']:,.0f} P&I + \\${fin['escrow']:,.0f} tax/ins)"
-        )
-
-        # The single most consequential house decision for an early retiree: a
-        # term that outlives your working years is carried by the PORTFOLIO.
-        _move = safe_int(get_override(st, "HOUSE_MOVE_AGE", 45), 45)
-        _term = safe_int(get_override(st, "NEW_MORTGAGE_YEARS", 30), 30)
-        _ret = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60)
-        _payoff = _move + _term
-        if _payoff > _ret:
-            _yrs = _payoff - _ret
-            st.warning(
-                f"This loan is paid off at **{_payoff}**, which is **{_yrs} years "
-                f"into retirement** (you target {_ret}). Those payments come out of "
-                f"the portfolio. A shorter term costs more per month while you're "
-                f"earning but often retires you *sooner* — worth testing both."
-            )
-        else:
-            st.caption(f":gray[Paid off at {_payoff}, before you retire at {_ret}.]")
-
-        ensure_default(st, "bp_home_selling_cost_pct",
-                       safe_float(get_override(st, "HOME_SELLING_COST_PCT", 0.06), 0.06) * 100)
-        v = st.number_input("Selling costs (%)", min_value=0.0, max_value=20.0,
-                            step=0.5, key="bp_home_selling_cost_pct",
-                            help="Realtor fees and closing costs on the sale of "
-                                 "the current home.")
-        set_override(st, "HOME_SELLING_COST_PCT", v / 100)
-
-        ensure_default(st, "bp_house_moving_costs",
-                       safe_int(get_override(st, "HOUSE_MOVING_COSTS", 10_000), 10_000))
-        v = st.number_input("Moving costs ($)", min_value=0, max_value=200_000,
-                            step=1_000, key="bp_house_moving_costs",
-                            help="Movers, buy-side closing costs, etc.")
-        set_override(st, "HOUSE_MOVING_COSTS", safe_int(v))
-        st.caption("Net sale proceeds (value − remaining mortgage − selling costs) "
-                   "flow into the portfolio. The down payment and moving costs are "
-                   "drawn from it, and the mortgage payment and home equity switch to "
-                   "the new house.")
+    # ===== Home moves =====
+    _home_moves(st)
 
     st.divider()
 
@@ -226,8 +326,10 @@ def render_body(st) -> None:
     # whichever loan you currently hold. Placed right after the "this loan
     # outlives your working years" warning because it is the direct remedy.
     _section_label(st, "Extra mortgage principal")
-    _has_loan = safe_int(get_override(st, "MORTGAGE_BALANCE", 0), 0) > 0 or bool(
-        get_override(st, "HOUSE_MOVE_ENABLED", False))
+    _ov_now = st.session_state.get("user_overrides", {}) or {}
+    _loan_ages = [e["age"] for e in housing_timeline(_ov_now)
+                  if e["action"] != "sell_rent" and e["loan"] > 0]
+    _has_loan = safe_int(get_override(st, "MORTGAGE_BALANCE", 0), 0) > 0 or bool(_loan_ages)
     if not _has_loan:
         st.caption(":gray[No mortgage configured, so there's nothing to pay down.]")
     else:
@@ -243,12 +345,11 @@ def render_body(st) -> None:
 
         _your_age = safe_int(get_override(st, "YOUR_AGE", 32), 32)
         if safe_int(extra) > 0:
-            _move_age = safe_int(get_override(st, "HOUSE_MOVE_AGE", 0), 0)
-            _move_on = bool(get_override(st, "HOUSE_MOVE_ENABLED", False))
-            # Offer "start at the move" because that is when the big new loan
-            # appears; paying down a house you're about to sell only raises the
-            # sale proceeds.
-            _opts = [_your_age] + ([_move_age] if (_move_on and _move_age > _your_age) else [])
+            # Offer "start at the purchase" because that is when the big new
+            # loan appears; paying down a house you're about to sell only raises
+            # the sale proceeds (and a renter has nothing to pay down before).
+            _move_age = min((a for a in _loan_ages if a > _your_age), default=0)
+            _opts = [_your_age] + ([_move_age] if _move_age else [])
             ensure_default(st, "bp_extra_mortgage_start",
                            safe_int(get_override(st, "EXTRA_MORTGAGE_PAYMENT_START_AGE",
                                                  _your_age) or _your_age, _your_age))
@@ -257,7 +358,7 @@ def render_body(st) -> None:
                     "Start paying extra at age", _opts, horizontal=True,
                     key="bp_extra_mortgage_start_radio",
                     format_func=lambda a: (f"{a} (now)" if a == _your_age
-                                            else f"{a} (after the move)"),
+                                            else f"{a} (after you buy)"),
                     help="Before a move, extra principal mostly just raises your sale "
                          "proceeds; after it, it attacks the new loan.")
             else:
@@ -280,9 +381,8 @@ def render_body(st) -> None:
                 # that almost never changes.
                 _sig = tuple(_ov.get(k) for k in (
                     "MORTGAGE_BALANCE", "MORTGAGE_YEARS_REMAINING", "MORTGAGE_MONTHLY",
-                    "HOUSE_MOVE_ENABLED", "HOUSE_MOVE_AGE", "NEW_MORTGAGE_BALANCE",
-                    "NEW_MORTGAGE_YEARS", "MORTGAGE_RATE_FOR_PAYOFF", "NEW_MORTGAGE_RATE", "YOUR_AGE",
-                )) + (safe_int(extra), safe_int(start))
+                    "MORTGAGE_RATE_FOR_PAYOFF", "YOUR_AGE",
+                )) + (repr(housing_timeline(_ov)), safe_int(extra), safe_int(start))
                 _memo = st.session_state.setdefault("_bp_payoff_memo", {})
                 if _sig in _memo:
                     base, now = _memo[_sig]
