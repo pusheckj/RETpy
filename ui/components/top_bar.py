@@ -132,10 +132,15 @@ def _resolve_success(results: Optional[dict]):
     return "—", "run to see"
 
 
-def _metric_html(label: str, value: str, hint: str = "") -> str:
+def _metric_html(label: str, value: str, hint: str = "", short: str = "") -> str:
+    """``short``: a phone-only label (theme.css swaps it in under 640px) for a long one."""
     parts = []
     parts.append('<div class="mc-topbar-metric">')
-    parts.append('<span class="mc-topbar-metric-label">' + label + '</span>')
+    if short:
+        parts.append('<span class="mc-topbar-metric-label"><span class="mc-lbl-full">' + label
+                     + '</span><span class="mc-lbl-short">' + short + '</span></span>')
+    else:
+        parts.append('<span class="mc-topbar-metric-label">' + label + '</span>')
     if hint:
         parts.append(
             '<span class="mc-topbar-metric-value">' + value
@@ -190,14 +195,15 @@ def render(st, results: Optional[dict] = None,
     html_parts.append(f'<span class="mc-topbar-title">{escape(title)}</span>')
     html_parts.append(_metric_html("Name(s)", names))
     if stats is not None:       # Spending view: figures from the statements instead
-        html_parts.extend(_metric_html(label, value) for label, value in stats)
+        html_parts.extend(_metric_html(st_[0], st_[1], short=st_[2] if len(st_) > 2 else "")
+                          for st_ in stats)
     else:
         html_parts.append(_metric_html("Net worth", net_worth_str))
         html_parts.append(_metric_html("Gross income", income_str))
         # Label matches the sidebar slider and the hero card ("Target retirement
         # age") — the same value was previously called three different things on
         # screen at once.
-        html_parts.append(_metric_html("Target retirement age", str(target_age)))
+        html_parts.append(_metric_html("Target retirement age", str(target_age), short="Target age"))
         html_parts.append(_metric_html("Success rate", success_str, success_hint))
     html_parts.append('</div>')
 
