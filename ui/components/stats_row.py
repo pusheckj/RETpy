@@ -4,7 +4,7 @@ from __future__ import annotations
 from utils.formatting import money, pct, success_tier
 
 
-def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a", cls: str = "") -> str:
+def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a", cls: str = "", two_line: bool = False) -> str:
     return f'''
     <div class="mc-stat-card" style="
         background: #ffffff;
@@ -13,7 +13,7 @@ def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a
         padding: 20px;
         height: 100%;
     ">
-        <div style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">
+        <div class="mc-stat-label{' mc-l2' if two_line else ''}" style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">
             {label}
         </div>
         <div class="{cls}" style="font-size: 28px; font-weight: 600; color: {color}; line-height: 1.2;">
@@ -71,6 +71,11 @@ def render(st, results: dict) -> None:
     else:
         p10_cls, p10_color, p10_tag = "", "#0f172a", ""
 
+    # On a phone the cards go two per row; a label that wraps in one card must
+    # not push its neighbour's value out of line, so a pair shares its label height.
+    labels = ["Median final portfolio", "10th percentile", "Success rate", "Years in retirement"]
+    l2 = [any(len(labels[j]) > 15 for j in (i - i % 2, i - i % 2 + 1)) for i in range(4)]
+
     cols = st.columns(4)
     with cols[0]:
         st.markdown(
@@ -78,6 +83,7 @@ def render(st, results: dict) -> None:
                 "Median final portfolio",
                 money(median_final, shorten=True),
                 f"at plan end (age {plan_until})",
+            two_line=l2[0],
             ),
             unsafe_allow_html=True,
         )
@@ -90,6 +96,7 @@ def render(st, results: dict) -> None:
                  else "1 in 10 runs end lower"),
                 color=p10_color,
                 cls=p10_cls,
+            two_line=l2[1],
             ),
             unsafe_allow_html=True,
         )
@@ -101,6 +108,7 @@ def render(st, results: dict) -> None:
                 f"{success_tag} · {num_sims:,} simulations",
                 color=success_color,
                 cls=success_cls,
+            two_line=l2[2],
             ),
             unsafe_allow_html=True,
         )
@@ -110,6 +118,7 @@ def render(st, results: dict) -> None:
                 "Years in retirement",
                 f"{years_in_ret}",
                 horizon,
+            two_line=l2[3],
             ),
             unsafe_allow_html=True,
         )
