@@ -15,7 +15,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
     with col_a:
         st.markdown(
             """
-            **Before age 59.5**
+            **Before age 59½**
             1. Cash / savings — no tax impact
             2. Taxable brokerage — LTCG rates (0/15/20%)
             3. Roth contributions — tax + penalty free (no earnings)
@@ -28,7 +28,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
     with col_b:
         st.markdown(
             """
-            **Age 59.5 and after**
+            **Age 59½ and after**
             1. Cash / savings
             2. Taxable brokerage — LTCG
             3. Traditional 401(k) / IRA — ordinary income tax
@@ -41,6 +41,14 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
 
     st.markdown("---")
     st.markdown('<div class="mc-section">Roth conversion strategy</div>', unsafe_allow_html=True)
+    try:
+        from utils.overrides import get_override
+    except ImportError:  # pragma: no cover
+        from ui.utils.overrides import get_override  # type: ignore
+    _age = int(get_override(st, "YOUR_AGE", cfg.YOUR_AGE) or cfg.YOUR_AGE)
+    _rmd_age = cfg.get_rmd_start_age(cfg.CURRENT_YEAR - _age)
+    _cap = int(get_override(st, "ROTH_CONVERSION_MAX_ANNUAL", cfg.ROTH_CONVERSION_MAX_ANNUAL)
+               or 0)
     _t = cfg.ROTH_CONVERSION_TARGET_BY_STATUS
     _top = " / ".join(f"\\${_t[k]:,.0f} {name}" for k, name in
                       ((cfg._FILING_MFJ, "joint"), (cfg._FILING_SINGLE, "single"),
@@ -50,10 +58,10 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
         When enabled, the simulator converts Traditional → Roth during low-income early-retirement years,
         filling up to the top of the 12% tax bracket for your filing status ({_top}; 2024 values).
         This creates tax-free growth in Roth and reduces future RMDs from Traditional balances
-        (RMD age is 73 or 75, depending on birth year).
+        (your RMD age is {_rmd_age}).
 
         Conversions typically run from retirement age through the Social Security claim age (often 67),
-        which is the period of lowest earned income. They are **capped** at \\${cfg.ROTH_CONVERSION_MAX_ANNUAL:,.0f}/year by default.
+        which is the period of lowest earned income. They are **capped** at \\${_cap:,.0f}/year (change it in Assumptions).
         """
     )
 
@@ -62,7 +70,6 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
     pr = results.get("primary_result", {}) or {} if results else {}
     rows = pr.get("income_sources_by_year", []) or []
     if rows:
-        st.markdown('<div class="mc-section">Withdrawal composition by year</div>', unsafe_allow_html=True)
         try:
             from components.income_sources_chart import render as render_inc
             render_inc(st, results, chart_key="income_sources_withdrawal_tab")
@@ -73,20 +80,3 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
             st.info("This chart isn't available for this run.")
     else:
         st.info("Detailed per-year withdrawal composition not available for this run.")
-
-    # Withdrawal-rate drawdown chart (% of portfolio pulled each year, by source)
-    wd_rows = pr.get("withdrawals_by_year", []) or []
-    if wd_rows:
-        st.markdown('<div class="mc-section">Withdrawal rate by source</div>', unsafe_allow_html=True)
-        # Same chart also appears in the main "Spending" section — say so, so it
-        # doesn't read as two different analyses.
-        st.caption(":gray[Same chart as the one in the **Spending** section above, "
-                   "repeated here alongside the withdrawal deep-dive.]")
-        try:
-            from components.withdrawal_drawdown_chart import render as render_dd
-            render_dd(st, results, chart_key="withdrawal_drawdown_withdrawal_tab")
-        except Exception:
-            # Keep the internals out of the UI (every other component shows a
-            # plain placeholder); the traceback still goes to the server log.
-            logging.exception("withdrawal_tab: chart render failed")
-            st.info("This chart isn't available for this run.")

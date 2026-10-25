@@ -963,11 +963,7 @@ def main() -> None:
     whatif_results = st.session_state.get("whatif_results")
 
     def _subheader(text: str) -> None:
-        st.markdown(
-            f'<div style="font-weight:700;font-size:16px;color:#334155;'
-            f'margin:16px 0 8px 0;">{text}</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="mc-section">{text}</div>', unsafe_allow_html=True)
 
     def _run_hint(what: str) -> None:
         if results is None:
