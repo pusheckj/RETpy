@@ -1882,6 +1882,13 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     [data-testid="stPopoverBody"]::-webkit-scrollbar, [data-testid="stPopoverBody"] *::-webkit-scrollbar { display: none; }
 }
 
+@media (max-width: 640px) {
+    /* A2: a tab row wider than its container scrolls inside itself instead of
+       pushing the whole What-if body sideways. */
+    section[data-testid="stMain"] [data-baseweb="tab-list"] { max-width: 100% !important; }
+    section[data-testid="stMain"] [data-testid="stTabs"] { min-width: 0; max-width: 100%; }
+}
+
 /* -- end phone polish A -- */
 
 
