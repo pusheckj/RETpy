@@ -1964,6 +1964,40 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish C1 (round 2). Only the round-2 fixer C1 edits this block.
    ========================================================================== */
 
+.mc-lbl-short { display: none; }
+@media (max-width: 640px) {
+    /* Planner mode switch (in the top gutter): equal margins either side, so it sits
+       on the page's centre line; the >> button lives in the left margin. */
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-gutter) {
+        left: 52px; right: 52px; top: 6px; width: auto;
+    }
+    .st-key-mc-mode-switch-gutter { justify-content: center !important; }
+    .st-key-mc-mode-switch-gutter > * { width: 100% !important; flex: 1 1 100% !important; }
+    .st-key-mc-mode-switch-gutter [role="radiogroup"] { display: flex !important; flex-wrap: nowrap !important; width: 100%; box-sizing: border-box; }
+    .st-key-mc-mode-switch-gutter [role="radiogroup"] label {
+        flex: 1 1 0; justify-content: center; text-align: center; padding: 4px 4px !important; }
+    .st-key-mc-mode-switch-gutter [role="radiogroup"] label { align-items: center; min-height: 34px; box-sizing: border-box; }
+    .st-key-mc-mode-switch-gutter [role="radiogroup"] label > div { margin: 0 !important; padding-left: 0 !important; }
+    .st-key-mc-mode-switch-gutter [role="radiogroup"] p { white-space: nowrap; font-size: 13px !important; margin: 0 !important; line-height: 1.2; }
+
+    /* Top card metrics: equal columns, one-line labels, text centred in each. */
+    .mc-topbar { gap: 6px 0; }
+    .mc-topbar-title { flex-basis: 100%; }
+    .mc-topbar .mc-topbar-metric:not(:nth-of-type(1)):not(:nth-of-type(3)) {
+        flex: 1 1 30%; min-width: 0; align-items: center; text-align: center;
+    }
+    .mc-topbar-metric-label { white-space: nowrap; }
+    .mc-lbl-full { display: none; }
+    .mc-lbl-short { display: inline; }
+
+    /* Streamlit pads the label text 8px on the left: pull it back so the words sit centred in each segment. */
+    [class*="st-key-mc-mode-switch"] [role="radiogroup"] label > div:last-child { padding-left: 0 !important; }
+    .st-key-mc-setup-banner { margin-bottom: 0; padding-left: 19px !important; }
+
+    /* Phone bar chips: text centred vertically, even gaps. */
+    .mc-phonebar-chips a { line-height: 1; padding-top: 0; padding-bottom: 0; }
+}
+
 /* -- end phone polish C1 -- */
 
 

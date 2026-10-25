@@ -809,7 +809,7 @@ def _spending_stats(st) -> list:
         if data is None:
             return [("Statements", "none yet")]
         monthly = sum(session_actual(st, data).values())
-        return [("Average spending / month", f"${monthly:,.0f}"),
+        return [("Average spending / month", f"${monthly:,.0f}", "Avg spend / month"),
                 ("Months counted", str(len(data["complete"])))]
     except Exception:
         return [("Statements", "unavailable")]
