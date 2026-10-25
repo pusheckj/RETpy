@@ -62,10 +62,11 @@ def render(st, results: dict) -> None:
     else:
         success_cls, success_color, success_tag = "mc-bad", "#dc2626", "✕ At risk"
     # "Thin cushion": the bad-luck (10th percentile) ending portfolio covers
-    # under two years of retirement spending. Skipped if spending isn't known.
+    # under two years of retirement spending (or is zero when no run survives
+    # long enough to log spending).
     spend_rows = pr.get("spending_by_year", []) or []
     start_spend = next((r.get("p50") for r in spend_rows if r.get("age") == retire_age), None)
-    if start_spend and p10 < 2 * start_spend:
+    if p10 <= 0 or (start_spend and p10 < 2 * start_spend):
         p10_cls, p10_color, p10_tag = "mc-warn", "#d97706", "Thin cushion"
     else:
         p10_cls, p10_color, p10_tag = "", "#0f172a", ""
