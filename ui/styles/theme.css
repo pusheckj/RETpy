@@ -2105,4 +2105,41 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     .mc-welcome-privacy { margin-top: 10px; }
 }
 
+/* Tab rows (What-if deep dives, 5 tabs = 610px) overran the 510-566px main pane when
+   the sidebar is open ("Mortgage paydov" cut off). Tighter tabs; if they still do not
+   fit, they wrap into a second row instead of scrolling out of view. */
+@media (min-width: 641px) and (max-width: 1100px) {
+    section[data-testid="stMain"] [data-testid="stTabs"] { min-width: 0; max-width: 100%; }
+    section[data-testid="stMain"] [data-baseweb="tab-list"] {
+        max-width: 100% !important; flex-wrap: wrap; box-sizing: border-box;
+    }
+    section[data-testid="stMain"] [data-baseweb="tab-list"] [data-baseweb="tab"] { padding: 7px 10px !important; }
+}
+
+/* Top card controls row: below 1240px the base rule lets these columns shrink to 0, so
+   next to an open sidebar "Up to date" was cut to "Up to". Keep each at its content
+   width; the row wraps when they no longer fit. */
+@media (min-width: 641px) and (max-width: 1100px) {
+    section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:not(:first-child) {
+        min-width: fit-content !important;
+    }
+}
+
+/* Sidebar open on a small tablet / landscape phone leaves a 510-640px main pane: give
+   the controls row the phone layout (run button takes the slack, size select and a
+   gear-only Settings button beside it) so Settings is not stranded on a row of its own. */
+@media (min-width: 641px) and (max-width: 900px) {
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(2) {
+        flex: 1 1 0 !important; width: auto !important; min-width: 130px !important;
+    }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3) {
+        flex: 0 0 108px !important; width: 108px !important; min-width: 0 !important;
+    }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(4) {
+        flex: 0 0 64px !important; width: 64px !important; min-width: 0 !important;
+    }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) .st-key-mc-topbar [data-testid="stPopoverButton"] [data-testid="stMarkdownContainer"] { display: none; }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) .st-key-mc-topbar [data-baseweb="select"] > div { padding: 4px 6px !important; }
+}
+
 /* -- end tablet polish D2 -- */
