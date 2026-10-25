@@ -1367,6 +1367,15 @@ footer { display: none !important; }
     [data-mc-clamp][data-mc-open]::after { content: " Less"; position: static; padding: 0; background: none; }
 }
 
+/* Mouse/trackpad: in the sidebar's two-column rows the -/+ steppers ate more
+   than half of the ~120px field and truncated the value ("1500(" ...). Hide
+   them there (type or use arrow keys); touch keeps its 44px steppers. */
+@media (hover: hover) and (pointer: fine) {
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stNumberInputStepUp"],
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stNumberInputStepDown"] { display: none; }
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .stNumberInput input { padding-right: 14px; }
+}
+
 /* Touch screens: finger-sized controls (Apple's 44px minimum). */
 @media (hover: none) and (pointer: coarse) {
     [data-testid^="stBaseButton"],
