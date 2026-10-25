@@ -998,10 +998,28 @@ footer { display: none !important; }
     border: 1px solid var(--mc-tile-border) !important;
     border-radius: var(--mc-radius-card) !important;
     box-shadow: var(--mc-tile-shadow) !important;
+    /* Never wider than the screen: an open Save/Print expander used to grow the
+       panel past the right edge. */
+    max-width: min(360px, calc(100vw - 32px)) !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
 }
+[data-testid="stPopoverBody"] [data-testid="stDownloadButton"] button,
+[data-testid="stPopoverBody"] [data-testid="stFileUploader"] section { max-width: 100%; }
+[data-testid="stPopoverBody"] [data-testid="stDownloadButton"] button p { white-space: normal; }
 [data-testid="stPopoverBody"] > div {
     background-color: transparent !important;
+    padding-bottom: 16px;   /* last control no longer touches the panel edge */
 }
+/* Select value text is a fixed 18px box with overflow:hidden, which clips
+   descenders (g, p, y) in a 22px line. Let it size to its line. */
+[data-testid="stPopoverBody"] [data-baseweb="select"] > div > div:first-child,
+[data-testid="stPopoverBody"] [data-baseweb="select"] > div > div:first-child > div {
+    height: auto !important;
+    min-height: 24px;
+    overflow: visible !important;
+}
+[data-testid="stPopoverBody"] [data-testid="stExpander"] { margin-top: 8px; }
 
 /* =========================================================
    Soft-segmented toggle — horizontal st.radio groups tagged
