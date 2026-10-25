@@ -338,14 +338,24 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         bar_values = [acct_values[i] for i in order]
         bar_colors = [acct_colors[i] for i in order]
 
+        def _wrap_label(name: str, width: int = 16) -> str:
+            if len(name) <= width or " " not in name:
+                return name
+            words = name.split(" ")
+            best = min(range(1, len(words)), key=lambda i: abs(len(" ".join(words[:i])) - len(" ".join(words[i:]))))
+            return " ".join(words[:best]) + "<br>" + " ".join(words[best:])
+
         def _account_bars(compact: bool) -> go.Figure:
+            # Phone: break a long name onto two lines ("Partner taxable<br>brokerage")
+            # so the labels stop taking half the plot; the hover keeps the full name.
+            ylabels = [_wrap_label(n) for n in bar_labels] if compact else bar_labels
             fig = go.Figure(data=[go.Bar(
-                x=bar_values, y=bar_labels, orientation="h",
+                x=bar_values, y=ylabels, orientation="h", customdata=bar_labels,
                 marker=dict(color=bar_colors),
                 text=[money(v, shorten=True) for v in bar_values],
                 textposition="outside", cliponaxis=False,
                 textfont=dict(size=12 if compact else 13),
-                hovertemplate="<b>%{y}</b><br>%{x:$,.0f}<extra></extra>",
+                hovertemplate="<b>%{customdata}</b><br>%{x:$,.0f}<extra></extra>",
             )])
             fig.update_layout(
                 title=dict(text="<b>By account</b>", x=0.0, xanchor="left", y=0.97, yanchor="top", font=dict(size=15)),
@@ -361,7 +371,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
                 # Phone: every bar carries its value, and at ~90 px of plot the
                 # axis numbers only ran into each other ("$0$200k$400k").
                 fig.update_xaxes(showticklabels=False, showgrid=False)
-                fig.update_layout(margin=dict(l=8, r=60, t=56, b=8))
+                fig.update_layout(margin=dict(l=8, r=60, t=56, b=8), height=400)
             return fig
 
         try:
