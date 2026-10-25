@@ -1843,4 +1843,35 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Keep those phone rules inside this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* Mode switch: centred, equal-width segments, symmetric inside the pill. */
+    [class*="st-key-mc-mode-switch"]:not(.st-key-mc-mode-switch-gutter) { justify-content: center !important; }
+    [class*="st-key-mc-mode-switch"]:not(.st-key-mc-mode-switch-gutter) > * { width: 100% !important; flex: 1 1 100% !important; }
+    [class*="st-key-mc-mode-switch"]:not(.st-key-mc-mode-switch-gutter) [role="radiogroup"] { display: flex !important; width: 100%; }
+    [class*="st-key-mc-mode-switch"]:not(.st-key-mc-mode-switch-gutter) [role="radiogroup"] label {
+        flex: 1 1 0; justify-content: center; text-align: center; padding: 6px 4px !important; }
+    [class*="st-key-mc-mode-switch"]:not(.st-key-mc-mode-switch-gutter) [role="radiogroup"] p { white-space: nowrap; font-size: 14px !important; }
+
+    /* Check-up debt cards: Name + Remove on one row, Balance + APR on the next,
+       Min per month on its own row; labels stay on one line. */
+    section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(3)) {
+        flex-wrap: wrap !important; row-gap: 4px !important;
+    }
+    section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(-n+2):not(:has(button[kind])) {
+        flex: 1 1 calc(50% - 8px) !important;
+    }
+    section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3):not(:first-child) {
+        flex: 1 1 100% !important;
+    }
+
+    /* Setup nav: Back / Skip for now / Next share the row in equal parts. */
+    .st-key-mc-setup-nav { flex-wrap: nowrap !important; gap: 6px !important; }
+    .st-key-mc-setup-nav > * { flex: 1 1 0 !important; min-width: 0 !important; margin-left: 0 !important; }
+    .st-key-mc-setup-nav > .st-key-gs_skip { flex-grow: 1.5 !important; }
+    .st-key-mc-setup-nav button { width: 100%; justify-content: center; white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+
+    /* "Forget my data" spans the card like the rest of its content. */
+    section[data-testid="stMain"] .st-key-device_forget, .st-key-device_forget button { width: 100% !important; }
+}
+
 /* -- end phone polish B -- */
