@@ -2147,4 +2147,15 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
 [data-testid="stCheckbox"] [data-testid="stWidgetLabel"] > [data-testid="stMarkdownContainer"] > p { display: inline; line-height: 22px !important; }
 [data-testid="stCheckbox"] [data-testid="stWidgetLabel"] > label { display: inline-flex; vertical-align: -3px; min-height: 0 !important; margin: 0 -20px 0 4px !important; }
 
+/* F1-4: Savings tile "basis" radio (% of pre-tax | % of take-home) spans the tile like the
+   other phone segmented radios; at 430 it was its natural width, hugging the left edge. */
+@media (max-width: 640px) {
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"],
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [data-testid="stRadio"] { width: 100% !important; }
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [role="radiogroup"] { display: flex !important; width: 100% !important; max-width: none !important; box-sizing: border-box; }
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [role="radiogroup"] label { flex: 1 1 0 !important; min-width: 0; justify-content: center; text-align: center; }
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [role="radiogroup"] label > div:last-child { padding-left: 0 !important; }
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [role="radiogroup"] label p { text-align: center; }
+}
+
 /* -- end polish F1 -- */
