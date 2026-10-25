@@ -1978,6 +1978,13 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish C3 (round 2). Only the round-2 fixer C3 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* The card's 10px side padding made Plotly lay the figure out 22px wider
+       than the visible box, so the right edge (last tick, end labels) was
+       clipped and the plot sat off-centre. No padding: figure = card. */
+    [data-testid="stPlotlyChart"] { padding: 0; }
+}
+
 /* -- end phone polish C3 -- */
 
 
