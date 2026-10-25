@@ -102,7 +102,7 @@ def render(st, results: dict) -> None:
 # values to try, in ascending order). Grids are intentionally small (6 points)
 # since each point is a fresh Monte Carlo run.
 _BREAK_EVEN_PARAMS = {
-    "Your 401k contribution ($/yr)": (
+    "Your 401(k) contribution ($/yr)": (
         "YOUR_401K_CONTRIBUTION",
         [10_000, 15_000, 18_500, 23_000, 27_500, 32_000],
     ),

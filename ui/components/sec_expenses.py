@@ -63,22 +63,24 @@ def _child_row(st, i: int, kid: dict) -> dict:
     """One child's inputs; returns the child's CHILDREN entry."""
     p = f"se_kid{i}_"
     yub = int(kid["years_until_birth"])
-    head, toggle = st.columns([1, 1.4], vertical_alignment="center")
-    head.markdown(f"**Child {i + 1}**")
+    st.markdown(f"**Child {i + 1}**")
     ensure_default(st, p + "born", yub <= 0)
-    born = toggle.toggle("Already born", key=p + "born")
-    c1, c2 = st.columns(2)
+    born = st.toggle("Already born", key=p + "born")
+    c1, c2 = st.columns(2, vertical_alignment="bottom")
     with c1:
         if born:
             yub = -_kid_number(st, p + "age", "Age today", -yub if yub <= 0 else 0, 0, 30, 1)
         else:
             yub = _kid_number(st, p + "in", "Born in (years)", yub if yub > 0 else 1, 1, 30, 1)
-        leaves = _kid_number(st, p + "leaves", "Leaves home at", kid["leaves_home_age"], 16, 30, 1,
-                             "Their costs stop at this age.")
     with c2:
         cost = _kid_number(st, p + "cost", "Monthly cost ($)", kid["monthly_cost"], 0, 10_000, 100,
                            "Childcare, food, clothes and activities while they live with "
                            "you, in today's dollars.")
+    c3, c4 = st.columns(2, vertical_alignment="bottom")
+    with c3:
+        leaves = _kid_number(st, p + "leaves", "Leaves home at", kid["leaves_home_age"], 16, 30, 1,
+                             "Their costs stop at this age.")
+    with c4:
         pct = _kid_number(st, p + "college", "College you pay (%)",
                           round(100 * float(kid["college_funding_pct"])), 0, 100, 5,
                           "Share of college you plan to pay. It's saved in a 529 from "
@@ -99,7 +101,7 @@ def _children(st) -> list:
     if any(c["college_funding_pct"] > 0 for c in out):
         # College prices: one pair for every child.
         first = next(c for c in out if c["college_funding_pct"] > 0)
-        c1, c2 = st.columns(2)
+        c1, c2 = st.columns(2, vertical_alignment="bottom")
         with c1:
             fee = _kid_number(st, "se_kid_college_cost", "A year of college ($)",
                               first["college_annual_cost"], 0, 200_000, 1_000,
@@ -140,15 +142,18 @@ def render_body(st) -> None:
     owns = status == "Own home"
 
     if owns:
-        c1, c2 = st.columns(2)
+        c1, c2 = st.columns(2, vertical_alignment="bottom")
         with c1:
             _money_input(st, "Home value", "se_home_value", "HOME_VALUE",
                          800_000, 10_000_000, 10_000)
-            _money_input(st, "Mortgage balance", "se_mortgage_balance",
-                         "MORTGAGE_BALANCE", 500_000, 5_000_000, 10_000)
         with c2:
             _money_input(st, "Monthly mortgage payment", "se_mortgage_monthly",
                          "MORTGAGE_MONTHLY", 3_000, 20_000, 100)
+        c1, c2 = st.columns(2, vertical_alignment="bottom")
+        with c1:
+            _money_input(st, "Mortgage balance", "se_mortgage_balance",
+                         "MORTGAGE_BALANCE", 500_000, 5_000_000, 10_000)
+        with c2:
             yrs_default = max(0, min(40, safe_int(get_override(st, "MORTGAGE_YEARS_REMAINING", 28), 28)))
             ensure_default(st, "se_mortgage_years", yrs_default)
             v = st.slider("Years remaining on mortgage", min_value=0, max_value=40,
@@ -158,7 +163,7 @@ def render_body(st) -> None:
             ensure_default(st, "se_mortgage_rate",
                            safe_float(get_override(st, "MORTGAGE_RATE_FOR_PAYOFF", 0.065), 0.065) * 100)
             v = st.number_input("Mortgage interest rate (%)", min_value=0.0, max_value=20.0,
-                                step=0.125, format="%.3f", key="se_mortgage_rate",
+                                step=0.25, format="%.2f", key="se_mortgage_rate",
                                 help="On your mortgage statement. Sets how fast you pay down "
                                      "the loan, so how much you'd keep if you sold.")
             set_override(st, "MORTGAGE_RATE_FOR_PAYOFF", round(v / 100, 6))
@@ -176,10 +181,9 @@ def render_body(st) -> None:
     _section_label(st, "Monthly spending")
     has_partner = safe_int(get_override(st, "PARTNER_AGE", 0), 0) > 0
     shown = [c for c in CATEGORIES if has_partner or not c.partner_only]
-    half = (len(shown) + 1) // 2
-    for col, cats in zip(st.columns(2), (shown[:half], shown[half:])):
-        with col:
-            for c in cats:
+    for r in range(0, len(shown), 2):
+        for col, c in zip(st.columns(2, vertical_alignment="bottom"), shown[r:r + 2]):
+            with col:
                 _money_input(st, c.label, c.widget, c.key, c.default, c.max_value, c.step,
                              help_text=c.help, mirror_key=c.mirror or None)
     if not has_partner:
