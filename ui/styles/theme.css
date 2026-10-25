@@ -2058,4 +2058,51 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Only fixer D2 edits this block.
    ========================================================================== */
 
+/* Touch tablets / landscape phones: the sidebar is 260-328px wide, so a two-column
+   number row is ~120px and the 44px -/+ steppers left the value 35px ("1" of
+   "10,000"). Same fix the mouse rule above applies: drop the steppers in
+   those rows (the numeric keypad does the entering). */
+@media (hover: none) and (pointer: coarse) and (min-width: 641px) and (max-width: 1400px) {
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stNumberInputStepUp"],
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stNumberInputStepDown"] { display: none; }
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .stNumberInput input { padding-right: 14px; }
+}
+
+/* Top card metrics on a narrow card (tablet portrait, or the sidebar open next to it):
+   the same equal, centred columns and short labels as the phone, so the last metric
+   never wraps onto a line by itself. Keys off the card's own width. */
+@media (min-width: 641px) and (max-width: 1100px) {
+    @container (max-width: 720px) {
+        .mc-topbar .mc-topbar-metric {
+            flex: 1 1 0; min-width: 0; align-items: center; text-align: center;
+        }
+        .mc-topbar-metric-label { white-space: nowrap; }
+        .mc-lbl-full { display: none; }
+        .mc-lbl-short { display: inline; }
+    }
+}
+
+/* Landscape tablets: the pinned top card is ~257px tall, a third of a 768px-tall
+   screen, with the sidebar already taking a column. Let it scroll away like it
+   does on portrait tablets and phones. */
+@media (min-width: 769px) and (max-width: 1100px) and (max-height: 800px) {
+    [data-testid="stLayoutWrapper"]:has(> [data-testid="stVerticalBlock"].st-key-mc-topbar) { position: static; }
+}
+
+/* Landscape phones: the welcome page spent 150px above the cards, which pushed the
+   buttons below the fold of a 390px-tall screen. */
+@media (max-height: 500px) and (orientation: landscape) {
+    .stApp:has(:is(.st-key-mc-welcome, .st-key-mc-simple-root, .st-key-mc-setup-root)) [data-testid="stMainBlockContainer"] {
+        padding-top: 20px;
+    }
+    .st-key-mc-welcome { margin-top: 0; }
+    .mc-welcome-head { margin-bottom: 12px; }
+    .mc-welcome-head { margin-bottom: 8px; }
+    .mc-welcome-head h1 { font-size: 24px; margin: 2px 0; }
+    .mc-welcome-head p { display: none; }
+    [class*="st-key-mc-welcome-"] { padding: 14px 18px !important; }
+    .mc-welcome-card p { margin-bottom: 10px; font-size: 14px; }
+    .mc-welcome-privacy { margin-top: 10px; }
+}
+
 /* -- end tablet polish D2 -- */
