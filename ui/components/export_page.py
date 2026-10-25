@@ -43,9 +43,10 @@ def render(st) -> None:
 
     components.html(
         """
+        <style>body { margin: 0; }</style>
         <div id="mc-export-wrap" style="font-family: Lora, Georgia, serif;">
           <button id="mc-export-btn" style="
-            width: 100%; padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1;
+            width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid #cbd5e1;
             background: transparent; color: #1f2937; font-size: 14px; font-weight: 600;
             cursor: pointer; font-family: inherit;
           ">Export current page (HTML)</button>

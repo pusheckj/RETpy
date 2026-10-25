@@ -507,6 +507,12 @@ label[data-baseweb="checkbox"]:has(input:not(:checked)) > div:first-child {
 /* Alert icons keep their glyphs readable */
 [data-testid="stAlert"] [data-testid="stIconMaterial"],
 [data-testid="stAlert"] [data-testid="stAlertDynamicIcon"] { color: #2dd4bf !important; }
+/* Phone polish C4: details that stayed light or too faint on dark. */
+[data-testid="stTooltipIcon"] svg { stroke: currentColor !important; }   /* theme.css fixes a dark stroke */
+div:has(> [data-testid="stNumberInputIcon"]) { background-color: #4a4655 !important; }
+[data-testid="stNumberInputIcon"], [data-testid="stNumberInputIcon"] * { color: var(--mc-ink) !important; }
+[data-testid="stExpander"] summary [data-testid="stExpanderIcon"] { color: #2dd4bf !important; background-color: rgba(45, 212, 191, 0.16) !important; }
+[role="radiogroup"].mc-seg label:not(:has(input:checked)) p { color: var(--mc-muted) !important; }
 </style>
 """
 
