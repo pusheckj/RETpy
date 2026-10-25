@@ -228,7 +228,7 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
     with st.expander("About these tax categories"):
         st.markdown(
             f"""
-            - **Federal income tax** — 2024 brackets for {ctx['status_label']}, applied to ordinary income (wages, Traditional 401k/IRA withdrawals, Social Security up to 85%).{two_returns}
+            - **Federal income tax** — 2024 brackets for {ctx['status_label']}, applied to ordinary income (wages, Traditional 401(k)/IRA withdrawals, Social Security up to 85%).{two_returns}
             - **{ctx['state_label']}** — {ctx['state_name']} income tax from its 2024 tax table (brackets, deductions, and whether it taxes Social Security and retirement income). In retirement years it is included in the Federal band, since the simulation records one combined income-tax figure per year.
             - **Payroll (FICA)** — Social Security and Medicare tax on working-year pay.
             - **LTCG** — Long-term capital gains (0% / 15% / 20%) on taxable brokerage withdrawals.

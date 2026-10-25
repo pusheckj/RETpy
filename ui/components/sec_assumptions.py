@@ -122,7 +122,7 @@ def render_body(st) -> None:
                     help="Convert Traditional to Roth during low-income early retirement years.")
     set_override(st, "ENABLE_ROTH_CONVERSION", bool(v))
     if st.session_state.get("sa_roth_enable", True):
-        c5, c6 = st.columns(2)
+        c5, c6 = st.columns(2, vertical_alignment="bottom")
         with c5:
             # Default = the top of the 12% bracket for YOUR filing status, kept
             # as None ("follow the status") until you type another amount; any
@@ -145,17 +145,17 @@ def render_body(st) -> None:
                                      f"for your filing status.")
             set_override(st, "ROTH_CONVERSION_TARGET_BRACKET",
                          None if safe_int(v) == _auto else safe_int(v))
+        with c6:
             ensure_default(st, "sa_roth_max",
                            safe_int(get_override(st, "ROTH_CONVERSION_MAX_ANNUAL", 100_000), 100_000))
             v = st.number_input("Max annual conversion ($)", min_value=0,
                                 max_value=500_000, step=10_000, key="sa_roth_max")
             set_override(st, "ROTH_CONVERSION_MAX_ANNUAL", safe_int(v))
-        with c6:
-            ensure_default(st, "sa_roth_stop",
-                           safe_int(get_override(st, "ROTH_CONVERSION_STOP_AGE", 67), 67))
-            v = st.slider("Stop conversions at age", min_value=62, max_value=75,
-                          step=1, key="sa_roth_stop")
-            set_override(st, "ROTH_CONVERSION_STOP_AGE", safe_int(v))
+        ensure_default(st, "sa_roth_stop",
+                       safe_int(get_override(st, "ROTH_CONVERSION_STOP_AGE", 67), 67))
+        v = st.slider("Stop conversions at age", min_value=62, max_value=75,
+                      step=1, key="sa_roth_stop")
+        set_override(st, "ROTH_CONVERSION_STOP_AGE", safe_int(v))
 
     st.divider()
 
@@ -188,7 +188,7 @@ def render_body(st) -> None:
 
     # Marketplace prices before age 65. These replace a "Pre-Medicare healthcare
     # cost" box that fed a flat band the default age-rated model never reads.
-    c7, c8 = st.columns(2)
+    c7, c8 = st.columns(2, vertical_alignment="bottom")
     with c7:
         ensure_default(st, "sa_aca_benchmark",
                        safe_int(get_override(st, "ACA_BENCHMARK_MONTHLY_AT_40",

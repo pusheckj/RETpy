@@ -52,7 +52,7 @@ def _lifestyle(st, overrides: dict) -> None:
         set_override(st, "EARLY_RETIREMENT_LEISURE_INCREASE",
                      safe_int(st.session_state.get("rg_leisure_amount"), auto))
 
-    c1, c2 = st.columns(2)
+    c1, c2 = st.columns(2, vertical_alignment="bottom")
     with c1:
         st.number_input("Extra for travel and hobbies ($/yr)", min_value=0, max_value=200_000,
                         step=1_000, key="rg_leisure_amount", on_change=_chosen,
@@ -65,7 +65,7 @@ def _lifestyle(st, overrides: dict) -> None:
         v = st.number_input("Until age", min_value=50, max_value=100, step=1,
                             key="rg_leisure_until")
         set_override(st, "EARLY_RETIREMENT_LEISURE_UNTIL_AGE", safe_int(v))
-    c3, c4 = st.columns(2)
+    c3, c4 = st.columns(2, vertical_alignment="bottom")
     with c3:
         ensure_default(st, "rg_late_pct", int(round(safe_float(
             get_override(st, "LATE_RETIREMENT_LEISURE_DECREASE", 0.15), 0.15) * 100)))
@@ -164,7 +164,7 @@ def render_body(st) -> None:
     else:
         set_override(st, "PARTNER_SS_CLAIM_AGE", None)
 
-    c1, c2 = st.columns(2)
+    c1, c2 = st.columns(2, vertical_alignment="bottom")
     with c1:
         ensure_default(st, "rg_your_fra",
                        safe_int(get_override(st, "YOUR_SS_MONTHLY_FRA", 2_000), 2_000))

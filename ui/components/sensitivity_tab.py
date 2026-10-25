@@ -24,7 +24,7 @@ def render(st, results: dict) -> None:
     base_overrides = dict(st.session_state.get("user_overrides", {}))
     target_age = int(base_overrides.get("TARGET_RETIREMENT_AGE", 55))
 
-    run_btn = st.button("Run sensitivity analysis", width="content")
+    run_btn = st.button("Run sensitivity analysis", width="stretch")
 
     if "sensitivity_results" not in st.session_state:
         st.session_state["sensitivity_results"] = None
@@ -102,7 +102,7 @@ def render(st, results: dict) -> None:
 # values to try, in ascending order). Grids are intentionally small (6 points)
 # since each point is a fresh Monte Carlo run.
 _BREAK_EVEN_PARAMS = {
-    "Your 401k contribution ($/yr)": (
+    "Your 401(k) contribution ($/yr)": (
         "YOUR_401K_CONTRIBUTION",
         [10_000, 15_000, 18_500, 23_000, 27_500, 32_000],
     ),
@@ -142,7 +142,7 @@ def _render_break_even(st, base_overrides: dict, target_age: int) -> None:
     label = st.selectbox(
         "Parameter to sweep", list(_BREAK_EVEN_PARAMS.keys()), key="break_even_param_label"
     )
-    run_sweep_btn = st.button("Find break-even value", width="content", key="break_even_run_btn")
+    run_sweep_btn = st.button("Find break-even value", width="stretch", key="break_even_run_btn")
 
     if run_sweep_btn:
         param_name, values = _BREAK_EVEN_PARAMS[label]

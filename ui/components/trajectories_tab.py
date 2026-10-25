@@ -72,16 +72,25 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
             showlegend=False,
         ))
 
+    # A few lucky paths can reach many times the median and flatten the rest:
+    # cap the axis near the top of the typical paths and say so.
+    maxima = sorted(max(v for _, v in p) for p, _ in outcomes)
+    cap = maxima[int(0.95 * (len(maxima) - 1))] * 1.05
+    clipped = sum(1 for m in maxima if m > cap)
+    note = (f" · {clipped} higher path{'s' if clipped != 1 else ''} run off the top"
+            if clipped else "")
     fig.update_layout(
         title=dict(
-            text="<b>Individual simulation paths</b><br><span style='font-size:13px;color:#94a3b8;'>Green = portfolio survives, red = runs out</span>",
+            text="<b>Individual simulation paths</b><br><span style='font-size:13px;color:#94a3b8;'>"
+                 f"Green = portfolio survives, red = runs out · today's dollars{note}</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),
         height=440,
         margin=dict(l=50, r=30, t=80, b=50),
         xaxis=dict(title="Age", zeroline=False,
                    range=[min(p[0][0] for p, _ in outcomes), max(p[-1][0] for p, _ in outcomes)]),
-        yaxis=dict(title="Portfolio value", zeroline=False, tickformat="$,.3~s"),
+        yaxis=dict(title="Portfolio value (today's $)", zeroline=False, tickformat="$,.3~s",
+                   **({"range": [0, cap]} if clipped else {})),
         hovermode="closest",
     )
     show_chart(st, fig, chart_key, {"displayModeBar": False})

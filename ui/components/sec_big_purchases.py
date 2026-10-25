@@ -112,10 +112,9 @@ def _move_row(st, i: int, event: dict, owns_before: bool) -> dict:
     """Inputs for one move; returns the event to store."""
     choices = _OWNING_CHOICES if owns_before else _RENTING_CHOICES
     ensure_default(st, f"bp_ev{i}_kind", 1 if event.get("action") == "sell_rent" else 0)
-    c1, c2 = st.columns([3, 2])
-    with c1:
-        kind = st.selectbox("Move", (0, 1), key=f"bp_ev{i}_kind",
-                            format_func=lambda k: choices[k])
+    kind = st.selectbox("Move", (0, 1), key=f"bp_ev{i}_kind",
+                        format_func=lambda k: choices[k])
+    c2, _ = st.columns(2, vertical_alignment="bottom")
     with c2:
         age = _num_input(st, "At age", f"bp_ev{i}_age", safe_int(event.get("age"), 40),
                          min_value=18, max_value=100, step=1)
@@ -123,7 +122,7 @@ def _move_row(st, i: int, event: dict, owns_before: bool) -> dict:
            "selling_cost_pct": event.get("selling_cost_pct")}
     if kind == 1:
         out["action"] = "sell_rent"
-        c3, c4 = st.columns(2)
+        c3, c4 = st.columns(2, vertical_alignment="bottom")
         with c3:
             out["rent"] = safe_int(_num_input(st, "New rent ($/mo)", f"bp_ev{i}_rent",
                                               safe_int(event.get("rent"), 2_000),
@@ -141,24 +140,27 @@ def _move_row(st, i: int, event: dict, owns_before: bool) -> dict:
             down0 = 1.0 - loan0 / price0 if price0 > 0 else 0.2
         rate0 = safe_float(event.get("rate"), 0.065)
         years0 = safe_int(event.get("years"), 30)
-        c3, c4 = st.columns(2)
+        c3, c4 = st.columns(2, vertical_alignment="bottom")
         with c3:
             price = safe_int(_num_input(st, "Home price ($)", f"bp_ev{i}_price", price0,
                                         min_value=0, max_value=20_000_000, step=10_000))
+        with c4:
+            rate = _num_input(st, "Mortgage rate (%)", f"bp_ev{i}_rate",
+                              round(rate0 * 100, 2), min_value=0.0, max_value=20.0,
+                              step=0.25, format="%.2f") / 100
+        c5, c6 = st.columns(2, vertical_alignment="bottom")
+        with c5:
             down = _num_input(st, "Down payment (%)", f"bp_ev{i}_down",
                               round(safe_float(down0, 0.2) * 100, 2), min_value=0.0,
                               max_value=100.0, step=1.0,
                               help="Below 20% typically adds PMI, which this model "
                                    "does not charge separately.") / 100
-            costs = safe_int(_num_input(st, "Buying and moving costs ($)", f"bp_ev{i}_costs",
-                                        safe_int(event.get("costs"), 10_000),
-                                        min_value=0, max_value=500_000, step=1_000))
-        with c4:
-            rate = _num_input(st, "Mortgage rate (%)", f"bp_ev{i}_rate",
-                              round(rate0 * 100, 3), min_value=0.0, max_value=20.0,
-                              step=0.125, format="%.3f") / 100
+        with c6:
             years = safe_int(_num_input(st, "Loan term (years)", f"bp_ev{i}_years", years0,
                                         min_value=1, max_value=40, step=1))
+        costs = safe_int(_num_input(st, "Buying and moving costs ($)", f"bp_ev{i}_costs",
+                                    safe_int(event.get("costs"), 10_000),
+                                    min_value=0, max_value=500_000, step=1_000))
         out.update(price=price, down_pct=round(down, 6), rate=round(rate, 6), years=years,
                    costs=costs)
         # A move carried over from an old plan keeps its exact loan and payment
@@ -233,6 +235,8 @@ def _home_moves(st) -> None:
               icon=":material/add_home:")
 
     buys = [e for e in stored if e.get("action") != "sell_rent"]
+    if buys or (owns_today and stored):
+        st.caption("Applies to all your moves:")
     if buys:
         ensure_default(st, "bp_new_home_escrow_pct",
                        safe_float(get_override(st, "NEW_HOME_ESCROW_PCT", 0.0135), 0.0135) * 100)
@@ -269,7 +273,7 @@ def render_body(st) -> None:
                                   "the portfolio (accumulation or retirement).")
     set_override(st, "CAR_ONETIME_ENABLED", bool(onetime_on))
     if onetime_on:
-        c1, c2 = st.columns(2)
+        c1, c2 = st.columns(2, vertical_alignment="bottom")
         with c1:
             ensure_default(st, "bp_car_onetime_age",
                            safe_int(get_override(st, "CAR_ONETIME_AGE", 40), 40))
@@ -292,7 +296,7 @@ def render_body(st) -> None:
                                     "the chosen age.")
     set_override(st, "CAR_RECURRING_ENABLED", bool(recurring_on))
     if recurring_on:
-        c3, c4 = st.columns(2)
+        c3, c4 = st.columns(2, vertical_alignment="bottom")
         with c3:
             ensure_default(st, "bp_car_recurring_start",
                            safe_int(get_override(st, "CAR_RECURRING_START_AGE", 40), 40))
@@ -426,7 +430,7 @@ def render_body(st) -> None:
                                    "\"Extra for travel and hobbies\" in Retirement goals.")
     set_override(st, "RETIREMENT_VACATION_ENABLED", bool(vacation_on))
     if vacation_on:
-        c8, c9 = st.columns(2)
+        c8, c9 = st.columns(2, vertical_alignment="bottom")
         with c8:
             ensure_default(st, "bp_vacation_annual",
                            safe_int(get_override(st, "RETIREMENT_VACATION_ANNUAL", 20_000), 20_000))

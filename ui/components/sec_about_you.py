@@ -16,9 +16,9 @@ except ImportError:  # pragma: no cover
                                     UNMARRIED_FILING, household_of, clear_partner)
 
 try:
-    from utils.household import plan_end_text
+    from utils.household import plan_end_ages, plan_end_text
 except ImportError:  # pragma: no cover
-    from ui.utils.household import plan_end_text  # type: ignore
+    from ui.utils.household import plan_end_ages, plan_end_text  # type: ignore
 
 from retirement_sim.config import plan_end_age
 
@@ -115,7 +115,8 @@ def render_body(st) -> None:
                 st.caption(f"Partner retires at {p_target} — the same year you do.")
             else:
                 when = "after you" if gap_vs_you > 0 else "before you"
-                st.caption(f"Partner retires at {p_target} — {abs(gap_vs_you)} year(s) {when}.")
+                n = abs(gap_vs_you)
+                st.caption(f"Partner retires at {p_target} — {n} year{'' if n == 1 else 's'} {when}.")
             if p_target < partner_age:
                 st.warning(
                     f"Partner's retirement age ({p_target}) is below their current age "
@@ -140,8 +141,16 @@ def render_body(st) -> None:
                             key="ay_partner_plan_until", help="The same, in your partner's age.")
         set_override(st, "PARTNER_PLAN_UNTIL_AGE", safe_int(p_until))
         # Whoever is covered longer sets the end; every result uses this horizon.
-        st.caption(f"The plan runs until "
-                   f"{plan_end_text(st.session_state.get('user_overrides', {}) or {})}.")
+        values = st.session_state.get("user_overrides", {}) or {}
+        end_you, end_partner = plan_end_ages(values)
+        diff = abs(end_you - end_partner) if end_partner is not None else 0
+        if diff:
+            who = "younger" if end_partner < end_you else "older"
+            st.caption(f"The plan runs until {plan_end_text(values)}. Your partner is {diff} "
+                       f"year{'' if diff == 1 else 's'} {who}, so the plan runs until the later "
+                       f"of your two plan-until ages.")
+        else:
+            st.caption(f"The plan runs until {plan_end_text(values)}.")
     end = plan_end_age(st.session_state.get("user_overrides", {}) or {})
     if end <= target:
         st.warning(

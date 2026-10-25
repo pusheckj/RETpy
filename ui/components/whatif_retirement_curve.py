@@ -125,7 +125,7 @@ def render(st, results: dict = None) -> None:
         st.toggle("Include Social Security", key="wifc_ss",
                   help="Whether the alternate scenario counts Social Security income.")
         if st.session_state.get("wifc_ss", True):
-            st.slider("SS claim age", 62, 70, key="wifc_ss_claim", step=1,
+            st.slider("Claim age", 62, 70, key="wifc_ss_claim", step=1,
                       help="Age Social Security benefits begin in the alternate scenario.")
 
     n_sims = int(st.session_state.get("n_simulations", 1000))

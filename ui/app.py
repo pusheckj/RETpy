@@ -801,6 +801,20 @@ def _inject_keyboard_nav() -> None:
     )
 
 
+def _spending_stats(st) -> list:
+    """Top-card figures for the Spending view: average monthly spending and months counted."""
+    try:
+        from components.spending_dashboard import statement_data, session_actual
+        data = statement_data(st)
+        if data is None:
+            return [("Statements", "none yet")]
+        monthly = sum(session_actual(st, data).values())
+        return [("Average spending / month", f"${monthly:,.0f}"),
+                ("Months counted", str(len(data["complete"])))]
+    except Exception:
+        return [("Statements", "unavailable")]
+
+
 def main() -> None:
     _inject_css()
     _init_state()
@@ -939,7 +953,8 @@ def main() -> None:
                      sims_render=_topbar_sims,
                      settings_render=_topbar_settings,
                      in_card=True, control_slots=control_slots,
-                     title="Spending" if spending_view else "Retirement Monte Carlo")
+                     title="Spending" if spending_view else "Retirement Monte Carlo",
+                     stats=_spending_stats(st) if spending_view else None)
 
 
     # Spending view: statements only, no simulation.
@@ -963,11 +978,7 @@ def main() -> None:
     whatif_results = st.session_state.get("whatif_results")
 
     def _subheader(text: str) -> None:
-        st.markdown(
-            f'<div style="font-weight:700;font-size:16px;color:#334155;'
-            f'margin:16px 0 8px 0;">{text}</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="mc-section">{text}</div>', unsafe_allow_html=True)
 
     def _run_hint(what: str) -> None:
         if results is None:

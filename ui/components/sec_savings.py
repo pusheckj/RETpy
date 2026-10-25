@@ -186,7 +186,7 @@ def _render_employer_match(st, overrides: dict) -> None:
                    safe_float(get_override(st, "YOUR_401K_MATCH_PCT", 0.0), 0.0) * 100)
     v = st.number_input(
         "Your employer's 401(k) match (% of pay)", min_value=0.0, max_value=25.0,
-        step=0.5, format="%.1f", key="sv_match_pct",
+        step=0.5, format="%.2f", key="sv_match_pct",
         help="The most your employer adds, as in \"we match up to 4%\". They match "
              "what you put in, so contributing less than this gets less match.",
     )
@@ -196,7 +196,7 @@ def _render_employer_match(st, overrides: dict) -> None:
                        safe_float(get_override(st, "PARTNER_401K_MATCH_PCT", 0.0), 0.0) * 100)
         v = st.number_input(
             "Partner's employer 401(k) match (% of pay)", min_value=0.0, max_value=25.0,
-            step=0.5, format="%.1f", key="sv_partner_match_pct",
+            step=0.5, format="%.2f", key="sv_partner_match_pct",
         )
         set_override(st, "PARTNER_401K_MATCH_PCT", float(v) / 100.0)
 
@@ -299,8 +299,10 @@ def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
         set_override(st, key, amount)
     _zero_partner_contributions(st, overrides)
 
-    # Sum check
-    if total_pct != 100:
+    # Running total: the shares must add up to 100%.
+    if total_pct == 100:
+        st.caption("Total: **100%** of what's left to save.")
+    else:
         if total_pct < 100:
             st.warning(
                 f"Percentages sum to **{total_pct}%** "

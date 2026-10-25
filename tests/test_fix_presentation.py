@@ -278,7 +278,7 @@ def test_break_even_uses_user_target_success_rate(monkeypatch):
     from utils import sim_runner
 
     assert float(cfg.TARGET_SUCCESS_RATE) == 0.80, "cfg default changed"
-    label = "Your 401k contribution ($/yr)"
+    label = "Your 401(k) contribution ($/yr)"
     assert label in sensitivity_tab._BREAK_EVEN_PARAMS
 
     captured = {}
@@ -306,7 +306,7 @@ def test_break_even_falls_back_to_cfg_when_override_absent(monkeypatch):
     monkeypatch.setattr(sim_runner, "sweep_break_even", _make_fake_sweep(captured))
 
     st = FakeSt(overrides={})
-    st.session_state["break_even_param_label"] = "Your 401k contribution ($/yr)"
+    st.session_state["break_even_param_label"] = "Your 401(k) contribution ($/yr)"
     st.button = lambda *a, **k: True
 
     sensitivity_tab._render_break_even(st, {}, target_age=55)
