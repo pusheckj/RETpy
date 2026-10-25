@@ -75,7 +75,7 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
     # A few lucky paths can reach many times the median and flatten the rest:
     # cap the axis near the top of the typical paths and say so.
     maxima = sorted(max(v for _, v in p) for p, _ in outcomes)
-    cap = maxima[int(0.95 * (len(maxima) - 1))] * 1.05
+    cap = maxima[int(0.8 * (len(maxima) - 1))] * 1.05
     clipped = sum(1 for m in maxima if m > cap)
     note = (f" · {clipped} higher path{'s' if clipped != 1 else ''} run off the top"
             if clipped else "")
