@@ -1006,31 +1006,44 @@ def render(st, **_kwargs) -> None:
         first = next((c for c in choices if c != "Housing"), choices[0])
         pick = st.pills("Expense category", choices, default=first, key="sp_cat",
                         label_visibility="collapsed") or first
+        st.markdown(f"**{pick}: spending by month**")
         _chart(st, lambda compact: category_trend_figure(view, pick, start, chart_end, incomplete,
                                                          dark, window, compact),
                "sp_cat_trend", PLOTLY_CONFIG)
-        a, b = st.columns(2)
-        with a:
+        merchants = _merchants_per_year(view, start, end, complete, pick, 10).assign(
+            **{"Per year": lambda d: d["Per year"].map(money)})
+        summary = category_summary(view, start, end, complete)
+        det = summary.reset_index().rename(columns={"category": "Category"})
+        det = det[det["Expense category"] == pick][["Category", "Per month", "Per year"]]
+        # A one-row breakdown just repeats the chart: show the merchants alone then.
+        if len(det) > 1:
+            a, b = st.columns(2)
+        else:
+            a = b = None
+        with (a if a is not None else st.container()):
             st.markdown(f"**Top merchants — {pick}**")
-            st.dataframe(_merchants_per_year(view, start, end, complete, pick, 10)
-                         .assign(**{"Per year": lambda d: d["Per year"].map(money)}),
-                         hide_index=True, width="stretch")
-        with b:
-            st.markdown("**Inside this expense category**")
-            summary = category_summary(view, start, end, complete)
-            det = summary.reset_index().rename(columns={"category": "Category"})
-            st.dataframe(det[det["Expense category"] == pick][["Category", "Per month", "Per year"]]
-                         .assign(**{"Per month": lambda d: d["Per month"].map(money),
-                                    "Per year": lambda d: d["Per year"].map(money)}),
-                         hide_index=True, width="stretch")
+            st.dataframe(merchants, hide_index=True, width="stretch")
+        if b is not None:
+            with b:
+                st.markdown("**Inside this expense category**")
+                st.dataframe(det.assign(**{"Per month": lambda d: d["Per month"].map(money),
+                                           "Per year": lambda d: d["Per year"].map(money)}),
+                             hide_index=True, width="stretch")
         st.caption("Per year over complete months. Merchant totals are before paybacks; categories are after.")
 
     with t_tx:
         cats = category_table(view, start, end)
         st.markdown("**By category**")
-        st.dataframe(cats.assign(**{c: cats[c].map(money) for c in ("Total", "Average", "Largest")}),
-                     hide_index=True, width="stretch",
-                     height=min(36 * (len(cats) + 1) + 2, 420))
+        # Numbers stay numeric so they right-align like the Transactions column; the
+        # expense category is blanked where it just repeats the category, and the
+        # table is tall enough for every row.
+        shown = cats.assign(**{"Expense category": cats["Expense category"].where(
+            cats["Expense category"] != cats["Category"], ""),
+            **{c: cats[c].round().astype(int) for c in ("Total", "Average", "Largest")}})
+        st.dataframe(shown, hide_index=True, width="stretch",
+                     height=36 * (len(cats) + 1) + 2,
+                     column_config={c: st.column_config.NumberColumn(format="dollar")
+                                    for c in ("Total", "Average", "Largest")})
         if not cats.empty:
             labels = {f"{r.Category} · {r.Transactions}": r.Category for r in cats.itertuples()}
             # Start on a category that has purchases to list (housing is a flat payment).
