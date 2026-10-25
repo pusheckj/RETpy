@@ -1842,6 +1842,46 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     .mc-hero-card .mc-hero-side { text-align: left !important; padding-top: 12px; border-top: 1px solid var(--mc-tile-border); }
 }
 
+@media (max-width: 640px) {
+    /* A3: segmented controls span the line with equal, centred segments. */
+    .st-key-portfolio_breakdown_main_view [data-testid="stButtonGroup"],
+    .st-key-net_worth_box_main_style [data-testid="stButtonGroup"],
+    .st-key-spending_range_main_style [data-testid="stButtonGroup"],
+    .st-key-spending_main_dollars_mode [data-testid="stButtonGroup"],
+    .st-key-spending_range_main_dollars [data-testid="stButtonGroup"],
+    .st-key-tax_tab_view [data-testid="stButtonGroup"] { width: 100% !important; }
+    .st-key-portfolio_breakdown_main_view [data-testid="stButtonGroup"] [role="radiogroup"],
+    .st-key-net_worth_box_main_style [data-testid="stButtonGroup"] [role="radiogroup"],
+    .st-key-spending_range_main_style [data-testid="stButtonGroup"] [role="radiogroup"],
+    .st-key-spending_main_dollars_mode [data-testid="stButtonGroup"] [role="radiogroup"],
+    .st-key-spending_range_main_dollars [data-testid="stButtonGroup"] [role="radiogroup"],
+    .st-key-tax_tab_view [data-testid="stButtonGroup"] [role="radiogroup"],
+    .st-key-portfolio_breakdown_main_view [data-testid="stButtonGroup"] > div:not([data-testid]),
+    .st-key-net_worth_box_main_style [data-testid="stButtonGroup"] > div:not([data-testid]),
+    .st-key-spending_range_main_style [data-testid="stButtonGroup"] > div:not([data-testid]),
+    .st-key-spending_main_dollars_mode [data-testid="stButtonGroup"] > div:not([data-testid]),
+    .st-key-spending_range_main_dollars [data-testid="stButtonGroup"] > div:not([data-testid]),
+    .st-key-tax_tab_view [data-testid="stButtonGroup"] > div:not([data-testid]) {
+        display: flex !important; flex-wrap: nowrap !important; width: 100% !important; max-width: none !important; }
+    .st-key-portfolio_breakdown_main_view [data-testid="stButtonGroup"] button,
+    .st-key-net_worth_box_main_style [data-testid="stButtonGroup"] button,
+    .st-key-spending_range_main_style [data-testid="stButtonGroup"] button,
+    .st-key-spending_main_dollars_mode [data-testid="stButtonGroup"] button,
+    .st-key-spending_range_main_dollars [data-testid="stButtonGroup"] button,
+    .st-key-tax_tab_view [data-testid="stButtonGroup"] button {
+        flex: 1 1 0 !important; max-width: none !important; min-width: 0; justify-content: center; text-align: center; }
+}
+
+/* A4: on touch devices scrollbars are overlays; hide the classic ones the
+   emulator draws so content is symmetric (main pane, sidebar, popovers). */
+@media (hover: none) and (pointer: coarse) {
+    section[data-testid="stMain"], section[data-testid="stSidebar"], section[data-testid="stSidebar"] *,
+    [data-testid="stPopoverBody"], [data-testid="stPopoverBody"] * { scrollbar-width: none; }
+    section[data-testid="stMain"]::-webkit-scrollbar, section[data-testid="stSidebar"]::-webkit-scrollbar,
+    section[data-testid="stSidebar"] *::-webkit-scrollbar,
+    [data-testid="stPopoverBody"]::-webkit-scrollbar, [data-testid="stPopoverBody"] *::-webkit-scrollbar { display: none; }
+}
+
 /* -- end phone polish A -- */
 
 
