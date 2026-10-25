@@ -35,7 +35,8 @@ def _fmt_signed_pct(value) -> str:
     if value is None:
         return "—"
     arrow = "▲" if value > 0 else ("▼" if value < 0 else "")
-    return f"{arrow} {pct(abs(value))}".strip()
+    # A change in a percentage is in percentage points, not percent.
+    return f"{arrow} {abs(value) * 100:.1f} pts".strip()
 
 
 def _fmt_signed_money(value) -> str:
