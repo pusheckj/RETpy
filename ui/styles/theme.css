@@ -1834,6 +1834,14 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    scrollbars). Keep planner phone rules inside this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* A1: hero tile stacks (target block below, left-aligned like the headline). */
+    .mc-hero-card { flex-direction: column !important; align-items: stretch !important; gap: 16px; padding: 20px 16px !important; margin-bottom: 16px !important; }
+    .mc-hero-card .mc-hero-big { font-size: clamp(36px, 15vw, 56px) !important; overflow-wrap: anywhere; }
+    .mc-hero-card .mc-hero-main > div:last-child { max-width: none !important; }
+    .mc-hero-card .mc-hero-side { text-align: left !important; padding-top: 12px; border-top: 1px solid var(--mc-tile-border); }
+}
+
 /* -- end phone polish A -- */
 
 

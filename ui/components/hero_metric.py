@@ -38,19 +38,19 @@ def render(st, results: dict) -> None:
 
     st.markdown(
         f'''
-        <div class="mc-card" style="display: flex; align-items: flex-start; justify-content: space-between; padding: 32px 40px; margin-bottom: 24px;">
-            <div>
+        <div class="mc-card mc-hero-card" style="display: flex; align-items: flex-start; justify-content: space-between; padding: 32px 40px; margin-bottom: 24px;">
+            <div class="mc-hero-main">
                 <div class="mc-hero-label" style="font-size: 13px; color: #64748b; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;">
                     Earliest retirement age
                 </div>
-                <div class="{big_cls}" style="font-size: 72px; font-weight: 700; color: {big_color}; line-height: 1.0;">
+                <div class="{big_cls} mc-hero-big" style="font-size: 72px; font-weight: 700; color: {big_color}; line-height: 1.0;">
                     {big_num}
                 </div>
                 <div style="font-size: 14px; color: #64748b; margin-top: 10px; max-width: 480px;">
                     {subtitle}
                 </div>
             </div>
-            <div style="text-align: right;">
+            <div class="mc-hero-side" style="text-align: right;">
                 <div style="font-size: 13px; color: #64748b; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;">
                     Target retirement age
                 </div>
