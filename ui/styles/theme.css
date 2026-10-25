@@ -446,7 +446,8 @@ section[data-testid="stSidebar"] .stTextInput input {
    Sidebar section icons — the leading material icon on each
    sidebar expander sits inside a soft teal "chip".
    ========================================================= */
-section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stExpanderIcon"] {
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stExpanderIcon"],
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stIconMaterial"] {
     background: rgba(13, 148, 136, 0.14);
     color: var(--mc-teal) !important;
     border-radius: 50%;
@@ -816,6 +817,27 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] [data-testid="stM
     overflow: visible;
     text-overflow: clip;
     line-height: 1.25;
+}
+
+/* Sidebar dividers (st.divider) default to 32px margins plus the 16px block gap,
+   which left ~100px of blank space around each rule. */
+section[data-testid="stSidebar"] hr { margin: 4px 0 !important; }
+
+/* Summary stat labels ("- TAXES", "= LEFT TO SAVE"): reserve two lines so the
+   values line up across the row however a label wraps. */
+section[data-testid="stSidebar"] [data-testid="stMetricLabel"] { min-height: 2.6em; align-items: flex-end; }
+
+/* Nested expanders (e.g. "Your pay by year") are sub-sections: smaller header,
+   smaller icon chip, no extra label indent. */
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary,
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p {
+    font-size: 15px !important;
+    text-align: left;
+}
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] { margin-left: 14px !important; }
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary [data-testid="stIconMaterial"],
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary [data-testid="stExpanderIcon"] {
+    width: 26px; height: 26px; min-width: 26px; font-size: 16px !important; margin-right: 8px;
 }
 
 /* =========================================================

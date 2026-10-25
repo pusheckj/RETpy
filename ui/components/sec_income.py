@@ -56,14 +56,14 @@ def render_body(st) -> None:
     st.markdown("**You**")
     c1, c2 = st.columns(2)
     with c1:
-        you_base = _income_input(st, "💼 Base salary", "si_your_base",
+        you_base = _income_input(st, "Base salary", "si_your_base",
                                  "YOUR_BASE_SALARY", 70_000)
-        you_bonus = _income_input(st, "🎁 Bonus", "si_your_bonus",
+        you_bonus = _income_input(st, "Bonus", "si_your_bonus",
                                   "YOUR_BONUS_AMOUNT", 0, max_value=1_000_000, step=500)
     with c2:
-        you_rsu = _income_input(st, "📈 RSU (gross, annual)", "si_your_rsu",
+        you_rsu = _income_input(st, "RSU (gross, annual)", "si_your_rsu",
                                 "YOUR_RSU_AMOUNT", 0, max_value=5_000_000)
-        you_other = _income_input(st, "🔄 Other income", "si_your_other",
+        you_other = _income_input(st, "Other income", "si_your_other",
                                   "YOUR_OTHER_INCOME", 0, max_value=1_000_000, step=500,
                                   help_text=_OTHER_INCOME_HELP)
 
@@ -81,14 +81,14 @@ def render_body(st) -> None:
         st.markdown("**Partner**")
         c3, c4 = st.columns(2)
         with c3:
-            p_base = _income_input(st, "💼 Partner base salary", "si_partner_base",
+            p_base = _income_input(st, "Partner base salary", "si_partner_base",
                                    "PARTNER_BASE_SALARY", 42_000)
-            p_bonus = _income_input(st, "🎁 Partner bonus", "si_partner_bonus",
+            p_bonus = _income_input(st, "Partner bonus", "si_partner_bonus",
                                     "PARTNER_BONUS_AMOUNT", 0, max_value=1_000_000, step=500)
         with c4:
-            p_rsu = _income_input(st, "📈 Partner RSU (gross)", "si_partner_rsu",
+            p_rsu = _income_input(st, "Partner RSU (gross)", "si_partner_rsu",
                                   "PARTNER_RSU_AMOUNT", 0, max_value=5_000_000)
-            p_other = _income_input(st, "🔄 Partner other income", "si_partner_other",
+            p_other = _income_input(st, "Partner other income", "si_partner_other",
                                     "PARTNER_OTHER_INCOME", 0, max_value=1_000_000, step=500,
                                     help_text=_OTHER_INCOME_HELP)
 
@@ -186,12 +186,12 @@ def render_body(st) -> None:
             )
 
         edited = st.data_editor(
-            df, num_rows="dynamic", width="stretch", key="si_comp_editor",
+            df, num_rows="dynamic", width="stretch", hide_index=True, key="si_comp_editor",
             column_config={
-                "age": st.column_config.NumberColumn("Age", min_value=18, max_value=80, step=1),
-                "base": st.column_config.NumberColumn("Base", min_value=0, step=1_000, format="dollar"),
-                "bonus": st.column_config.NumberColumn("Bonus", min_value=0, step=500, format="dollar"),
-                "rsu_gross": st.column_config.NumberColumn("RSU", min_value=0, step=1_000, format="dollar"),
+                "age": st.column_config.NumberColumn("Age", min_value=18, max_value=80, step=1, width="small"),
+                "base": st.column_config.NumberColumn("Base", min_value=0, step=1_000, format="dollar", width="small"),
+                "bonus": st.column_config.NumberColumn("Bonus", min_value=0, step=500, format="dollar", width="small"),
+                "rsu_gross": st.column_config.NumberColumn("RSU", min_value=0, step=1_000, format="dollar", width="small"),
             },
         )
 
