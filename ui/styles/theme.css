@@ -1971,6 +1971,37 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish C2 (round 2). Only the round-2 fixer C2 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* C2-1: stat cards go two per row; a pair reserves the same label height
+       (.mc-l2 is set on both cards of a pair when either label wraps) so the
+       values share a baseline. */
+    .mc-stat-card .mc-stat-label { line-height: 1.45; }
+    .mc-stat-card .mc-stat-label.mc-l2 { min-height: calc(2 * 1.45em); }
+
+    /* C2-2: card-less metrics (st.metric) in a 2-up row: both cells fill the row
+       height and sit their label + value at the bottom, so a label that wraps in
+       one cell does not push its neighbour's value out of line. */
+    section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]):not(:has([data-testid="stPlotlyChart"])) > [data-testid="stColumn"] { display: flex; }
+    section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]):not(:has([data-testid="stPlotlyChart"])) > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] { flex: 1 1 auto; justify-content: flex-end; }
+    section[data-testid="stMain"] [data-testid="stMetric"] { display: flex; flex-direction: column; justify-content: flex-end; }
+    section[data-testid="stMain"] [data-testid="stMetricLabel"] { line-height: 1.35; }
+    /* A delta line under one value (e.g. "risk") must not lift its neighbours' values:
+       the cells without one reserve the same height (rows of 2 or 4; a 3-up row
+       wraps so its odd one is alone on its line). */
+    section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetricDelta"]):not(:has(> [data-testid="stColumn"]:nth-child(3):last-child)) [data-testid="stMetric"]:not(:has([data-testid="stMetricDelta"])) { padding-bottom: 28px; }
+}
+
+@media (max-width: 640px) {
+    /* C2-3: segmented radios whose label wraps: every segment as tall as the
+       tallest one, text centred both ways. */
+    section[data-testid="stMain"] [class*="st-key-"] [role="radiogroup"]:has(label:nth-child(2)) label { align-self: stretch; align-items: center; }
+}
+
+@media (max-width: 640px) {
+    /* C2-4: hero text inset matches the stat cards' 20px (it was 16px). */
+    .mc-hero-card { padding: 20px !important; }
+}
+
 /* -- end phone polish C2 -- */
 
 

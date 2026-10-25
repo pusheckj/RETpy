@@ -111,7 +111,7 @@ def _delta_badge(delta_val: float) -> str:
     )
 
 
-def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a", tooltip: str = "", cls: str = "", delta_html: str = "", idx: int = 0) -> str:
+def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a", tooltip: str = "", cls: str = "", delta_html: str = "", idx: int = 0, two_line: bool = False) -> str:
     # #5/#14: wrap the card in a positioned container that holds a hidden .mc-tip
     # popup, shown on :hover via CSS (no JS, no native title tooltip).
     # idx drives the ③ cascade stagger so the 4 cards reveal one-by-one.
@@ -120,7 +120,7 @@ def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a
     return f'''
     <div class="mc-stat-wrap mc-cascade" style="animation-delay:{idx * 90}ms;">
     <div class="mc-stat-card" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; height: 100%; min-height: 130px; display: flex; flex-direction: column; justify-content: flex-start; cursor: {cursor};">
-        <div style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">{label}</div>
+        <div class="mc-stat-label{' mc-l2' if two_line else ''}" style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">{label}</div>
         <div class="{cls}" style="font-size: clamp(20px, 17cqi, 52px); font-weight: 700; color: {color}; line-height: 1.1; overflow-wrap: anywhere;">{value}</div>{delta_html}
         <div style="font-size: 12px; color: #94a3b8; margin-top: auto; padding-top: 6px;">{sublabel}</div>
     </div>
@@ -267,10 +267,12 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
     else:
         d_nw = d_ret = d_nonret = d_home = ""
 
-    with cols[0]: st.markdown(_stat_card("Net worth", money(net_worth, shorten=True), "total assets minus debt", "#0d9488", tooltip=net_worth_tip, cls="mc-teal", delta_html=d_nw, idx=0), unsafe_allow_html=True)
-    with cols[1]: st.markdown(_stat_card("Retirement accounts", money(retirement_sum, shorten=True), "401(k), Roth IRA, Traditional IRA, HSA", tooltip=retirement_tip, delta_html=d_ret, idx=1), unsafe_allow_html=True)
-    with cols[2]: st.markdown(_stat_card("Non&#8209;retirement", money(taxable_sum + cash_sum, shorten=True), "taxable brokerage + cash", tooltip=non_retirement_tip, delta_html=d_nonret, idx=2), unsafe_allow_html=True)
-    with cols[3]: st.markdown(_stat_card("Home equity", money(home_equity, shorten=True), ("projected equity" if projected else f"value {money(home_value, shorten=True)}"), tooltip=home_equity_tip, delta_html=d_home, idx=3), unsafe_allow_html=True)
+    # Phone: cards go two per row; a pair shares its label height (see theme.css).
+    l2 = [True, True, False, False]   # "Net worth" | "Retirement accounts" wrap; "Non-retirement" | "Home equity" do not
+    with cols[0]: st.markdown(_stat_card("Net worth", money(net_worth, shorten=True), "total assets minus debt", "#0d9488", tooltip=net_worth_tip, cls="mc-teal", delta_html=d_nw, idx=0, two_line=l2[0]), unsafe_allow_html=True)
+    with cols[1]: st.markdown(_stat_card("Retirement accounts", money(retirement_sum, shorten=True), "401(k), Roth IRA, Traditional IRA, HSA", tooltip=retirement_tip, delta_html=d_ret, idx=1, two_line=l2[1]), unsafe_allow_html=True)
+    with cols[2]: st.markdown(_stat_card("Non&#8209;retirement", money(taxable_sum + cash_sum, shorten=True), "taxable brokerage + cash", tooltip=non_retirement_tip, delta_html=d_nonret, idx=2, two_line=l2[2]), unsafe_allow_html=True)
+    with cols[3]: st.markdown(_stat_card("Home equity", money(home_equity, shorten=True), ("projected equity" if projected else f"value {money(home_value, shorten=True)}"), tooltip=home_equity_tip, delta_html=d_home, idx=3, two_line=l2[3]), unsafe_allow_html=True)
 
     st.markdown('<div style="height: 24px;"></div>', unsafe_allow_html=True)
 
