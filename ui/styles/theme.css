@@ -2087,4 +2087,44 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish E1 (owner-length content in planner tiles). Only fixer E1 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* E1-1: the donut's card rule ([class*="_category"]) also matched the
+       mc-wide-/mc-narrow- wrapper that show_chart adds, so the donut sat in a
+       card inside a card (11px inset, double border). Only the chart keeps it. */
+    [class*="st-key-mc-narrow-"][class*="_category"],
+    [class*="st-key-mc-wide-"][class*="_category"] {
+        background: none; border: 0; box-shadow: none; padding: 0; margin: 0;
+    }
+
+    /* E1-2: metric help icons follow the last word of their label instead of
+       floating at the right edge of the (possibly 3-line) label box. */
+    section[data-testid="stMain"] [data-testid="stMetricLabel"] { display: block; padding-right: 20px; box-sizing: border-box; }
+    section[data-testid="stMain"] [data-testid="stMetricLabel"] > div,
+    section[data-testid="stMain"] [data-testid="stMetricLabel"] > div > [data-testid="stMarkdownContainer"],
+    section[data-testid="stMain"] [data-testid="stMetricLabel"] > div > [data-testid="stMarkdownContainer"] > p { display: inline; }
+    /* The label keeps a 20px gutter on the right and the icon (negative right margin)
+       sits in it: it follows the last word, never wraps onto a line of its own and
+       never reaches the neighbouring column. */
+    section[data-testid="stMain"] [data-testid="stMetricLabel"] > label { display: inline-flex; vertical-align: -3px; margin: 0 -20px 0 4px; }
+}
+
+@media (max-width: 640px) {
+    /* E1-3: two-option segmented radios in the tiles ("At retirement (age N)",
+       "Point cloud (violin)"): slimmer padding + 14px text so the label fits one
+       line at 390 where it used to wrap, leaving the two segments the same height. */
+    [class*="st-key-mc-tile-"] [role="radiogroup"]:has(label:nth-child(2)) label { padding-left: 6px !important; padding-right: 6px !important; }
+    [class*="st-key-mc-tile-"] [role="radiogroup"]:has(label:nth-child(2)) label p { font-size: 14px !important; line-height: 1.25; }
+}
+
+@media (max-width: 640px) {
+    /* Balanced wrap: a wrapped segment label breaks "At retirement / (age 40)",
+       not "At retirement (age / 40)". */
+    [class*="st-key-mc-tile-"] [role="radiogroup"]:has(label:nth-child(2)) label p { text-wrap: balance; }
+}
+@media (max-width: 380px) {
+    /* E1-4: at 360 the 2-up tile is ~107px wide inside; "NON-RETIREMENT" broke
+       mid-word and pushed its value below its neighbour's. */
+    .mc-stat-card .mc-stat-label { font-size: 11px !important; letter-spacing: 0 !important; }
+}
+
 /* -- end phone polish E1 -- */

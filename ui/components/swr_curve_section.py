@@ -183,7 +183,13 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
                    zeroline=False, tickfont=dict(color="#64748b")),
         showlegend=False, dragmode="pan", uirevision="keep",
     )
-    show_chart(st, fig, f"swr_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
+    def _build(compact: bool):
+        f = go.Figure(fig)
+        if compact:  # the full axis title is clipped on a 360px phone
+            f.update_xaxes(title_text="Initial withdrawal rate")
+        return f
+
+    show_chart(st, _build, f"swr_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
     st.caption(
         "Each point re-runs the full Monte Carlo at a different year-1 spending level. The rate is the "
         "**realized total** first-year draw ÷ investable balance at retirement, directly comparable "
