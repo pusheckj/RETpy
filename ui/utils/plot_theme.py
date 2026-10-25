@@ -246,7 +246,7 @@ def _wrap_title(fig, compact: bool = False) -> None:
     # Pin the title to the top of the figure so extra wrapped lines grow DOWN
     # into the reserved margin instead of being centred over the plot.
     fig.update_layout(title=dict(text="<br>".join(out), yref="container", y=1,
-                                 yanchor="top", pad=dict(t=14)))
+                                 yanchor="top", pad=dict(t=14, l=10 if compact else 0)))
     if compact:
         _set_margin(fig, t=14 + height + 22)
     else:
@@ -384,7 +384,7 @@ def style_fig(fig, st, compact: bool = False):
         # whenever the plot height differs from what the offset was tuned for.
         layout_kwargs["legend"] = dict(
             orientation="h", yref="container", yanchor="bottom", y=0.0,
-            xref="container" if compact else "paper", xanchor="left", x=0.0,
+            xref="container" if compact else "paper", xanchor="left", x=0.03 if compact else 0.0,
             font=dict(family=fam, color=text_color,
                       size=10.5 if len(_legend_entries(fig)) >= 4 else 11.5),
             itemsizing="constant",
@@ -408,7 +408,7 @@ def style_fig(fig, st, compact: bool = False):
             cur_r = cur_b = None
         new_r = 30 if (cur_r is None or cur_r >= 150) else cur_r
         if compact:  # the legend is clipped to the plot width: don't waste it on a gutter
-            new_r = min(new_r, 60)
+            new_r = 18
         # Room for tick labels (+ the x-axis title if any) and then the legend rows.
         rows = _legend_rows(fig, compact)
         if compact and rows:
@@ -424,6 +424,18 @@ def style_fig(fig, st, compact: bool = False):
         fig.update_xaxes(automargin=True)
         fig.update_yaxes(automargin=True)
 
+    if compact and not is_pie:
+        # Even side gutters on a ~300px card: tick labels grow the left one
+        # (automargin), so the fixed margins stay small, and labels that sat in
+        # the old right gutter move inside the plot, above their line at the left
+        # (the right end is where the tall values are).
+        m = fig.layout.margin
+        fig.update_layout(margin=dict(l=min(m.l if m.l is not None else 80, 14), r=24))
+        fig.update_yaxes(automargin=True)
+        fig.update_xaxes(automargin=True)
+        for a in fig.layout.annotations or []:
+            if a.xref in ("paper", "x domain") and (a.x or 0) >= 1 and a.xanchor in (None, "auto", "left"):
+                a.update(xanchor="left", x=0, yanchor="bottom", yshift=2)
     if compact:
         # Right-hand axis title + a wide gutter squeezed a ~300px plot (and the
         # legend, which is clipped to the plot width); the legend already names

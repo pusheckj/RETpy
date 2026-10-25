@@ -2043,6 +2043,55 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish C3 (round 2). Only the round-2 fixer C3 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* The card's 10px side padding made Plotly lay the figure out 22px wider
+       than the visible box, so the right edge (last tick, end labels) was
+       clipped and the plot sat off-centre. No padding: figure = card. */
+    [data-testid="stPlotlyChart"] { padding: 0; }
+}
+
+@media (max-width: 640px) {
+    /* Savings-rate basis toggle: two equal, centred segments spanning the line
+       (the long labels wrap inside their segment). */
+    [class*="st-key-savings_rate"][class*="_basis"] { width: 100% !important; }
+    [class*="st-key-savings_rate"][class*="_basis"] [role="radiogroup"] { display: flex !important; width: 100% !important; max-width: none !important; }
+    [class*="st-key-savings_rate"][class*="_basis"] [role="radiogroup"] label { flex: 1 1 0 !important; min-width: 0; justify-content: center; text-align: center; }
+    [class*="st-key-savings_rate"][class*="_basis"] [role="radiogroup"] label > div:last-child { padding-left: 0 !important; margin-left: 0 !important; }
+    [class*="st-key-savings_rate"][class*="_basis"] [role="radiogroup"] label p { text-align: center; }
+}
+
+@media (max-width: 640px) {
+    /* Spending view: Period and Moving average span the line as equal, centred
+       segments (they were natural-width and ragged, one row wrapping). */
+    .st-key-sp_period, .st-key-sp_ma { width: 100% !important; max-width: none !important; }
+    .st-key-sp_period [data-testid="stButtonGroup"],
+    .st-key-sp_ma [data-testid="stButtonGroup"] { display: flex !important; flex-direction: column !important; align-items: stretch !important; width: 100% !important; }
+    .st-key-sp_period [data-testid="stButtonGroup"] > div:not([data-testid]),
+    .st-key-sp_ma [data-testid="stButtonGroup"] > div:not([data-testid]) { display: flex !important; flex-wrap: nowrap !important; width: 100% !important; max-width: none !important; box-sizing: border-box; gap: 0; }
+    .st-key-sp_period [data-testid="stButtonGroup"] button,
+    .st-key-sp_ma [data-testid="stButtonGroup"] button { flex: 1 1 0 !important; min-width: 0; max-width: none !important; justify-content: center; text-align: center; padding-left: 4px !important; padding-right: 4px !important; }
+    .st-key-sp_period [data-testid="stButtonGroup"] button *,
+    .st-key-sp_ma [data-testid="stButtonGroup"] button * { white-space: normal; text-align: center; }
+    /* Four-tab rows (Spending view) fit without scrolling: tighter tabs. */
+    section[data-testid="stMain"] [data-baseweb="tab-list"]:has(> button[role="tab"]:nth-of-type(4)):not(:has(> button[role="tab"]:nth-of-type(5))) button[role="tab"] { flex: 1 1 auto; justify-content: center; padding-left: 8px !important; padding-right: 8px !important; }
+    section[data-testid="stMain"] [data-baseweb="tab-list"]:has(> button[role="tab"]:nth-of-type(4)):not(:has(> button[role="tab"]:nth-of-type(5))) { display: flex !important; width: 100%; box-sizing: border-box; }
+}
+
+@media (max-width: 640px) {
+    /* Every "Today's $ | Future $" toggle (income tile, withdrawal tab, ...) and
+       the Spending view's Show toggle span the line in equal, centred segments. */
+    [class*="st-key-"][class*="_dollars_mode"] { width: 100% !important; }
+    [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"] { display: flex !important; width: 100% !important; max-width: none !important; }
+    [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"] label { flex: 1 1 0 !important; min-width: 0; justify-content: center; text-align: center; }
+    [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"] label > div:last-child { padding-left: 0 !important; margin-left: 0 !important; }
+    [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"] label p { text-align: center; }
+    .st-key-sp_view { width: 100% !important; max-width: none !important; }
+    .st-key-sp_view [data-testid="stButtonGroup"] { display: flex !important; flex-direction: column !important; align-items: stretch !important; width: 100% !important; }
+    .st-key-sp_view [data-testid="stButtonGroup"] > div:not([data-testid]) { display: flex !important; flex-wrap: nowrap !important; width: 100% !important; max-width: none !important; box-sizing: border-box; gap: 0; }
+    .st-key-sp_view [data-testid="stButtonGroup"] button { flex: 1 1 0 !important; min-width: 0; max-width: none !important; justify-content: center; text-align: center; padding-left: 4px !important; padding-right: 4px !important; }
+    .st-key-sp_view [data-testid="stButtonGroup"] button * { white-space: normal; text-align: center; }
+}
+
 /* -- end phone polish C3 -- */
 
 

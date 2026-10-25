@@ -981,7 +981,13 @@ def render(st, **_kwargs) -> None:
                 "Your plan": g["Your plan"].map(money),
                 "Actual": g["Actual"].map(_or_dash(money)),
                 "Difference": g["Difference"].map(_or_dash(lambda v: ("+" if v > 0 else "") + money(v))),
-            }), hide_index=True, width="stretch")
+            }), hide_index=True, width="stretch",
+                # Pixel widths that add up to a phone screen (the grid still fills
+                # a wider card): no half-hidden last column.
+                column_config={"Expense category": st.column_config.Column(width=124),
+                               "Your plan": st.column_config.Column(width=72),
+                               "Actual": st.column_config.Column(width=72),
+                               "Difference": st.column_config.Column(width=84)})
             no_partner = ((g["Expense category"] == "Partner spending") & g["Actual"].isna()
                           & (g["Your plan"] > 0)).any()
             st.caption("Plan = the Expenses section's monthly inputs. Actual = your accounts averaged "
@@ -1022,7 +1028,11 @@ def render(st, **_kwargs) -> None:
             a = b = None
         with (a if a is not None else st.container()):
             st.markdown(f"**Top merchants — {pick}**")
-            st.dataframe(merchants, hide_index=True, width="stretch")
+            st.dataframe(merchants, hide_index=True, width="stretch",
+                         column_config={"Merchant": st.column_config.Column(width=130),
+                                        "Category": st.column_config.Column(width=90),
+                                        "Per year": st.column_config.Column(width=66),
+                                        "Visits": st.column_config.Column(width=56)})
         if b is not None:
             with b:
                 st.markdown("**Inside this expense category**")

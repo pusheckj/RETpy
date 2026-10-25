@@ -132,7 +132,15 @@ def render(st) -> None:
                    tickfont=dict(color="#64748b")),
         showlegend=False, dragmode="pan", uirevision="keep",
     )
-    show_chart(st, fig, f"life_dist_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
+    def _build(compact):
+        f = go.Figure(fig)
+        if compact:  # "plan ends" sat past the right edge of a phone-width plot
+            for a in f.layout.annotations:
+                if str(a.text).startswith("plan ends"):
+                    a.update(xanchor="right")
+        return f
+
+    show_chart(st, _build, f"life_dist_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
 
     # ---- Plan tie-in ----
     reach90 = dist["reach"][90]
