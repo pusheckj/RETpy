@@ -47,9 +47,12 @@ def render_body(st) -> None:
         set_override(st, "STOCK_ALLOCATION", v / 100)
     with c2:
         bond_pct = 100 - st.session_state.get("sa_stock_alloc", 80)
-        # Drawn like a widget label + value so it matches "Stock allocation (%)".
-        st.markdown(f'<div style="font-size:14px;line-height:1.4;margin-bottom:6px;">Bond allocation (%)</div>'
-                    f'<div style="font-size:22px;font-weight:700;padding-top:4px;">{bond_pct:.0f}</div>',
+        # Derived (100 - stocks), so it is drawn as a read-only readout, not
+        # something that looks like an input: same label weight as the sidebar
+        # labels, muted value, and the rule beneath.
+        st.markdown(f'<div style="font-size:15px;font-weight:600;line-height:1.4;margin-bottom:6px;">Bond allocation (%)</div>'
+                    f'<div style="font-size:22px;font-weight:700;padding-top:4px;color:var(--mc-muted);">{bond_pct:.0f}</div>'
+                    f'<div style="font-size:12px;color:var(--mc-muted);">= 100 &minus; stocks</div>',
                     unsafe_allow_html=True)
 
     # Interpret INVESTMENT_FEE_RATE as fraction. bps = fee_rate * 10_000.

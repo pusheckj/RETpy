@@ -39,8 +39,8 @@ def _md(text) -> str:
 
 
 def _section_label(st, txt):
-    st.markdown(f'<div style="font-size: 13px; color: #64748b; text-transform: uppercase; '
-                f'letter-spacing: 0.05em; margin: 12px 0 6px 0;">{txt}</div>',
+    st.markdown(f'<div style="font-size: 13px; font-weight: 700; color: var(--mc-ink); '
+                f'text-transform: uppercase; letter-spacing: 0.05em; margin: 12px 0 6px 0;">{txt}</div>',
                 unsafe_allow_html=True)
 
 

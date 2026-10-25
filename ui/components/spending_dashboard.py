@@ -824,23 +824,30 @@ def _md_day(ts: pd.Timestamp) -> str:
     return f"{ts:%b} {ts.day}, {ts.year}"
 
 
+def _purchases(tx: pd.DataFrame, start: pd.Period, end: pd.Period) -> pd.DataFrame:
+    """Counted purchases in the period. Fixed monthly estimates are repeated
+    placeholders, not purchases, so they are left out."""
+    s = counted(tx)
+    s = s[(s["month"] >= start) & (s["month"] <= end)]
+    return s[(s["kind"] == "spend") & (s["amount"] < 0) & (s["account"] != ESTIMATE_SOURCE)]
+
+
 def _ranked_lists(st, tx: pd.DataFrame, start: pd.Period, end: pd.Period, category: str) -> None:
     """Two numbered, plain-text lists for one category: biggest purchases and
     most frequent merchants (easier to scan than a wide table)."""
-    s = counted(tx)
-    s = s[(s["month"] >= start) & (s["month"] <= end) & (s["category"] == category)]
-    # Fixed monthly estimates are repeated placeholders, not purchases: leave them out.
-    buys = s[(s["kind"] == "spend") & (s["amount"] < 0) & (s["account"] != ESTIMATE_SOURCE)]
+    buys = _purchases(tx, start, end)
+    buys = buys[buys["category"] == category]
+    none = "_No purchases in this category for this period. Pick another category._"
     left, right = st.columns(2)
     with left:
         st.markdown("**Largest purchases**")
         top = buys.nlargest(10, "spend")
         st.markdown("\n".join(f"{i}. **{money_md(r.spend)}** · {_md_day(r.date)} — {r.merchant}"
-                               for i, r in enumerate(top.itertuples(), 1)) or "_None in this period._")
+                               for i, r in enumerate(top.itertuples(), 1)) or none)
     with right:
         st.markdown("**Most frequent merchants**")
         if buys.empty:
-            st.markdown("_None in this period._")
+            st.markdown(none)
         else:
             g = (buys.assign(_k=buys["description"].map(merchant_key))
                  .groupby("_k").agg(name=("merchant", lambda m: m.value_counts().index[0]),
@@ -999,34 +1006,50 @@ def render(st, **_kwargs) -> None:
         first = next((c for c in choices if c != "Housing"), choices[0])
         pick = st.pills("Expense category", choices, default=first, key="sp_cat",
                         label_visibility="collapsed") or first
+        st.markdown(f"**{pick}: spending by month**")
         _chart(st, lambda compact: category_trend_figure(view, pick, start, chart_end, incomplete,
                                                          dark, window, compact),
                "sp_cat_trend", PLOTLY_CONFIG)
-        a, b = st.columns(2)
-        with a:
+        merchants = _merchants_per_year(view, start, end, complete, pick, 10).assign(
+            **{"Per year": lambda d: d["Per year"].map(money)})
+        summary = category_summary(view, start, end, complete)
+        det = summary.reset_index().rename(columns={"category": "Category"})
+        det = det[det["Expense category"] == pick][["Category", "Per month", "Per year"]]
+        # A one-row breakdown just repeats the chart: show the merchants alone then.
+        if len(det) > 1:
+            a, b = st.columns(2)
+        else:
+            a = b = None
+        with (a if a is not None else st.container()):
             st.markdown(f"**Top merchants — {pick}**")
-            st.dataframe(_merchants_per_year(view, start, end, complete, pick, 10)
-                         .assign(**{"Per year": lambda d: d["Per year"].map(money)}),
-                         hide_index=True, width="stretch")
-        with b:
-            st.markdown("**Inside this expense category**")
-            summary = category_summary(view, start, end, complete)
-            det = summary.reset_index().rename(columns={"category": "Category"})
-            st.dataframe(det[det["Expense category"] == pick][["Category", "Per month", "Per year"]]
-                         .assign(**{"Per month": lambda d: d["Per month"].map(money),
-                                    "Per year": lambda d: d["Per year"].map(money)}),
-                         hide_index=True, width="stretch")
+            st.dataframe(merchants, hide_index=True, width="stretch")
+        if b is not None:
+            with b:
+                st.markdown("**Inside this expense category**")
+                st.dataframe(det.assign(**{"Per month": lambda d: d["Per month"].map(money),
+                                           "Per year": lambda d: d["Per year"].map(money)}),
+                             hide_index=True, width="stretch")
         st.caption("Per year over complete months. Merchant totals are before paybacks; categories are after.")
 
     with t_tx:
         cats = category_table(view, start, end)
         st.markdown("**By category**")
-        st.dataframe(cats.assign(**{c: cats[c].map(money) for c in ("Total", "Average", "Largest")}),
-                     hide_index=True, width="stretch",
-                     height=min(36 * (len(cats) + 1) + 2, 420))
+        # Numbers stay numeric so they right-align like the Transactions column; the
+        # expense category is blanked where it just repeats the category, and the
+        # table is tall enough for every row.
+        shown = cats.assign(**{"Expense category": cats["Expense category"].where(
+            cats["Expense category"] != cats["Category"], ""),
+            **{c: cats[c].round().astype(int) for c in ("Total", "Average", "Largest")}})
+        st.dataframe(shown, hide_index=True, width="stretch",
+                     height=36 * (len(cats) + 1) + 2,
+                     column_config={c: st.column_config.NumberColumn(format="dollar")
+                                    for c in ("Total", "Average", "Largest")})
         if not cats.empty:
             labels = {f"{r.Category} · {r.Transactions}": r.Category for r in cats.itertuples()}
-            first = next((lb for lb, c in labels.items() if c != "Housing"), list(labels)[0])
+            # Start on a category that has purchases to list (housing is a flat payment).
+            with_buys = set(_purchases(view, start, end)["category"])
+            first = next((lb for lb, c in labels.items() if c != "Housing" and c in with_buys),
+                         next((lb for lb, c in labels.items() if c in with_buys), list(labels)[0]))
             pick_label = st.pills("Category", list(labels), default=first, key="sp_tx_cat",
                                   label_visibility="collapsed") or first
             _ranked_lists(st, view, start, end, labels[pick_label])

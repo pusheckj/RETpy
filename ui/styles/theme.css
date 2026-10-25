@@ -446,7 +446,8 @@ section[data-testid="stSidebar"] .stTextInput input {
    Sidebar section icons — the leading material icon on each
    sidebar expander sits inside a soft teal "chip".
    ========================================================= */
-section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stExpanderIcon"] {
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stExpanderIcon"],
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary [data-testid="stIconMaterial"] {
     background: rgba(13, 148, 136, 0.14);
     color: var(--mc-teal) !important;
     border-radius: 50%;
@@ -818,6 +819,27 @@ section[data-testid="stSidebar"] [data-testid="stMetricLabel"] [data-testid="stM
     line-height: 1.25;
 }
 
+/* Sidebar dividers (st.divider) default to 32px margins plus the 16px block gap,
+   which left ~100px of blank space around each rule. */
+section[data-testid="stSidebar"] hr { margin: 4px 0 !important; }
+
+/* Summary stat labels ("- TAXES", "= LEFT TO SAVE"): reserve two lines so the
+   values line up across the row however a label wraps. */
+section[data-testid="stSidebar"] [data-testid="stMetricLabel"] { min-height: 2.6em; align-items: flex-end; }
+
+/* Nested expanders (e.g. "Your pay by year") are sub-sections: smaller header,
+   smaller icon chip, no extra label indent. */
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary,
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p {
+    font-size: 15px !important;
+    text-align: left;
+}
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] { margin-left: 14px !important; }
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary [data-testid="stIconMaterial"],
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] summary [data-testid="stExpanderIcon"] {
+    width: 26px; height: 26px; min-width: 26px; font-size: 16px !important; margin-right: 8px;
+}
+
 /* =========================================================
    Hide Streamlit chrome
    ========================================================= */
@@ -998,10 +1020,28 @@ footer { display: none !important; }
     border: 1px solid var(--mc-tile-border) !important;
     border-radius: var(--mc-radius-card) !important;
     box-shadow: var(--mc-tile-shadow) !important;
+    /* Never wider than the screen: an open Save/Print expander used to grow the
+       panel past the right edge. */
+    max-width: min(360px, calc(100vw - 32px)) !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
 }
+[data-testid="stPopoverBody"] [data-testid="stDownloadButton"] button,
+[data-testid="stPopoverBody"] [data-testid="stFileUploader"] section { max-width: 100%; }
+[data-testid="stPopoverBody"] [data-testid="stDownloadButton"] button p { white-space: normal; }
 [data-testid="stPopoverBody"] > div {
     background-color: transparent !important;
+    padding-bottom: 16px;   /* last control no longer touches the panel edge */
 }
+/* Select value text is a fixed 18px box with overflow:hidden, which clips
+   descenders (g, p, y) in a 22px line. Let it size to its line. */
+[data-testid="stPopoverBody"] [data-baseweb="select"] > div > div:first-child,
+[data-testid="stPopoverBody"] [data-baseweb="select"] > div > div:first-child > div {
+    height: auto !important;
+    min-height: 24px;
+    overflow: visible !important;
+}
+[data-testid="stPopoverBody"] [data-testid="stExpander"] { margin-top: 8px; }
 
 /* =========================================================
    Soft-segmented toggle — horizontal st.radio groups tagged
@@ -1061,6 +1101,27 @@ footer { display: none !important; }
 [data-testid="stAlert"] svg {
     color: #0d9488 !important;
     fill: #0d9488 !important;
+}
+/* Tint by kind so a warning or success doesn't read as another white card:
+   a faint wash of the accent over the tile (works in light and dark) + an
+   accent left edge. Info keeps the plain teal card. */
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) {
+    --mc-alert: #d97706;
+}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) {
+    --mc-alert: #16a34a;
+}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) {
+    --mc-alert: #dc2626;
+}
+[data-testid="stAlertContainer"]:is(:has([data-testid="stAlertContentWarning"]), :has([data-testid="stAlertContentSuccess"]), :has([data-testid="stAlertContentError"])) {
+    background: color-mix(in srgb, var(--mc-alert) 9%, var(--mc-tile)) !important;
+    border-color: color-mix(in srgb, var(--mc-alert) 35%, var(--mc-tile-border)) !important;
+    border-left: 4px solid var(--mc-alert) !important;
+}
+[data-testid="stAlertContainer"]:is(:has([data-testid="stAlertContentWarning"]), :has([data-testid="stAlertContentSuccess"]), :has([data-testid="stAlertContentError"])) svg {
+    color: var(--mc-alert) !important;
+    fill: var(--mc-alert) !important;
 }
 
 .streamlit-expanderHeader,
@@ -1347,6 +1408,15 @@ footer { display: none !important; }
     }
     [data-mc-clamp][data-mc-open] { display: block; overflow: visible; -webkit-line-clamp: unset; }
     [data-mc-clamp][data-mc-open]::after { content: " Less"; position: static; padding: 0; background: none; }
+}
+
+/* Mouse/trackpad: in the sidebar's two-column rows the -/+ steppers ate more
+   than half of the ~120px field and truncated the value ("1500(" ...). Hide
+   them there (type or use arrow keys); touch keeps its 44px steppers. */
+@media (hover: hover) and (pointer: fine) {
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stNumberInputStepUp"],
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stNumberInputStepDown"] { display: none; }
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .stNumberInput input { padding-right: 14px; }
 }
 
 /* Touch screens: finger-sized controls (Apple's 44px minimum). */
@@ -1719,7 +1789,7 @@ section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.mc-stat-car
    side-by-side columns reserve two lines (bottom-aligned) so paired inputs line up. */
 section[data-testid="stSidebar"] [role="radiogroup"].mc-seg { display: flex !important; flex-wrap: nowrap !important; width: 100%; gap: 0; padding: 2px !important; box-sizing: border-box; }
 section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label { flex: 1 1 auto; padding: 7px 2px !important; white-space: nowrap; text-align: center; }
-section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label p { font-size: 12.5px !important; white-space: nowrap; }
+section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label p { font-size: 13px !important; white-space: nowrap; }
 section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidgetLabel"] {
     min-height: 2.6em; display: flex; align-items: flex-end;
 }
@@ -1749,3 +1819,12 @@ section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidget
 /* Sidebar tables: the hover toolbar (download / search / fullscreen) covers the
    first column headers in the narrow sidebar. */
 section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: none !important; }
+
+/* Touch: the last few sub-44px targets (placed last so they beat the top-bar
+   rules above). Sidebar close button, view pills and section chips. */
+@media (hover: none) and (pointer: coarse) {
+    [data-testid="stSidebarCollapseButton"] button { min-width: 44px; min-height: 44px; }
+    .st-key-mc-topbar [data-testid="stButtonGroup"] button,
+    .st-key-mc-topbar [data-testid="stPopoverButton"],
+    .mc-phonebar-chips a { min-height: 44px; }
+}
