@@ -1828,3 +1828,19 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     .st-key-mc-topbar [data-testid="stPopoverButton"],
     .mc-phonebar-chips a { min-height: 44px; }
 }
+
+/* ==========================================================================
+   Phone polish A: planner page (hero tile, What-if, segmented controls,
+   scrollbars). Keep planner phone rules inside this block.
+   ========================================================================== */
+
+/* -- end phone polish A -- */
+
+
+
+/* ==========================================================================
+   Phone polish B: welcome, money check-up, guided setup, mode switch.
+   Keep those phone rules inside this block.
+   ========================================================================== */
+
+/* -- end phone polish B -- */
