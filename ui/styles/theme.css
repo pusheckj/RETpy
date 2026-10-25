@@ -1849,25 +1849,41 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     .st-key-spending_range_main_style,
     .st-key-spending_main_dollars_mode,
     .st-key-spending_range_main_dollars,
-    .st-key-tax_tab_view { width: 100% !important; }
+    .st-key-tax_tab_view,
+    .st-key-net_worth_box_main_dollars,
+    .st-key-sa_scenario { width: 100% !important; }
     .st-key-portfolio_breakdown_main_view [role="radiogroup"],
     .st-key-net_worth_box_main_style [role="radiogroup"],
     .st-key-spending_range_main_style [role="radiogroup"],
     .st-key-spending_main_dollars_mode [role="radiogroup"],
     .st-key-spending_range_main_dollars [role="radiogroup"],
-    .st-key-tax_tab_view [role="radiogroup"] { display: flex !important; width: 100% !important; max-width: none !important; }
+    .st-key-tax_tab_view [role="radiogroup"],
+    .st-key-net_worth_box_main_dollars [role="radiogroup"],
+    .st-key-sa_scenario [role="radiogroup"] { display: flex !important; width: 100% !important; max-width: none !important; }
     .st-key-portfolio_breakdown_main_view [role="radiogroup"] label,
     .st-key-net_worth_box_main_style [role="radiogroup"] label,
     .st-key-spending_range_main_style [role="radiogroup"] label,
     .st-key-spending_main_dollars_mode [role="radiogroup"] label,
     .st-key-spending_range_main_dollars [role="radiogroup"] label,
-    .st-key-tax_tab_view [role="radiogroup"] label { flex: 1 1 0 !important; min-width: 0; justify-content: center; text-align: center; }
+    .st-key-tax_tab_view [role="radiogroup"] label,
+    .st-key-net_worth_box_main_dollars [role="radiogroup"] label,
+    .st-key-sa_scenario [role="radiogroup"] label { flex: 1 1 0 !important; min-width: 0; justify-content: center; text-align: center; }
+    .st-key-portfolio_breakdown_main_view [role="radiogroup"] label > div:last-child,
+    .st-key-net_worth_box_main_style [role="radiogroup"] label > div:last-child,
+    .st-key-spending_range_main_style [role="radiogroup"] label > div:last-child,
+    .st-key-spending_main_dollars_mode [role="radiogroup"] label > div:last-child,
+    .st-key-spending_range_main_dollars [role="radiogroup"] label > div:last-child,
+    .st-key-tax_tab_view [role="radiogroup"] label > div:last-child,
+    .st-key-net_worth_box_main_dollars [role="radiogroup"] label > div:last-child,
+    .st-key-sa_scenario [role="radiogroup"] label > div:last-child { padding-left: 0 !important; }   /* the 8px gap meant for the (hidden) radio dot shifts text right */
     .st-key-portfolio_breakdown_main_view [role="radiogroup"] label p,
     .st-key-net_worth_box_main_style [role="radiogroup"] label p,
     .st-key-spending_range_main_style [role="radiogroup"] label p,
     .st-key-spending_main_dollars_mode [role="radiogroup"] label p,
     .st-key-spending_range_main_dollars [role="radiogroup"] label p,
-    .st-key-tax_tab_view [role="radiogroup"] label p { text-align: center; }
+    .st-key-tax_tab_view [role="radiogroup"] label p,
+    .st-key-net_worth_box_main_dollars [role="radiogroup"] label p,
+    .st-key-sa_scenario [role="radiogroup"] label p { text-align: center; }
 }
 
 /* A4: on touch devices scrollbars are overlays; hide the classic ones the
