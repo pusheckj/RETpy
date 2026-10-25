@@ -1863,6 +1863,15 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3):not(:first-child) {
         flex: 1 1 100% !important;
     }
+
+    /* Setup nav: Back / Skip for now / Next share the row in equal parts. */
+    .st-key-mc-setup-nav { flex-wrap: nowrap !important; gap: 6px !important; }
+    .st-key-mc-setup-nav > * { flex: 1 1 0 !important; min-width: 0 !important; margin-left: 0 !important; }
+    .st-key-mc-setup-nav > .st-key-gs_skip { flex-grow: 1.5 !important; }
+    .st-key-mc-setup-nav button { width: 100%; justify-content: center; white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+
+    /* "Forget my data" spans the card like the rest of its content. */
+    section[data-testid="stMain"] .st-key-device_forget, .st-key-device_forget button { width: 100% !important; }
 }
 
 /* -- end phone polish B -- */
