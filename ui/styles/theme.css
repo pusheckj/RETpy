@@ -2138,4 +2138,13 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     box-sizing: border-box; flex: 0 0 340px; height: 340px; overflow: visible;
 }
 
+/* F1-2: toggle/checkbox labels that wrap: the help icon follows the LAST word instead of
+   sitting at the far right of the (full-width) label box. Text and icon flow inline; the
+   box keeps a 20px gutter on the right that the icon (negative right margin) occupies, so
+   the icon never drops onto a line of its own. Same recipe as the metric labels (E1-2). */
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] { display: block; padding-right: 20px; box-sizing: border-box; line-height: 22px; }
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] > [data-testid="stMarkdownContainer"],
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] > [data-testid="stMarkdownContainer"] > p { display: inline; line-height: 22px !important; }
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] > label { display: inline-flex; vertical-align: -3px; min-height: 0 !important; margin: 0 -20px 0 4px !important; }
+
 /* -- end polish F1 -- */
