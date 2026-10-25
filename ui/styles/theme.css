@@ -1102,6 +1102,27 @@ footer { display: none !important; }
     color: #0d9488 !important;
     fill: #0d9488 !important;
 }
+/* Tint by kind so a warning or success doesn't read as another white card:
+   a faint wash of the accent over the tile (works in light and dark) + an
+   accent left edge. Info keeps the plain teal card. */
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) {
+    --mc-alert: #d97706;
+}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) {
+    --mc-alert: #16a34a;
+}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) {
+    --mc-alert: #dc2626;
+}
+[data-testid="stAlertContainer"]:is(:has([data-testid="stAlertContentWarning"]), :has([data-testid="stAlertContentSuccess"]), :has([data-testid="stAlertContentError"])) {
+    background: color-mix(in srgb, var(--mc-alert) 9%, var(--mc-tile)) !important;
+    border-color: color-mix(in srgb, var(--mc-alert) 35%, var(--mc-tile-border)) !important;
+    border-left: 4px solid var(--mc-alert) !important;
+}
+[data-testid="stAlertContainer"]:is(:has([data-testid="stAlertContentWarning"]), :has([data-testid="stAlertContentSuccess"]), :has([data-testid="stAlertContentError"])) svg {
+    color: var(--mc-alert) !important;
+    fill: var(--mc-alert) !important;
+}
 
 .streamlit-expanderHeader,
 [data-testid="stExpander"] summary {

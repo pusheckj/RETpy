@@ -824,23 +824,30 @@ def _md_day(ts: pd.Timestamp) -> str:
     return f"{ts:%b} {ts.day}, {ts.year}"
 
 
+def _purchases(tx: pd.DataFrame, start: pd.Period, end: pd.Period) -> pd.DataFrame:
+    """Counted purchases in the period. Fixed monthly estimates are repeated
+    placeholders, not purchases, so they are left out."""
+    s = counted(tx)
+    s = s[(s["month"] >= start) & (s["month"] <= end)]
+    return s[(s["kind"] == "spend") & (s["amount"] < 0) & (s["account"] != ESTIMATE_SOURCE)]
+
+
 def _ranked_lists(st, tx: pd.DataFrame, start: pd.Period, end: pd.Period, category: str) -> None:
     """Two numbered, plain-text lists for one category: biggest purchases and
     most frequent merchants (easier to scan than a wide table)."""
-    s = counted(tx)
-    s = s[(s["month"] >= start) & (s["month"] <= end) & (s["category"] == category)]
-    # Fixed monthly estimates are repeated placeholders, not purchases: leave them out.
-    buys = s[(s["kind"] == "spend") & (s["amount"] < 0) & (s["account"] != ESTIMATE_SOURCE)]
+    buys = _purchases(tx, start, end)
+    buys = buys[buys["category"] == category]
+    none = "_No purchases in this category for this period. Pick another category._"
     left, right = st.columns(2)
     with left:
         st.markdown("**Largest purchases**")
         top = buys.nlargest(10, "spend")
         st.markdown("\n".join(f"{i}. **{money_md(r.spend)}** · {_md_day(r.date)} — {r.merchant}"
-                               for i, r in enumerate(top.itertuples(), 1)) or "_None in this period._")
+                               for i, r in enumerate(top.itertuples(), 1)) or none)
     with right:
         st.markdown("**Most frequent merchants**")
         if buys.empty:
-            st.markdown("_None in this period._")
+            st.markdown(none)
         else:
             g = (buys.assign(_k=buys["description"].map(merchant_key))
                  .groupby("_k").agg(name=("merchant", lambda m: m.value_counts().index[0]),
@@ -1026,7 +1033,10 @@ def render(st, **_kwargs) -> None:
                      height=min(36 * (len(cats) + 1) + 2, 420))
         if not cats.empty:
             labels = {f"{r.Category} · {r.Transactions}": r.Category for r in cats.itertuples()}
-            first = next((lb for lb, c in labels.items() if c != "Housing"), list(labels)[0])
+            # Start on a category that has purchases to list (housing is a flat payment).
+            with_buys = set(_purchases(view, start, end)["category"])
+            first = next((lb for lb, c in labels.items() if c != "Housing" and c in with_buys),
+                         next((lb for lb, c in labels.items() if c in with_buys), list(labels)[0]))
             pick_label = st.pills("Category", list(labels), default=first, key="sp_tx_cat",
                                   label_visibility="collapsed") or first
             _ranked_lists(st, view, start, end, labels[pick_label])
