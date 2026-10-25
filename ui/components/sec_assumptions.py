@@ -52,7 +52,7 @@ def render_body(st) -> None:
         # labels, muted value, and the rule beneath.
         st.markdown(f'<div style="font-size:15px;font-weight:600;line-height:1.4;margin-bottom:6px;">Bond allocation (%)</div>'
                     f'<div style="font-size:22px;font-weight:700;padding-top:4px;color:var(--mc-muted);">{bond_pct:.0f}</div>'
-                    f'<div style="font-size:12px;color:var(--mc-muted);">= 100 &minus; stocks</div>',
+                    f'<div style="font-size:12px;color:var(--mc-muted);margin-bottom:14px;">= 100 &minus; stocks</div>',
                     unsafe_allow_html=True)
 
     # Interpret INVESTMENT_FEE_RATE as fraction. bps = fee_rate * 10_000.

@@ -2050,6 +2050,28 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish C4 (round 2). Only the round-2 fixer C4 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* Help icons sit right after their own label text (not at the far right of
+       the column, where they read as part of the neighbour's label). */
+    [data-testid="stWidgetLabel"] { justify-content: flex-start !important; gap: 4px; }
+    [data-testid="stWidgetLabel"] > :has([data-testid="stTooltipIcon"]) { margin-left: 0 !important; flex: 0 0 auto; }
+
+    /* Check-up action buttons match the full-width Forget / setup CTAs. */
+    section[data-testid="stMain"] .st-key-simple_debt_add,
+    section[data-testid="stMain"] .st-key-simple_debt_add button { width: 100% !important; }
+
+    /* Side panel: segmented choices and action buttons span the panel width. */
+    section[data-testid="stSidebar"] [role="radiogroup"].mc-seg { display: flex !important; width: 100% !important; max-width: none !important; }
+    section[data-testid="stSidebar"] [role="radiogroup"].mc-seg > label { flex: 1 1 0 !important; min-width: 0; justify-content: center; text-align: center; }
+    section[data-testid="stSidebar"] [role="radiogroup"].mc-seg > label > div:last-child { padding-left: 0 !important; }
+    section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label p { text-align: center; }
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(> [data-testid="stRadio"] .mc-seg),
+    section[data-testid="stSidebar"] [data-testid="stRadio"]:has(.mc-seg),
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(> [data-testid="stButton"]),
+    section[data-testid="stSidebar"] [data-testid="stButton"],
+    section[data-testid="stSidebar"] [data-testid="stButton"] button { width: 100% !important; }
+}
+
 /* -- end phone polish C4 -- */
 
 
