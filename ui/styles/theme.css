@@ -1789,7 +1789,7 @@ section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.mc-stat-car
    side-by-side columns reserve two lines (bottom-aligned) so paired inputs line up. */
 section[data-testid="stSidebar"] [role="radiogroup"].mc-seg { display: flex !important; flex-wrap: nowrap !important; width: 100%; gap: 0; padding: 2px !important; box-sizing: border-box; }
 section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label { flex: 1 1 auto; padding: 7px 2px !important; white-space: nowrap; text-align: center; }
-section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label p { font-size: 12.5px !important; white-space: nowrap; }
+section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label p { font-size: 13px !important; white-space: nowrap; }
 section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidgetLabel"] {
     min-height: 2.6em; display: flex; align-items: flex-end;
 }
