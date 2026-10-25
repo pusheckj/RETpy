@@ -252,19 +252,20 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
                 name=label,
                 marker_color=color,
                 hovertemplate=f"{label}<br>$%{{x:,.0f}}<extra></extra>",
-                text=label if val > disposable * 0.05 else "",
-                textposition="inside",
-                textfont=dict(color="white", size=10),
             ))
             cumulative += val
 
         fig.update_layout(
             barmode="stack",
-            height=104,
-            margin=dict(l=0, r=10, t=6, b=28),
-            xaxis=dict(showgrid=False, zeroline=False, tickformat="$,.3~s"),
+            height=150,
+            margin=dict(l=0, r=10, t=6, b=6),
+            xaxis=dict(showgrid=False, zeroline=False, tickformat="$,.2~s",
+                       nticks=4, tickfont=dict(size=11)),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            showlegend=False,
+            # Labels live in the legend (11px+), not rotated/tiny inside slim segments.
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="top", y=-0.35, x=0,
+                        font=dict(size=11), itemwidth=30),
         )
         try:
             from utils.plot_theme import style_fig, show_chart
