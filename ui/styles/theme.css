@@ -1776,3 +1776,12 @@ section[data-testid="stSidebar"] [data-testid="stColumn"] [data-testid="stWidget
 /* Sidebar tables: the hover toolbar (download / search / fullscreen) covers the
    first column headers in the narrow sidebar. */
 section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: none !important; }
+
+/* Touch: the last few sub-44px targets (placed last so they beat the top-bar
+   rules above). Sidebar close button, view pills and section chips. */
+@media (hover: none) and (pointer: coarse) {
+    [data-testid="stSidebarCollapseButton"] button { min-width: 44px; min-height: 44px; }
+    .st-key-mc-topbar [data-testid="stButtonGroup"] button,
+    .st-key-mc-topbar [data-testid="stPopoverButton"],
+    .mc-phonebar-chips a { min-height: 44px; }
+}
