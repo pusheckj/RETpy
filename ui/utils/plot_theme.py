@@ -246,7 +246,7 @@ def _wrap_title(fig, compact: bool = False) -> None:
     # Pin the title to the top of the figure so extra wrapped lines grow DOWN
     # into the reserved margin instead of being centred over the plot.
     fig.update_layout(title=dict(text="<br>".join(out), yref="container", y=1,
-                                 yanchor="top", pad=dict(t=14)))
+                                 yanchor="top", pad=dict(t=14, l=10 if compact else 0)))
     if compact:
         _set_margin(fig, t=14 + height + 22)
     else:
@@ -384,7 +384,7 @@ def style_fig(fig, st, compact: bool = False):
         # whenever the plot height differs from what the offset was tuned for.
         layout_kwargs["legend"] = dict(
             orientation="h", yref="container", yanchor="bottom", y=0.0,
-            xref="container" if compact else "paper", xanchor="left", x=0.0,
+            xref="container" if compact else "paper", xanchor="left", x=0.03 if compact else 0.0,
             font=dict(family=fam, color=text_color,
                       size=10.5 if len(_legend_entries(fig)) >= 4 else 11.5),
             itemsizing="constant",
@@ -430,7 +430,7 @@ def style_fig(fig, st, compact: bool = False):
         # the old right gutter move inside the plot, above their line at the left
         # (the right end is where the tall values are).
         m = fig.layout.margin
-        fig.update_layout(margin=dict(l=min(m.l if m.l is not None else 80, 8), r=24))
+        fig.update_layout(margin=dict(l=min(m.l if m.l is not None else 80, 14), r=24))
         fig.update_yaxes(automargin=True)
         fig.update_xaxes(automargin=True)
         for a in fig.layout.annotations or []:

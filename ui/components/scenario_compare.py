@@ -80,7 +80,7 @@ def render(st, results: dict | None) -> None:
 
     # Simple clear-all control; keeps the feature read-only/low-risk (no
     # per-row delete UI needed for a v1 comparison view).
-    if st.button("Clear pinned scenarios", key="clear_pinned_scenarios"):
+    if st.button("Clear pinned scenarios", key="clear_pinned_scenarios", width="stretch"):
         pinned.clear()
         return
 
@@ -203,7 +203,7 @@ def _render_compare_inputs(st, pinned: Dict[str, Any]) -> None:
         with row_cols[0]:
             st.caption(f"**{key}**")
         with row_cols[1]:
-            clicked = st.button("Compute impact", key=f"cmp_impact_{impact_key}")
+            clicked = st.button("Compute impact", key=f"cmp_impact_{impact_key}", width="stretch")
         if clicked:
             from utils.sim_runner import run_full_analysis
 

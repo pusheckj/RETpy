@@ -136,7 +136,7 @@ def render(st, results: dict = None) -> None:
     fresh = bool(stored) and stored.get("_hash") is not None and cur_hash is not None and stored.get("_hash") == cur_hash
 
     if st.button("✓ Comparison up to date" if fresh else "Compare scenarios",
-                 key="wifc_btn", type="primary", disabled=fresh,
+                 key="wifc_btn", type="primary", disabled=fresh, width="stretch",
                  help="Re-runs both age-scans. Change a lever above to re-enable." if fresh else None):
         prog = st.progress(0.0, text="Running both scenarios…")
 
