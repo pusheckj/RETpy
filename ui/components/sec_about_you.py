@@ -146,9 +146,9 @@ def render_body(st) -> None:
         diff = abs(end_you - end_partner) if end_partner is not None else 0
         if diff:
             who = "younger" if end_partner < end_you else "older"
-            st.caption(f"The plan runs until you're {end_you}, when your partner is {end_partner}. "
-                       f"Your partner is {diff} year{'' if diff == 1 else 's'} {who}, and the plan "
-                       f"covers whoever's own plan-until age comes last.")
+            st.caption(f"The plan runs until {plan_end_text(values)}. Your partner is {diff} "
+                       f"year{'' if diff == 1 else 's'} {who}, so the plan runs until the later "
+                       f"of your two plan-until ages.")
         else:
             st.caption(f"The plan runs until {plan_end_text(values)}.")
     end = plan_end_age(st.session_state.get("user_overrides", {}) or {})

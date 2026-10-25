@@ -156,7 +156,8 @@ def render(st, results: Optional[dict] = None,
            view_render=None,
            in_card: bool = False,
            control_slots=None,
-           title: str = "Retirement Monte Carlo") -> None:
+           title: str = "Retirement Monte Carlo",
+           stats: Optional[list] = None) -> None:
     """Render the sticky top bar.
 
     Layout is a keyed ``st.container`` (the sticky element — it lives in the
@@ -188,13 +189,16 @@ def render(st, results: Optional[dict] = None,
     html_parts.append('<div class="mc-topbar">')
     html_parts.append(f'<span class="mc-topbar-title">{escape(title)}</span>')
     html_parts.append(_metric_html("Name(s)", names))
-    html_parts.append(_metric_html("Net worth", net_worth_str))
-    html_parts.append(_metric_html("Gross income", income_str))
-    # Label matches the sidebar slider and the hero card ("Target retirement
-    # age") — the same value was previously called three different things on
-    # screen at once.
-    html_parts.append(_metric_html("Target retirement age", str(target_age)))
-    html_parts.append(_metric_html("Success rate", success_str, success_hint))
+    if stats is not None:       # Spending view: figures from the statements instead
+        html_parts.extend(_metric_html(label, value) for label, value in stats)
+    else:
+        html_parts.append(_metric_html("Net worth", net_worth_str))
+        html_parts.append(_metric_html("Gross income", income_str))
+        # Label matches the sidebar slider and the hero card ("Target retirement
+        # age") — the same value was previously called three different things on
+        # screen at once.
+        html_parts.append(_metric_html("Target retirement age", str(target_age)))
+        html_parts.append(_metric_html("Success rate", success_str, success_hint))
     html_parts.append('</div>')
 
     from contextlib import nullcontext

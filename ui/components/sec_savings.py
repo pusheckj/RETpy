@@ -299,8 +299,10 @@ def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
         set_override(st, key, amount)
     _zero_partner_contributions(st, overrides)
 
-    # Sum check
-    if total_pct != 100:
+    # Running total: the shares must add up to 100%.
+    if total_pct == 100:
+        st.caption("Total: **100%** of what's left to save.")
+    else:
         if total_pct < 100:
             st.warning(
                 f"Percentages sum to **{total_pct}%** "
