@@ -11,8 +11,7 @@ restore it. If the caller replaces that dict between runs (for example after
 reading it back from the browser), the widgets reseed from it on the next run.
 
 Styling: the page uses the app's tiles (``mc-tile-simple-*``) and
-``.mc-section`` headings from ``styles/theme.css`` plus the ``simple-*`` classes
-in ``SIMPLE_CSS`` below, which the caller injects (or merges into theme.css).
+``.mc-section`` headings and the ``simple-*`` classes, all in ``styles/theme.css``.
 """
 from __future__ import annotations
 
@@ -39,115 +38,6 @@ _SCALARS = [k for k in sf.DEFAULT_INPUTS if k != "debts"]
 _DOLLAR = ":material/attach_money:"
 _PCT = ":material/percent:"
 _TEAL, _SLATE = "#0d9488", "#7a8db3"
-
-SIMPLE_CSS = """
-/* ---------- Simple mode ("Money check-up") ---------- */
-.simple-sub { color: var(--mc-muted); font-size: 15px; line-height: 1.45; margin: -8px 0 18px; }
-.simple-group { font-weight: 700; font-size: 15px; color: var(--mc-ink); margin: 6px 0 -4px; }
-.simple-kpi-value { font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em;
-    color: var(--mc-ink); margin: 6px 0 8px; }
-.simple-chip { display: inline-block; font-size: 12px; font-weight: 600; line-height: 1.5;
-    padding: 2px 10px; border-radius: 999px; white-space: nowrap;
-    background: rgba(100, 116, 139, 0.14); color: var(--mc-muted); }
-.simple-chip--good { background: rgba(13, 148, 136, 0.14); color: #0d9488; }
-.simple-chip--warn { background: rgba(217, 119, 6, 0.14); color: #b45309; }
-.simple-chip--current { background: #0d9488; color: #ffffff; }
-.simple-note { font-size: 14px; line-height: 1.45; color: var(--mc-muted); margin-top: 8px; }
-.simple-note b { color: var(--mc-ink); }
-.simple-meter { position: relative; height: 10px; border-radius: 999px; margin: 16px 0 26px;
-    background: rgba(100, 116, 139, 0.16); }
-.simple-meter-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px;
-    background: #14b8a6; }
-.simple-meter-tick { position: absolute; top: -4px; bottom: -4px; width: 2px;
-    background: var(--mc-ink); opacity: 0.45; }
-.simple-meter-tick span { position: absolute; top: 18px; left: 1px; transform: translateX(-50%);
-    font-size: 11px; color: var(--mc-muted); white-space: nowrap; }
-.simple-meter-tick--end span { left: auto; right: 0; transform: none; }
-
-.simple-steps { display: flex; flex-direction: column; gap: 10px; }
-.simple-step { border: 1px solid var(--mc-tile-border); border-radius: 14px; padding: 12px 14px; }
-.simple-step-head { display: flex; align-items: center; gap: 10px; }
-.simple-step-num { flex: 0 0 26px; height: 26px; border-radius: 50%; display: flex;
-    align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
-    background: rgba(100, 116, 139, 0.14); color: var(--mc-muted); }
-.simple-step-title { flex: 1 1 auto; min-width: 0; font-weight: 700; font-size: 15px;
-    color: var(--mc-ink); }
-.simple-step-body { margin: 6px 0 0 36px; font-size: 14px; line-height: 1.45; color: var(--mc-muted); }
-.simple-step-target { color: var(--mc-ink); font-weight: 600; }
-.simple-step-detail { color: var(--mc-ink); margin-top: 4px; }
-.simple-step--current { border: 2px solid #14b8a6; background: rgba(20, 184, 166, 0.07);
-    box-shadow: 0 6px 16px rgba(13, 148, 136, 0.15); }
-.simple-step--current .simple-step-num { background: #0d9488; color: #ffffff; }
-.simple-step--done .simple-step-num { background: rgba(13, 148, 136, 0.16); color: #0d9488; }
-.simple-step--done .simple-step-title,
-.simple-step--skip .simple-step-title { color: var(--mc-muted); }
-
-.simple-plan { border: 1px solid var(--mc-tile-border); border-radius: 14px; padding: 14px 16px;
-    margin-bottom: 4px; }
-.simple-plan--best { border: 2px solid #14b8a6; }
-.simple-plan-head { display: flex; justify-content: space-between; align-items: center;
-    gap: 8px; flex-wrap: wrap; }
-.simple-plan-name { font-weight: 800; font-size: 18px; color: var(--mc-ink); }
-.simple-plan-sub { color: var(--mc-muted); font-size: 13px; margin: 2px 0 10px; }
-.simple-plan-big { font-size: 22px; font-weight: 800; line-height: 1.2; color: var(--mc-ink); }
-.simple-plan-meta { font-size: 14px; color: var(--mc-muted); margin: 4px 0 10px; }
-.simple-plan-list-title { font-size: 12px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.04em; color: var(--mc-muted); margin-bottom: 4px; }
-.simple-plan-order { margin: 0; padding: 0; list-style: none; font-size: 14px; color: var(--mc-ink); }
-.simple-plan-order li { display: flex; justify-content: space-between; gap: 10px;
-    padding: 5px 0; border-top: 1px solid var(--mc-tile-border); }
-.simple-plan-order li span:last-child { color: var(--mc-muted); white-space: nowrap; }
-
-.simple-bar-row { margin: 0 0 18px; }
-.simple-bar-head { display: flex; justify-content: space-between; gap: 8px; font-size: 15px;
-    font-weight: 600; color: var(--mc-ink); }
-.simple-bar-head span:last-child { font-weight: 500; color: var(--mc-muted); white-space: nowrap; }
-.simple-bar { position: relative; height: 14px; border-radius: 999px; margin: 6px 0;
-    background: rgba(100, 116, 139, 0.16); }
-.simple-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
-.simple-fill--on_track { background: #14b8a6; }
-.simple-fill--close { background: #f59e0b; }
-.simple-fill--off { background: #d97706; }
-.simple-bar-target { position: absolute; top: -4px; bottom: -4px; width: 3px; border-radius: 2px;
-    background: var(--mc-ink); }
-.simple-bar-note { font-size: 13.5px; line-height: 1.4; color: var(--mc-muted); }
-
-/* Debt rows: the Name box and Remove button match the number inputs (pill, same border). */
-[class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"] {
-    border: 1px solid rgba(120, 96, 52, 0.12) !important; border-radius: 999px !important;
-    box-shadow: none !important; }
-[class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"] input { border: 0 !important; }
-[class*="st-key-simple-debt-"] [data-testid="stColumn"] button[kind] { border-radius: 999px; }
-/* Result cards in one row share a height. */
-[data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] > [class*="st-key-mc-tile-simple-"]) > [data-testid="stVerticalBlock"],
-[data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] > [class*="st-key-mc-tile-simple-"]) > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"],
-.st-key-mc-tile-simple-rate, .st-key-mc-tile-simple-fund { height: 100%; }
-.simple-meter-tick span { font-size: 12px; }
-
-/* Debt rows: Name + Remove on one row, balance / APR / minimum on the next, on
-   tablets and phones (the global <=1100px rule would stack all five fields). */
-@media (max-width: 1100px) {
-    section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important; gap: 8px !important;
-    }
-    section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-        flex: 1 1 0 !important; width: auto !important; min-width: 0 !important;
-    }
-    section[data-testid="stMain"] [class*="st-key-simple-debt-"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(button[kind]) {
-        flex: 0 0 auto !important;
-    }
-}
-@media (max-width: 640px) {
-    [class*="st-key-simple-debt-"] [data-testid="stNumberInputStepUp"],
-    [class*="st-key-simple-debt-"] [data-testid="stNumberInputStepDown"] { display: none !important; }
-    .simple-kpi-value { font-size: 34px; }
-}
-/* Stacked plan cards (Avalanche / Snowball): Streamlit's markdown container has a
-   -16px bottom margin that eats the 12px row gap, leaving the cards touching. */
-@media (max-width: 1100px) {
-    .simple-plan { margin-bottom: 20px; }
-}
-"""
 
 
 # ---------------------------------------------------------------------------

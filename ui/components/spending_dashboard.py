@@ -639,7 +639,7 @@ def pie_figure(avg: pd.Series, dark: bool, compact: bool = False) -> go.Figure:
                       legend=(dict(orientation="h", x=0.5, xanchor="center", y=0.32, yanchor="top",
                                    font=dict(size=11.5)) if compact
                               else dict(x=0.45, y=0.5, yanchor="middle", font=dict(size=11.5))),
-                      margin=dict(t=10, b=10, l=10, r=_CARD_CLIP),
+                      margin=dict(t=10, b=10, l=10, r=10 if compact else _CARD_CLIP),  # phone card isn't clipped: keep it centred
                       # True total (a bucket netting negative can't be a slice but still counts).
                       annotations=[dict(text=f"<b>{money(avg.sum())}</b><br><span style='font-size:11px'>per month</span>",
                                         x=0.5 if compact else 0.21, y=0.68 if compact else 0.5,
@@ -720,7 +720,7 @@ def monthly_figure(table: pd.DataFrame, incomplete: List[pd.Period], dark: bool,
     fig.update_xaxes(range=[table.index[0].start_time, (table.index[-1] + 1).start_time])
     fig.update_layout(barmode="relative", barcornerradius=4, bargap=0.25, height=440,
                       hovermode="closest", legend=dict(orientation="h", y=-0.24 if compact else -0.15),
-                      margin=dict(t=36, b=10, l=10, r=_CARD_CLIP),
+                      margin=dict(t=36, b=10, l=10, r=10 if compact else _CARD_CLIP),
                       yaxis=dict(tickformat="$,.0f", title=None),
                       xaxis=dict(title=None, dtick="M3" if compact else "M1", tickformat="%b<br>%Y",
                                  ticklabelmode="period"))
@@ -755,7 +755,7 @@ def category_trend_figure(tx: pd.DataFrame, category: str, start: pd.Period, end
     _shade_incomplete(fig, list(months), incomplete, dark)
     fig.update_xaxes(range=[start.start_time, (end + 1).start_time])
     fig.update_layout(height=330, barcornerradius=4, bargap=0.3, hovermode="x unified",
-                      legend=dict(orientation="h", y=-0.3), margin=dict(t=36, b=10, l=10, r=_CARD_CLIP),
+                      legend=dict(orientation="h", y=-0.3), margin=dict(t=36, b=10, l=10, r=10 if compact else _CARD_CLIP),
                       yaxis=dict(tickformat="$,.0f", title=None),
                       xaxis=dict(title=None, dtick="M3" if compact else "M1", tickformat="%b<br>%Y",
                                  ticklabelmode="period"))
@@ -879,7 +879,7 @@ def render(st, **_kwargs) -> None:
     folder_ok = bool(data_dir) and os.path.isdir(data_dir)
     store = _upload_store(st)
     title, gear = st.columns([6, 1], vertical_alignment="bottom")
-    title.markdown('<div class="mc-section">Spending</div>', unsafe_allow_html=True)
+    title.markdown('<div class="mc-section mc-section-spending">Spending</div>', unsafe_allow_html=True)
     if folder_ok:                                    # local folder: as before
         with gear.popover("Statements", width="stretch"):
             _settings_form(st, data_dir, True)
@@ -992,18 +992,28 @@ def render(st, **_kwargs) -> None:
 
             def _or_dash(fmt):
                 return lambda v: "—" if pd.isna(v) else fmt(v)
-            st.dataframe(pd.DataFrame({
+            pva = pd.DataFrame({
                 "Expense category": g["Expense category"],
                 "Your plan": g["Your plan"].map(money),
                 "Actual": g["Actual"].map(_or_dash(money)),
                 "Difference": g["Difference"].map(_or_dash(lambda v: ("+" if v > 0 else "") + money(v))),
-            }), hide_index=True, width="stretch",
-                # Pixel widths that add up to a phone screen (the grid still fills
-                # a wider card): no half-hidden last column.
-                column_config={"Expense category": st.column_config.Column(width=124),
-                               "Your plan": st.column_config.Column(width=72),
-                               "Actual": st.column_config.Column(width=72),
-                               "Difference": st.column_config.Column(width=84)})
+            })
+            _phone_df(st, "sp_pva", pva,
+                      # Phone: short names and headers so nothing is cut off at 360-430px; only
+                      # the first column is pinned, the rest share what is left (no empty strip).
+                      {"Expense category": st.column_config.Column("Category", width=108),
+                       "Your plan": st.column_config.Column("Plan"),
+                       "Actual": st.column_config.Column("Actual"),
+                       "Difference": st.column_config.Column("Diff.")},
+                      phone_df=pva.assign(**{"Expense category": pva["Expense category"].replace(
+                          {"Entertainment / discretionary": "Entertainment", "Other / miscellaneous": "Other",
+                           "Healthcare premiums": "Healthcare"})}),
+                      # Pixel widths that add up to a phone screen (the grid still fills
+                      # a wider card): no half-hidden last column.
+                      column_config={"Expense category": st.column_config.Column(width=124),
+                                     "Your plan": st.column_config.Column(width=72),
+                                     "Actual": st.column_config.Column(width=72),
+                                     "Difference": st.column_config.Column(width=84)})
             no_partner = ((g["Expense category"] == "Partner spending") & g["Actual"].isna()
                           & (g["Your plan"] > 0)).any()
             st.caption("Plan = the Expenses section's monthly inputs. Actual = your accounts averaged "
@@ -1032,8 +1042,8 @@ def render(st, **_kwargs) -> None:
         _chart(st, lambda compact: category_trend_figure(view, pick, start, chart_end, incomplete,
                                                          dark, window, compact),
                "sp_cat_trend", PLOTLY_CONFIG)
-        merchants = _merchants_per_year(view, start, end, complete, pick, 10).assign(
-            **{"Per year": lambda d: d["Per year"].map(money)})
+        raw_merchants = _merchants_per_year(view, start, end, complete, pick, 10)
+        merchants = raw_merchants.assign(**{"Per year": lambda d: d["Per year"].map(money)})
         summary = category_summary(view, start, end, complete)
         det = summary.reset_index().rename(columns={"category": "Category"})
         det = det[det["Expense category"] == pick][["Category", "Per month", "Per year"]]
@@ -1044,11 +1054,15 @@ def render(st, **_kwargs) -> None:
             a = b = None
         with (a if a is not None else st.container()):
             st.markdown(f"**Top merchants — {pick}**")
-            st.dataframe(merchants, hide_index=True, width="stretch",
-                         column_config={"Merchant": st.column_config.Column(width=130),
-                                        "Category": st.column_config.Column(width=90),
-                                        "Per year": st.column_config.Column(width=66),
-                                        "Visits": st.column_config.Column(width=56)})
+            _phone_df(st, "sp_merchants", merchants,
+                      {"Merchant": st.column_config.Column(width=170),
+                       "Per year": st.column_config.NumberColumn(format="dollar", width=82),
+                       "Visits": st.column_config.NumberColumn(width=58)},
+                      phone_df=raw_merchants.assign(**{"Per year": raw_merchants["Per year"].round().astype(int)}),
+                      column_config={"Merchant": st.column_config.Column(width=130),
+                                     "Category": st.column_config.Column(width=90),
+                                     "Per year": st.column_config.Column(width=66),
+                                     "Visits": st.column_config.Column(width=56)})
         if b is not None:
             with b:
                 st.markdown("**Inside this expense category**")
