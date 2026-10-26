@@ -59,9 +59,9 @@ except ImportError:  # pragma: no cover
 SETTINGS_PATH = os.path.expanduser("~/.config/retirement-sim/spending.json")
 RULES_FILENAME = "spending_rules.json"
 UPLOAD_STATE = "sp_uploads"      # st.session_state key: this visitor's uploads + parsed result
-PRIVACY_NOTE = "Your files are processed in memory for this session only and never saved."
-FORMATS_NOTE = ("Recognised: Ally Bank statements (PDF), Fidelity / Elan card statements "
-                "(CSV export or PDF), Venmo monthly statements (CSV) and Apple Card exports "
+PRIVACY_NOTE = "Your files are read in memory for this session only. Nothing is saved."
+FORMATS_NOTE = ("Supported: Ally Bank statements (PDF), Fidelity / Elan card statements "
+                "(CSV or PDF), Venmo monthly statements (CSV) and Apple Card exports "
                 "(CSV). Anything else is skipped and listed under Data.")
 # The Expenses section's own buckets, from the list both screens are built on
 # (utils/expense_categories.py): (label, plan keys, statement categories).
@@ -226,7 +226,7 @@ def load_uploaded(files: Iterable[Tuple[str, bytes]], rules_json: Optional[bytes
         try:
             rules = parse_rules(rules_json)
         except ValueError as exc:
-            rules_error = f"Your rules file was ignored ({exc}); using the default rules."
+            rules_error = f"Couldn't use your rules file ({exc}). Using the default rules."
     return {**prepare(raw, checks, problems, rules), "rules_error": rules_error}
 
 
@@ -795,8 +795,8 @@ def _settings_form(st, data_dir: str, ok: bool) -> None:
         return
     path = st.text_input(
         "Statements folder", value=data_dir, key="sp_dir_input",
-        help="Folder with your bank / card / Venmo statements (CSV or PDF, any "
-             "sub-folders). It stays outside the app — nothing is copied in.")
+        help="Folder with your bank, card and Venmo statements (CSV or PDF, "
+             "subfolders are fine). It stays where it is. Nothing is copied into the app.")
     c1, c2 = st.columns(2)
     if c1.button("Save & load", key="sp_save", width="stretch"):
         save_data_dir(os.path.expanduser(path.strip()))
@@ -816,9 +816,9 @@ def _upload_panel(st, store: Dict) -> None:
     st.file_uploader(
         "Upload statements", type=["csv", "pdf", "json"], accept_multiple_files=True,
         key=_uploader_key(st), on_change=_take_uploads, args=(st,),
-        help="Bank / card / Venmo statements (CSV or PDF). Optionally add your rules file "
-             f"({RULES_FILENAME}, JSON) to tune what counts as spending; without one, generic "
-             "rules apply. A file with the same name as an earlier one replaces it.")
+        help="Bank, card and Venmo statements (CSV or PDF). You can also add a rules file "
+             f"({RULES_FILENAME}, JSON) to change what counts as spending. Without one, "
+             "default rules apply. A file with the same name as an earlier one replaces it.")
     n = len(store["files"])
     if n or store["rules"]:
         rules = f"rules from {store['rules'][0]}" if store["rules"] else "default rules"
@@ -840,10 +840,10 @@ def gap_notes(data: Dict) -> List[str]:
             notes.append(f"**{s['source']}**: only {s['rows']} transaction(s) loaded "
                          f"({_day(s['first'])} – {_day(s['last'])}).{paid} Export its full history.")
         for a, b in s["gaps"]:
-            notes.append(f"**{s['source']}**: nothing from {_day(a)} to {_day(b)} — missing statements?")
+            notes.append(f"**{s['source']}**: no transactions from {_day(a)} to {_day(b)}. Missing statements?")
         if s["empty_months"] and not s["gaps"]:
-            notes.append(f"**{s['source']}**: nothing in {', '.join(_mon(p) for p in s['empty_months'])} "
-                         "— missing statement?")
+            notes.append(f"**{s['source']}**: no transactions in {', '.join(_mon(p) for p in s['empty_months'])}. "
+                         "Missing statement?")
     notes += data["problems"]
     return notes
 
@@ -907,14 +907,14 @@ def render(st, **_kwargs) -> None:
         try:
             data = _uploaded_data(st)
         except Exception as exc:  # untrusted files must not take the tab down
-            st.error(f"These files couldn't be processed ({type(exc).__name__}: {exc}). "
+            st.error(f"Couldn't process these files ({type(exc).__name__}: {exc}). "
                      "Clear them under Statements and try again.")
             return
         if data["rules_error"]:
             st.warning(data["rules_error"])
     else:
         st.info("Upload your bank, card and Venmo statements to see your spending." if hosted
-                else "Choose the folder holding your statements, or upload them, to see your spending.")
+                else "Choose the folder with your statements, or upload them, to see your spending.")
         _settings_form(st, data_dir, False)          # renders nothing when hosted
         _upload_panel(st, store)
         return
@@ -944,8 +944,8 @@ def render(st, **_kwargs) -> None:
         sel = st.pills("Include", GROUPS, selection_mode="multi", default=GROUPS, key="sp_groups") or []
     with c4:
         drop_oneoffs = st.toggle(f"Hide one-offs ({money_md(ONE_OFF)}+)", key="sp_oneoffs",
-                                 help="Hide single purchases of $500 or more (and paybacks for "
-                                      "them) to see routine spending.")
+                                 help="Hides single purchases of $500 or more, and paybacks for "
+                                      "them, so you see routine spending.")
     if not sel:
         st.info("Pick at least one expense category under Include.")
         return
@@ -985,7 +985,7 @@ def render(st, **_kwargs) -> None:
         line.append(f"up to {money_md(k['unitemized_per_month'])}/mo to {', '.join(tiny)} not itemized")
     notes = gap_notes(data)
     if notes:
-        line.append(f"⚠ {len(notes)} data gap{'s' if len(notes) > 1 else ''} — see Data")
+        line.append(f"⚠ {len(notes)} data gap{'s' if len(notes) > 1 else ''}, see Data")
     st.caption(" · ".join(line))
 
     sig_last = [x["last"] for x in data["sources"] if x["rows"] >= 20]
@@ -1031,9 +1031,9 @@ def render(st, **_kwargs) -> None:
                                      "Difference": st.column_config.Column(width=84)})
             no_partner = ((g["Expense category"] == "Partner spending") & g["Actual"].isna()
                           & (g["Your plan"] > 0)).any()
-            st.caption("Plan = the Expenses section's monthly inputs. Actual = your accounts averaged "
-                       "over every complete month (not just the period above), after paybacks; "
-                       "housing is your current payment."
+            st.caption("Plan is the monthly inputs in the Expenses section. Actual is your accounts averaged "
+                       "over every complete month (not just the period above), after paybacks. "
+                       "Housing is your current payment."
                        + (" Partner spending isn't in your statements, so the plan keeps its own "
                           "figure." if no_partner else ""))
             sync_control(st, data, "sp_use_actual")
@@ -1044,7 +1044,7 @@ def render(st, **_kwargs) -> None:
         ma = moving_average(full["Net"], complete, window) if window else None
         _chart(st, lambda compact: monthly_figure(table, incomplete, dark, ma, window, compact),
                "sp_monthly", PLOTLY_CONFIG)
-        st.caption("Each bar is your real share: purchases minus refunds and minus what people paid "
+        st.caption("Each bar is purchases minus refunds and minus what people paid "
                    "you back. The average skips shaded months (missing statements).")
 
     with t_trend:
@@ -1068,7 +1068,7 @@ def render(st, **_kwargs) -> None:
         else:
             a = b = None
         with (a if a is not None else st.container()):
-            st.markdown(f"**Top merchants — {pick}**")
+            st.markdown(f"**Top merchants: {pick}**")
             _phone_df(st, "sp_merchants", merchants,
                       {"Merchant": st.column_config.Column(width=170),
                        "Per year": st.column_config.NumberColumn(format="dollar", width=82),
@@ -1171,4 +1171,4 @@ def render(st, **_kwargs) -> None:
                    "Net amount": st.column_config.Column("Net", width=80)},
                   phone_df=why.assign(Type=why["Type"].replace({"Between accounts": "Transfer"})))
         st.caption("Transfers move your own money between accounts (card payments, savings, Venmo "
-                   "cash-outs); counting them would double count purchases.")
+                   "cash-outs). Counting them would double count purchases.")

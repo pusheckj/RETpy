@@ -329,7 +329,7 @@ def test_hosted_tab_never_reads_the_server_folder(tmp_path, monkeypatch):
     assert not at.metric                                   # the server's statements were not loaded
     assert not at.text_input                               # no folder box to type "/" into
     assert len(at.get("file_uploader")) == 1
-    assert sd.PRIVACY_NOTE in _captions(at) and "Recognised" in _captions(at)
+    assert sd.PRIVACY_NOTE in _captions(at) and "Supported" in _captions(at)
 
 
 def test_hosted_tab_renders_uploads(monkeypatch):
