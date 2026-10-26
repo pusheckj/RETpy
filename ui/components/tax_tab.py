@@ -153,7 +153,7 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
             x=retirement_age,
             line_dash="dash",
             line_color="#94a3b8",
-            annotation_text=f"Retire @ {retirement_age}",
+            annotation_text=f"Retire at {retirement_age}",
             annotation_position="top left",
             annotation_font=dict(size=11, color="#64748b"),
         )

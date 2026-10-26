@@ -105,7 +105,7 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
                   help="First year before 59½ that the median plan pays an early-withdrawal penalty "
                        "or runs out of penalty-free money.")
     with cols[2]:
-        st.metric("Penalty-free fuel at retirement", money(accessible_at_retire, shorten=True),
+        st.metric("Penalty-free money at retirement", money(accessible_at_retire, shorten=True),
                   help="Median cash + taxable brokerage + Roth balance in your first retirement year.")
 
     dark = is_dark(st)
@@ -139,7 +139,7 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
 
     fig.update_layout(
         title=dict(
-            text="<b>Penalty-free bridge fuel vs. annual withdrawal</b><br>"
+            text="<b>Penalty-free money vs. annual withdrawal</b><br>"
                  "<span style='font-size:13px;color:#64748b;'>Median accessible balance "
                  "(cash + taxable + Roth) until 59½ · today's dollars</span>",
             x=0.0, xanchor="left", font=dict(size=16),
@@ -153,9 +153,9 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
     )
     show_chart(st, fig, f"{chart_key}_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
     st.caption(
-        "The stacked area is your **penalty-free fuel**: cash, taxable brokerage, and Roth. "
+        "The stacked area is your **penalty-free money**: cash, taxable brokerage, and Roth. "
         "You can use these before 59½ without a 10% penalty. The dotted line is the median annual "
-        "withdrawal. The bridge is funded as long as the fuel stays above the withdrawal line. "
+        "withdrawal. The bridge is funded as long as that balance stays above the withdrawal line. "
         "If it doesn't, save more in taxable or Roth accounts before you retire. "
         "Roth counts at its full balance, which stands in for what you've put in, so accessible "
         "Roth is slightly overstated."

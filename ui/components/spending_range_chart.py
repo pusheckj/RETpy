@@ -141,14 +141,14 @@ def render(st, results: dict = None, chart_key: str = "spending_range_main") -> 
         # simulated paths" for a 1,000-sim run at 80% success.
         n = max((r.get("n", 0) or 0 for r in rows), default=0) if rows else 0
         runs = int((results.get("primary_result", {}) or {}).get("n_simulations") or n)
-        based_on = (f"Based on all {n:,} simulated runs (the same runs as the success rate)"
+        based_on = (f"Based on all {n:,} simulated runs (the same runs as the chance of success)"
                     if n >= runs else f"Based on {n:,} of the {runs:,} simulated runs")
         st.caption(
             "Each box shows how **annual spending varies across simulated market paths** at that age. "
             "The box covers the middle 50% (25th to 75th percentile), the whiskers reach the 10th and 90th, and the "
             "line is the median. Spending is flat while you work, then **spreads out in retirement** as the "
-            "**spending guardrails** raise or cut discretionary spending based on how markets treated your "
-            f"portfolio. {based_on}. This is living spending after guardrails. "
+            "**spending guardrails** and the **cut-after-down-years rule** trim discretionary spending when "
+            f"markets are weak. {based_on}. This is living spending after guardrails. "
             "Healthcare and long-term care are modeled separately and left out. "
             "The vertical axis is zoomed in, so it doesn't start at $0."
         )

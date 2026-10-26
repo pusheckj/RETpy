@@ -92,10 +92,10 @@ def render(st, results: dict = None) -> None:
             base_sr = base_pr.get("success_rate")
             shock_sr = shock_pr.get("success_rate")
             st.metric(
-                f"Success @ {entry['age']}",
+                f"Success at {entry['age']}",
                 pct(shock_sr) if shock_sr is not None else "—",
                 delta=None if (base_sr is None or shock_sr is None)
-                else f"{(shock_sr - base_sr) * 100:+.1f}pp",
+                else f"{(shock_sr - base_sr) * 100:+.1f} points",
             )
         with cols[2]:
             base_med = base_pr.get("median_final")

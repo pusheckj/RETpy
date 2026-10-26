@@ -49,9 +49,9 @@ def render(st, results: dict) -> None:
 
         rows = []
         status_placeholder = st.empty()
-        status_placeholder.info(f"Running {len(scenarios)} scenarios, about 10 seconds each...")
-        progress = st.progress(0.0, text="Getting scenarios ready...")
-        with st.spinner("Running sensitivity analysis..."):
+        status_placeholder.info(f"Running {len(scenarios)} scenarios, about 10 seconds each…")
+        progress = st.progress(0.0, text="Getting scenarios ready…")
+        with st.spinner("Running sensitivity analysis…"):
             for i, (name, delta, age) in enumerate(scenarios):
                 progress.progress(
                     i / len(scenarios),
@@ -71,7 +71,7 @@ def render(st, results: dict) -> None:
                 except Exception as e:
                     progress.progress(
                         (i + 1) / len(scenarios),
-                        text=f"Scenario {name} failed, continuing...",
+                        text=f"Scenario {name} failed, continuing…",
                     )
                     rows.append({
                         "Scenario": name, "Retire age": age, "Success": 0.0,
@@ -127,7 +127,7 @@ def _render_break_even(st, base_overrides: dict, target_age: int) -> None:
     st.markdown("#### Break-even finder")
     st.caption(
         "Try a range of values for one input, with retirement age fixed, to find the "
-        "smallest value that reaches your target success rate."
+        "smallest value that reaches your success target."
     )
 
     # Read the USER's target, not cfg's module default. sim_runner restores cfg
@@ -146,7 +146,7 @@ def _render_break_even(st, base_overrides: dict, target_age: int) -> None:
 
     if run_sweep_btn:
         param_name, values = _BREAK_EVEN_PARAMS[label]
-        with st.spinner(f"Sweeping {label}..."):
+        with st.spinner(f"Sweeping {label}…"):
             if param_name == "TARGET_RETIREMENT_AGE_SWEEP":
                 # Retirement age is a sweep parameter passed to run_full_analysis
                 # directly rather than a cfg override, so sweep it in-line here
@@ -168,7 +168,7 @@ def _render_break_even(st, base_overrides: dict, target_age: int) -> None:
         be_value = sweep_state.get("break_even_value")
         if be_value is None:
             st.warning(
-                f"No value we tested for **{sweep_state['label']}** reaches "
+                f"No value tested for **{sweep_state['label']}** reaches "
                 f"{pct(sweep_state['target_success_rate'])} success."
             )
         else:

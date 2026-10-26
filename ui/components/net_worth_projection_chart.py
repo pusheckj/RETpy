@@ -412,7 +412,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
             x=retirement_age,
             line_dash="dash",
             line_color="#94a3b8",
-            annotation_text=f"Retire @ {retirement_age}",
+            annotation_text=f"Retire at {retirement_age}",
             annotation_position="top",
             annotation_font=dict(size=11, color="#64748b"),
         )
@@ -461,7 +461,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
         f"Real (inflation-adjusted) return: investment accounts "
         f"{_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['investment']*100:.1f}%, "
         f"cash {_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['cash']*100:.1f}%, "
-        f"home equity follows the mortgage paydown and any planned moves. The Monte "
-        f"Carlo simulation (Run is in the top bar) adds return ups and downs and "
+        f"home equity follows the mortgage paydown and any planned moves. "
+        f"**Run simulation** (top bar) adds market ups and downs and "
         f"tax-efficient withdrawals."
     )

@@ -29,8 +29,7 @@ def _inputs_hash(overrides: dict, n_sims):
         return None
 
 
-_FRESH_HELP = ("This matches your current inputs. Change a sidebar setting "
-               "or the simulation count to recalculate.")
+_FRESH_HELP = ("Up to date. Change an input or the simulation count to recalculate.")
 
 
 def render(st, results: dict = None) -> None:
@@ -46,15 +45,10 @@ def render(st, results: dict = None) -> None:
     _horizon = f"{_years}-year horizon" if _years > 0 else "horizon"
     st.caption(
         "Your own version of the 4% rule. It tries different first-year withdrawals "
-        "(as a % of your investable assets at retirement), runs the full Monte Carlo "
+        "(as a % of your investable assets at retirement), runs the full simulation "
         "at each, and finds the **highest rate that still meets your success "
         f"target**. Unlike the generic 4% rule, it counts your taxes, Social Security, "
         f"guardrails, and your {_horizon}."
-    )
-    st.caption(
-        "The same plan once more: **Retirement** gives the earliest age, "
-        "**Portfolio needed to retire** gives the portfolio you need, and this gives the "
-        "spending that portfolio supports."
     )
 
     n_sims = int(st.session_state.get("n_simulations", 1000))
@@ -140,9 +134,9 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
 
     if swr_rate is None:
         st.info(
-            "No withdrawal rate we tested meets your success target, even a much "
-            "lower first-year spend. Try retiring later, saving more, or lowering the "
-            "target success rate."
+            "No withdrawal rate tested meets your success target, even a much "
+            "lower first-year spend. Try retiring later, saving more, or lowering your "
+            "success target."
         )
 
     xs = [c["realized_rate"] * 100 for c in curve]
@@ -191,7 +185,7 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
 
     show_chart(st, _build, f"swr_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
     st.caption(
-        "Each point re-runs the full Monte Carlo at a different first-year spending level. The rate is the "
+        "Each point re-runs the full simulation at a different first-year spending level. The rate is the "
         "**total** first-year withdrawal ÷ investable balance at retirement, so you can compare it "
         "directly to your plan's rate. This uses today's inputs. **Recalculate after you change them.**"
     )
