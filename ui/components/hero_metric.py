@@ -34,7 +34,7 @@ def render(st, results: dict) -> None:
     else:
         big_num = str(earliest)
         big_color, big_cls = "#0d9488", "mc-teal"
-        subtitle = f"with a {pct(target_success_rate)} chance of success. At your target age of {target_age}, it's {pct(success_rate)}."
+        subtitle = f"to reach your {pct(target_success_rate)} success target. At your target age of {target_age}, the chance of success is {pct(success_rate)}."
 
     st.markdown(
         f'''
