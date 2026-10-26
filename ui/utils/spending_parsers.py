@@ -404,20 +404,20 @@ def _parse_one(name: str, data: bytes) -> Tuple[List[dict], List[dict], Optional
         text = _csv_text(data)
         parser = _CSV_PARSERS.get(_detect_csv(text))
         if parser is None:
-            return [], [], f"{name}: unrecognized CSV format — skipped"
+            return [], [], f"{name}: unrecognized CSV format, skipped"
         return parser(text, name), [], None
     if not name.lower().endswith(".pdf"):
-        return [], [], f"{name}: not a CSV or PDF statement — skipped"
+        return [], [], f"{name}: not a CSV or PDF statement, skipped"
     try:
         lines, word_rows = _read_pdf(data)
     except ImportError:
-        return [], [], f"{name}: PDF support needs `pip install pymupdf` — skipped"
+        return [], [], f"{name}: PDF support needs `pip install pymupdf`, skipped"
     if "Ally Bank" in "\n".join(lines[:200]):
         rows, checks = parse_ally_lines(lines, name)
     elif "Elan Financial Services" in "\n".join(lines):
         rows, checks = parse_elan_rows(word_rows, lines, name)
     else:
-        return [], [], f"{name}: unrecognized PDF statement — skipped"
+        return [], [], f"{name}: unrecognized PDF statement, skipped"
     return rows, checks, None
 
 
@@ -447,7 +447,7 @@ def load_files(files: Iterable[Tuple[str, bytes]]) -> Tuple[pd.DataFrame, List[d
         try:
             r, c, problem = _parse_one(label, data)
         except Exception as exc:  # one bad file must not hide the rest
-            problems.append(f"{label}: could not be read ({type(exc).__name__}: {exc})")
+            problems.append(f"{label}: couldn't be read ({type(exc).__name__}: {exc})")
             continue
         rows += r
         checks += c
@@ -485,7 +485,7 @@ def load_folder(data_dir: str) -> Tuple[pd.DataFrame, List[dict], List[str]]:
             with open(path, "rb") as fh:
                 files.append((rel, fh.read()))
         except OSError as exc:
-            unreadable.append(f"{rel}: could not be read ({type(exc).__name__}: {exc})")
+            unreadable.append(f"{rel}: couldn't be read ({type(exc).__name__}: {exc})")
     df, checks, problems = load_files(files)
     return df, checks, unreadable + problems
 
