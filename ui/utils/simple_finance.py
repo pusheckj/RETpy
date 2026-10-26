@@ -4,7 +4,7 @@ Pure functions only (no Streamlit), so everything here is unit-testable and
 instant. Four checks:
 
 1. Savings rate and emergency fund (``savings_rate``, ``emergency_fund``).
-2. "Where my next dollar goes": a personalised priority ladder (``priority_ladder``).
+2. "Where your next dollar goes": a personalised priority ladder (``priority_ladder``).
 3. Debt payoff, avalanche vs snowball (``simulate_payoff``, ``compare_payoff``).
 4. The 50/30/20 budget check (``budget_503020``).
 
@@ -359,12 +359,12 @@ def priority_ladder(inputs: Dict[str, Any], today: Optional[date] = None) -> Lis
         left = salary * (match_pct - contrib_pct) / 100.0
         st2 = "pending"
         detail2 = (f"You put in {contrib_pct:g}%. Raising it to {match_pct:g}% gets about "
-                   f"{money(left)}/yr in free money you're leaving on the table now.")
+                   f"{money(left)}/yr in free match money you're missing.")
     match_target = salary * match_pct / 100.0
     steps.append(LadderStep(
         2, "employer_match", "Get your full 401(k) match", st2, match_target,
         f"{money(match_target)}/yr ({match_pct:g}% of pay)",
-        "It's free money: an instant return no investment can beat. "
+        "It's free money. No investment is a surer return. "
         "Assumes your employer matches dollar for dollar.",
         detail2, contrib_annual))
 

@@ -9,14 +9,14 @@ from __future__ import annotations
 QUESTIONS: list[tuple[str, str]] = [
     (
         "What is a Monte Carlo simulation?",
-        "Instead of assuming one average return, the app runs thousands of "
-        "randomized year-by-year market sequences based on historical stock and "
-        "bond behavior. Each one plays out a different possible future, and the "
-        "app counts how many succeed. \"80% success at age 55\" means 8 out of "
+        "Instead of assuming one average return, the simulation runs thousands of "
+        "randomized year-by-year market sequences based on the average returns and "
+        "ups and downs of stocks and bonds. Each one plays out a different possible "
+        "future, and the plan counts how many succeed. \"80% success at age 55\" means 8 out of "
         "10 simulated futures last through your plan-until age (95 by default).",
     ),
     (
-        "What's a good \"target success rate\"?",
+        "What's a good success target?",
         "80% is a common default. It balances not running out of money against "
         "working extra years for little gain. Many early retirees aim for "
         "90-95%. Past about 90%, each extra year of work adds very little.",
@@ -75,7 +75,7 @@ QUESTIONS: list[tuple[str, str]] = [
         "The years before Medicare (ages 50-64) are often the most expensive. "
         "ACA premiums can run \\$20k or more a year for a couple without "
         "subsidies. Medicare starts at 65 and costs about \\$8-15k a year for "
-        "a couple, including supplemental coverage. The app models both phases.",
+        "a couple, including supplemental coverage. The plan covers both phases.",
     ),
     (
         "What if I rent, or I'm single?",

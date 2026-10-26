@@ -283,7 +283,7 @@ def draw_kids(st) -> None:
         _money(st, "gs_kid_cost", "Monthly cost of one child", saved["cost"], _ONE_KID_COST,
                hi=10_000, step=100)
         _cue(st, "Childcare, food, clothes and activities, until they turn 18. Each child "
-                 "after the first counts at about two-thirds of this. A rough guess is fine. "
+                 "after the first counts at about two-thirds of this. A guess is fine. "
                  "You can set each child separately later under Expenses.")
 
 
@@ -536,7 +536,7 @@ def draw_home(st) -> None:
                ov.get("MORTGAGE_MONTHLY") if owns else None, None, hi=20_000, step=50)
         _cue(st, "The full payment, including property tax and insurance if they're part of it. "
                  "Enter 0 if it's paid off.")
-        _whole(st, "gs_mortgage_years", "Years left on the mortgage",
+        _whole(st, "gs_mortgage_years", "Years left on mortgage",
                ov.get("MORTGAGE_YEARS_REMAINING") if owns else None, None, 0, 40)
         _cue(st, "Enter 0 if it's paid off.")
 
@@ -604,7 +604,7 @@ def draw_spending(st) -> None:
                     if c.get("debt_min") else ""))
     else:
         _cue(st, "About how much do you spend each month? Your bank or card app's spending "
-                 "summary can help. Rough is fine. Leave out housing (the last step) and "
+                 "summary can help. Leave out housing (the last step) and "
                  "money you save. Each box starts at a typical amount. Change any that don't fit.")
     cats = _shown_categories(st)
     for row in range(0, len(cats), 2):      # one row of columns per pair, so the boxes line up
@@ -711,8 +711,8 @@ def review_lines(ov: Dict[str, Any]) -> List[str]:
 
 def draw_review(st) -> None:
     st.markdown("\n".join(f"- {line}" for line in review_lines(_ov(st))))
-    _cue(st, "Use Back to change an answer. Later, everything is in the side panel "
-             "(on a phone, tap the arrow at the top left).")
+    _cue(st, "Use Back to change an answer. Later, everything is in the sidebar "
+             "(on a phone, tap the arrow at the top left to open it).")
 
 
 def _nothing(st) -> Optional[str]:
@@ -728,7 +728,7 @@ class Step(NamedTuple):
 
 
 STEPS: List[Step] = [
-    Step("About you", "A few basics. Rough answers are fine, and you can change anything later.",
+    Step("About you", "A few basics. A guess is fine, and you can change anything later.",
          draw_you, commit_you, check_you),
     Step("Children", "", draw_kids, commit_kids, check_kids),
     Step("Where you live", "", draw_state, commit_state, check_state),
@@ -738,7 +738,7 @@ STEPS: List[Step] = [
     Step("Your home", "", draw_home, commit_home, check_home),
     Step("Monthly spending", "", draw_spending, commit_spending, _nothing),
     Step("Retirement", "", draw_retire, commit_retire, _nothing),
-    Step("All set", "Here's what the planner will use.", draw_review, lambda st: None, _nothing),
+    Step("All set", "The planner will use these answers.", draw_review, lambda st: None, _nothing),
 ]
 
 

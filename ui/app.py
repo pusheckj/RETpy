@@ -25,7 +25,7 @@ import streamlit as st
 
 # Page config MUST be the first Streamlit call.
 st.set_page_config(
-    page_title="Retirement Monte Carlo",
+    page_title="Retirement planner",
     page_icon="📈",
     layout="wide",
     # "auto" (not "expanded"): Streamlit auto-collapses the sidebar on narrow
@@ -230,7 +230,7 @@ def _autorun_all(progress_container=None) -> None:
         logging.getLogger("retirement_ui").exception("Auto-run failed")
         st.warning(
             f"Couldn't finish preparing the plan automatically ({e}). "
-            "Click Run to try again."
+            "Click Run simulation to try again."
         )
     finally:
         prog.empty()
@@ -966,7 +966,7 @@ def main() -> None:
                      sims_render=_topbar_sims,
                      settings_render=_topbar_settings,
                      in_card=True, control_slots=control_slots,
-                     title="Spending" if spending_view else "Retirement Monte Carlo",
+                     title="Spending" if spending_view else "Retirement planner",
                      stats=spending_stats)
 
 
@@ -1008,7 +1008,7 @@ def main() -> None:
 
     if _results_are_stale():
         st.warning("Your inputs changed since this simulation ran. The results "
-                   "below, including the success rate at the top, still use the "
+                   "below, including the chance of success at the top, still use the "
                    "old inputs. Click **Run simulation** to refresh.")
 
     # ============================ 1. RETIREMENT ============================

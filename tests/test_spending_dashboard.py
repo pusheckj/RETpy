@@ -370,7 +370,7 @@ class TestDashboardSummaries:
         assert row["Housing"] == pytest.approx(2000.0)
         assert row["Food & groceries"] == pytest.approx(39.0)          # 2 coffees - refund + Venmo 🍕
         assert row["Utilities"] == pytest.approx(-40.0)                # water payback netted in
-        assert row["Entertainment / discretionary"] == pytest.approx(50.0)
+        assert row["Fun and discretionary"] == pytest.approx(50.0)
         assert row["Net"] == pytest.approx(sd.kpis(tx, jul, jul, [jul])["per_month"])
 
     def test_housing_toggle(self):
@@ -510,7 +510,7 @@ def test_plan_vs_actual_and_what_differs():
     assert (g.loc["Housing", "Your plan"], g.loc["Housing", "Actual"]) == (2100.0, 2000.0)
     assert g.loc["Food & groceries", "Difference"] == pytest.approx(-61.0)
     assert pd.isna(g.loc["Partner spending", "Actual"])   # not in statements: never "differs"
-    assert sd.differing(ov, a) == ["Housing", "Food & groceries", "Entertainment / discretionary"]
+    assert sd.differing(ov, a) == ["Housing", "Food & groceries", "Fun and discretionary"]
     assert sd.differing({**ov, **a}, a) == []
     assert list(sd.plan_vs_actual(ov, a, ["Housing"])["Expense category"]) == ["Housing"]
 

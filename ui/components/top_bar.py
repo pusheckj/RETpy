@@ -161,7 +161,7 @@ def render(st, results: Optional[dict] = None,
            view_render=None,
            in_card: bool = False,
            control_slots=None,
-           title: str = "Retirement Monte Carlo",
+           title: str = "Retirement planner",
            stats: Optional[list] = None) -> None:
     """Render the sticky top bar.
 

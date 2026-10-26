@@ -185,7 +185,7 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
                      "Roth or traditional IRA contributions so far this year.", step=100.0,
                      hi=sf.BALANCE_MAX)
     with c2:
-        st.toggle("My health plan is HSA-eligible", key=_W + "hsa_eligible",
+        st.toggle("Your health plan is HSA-eligible", key=_W + "hsa_eligible",
                   help="Health Savings Accounts are only for high-deductible health plans. "
                        "Your plan documents say if it's HSA-eligible.")
         if ss.get(_W + "hsa_eligible"):
@@ -212,7 +212,7 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
             a.number_input("APR", min_value=0.0, max_value=sf.PCT_MAX, step=0.25,
                            format="%.2f", key=_debt_key(i, "apr_pct"),
                            help="The yearly interest rate on your statement.", icon=_PCT)
-            m.number_input("Min per month", min_value=0.0, max_value=sf.MONTHLY_MAX, step=10.0,
+            m.number_input("Min payment", min_value=0.0, max_value=sf.MONTHLY_MAX, step=10.0,
                            format="%.0f", key=_debt_key(i, "min_payment"),
                            help="The minimum payment due each month.", icon=_DOLLAR)
     if len(inputs["debts"]) < sf.MAX_DEBTS:
@@ -277,7 +277,7 @@ def _render_headline(st, rate: sf.SavingsRate, fund: sf.EmergencyFund) -> None:
 
 def _render_ladder(st, steps: List[sf.LadderStep]) -> None:
     with st.container(border=True, key="mc-tile-simple-ladder"):
-        _section(st, "Where my next dollar goes",
+        _section(st, "Where your next dollar goes",
                  "Work down the list. The highlighted step is where your next spare dollar "
                  "does the most good.")
         cards = []
@@ -432,7 +432,7 @@ def render(st) -> None:
 
     st.markdown('<div class="mc-section">Money check-up</div>', unsafe_allow_html=True)
     st.markdown('<div class="simple-sub">Five quick checks: your savings rate, your emergency '
-                'fund, where your next dollar should go, paying off debt, and the '
+                'fund, where your next dollar goes, paying off debt, and the '
                 '50/30/20 budget.</div>', unsafe_allow_html=True)
 
     with st.container(border=True, key="mc-tile-simple-inputs"):
