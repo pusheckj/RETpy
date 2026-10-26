@@ -2646,6 +2646,44 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
    Phone polish K2 (round 4). Only fixer K2 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* K2-18: metric rows in the side panel (Taxes 2-up, Income YOU/PARTNER/TOTAL 3-up) stay
+       side by side instead of stacking one per row with a ~55px gap. */
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(input)):not(:has(button)) {
+        flex-wrap: nowrap !important; gap: 8px !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(input)):not(:has(button)) > [data-testid="stColumn"] {
+        min-width: 0 !important; flex: 1 1 0 !important; width: auto !important;
+    }
+
+    /* K2-10: a tap leaves :hover stuck on the button under the finger, and the primary-button
+       hover nudge (translateX 3px on the label) then shows as 13/7 padding on "Show my results"
+       / Next. No nudge on touch screens. */
+    .stButton > button[kind="primary"]:hover > * { transform: none !important; }
+}
+
+@media (max-width: 640px) {
+    /* K2-14: Savings rate / Emergency fund end in a bare <div>, so Streamlit's -1rem markdown
+       margin (meant to cancel a paragraph's margin) pulled the last line to 1-2px from the
+       card edge. Cancel it and give the bottom the same air as the top (~9px). */
+    [class*="st-key-mc-tile-simple-rate"] [data-testid="stMarkdownContainer"],
+    [class*="st-key-mc-tile-simple-fund"] [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
+    .st-key-mc-tile-simple-rate, .st-key-mc-tile-simple-fund { padding-bottom: 8px !important; }
+}
+
+@media (max-width: 640px) {
+    /* K2-20: two-option sidebar switches (Rent or own?) have room for the same 16px label
+       as the planner pills; only the three-way scenario switch needs the 13px squeeze. */
+    section[data-testid="stSidebar"] [role="radiogroup"].mc-seg:has(> label:nth-of-type(2):last-of-type) label p { font-size: 16px !important; }
+}
+
+@media (max-width: 640px) {
+    /* K2-18: the 2-line label reserve is for 4-across desktop; with 2-3 across on a phone the
+       labels are one line, so it only added ~20px of dead space above each value. Values stay
+       bottom-aligned (stMetric is a flex column ending at the value) if a label wraps. */
+    section[data-testid="stSidebar"] [data-testid="stMetricLabel"] { min-height: 0; }
+}
+
 /* -- end phone polish K2 -- */
 
 
