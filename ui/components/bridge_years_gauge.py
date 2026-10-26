@@ -71,14 +71,14 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
     # day one is the exact opposite of their situation.
     if retire_age >= _EARLY_AGE:
         st.caption(
-            "You retire at or after 59½, so every account is penalty-free from day one — "
-            "no bridge to fund."
+            "You retire at or after 59½, so every account is penalty-free from day one. "
+            "There's no bridge to fund."
         )
         return
     if not access:
         st.caption(
-            "Penalty-free bridge data isn't available for this run — re-run the "
-            "simulation to see how the pre-59½ years are funded."
+            "Bridge data isn't available for this run. Run the simulation again to see how "
+            "the years before 59½ are funded."
         )
         return
 
@@ -97,16 +97,16 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
     cols = st.columns(3)
     with cols[0]:
         st.metric("Bridge to 59½", "Funded ✓" if funded else "Shortfall",
-                  help="Whether the MEDIAN plan reaches 59½ with penalty-free fuel covering "
-                       "each year's withdrawal (same median series as the chart).")
+                  help="Whether the median plan reaches 59½ with penalty-free money covering "
+                       "each year's withdrawal. Uses the same median as the chart.")
     with cols[1]:
         st.metric("First shortfall",
                   "None" if funded else f"age {first_short}",
-                  help="First bridge year the median plan pays an early-withdrawal penalty or "
-                       "runs out of penalty-free fuel.")
+                  help="First year before 59½ that the median plan pays an early-withdrawal penalty "
+                       "or runs out of penalty-free money.")
     with cols[2]:
         st.metric("Penalty-free fuel at retirement", money(accessible_at_retire, shorten=True),
-                  help="Median cash + taxable + Roth balance in the first retirement year.")
+                  help="Median cash + taxable brokerage + Roth balance in your first retirement year.")
 
     dark = is_dark(st)
     ref_line = "#e2e8f0" if dark else "#0f172a"
@@ -141,7 +141,7 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
         title=dict(
             text="<b>Penalty-free bridge fuel vs. annual withdrawal</b><br>"
                  "<span style='font-size:13px;color:#64748b;'>Median accessible balance "
-                 "(cash + taxable + Roth) through the pre-59½ gap years · today's dollars</span>",
+                 "(cash + taxable + Roth) until 59½ · today's dollars</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),
         height=380, margin=dict(l=50, r=40, t=84, b=50),
@@ -153,10 +153,10 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
     )
     show_chart(st, fig, f"{chart_key}_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
     st.caption(
-        "The stacked area is your **penalty-free fuel** — cash, taxable brokerage, and Roth, the "
-        "accounts you can tap before 59½ without a 10% penalty. The dotted line is the median annual "
-        "draw. The bridge is funded as long as the fuel stays above the draw and you never hit a "
-        "*forced-draw* marker; if not, shift more savings into taxable / Roth before retiring. "
-        "*(Roth uses the full balance as a stand-in for contribution basis, so accessible Roth is "
-        "slightly overstated.)*"
+        "The stacked area is your **penalty-free fuel**: cash, taxable brokerage, and Roth. "
+        "You can use these before 59½ without a 10% penalty. The dotted line is the median annual "
+        "withdrawal. The bridge is funded as long as the fuel stays above the withdrawal line. "
+        "If it doesn't, save more in taxable or Roth accounts before you retire. "
+        "Roth counts at its full balance, which stands in for what you've put in, so accessible "
+        "Roth is slightly overstated."
     )

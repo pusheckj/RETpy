@@ -30,11 +30,11 @@ def render(st, results: dict) -> None:
     if earliest is None:
         big_num = "Not achieved"
         big_color, big_cls = "#64748b", ""  # muted; dark theme lightens it
-        subtitle = "Portfolio cannot support retirement within the scanned age range. Try raising savings, lowering target age, or adjusting return scenario."
+        subtitle = "No retirement age we checked reaches your target. Try saving more, spending less, or changing the return scenario."
     else:
         big_num = str(earliest)
         big_color, big_cls = "#0d9488", "mc-teal"
-        subtitle = f"with a {pct(target_success_rate)} success rate. Selected target: age {target_age} ({pct(success_rate)})."
+        subtitle = f"with a {pct(target_success_rate)} chance of success. At your target age of {target_age}, it's {pct(success_rate)}."
 
     st.markdown(
         f'''

@@ -27,24 +27,23 @@ def render(st) -> None:
     st.markdown('<div class="mc-section">Your life expectancy</div>', unsafe_allow_html=True)
     overrides = st.session_state.get("user_overrides", {}) or {}
     st.caption(
-        "Your lifespan as a **distribution**, adjusted for your personal risk factors (your own, not "
-        "a partner's). This is what "
-        "sets how long your money must last — the safe move is to plan to a high percentile, not "
-        "the average. Educational actuarial estimate (Gompertz mortality with relative-risk "
-        "multipliers from public epidemiology), **not medical advice**."
+        "A range of likely lifespans, adjusted for your own risk factors (not your "
+        "partner's). It sets how long your money needs to last. Plan for a high percentile, "
+        "not the average. This is an educational estimate (Gompertz mortality with "
+        "relative-risk multipliers from public studies), **not medical advice**."
     )
 
     # ---- Inputs ----
     top = st.columns([1, 1])
     with top[0]:
         sex = st.selectbox("Sex at birth", ["Male", "Female"], key="le_sex",
-                           help="Baseline mortality differs by sex; this sets the starting curve.")
+                           help="Baseline mortality differs by sex. This sets the starting curve.")
     with top[1]:
         default_age = safe_int(overrides.get("YOUR_AGE", 40), 40)
         st.session_state.setdefault("le_age", default_age)
         current_age = st.number_input("Your current age", min_value=18, max_value=100, step=1,
-                                      key="le_age", help="Life expectancy is computed conditional "
-                                      "on being alive at this age.")
+                                      key="le_age", help="Life expectancy is worked out assuming "
+                                      "you are alive at this age.")
 
     keys = list(RISK_FACTORS.keys())
     fcols = st.columns(3)
@@ -59,7 +58,7 @@ def render(st) -> None:
 
     conditions = st.multiselect(
         "Diagnosed conditions", list(CONDITIONS.keys()), key="le_conditions",
-        help="Each selected condition raises the mortality hazard. Leave empty if none apply.",
+        help="Each condition you pick raises your risk of dying earlier. Leave empty if none apply.",
     )
 
     # ---- Compute (instant) ----
@@ -72,18 +71,18 @@ def render(st) -> None:
     # ---- Headline metrics ----
     metric_row(st, [
         ("Median lifespan", f"{dist['median']}",
-         dict(help="Half of people with your profile live longer than this.")),
+         dict(help="Half of people with your profile live past this age.")),
         ("Life expectancy", f"{dist['mean']:.0f}",
-         dict(help="Mean age at death (the average).")),
+         dict(help="The average age at death.")),
         ("1-in-10 reach", f"{dist['p90']}",
-         dict(help="90th-percentile age — a 10% chance of living even longer. A prudent "
-                   "planning horizon.")),
+         dict(help="The age 1 in 10 people with your profile live past. A "
+                   "sensible planning horizon.")),
         ("Outlive your plan", f"{reach_plan:.0%}",
          dict(delta="risk" if reach_plan >= 0.25 else "low",
               delta_color=("inverse" if reach_plan >= 0.25 else "normal"),
               delta_arrow=("up" if reach_plan >= 0.25 else "down"),
               help=f"Chance you're still alive when the plan ends (you're {plan_until}). "
-                   "If high, your plan may end while you're still spending.")),
+                   "If it's high, your plan could end while you're still spending.")),
     ])
 
     # ---- Distribution plot ----
@@ -122,7 +121,7 @@ def render(st) -> None:
     fig.update_layout(
         title=dict(
             text="<b>Your projected age at death</b><br><span style='font-size:13px;color:#64748b;'>"
-                 "Distribution of when you're likely to pass, given your risk factors</span>",
+                 "How likely each age at death is, given your risk factors</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),
         height=360, margin=dict(l=50, r=40, t=80, b=50),
@@ -146,16 +145,16 @@ def render(st) -> None:
     lead = (f"There's a **{reach_plan:.0%}** chance you're still alive when the plan ends "
             f"(you're **{plan_until}**). ") if plan_until > current_age else ""
     if plan_until > current_age and reach_plan >= 0.25:
-        lead += (f"That's a meaningful longevity risk — consider extending the plan toward your "
-                 f"1-in-10 age (**{dist['p90']}**) so the money doesn't run out while you're still here.")
+        lead += (f"That's a real risk of outliving your plan. Consider extending it toward your "
+                 f"1-in-10 age (**{dist['p90']}**) so the money lasts as long as you do.")
     elif plan_until > current_age and plan_until >= dist["p90"]:
-        lead += "Your plan already covers a long-life scenario — good buffer against outliving your money."
+        lead += "Your plan already covers a long life, which gives you a good buffer."
     else:
         lead += f"About **{reach90:.0%}** of people with your profile reach age 90."
     st.markdown(lead)
     st.caption(
-        "The shaded curve is the probability of dying at each age. Longevity risk cuts the opposite "
-        "way from market risk: living *longer* than planned is what drains a portfolio, so retirement "
-        "plans typically fund to the ~90th-percentile age, not the average. "
-        f"(Hazard multiplier for your profile: **{dist['hazard_ratio']:.2f}×** the reference.)"
+        "The shaded curve shows the chance of dying at each age. Living *longer* than planned is "
+        "what drains a portfolio, so retirement plans usually fund to around the 90th-percentile "
+        "age, not the average. "
+        f"Your profile's risk multiplier is **{dist['hazard_ratio']:.2f}×** the reference."
     )

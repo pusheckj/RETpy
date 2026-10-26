@@ -436,8 +436,8 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
         title=dict(
             text="<b>Projected net worth by account</b><br>"
                  "<span style='font-size:13px;color:#64748b;'>"
-                 "Deterministic projection from today through retirement · "
-                 "auto-updates as you edit inputs</span>",
+                 "One steady-return projection from today to retirement · "
+                 "updates as you edit inputs</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),
         height=420,
@@ -462,6 +462,6 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
         f"{_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['investment']*100:.1f}%, "
         f"cash {_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['cash']*100:.1f}%, "
         f"home equity follows the mortgage paydown and any planned moves. The Monte "
-        f"Carlo simulation (Run is in the top bar) adds return uncertainty and "
-        f"tax-efficient drawdown."
+        f"Carlo simulation (Run is in the top bar) adds return ups and downs and "
+        f"tax-efficient withdrawals."
     )

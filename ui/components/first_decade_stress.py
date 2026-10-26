@@ -120,7 +120,7 @@ def render(st, results: dict = None, chart_key: str = "first_decade_stress") -> 
             # never wraps titles; one long span used to clip mid-word).
             text="<b>First-decade stress: median vs unlucky path</b><br>"
                  "<span style='font-size:13px;color:#64748b;'>The shaded wedge is your "
-                 "sequence-of-returns risk — "
+                 "sequence-of-returns risk: "
                  "how far a bad early market pulls you below the median "
                  "(today's dollars)</span>",
             x=0.0, xanchor="left", font=dict(size=16),
@@ -157,17 +157,16 @@ def render(st, results: dict = None, chart_key: str = "first_decade_stress") -> 
     if table:
         st.dataframe(pd.DataFrame(table), width="stretch", hide_index=True)
     st.caption(
-        "Solid line is a typical market; dotted line is a poor-luck (10th-percentile) path. "
-        "The gap widens fastest in the **first decade**, when a bad return sequence does the "
-        "most damage. A wide early gap argues for a cash/bond buffer, more guardrail "
-        "flexibility, or one more year of work; a narrow one means your plan handles a rough "
-        "start. Depleted paths count as $0, so the 10th percentile can fall to zero."
+        "The solid line is a typical market. The dotted line is an unlucky one (10th percentile). "
+        "The gap grows fastest in the **first decade**, when bad returns do the "
+        "most damage. A wide early gap is a reason to hold a cash or bond buffer, spend more "
+        "flexibly, or work one more year. A narrow one means your plan can handle a rough "
+        "start. Runs that run out of money count as $0, so the 10th percentile can fall to zero."
     )
 
     # ---- Optional: why is the unlucky path the low performer? ----
     if st.toggle("Analyze the unlucky path", key=f"{chart_key}_why",
-                 help="Break down the circumstances behind the 10th-percentile outcome — "
-                      "the sequence-of-returns story."):
+                 help="See what drives the 10th-percentile outcome."):
         _render_unlucky_analysis(st, retire_age, plan_until, results)
 
 
@@ -196,14 +195,14 @@ def _render_unlucky_analysis(st, retire_age: int, plan_until: int, results: dict
     with cols[1]:
         if depletion_age is not None:
             st.metric("Runs dry by", f"age {depletion_age}",
-                      help="First age the unlucky path is effectively exhausted (≤2% of its start).")
+                      help="First age the unlucky path is nearly out of money (2% or less of its start).")
         else:
             st.metric("Unlucky ending", money(end_p10, shorten=True),
                       help=f"10th-percentile balance at the plan-end age ({end_age}).")
     with cols[2]:
         st.metric("First-year draw", f"{draw_pct:.1%}" if draw_pct else "—",
-                  help="Median year-1 withdrawal ÷ the unlucky path's starting balance — the "
-                       "spending pressure a weak early market has to absorb.")
+                  help="Median first-year withdrawal ÷ the unlucky path's starting balance. "
+                       "It shows how much spending a weak early market has to cover.")
 
     # Prose: tailor to whether the unlucky path depletes or merely lags.
     parts = []
@@ -214,34 +213,34 @@ def _render_unlucky_analysis(st, retire_age: int, plan_until: int, results: dict
         )
     else:
         parts.append(
-            "The unlucky path is held back by a **weak early market** — flat-to-negative returns "
+            "The unlucky path is held back by a **weak early market**, with flat or negative returns "
             "in the first retirement years"
         )
     if draw_pct is not None:
         parts.append(
-            f" while you keep withdrawing ~**{money(first_draw, shorten=True)}/yr** (≈{draw_pct:.1%} of the "
-            f"balance). Selling assets *after* they've dropped — **sequence-of-returns risk** — locks in "
-            f"the loss, so each later year compounds off a smaller base."
+            f" while you keep withdrawing about **{money(first_draw, shorten=True)}/yr** ({draw_pct:.1%} of the "
+            f"balance). Selling assets *after* they've dropped locks in the loss, so each later year "
+            f"grows from a smaller base. That's **sequence-of-returns risk**."
         )
     else:
         parts.append(
-            ". Withdrawing through that early dip — **sequence-of-returns risk** — sells assets while "
-            "they're down, so the portfolio compounds off a smaller base."
+            ". Withdrawing through that early dip sells assets while "
+            "they're down, so the portfolio grows from a smaller base. That's **sequence-of-returns risk**."
         )
     if depletion_age is not None:
         parts.append(
-            f" It never recovers: the balance bottoms out around age **{trough_age}** and is exhausted by "
+            f" It never recovers. The balance bottoms out around age **{trough_age}** and runs out by "
             f"age **{depletion_age}**."
         )
     elif med_10 is not None and p10_10 is not None and med_10 > 0:
         gap10 = (med_10 - p10_10) / med_10
         parts.append(
-            f" It survives, but by the end of the first decade the unlucky path sits about "
-            f"**{gap10:.0%} below the median** — that persistent gap is the sequence-risk drag."
+            f" It survives, but by the end of the first decade it sits about "
+            f"**{gap10:.0%} below the median**. That lasting gap is the cost of sequence risk."
         )
     parts.append(
-        " The fix for a fragile early decade: hold a **cash/bond buffer** to avoid selling stocks in a "
-        "downturn, lean on **spending guardrails**, or **work one more year** to shrink the draw rate."
+        " To protect a fragile early decade, hold a **cash or bond buffer** so you don't sell stocks in a "
+        "downturn, use **spending guardrails**, or **work one more year** to lower the withdrawal rate."
     )
     st.markdown("".join(parts))
 

@@ -114,8 +114,8 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
         fig.update_layout(
             title=dict(
                 text="<b>Investable portfolio range over time</b><br>"
-                     f"<span style='font-size:13px;color:#64748b;'>Distribution of projected "
-                     f"investable balance across Monte Carlo runs · {mode_label}</span>",
+                     f"<span style='font-size:13px;color:#64748b;'>Projected investable "
+                     f"balance across Monte Carlo runs · {mode_label}</span>",
                 x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
             ),
             height=420, margin=dict(l=50, r=40, t=80, b=50),
@@ -134,12 +134,12 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
         )
         show_chart(st, fig, f"{chart_key}_{'nom' if future else 'tod'}_{'pts' if points_mode else 'box'}_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
         st.caption(
-            "Each box is the spread of **projected investable net worth across all simulated "
-            "market paths** at that age (portfolio balances only — home equity is excluded, "
-            "unlike the top-bar and Current-portfolio \"Net worth\" figures): the box spans the middle 50% (25th–75th percentile), the whiskers reach "
-            "the 10th–90th, and the line is the median. The range fans out over time as returns "
-            "compound; paths that deplete count as $0, pulling the lower percentiles toward zero "
-            "in later years."
+            "Each box shows the spread of **investable net worth across all simulated market "
+            "paths** at that age. It leaves out home equity, unlike the \"Net worth\" figures "
+            "elsewhere. The box covers the middle 50% (25th to 75th percentile), the whiskers "
+            "reach the 10th and 90th, and the line is the median. The range widens over time as "
+            "returns compound. Runs that run out of money count as $0, which pulls the lower "
+            "percentiles toward zero in later years."
         )
 
     _body()
