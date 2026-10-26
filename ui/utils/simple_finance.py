@@ -282,8 +282,8 @@ def emergency_fund(cash: float, essentials: float,
     elif months <= EMERGENCY_MAX_MONTHS:
         status, msg = "ok", "Inside the 3-6 month range most planners suggest."
     else:
-        status, msg = "plenty", ("More than 6 months. Extra cash beyond your goal "
-                                 "could work harder invested.")
+        status, msg = "plenty", ("More than 6 months. Cash beyond your goal "
+                                 "could be invested instead.")
     return EmergencyFund(months, essentials, cash, gap(EMERGENCY_MIN_MONTHS),
                          gap(EMERGENCY_MAX_MONTHS), target_months, gap(target_months),
                          status, msg)

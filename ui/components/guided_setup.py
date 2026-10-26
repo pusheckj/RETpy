@@ -282,9 +282,9 @@ def draw_kids(st) -> None:
     if _kid_count(st) > 0:
         _money(st, "gs_kid_cost", "Monthly cost of one child", saved["cost"], _ONE_KID_COST,
                hi=10_000, step=100)
-        _cue(st, "Childcare, food, clothes and activities, until they leave home at 18. Each "
-                 "child after the first is counted at about two-thirds of this. A rough guess "
-                 "is fine; you can fine-tune each child later under Expenses.")
+        _cue(st, "Childcare, food, clothes and activities, until they turn 18. Each child "
+                 "after the first counts at about two-thirds of this. A rough guess is fine. "
+                 "You can set each child separately later under Expenses.")
 
 
 def commit_kids(st) -> None:
@@ -342,8 +342,8 @@ def draw_state(st) -> None:
     _seed(st, "gs_state", _state_saved(ov), None)
     where = st.selectbox("Where do you live?", list(STATES), key="gs_state",
                          placeholder="Choose your state")
-    note = "Used for state income tax, with your state's own rates and rules. Texas, " \
-           "Florida, Washington, Nevada, Tennessee and a few others have none."
+    note = "We use this for your state income tax. Texas, Florida, Washington, Nevada, " \
+           "Tennessee and a few others have none."
     if where in STATES and where != _STATE_FLAT_LABEL and \
             cfg.state_tax_rules(STATES[where])["confidence"] == "approx":
         note += " We use approximate figures for this state."     # one paragraph, not two
@@ -459,8 +459,8 @@ def draw_saving(st) -> None:
     hsa = _choice(st, "gs_hsa", "Is your health plan HSA-eligible?", ["No", "Yes"],
                   "Yes" if _num(ov.get("YOUR_HSA_CONTRIBUTION")) > 0 else "No",
                   "Yes" if c.get("hsa_eligible") else "No", horizontal=True)
-    _cue(st, "Only high-deductible plans are. Your plan documents say so; if you're not sure, "
-             "choose No.")
+    _cue(st, "Only high-deductible plans qualify. Your plan documents will say. Not sure? "
+             "Choose No.")
     if hsa == "Yes":
         _money(st, "gs_hsa_amt", "How much goes into your HSA each year?",
                ov.get("YOUR_HSA_CONTRIBUTION"),
@@ -519,8 +519,8 @@ def draw_home(st) -> None:
     home = _choice(st, "gs_home", "Do you rent or own your home?", [RENT, OWN],
                    OWN if owns else RENT, None, horizontal=True)
     if c:
-        _cue(st, f"Your check-up's needs ({money_md(c['needs'])} a month) include this payment; "
-                 "it comes out of your other spending on the next step.")
+        _cue(st, f"The needs from your check-up ({money_md(c['needs'])} a month) include this "
+                 "payment, so the next step leaves it out of your other spending.")
     if home == RENT:
         _money(st, "gs_rent", "Monthly rent", ov.get("SPEND_RENT_MONTHLY") if not owns else None,
                None, hi=20_000, step=50)
@@ -594,18 +594,18 @@ def draw_spending(st) -> None:
     if c:
         rest = max(0.0, c["needs"] - housing)
         _cue(st, f"From your check-up: {money_md(c['needs'])} of needs and {money_md(c['wants'])} "
-                 f"of wants a month. Housing ({money_md(housing)}) was the previous step, so the "
+                 f"of wants a month. Housing ({money_md(housing)}) was the last step, so the "
                  f"other {money_md(rest)} of needs is in Other below"
                  + (f", including {money_md(c['debt_min'])} of minimum debt payments"
                     if c.get("debt_min") else "")
                  + ". Move parts of it into the right boxes if you can, especially health "
-                   "insurance. The total is what matters most."
+                   "insurance. The total matters most."
                  + (" Leave the debt payments in Other, and lower it once a debt is paid off."
                     if c.get("debt_min") else ""))
     else:
         _cue(st, "About how much do you spend each month? Your bank or card app's spending "
-                 "summary helps. Rough numbers are fine. Leave out housing (the previous step) and "
-                 "money you save. Each box starts at a typical amount: change any that don't fit.")
+                 "summary can help. Rough is fine. Leave out housing (the last step) and "
+                 "money you save. Each box starts at a typical amount. Change any that don't fit.")
     cats = _shown_categories(st)
     for row in range(0, len(cats), 2):      # one row of columns per pair, so the boxes line up
         for col, cat in zip(st.columns(2), cats[row:row + 2]):
@@ -655,7 +655,7 @@ def draw_retire(st) -> None:
     if ss == SS_YES:
         _money(st, "gs_ss_amt", "Your estimated monthly benefit at full retirement age",
                ov.get("YOUR_SS_MONTHLY_FRA"), ov.get("YOUR_SS_MONTHLY_FRA", 2_000), hi=5_000, step=50)
-        _cue(st, "Your estimate is at ssa.gov/myaccount (signing up takes a few minutes). "
+        _cue(st, "Get your estimate at ssa.gov/myaccount. Signing up takes a few minutes. "
                  "Not sure? Keep this typical amount.")
         if _partner(st):
             _money(st, "gs_pss_amt", "Your partner's estimated monthly benefit",
