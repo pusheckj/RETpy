@@ -453,7 +453,7 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
     overrides = st.session_state.get("user_overrides", {}) or {}
 
     if not _any_category_set(overrides):
-        st.info("Set spending patterns in the sidebar to see projected expenses.")
+        st.info("Set your spending in the sidebar to see projected expenses.")
         return
 
     current_age = safe_int(overrides.get("YOUR_AGE", 25), 25)
@@ -467,7 +467,7 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
 
     ages = list(range(current_age, plan_until + 1))
     if not ages:
-        st.info("No plan horizon to display (check current age and plan end age).")
+        st.info("There are no years to show. Check your current age and plan end age.")
         return
 
     # The engine's own preset mapping, with this plan's children and lifestyle
@@ -526,9 +526,9 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
                 four_pct_series=four_pct_today, four_pct_color=four_pct_color,
                 mortgage_color=mortgage_color,
                 title="Projected annual spending by category (future dollars)",
-                subtitle=(f"Nominal dollars · inflated at {inflation_rate * 100:.2f}%/yr · "
+                subtitle=(f"Future dollars · inflated at {inflation_rate * 100:.2f}%/yr · "
                           f"lifecycle: {preset}"),
-                yaxis_title="Annual spending ($, nominal)",
+                yaxis_title="Annual spending ($, future)",
                 st=st,
             )
         else:
@@ -544,27 +544,26 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
         show_chart(st, fig, f"{chart_key}_{'nominal' if future else 'today'}_{'dk' if is_dark(st) else 'lt'}", PLOTLY_CONFIG)
 
         base_caption = (
-            "Stacked bars show each category's annual spending, including "
-            "**children** (rises as kids are born, drops as each leaves home) "
-            "and, when enabled, **long-term care** as the *expected* yearly cost "
-            "(probability × age-scaled care cost — the cost if care is needed is "
-            "much larger). "
-            "**Housing is auto-derived** from your mortgage / rent inputs; the "
-            "mortgage bar drops to $0 at payoff. The sidebar lifecycle preset "
-            "scales the other categories at key ages. The dotted **4% rule** line "
-            "(shown after you run the simulation) is 4% of your median projected "
-            "portfolio **each year** — a gauge of safe annual spending, on the "
-            "same axis as the bars."
+            "Each bar stacks your spending by category. **Children** rise as kids "
+            "are born and drop as each leaves home. If long-term care is on, it "
+            "shows as the *expected* yearly cost (chance of needing care times the "
+            "cost at that age). The cost if you do need care is much larger. "
+            "**Housing** comes from your mortgage or rent inputs, and the "
+            "mortgage bar drops to $0 when it's paid off. The lifecycle preset "
+            "in the sidebar scales the other categories at certain ages. After you "
+            "run the simulation, the dotted **4% rule** line shows 4% of your "
+            "median projected portfolio each year, a rough ceiling for safe "
+            "spending, on the same axis as the bars."
         )
         if future:
             st.caption(
-                base_caption + " In **future (nominal) dollars** — each year is "
-                "grown by inflation, so totals look larger even though real "
-                "purchasing power is unchanged."
+                base_caption + " Shown in **future dollars**: each year is "
+                "grown by inflation, so totals look larger even though your "
+                "buying power is the same."
             )
         else:
             st.caption(
-                base_caption + " In **today's dollars** (constant purchasing "
+                base_caption + " Shown in **today's dollars** (constant buying "
                 "power)."
             )
 

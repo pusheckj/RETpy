@@ -50,10 +50,10 @@ def render(st, results: dict = None) -> None:
     target_age = safe_int(base_overrides.get("TARGET_RETIREMENT_AGE", 55), 55)
 
     st.caption(
-        "Each button re-runs a lighter simulation (both with and without the "
-        "shock, at the same reduced count) so the before/after comparison "
-        "isn't confounded by simulation noise. Preview only — your actual "
-        "plan and inputs are untouched."
+        "Each button runs a lighter simulation twice, with and without the "
+        "shock, using the same number of runs so simulation noise doesn't "
+        "skew the before and after. This is a preview only. Your plan and "
+        "inputs don't change."
     )
 
     store = st.session_state.setdefault("stress_preset_results", {})

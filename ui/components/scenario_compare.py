@@ -66,7 +66,7 @@ def render(st, results: dict | None) -> None:
             default_name = f"Scenario {len(pinned) + 1}"
             name = st.text_input("Name this scenario", value=default_name, key="pin_scenario_name")
         with cols[1]:
-            submitted = st.form_submit_button("📌 Pin current scenario", width="stretch")
+            submitted = st.form_submit_button("Pin this scenario", width="stretch")
     if submitted:
         label = (name or "").strip() or f"Scenario {len(pinned) + 1}"
         pinned[label] = {
@@ -75,7 +75,7 @@ def render(st, results: dict | None) -> None:
         }
 
     if not pinned:
-        st.caption("No scenarios pinned yet. Run a simulation, then pin it to compare.")
+        st.caption("Nothing pinned yet. Run a simulation, then pin it to compare.")
         return
 
     # Simple clear-all control; keeps the feature read-only/low-risk (no
@@ -164,14 +164,14 @@ def _render_compare_inputs(st, pinned: Dict[str, Any]) -> None:
     overrides_b = (entry_b.get("overrides") or {}) if isinstance(entry_b, dict) else {}
     if not overrides_a and not overrides_b:
         st.caption(
-            "These scenarios were pinned before input snapshots were added — "
-            "re-pin them to compare inputs."
+            "These were pinned before inputs were saved with them. "
+            "Pin them again to compare inputs."
         )
         return
 
     diffs = diff_overrides(overrides_a, overrides_b)
     if not diffs:
-        st.caption("No differing inputs between these two scenarios.")
+        st.caption("These two scenarios have the same inputs.")
         return
 
     import pandas as pd
@@ -184,11 +184,10 @@ def _render_compare_inputs(st, pinned: Dict[str, Any]) -> None:
     )
     st.dataframe(table, width="stretch", hide_index=True)
     st.caption(
-        "Click **Compute impact** on a row to isolate that ONE input's effect "
-        "(Scenario A's inputs, with just that key swapped to Scenario B's "
-        "value, re-run at a lighter simulation count). Same one-variable-at-a-"
-        "time approximation the Sensitivity tab already uses — effects are not "
-        "guaranteed to add up exactly to the full A-vs-B gap."
+        "Click **Compute impact** on a row to see the effect of that one input alone. "
+        "It reruns Scenario A with only that input changed to Scenario B's value, "
+        "using fewer simulations. The Sensitivity tab works the same way, so the "
+        "effects may not add up exactly to the full gap between A and B."
     )
 
     impacts = st.session_state.setdefault("scenario_compare_impacts", {})

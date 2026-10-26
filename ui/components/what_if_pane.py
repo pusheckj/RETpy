@@ -99,7 +99,7 @@ def render(st, results: Dict[str, Any] | None = None, delta: Dict[str, Any] | No
 
     if active_toggles:
         labels = ", ".join(TOGGLE_LABELS.get(k, k) for k in active_toggles)
-        st.caption(f"Active toggles: {labels}")
+        st.caption(f"Turned on: {labels}")
 
     earliest_delta = deltas.get("earliest_retirement_age")
     success_delta = deltas.get("success_rate")

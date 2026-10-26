@@ -40,7 +40,7 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
     pr = results.get("primary_result", {}) or {}
     outcomes = [(p, bad) for p, bad in sample_outcomes(pr) if p]
     if not outcomes:
-        st.info("No sample paths available.")
+        st.info("No sample paths to show.")
         return
 
     n_runs = int(pr.get("n_simulations")
@@ -77,7 +77,7 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
     maxima = sorted(max(v for _, v in p) for p, _ in outcomes)
     cap = maxima[int(0.8 * (len(maxima) - 1))] * 1.05
     clipped = sum(1 for m in maxima if m > cap)
-    note = (f" · {clipped} higher path{'s' if clipped != 1 else ''} run off the top"
+    note = (f" · {clipped} higher path{'s' if clipped != 1 else ''} go off the top"
             if clipped else "")
     fig.update_layout(
         title=dict(

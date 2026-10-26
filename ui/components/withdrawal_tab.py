@@ -8,7 +8,7 @@ from retirement_sim import config as cfg
 
 def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
     st.markdown('<div class="mc-section">Tax-efficient withdrawal order</div>', unsafe_allow_html=True)
-    st.caption("The simulator pulls from accounts in this order each year to minimize lifetime taxes, "
+    st.caption("Each year the simulator takes money from your accounts in this order to keep lifetime taxes low, "
                "unless you turn on an early-access strategy (72(t) payments or a Roth ladder).")
 
     col_a, col_b = st.columns(2)
@@ -16,13 +16,13 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
         st.markdown(
             """
             **Before age 59½**
-            1. Cash / savings — no tax impact
-            2. Taxable brokerage — LTCG rates (0/15/20%)
-            3. Roth contributions — tax + penalty free (no earnings)
-            4. Traditional 401(k) / IRA — income tax **+ 10% penalty**
-            5. HSA non-medical — income tax **+ 20% penalty**
+            1. Cash / savings: no tax
+            2. Taxable brokerage: LTCG rates (0/15/20%)
+            3. Roth contributions: no tax or penalty (not earnings)
+            4. Traditional 401(k) / IRA: income tax **+ 10% penalty**
+            5. HSA non-medical: income tax **+ 20% penalty**
 
-            *Rationale*: avoid the 10-20% penalties entirely; drain taxable first so tax-advantaged accounts keep compounding.
+            *Why*: this avoids the 10-20% penalties and lets your tax-advantaged accounts keep growing.
             """
         )
     with col_b:
@@ -30,12 +30,12 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
             """
             **Age 59½ and after**
             1. Cash / savings
-            2. Taxable brokerage — LTCG
-            3. Traditional 401(k) / IRA — ordinary income tax
-            4. Roth — tax-free (saved for last)
-            5. HSA — tax-free for qualified medical expenses
+            2. Taxable brokerage: LTCG
+            3. Traditional 401(k) / IRA: ordinary income tax
+            4. Roth: tax-free (saved for last)
+            5. HSA: tax-free for qualified medical expenses
 
-            *Rationale*: Roth is the most tax-efficient, so preserve it. Traditional drawn before Roth lets tax brackets fill up gradually.
+            *Why*: Roth is the most tax-efficient, so it waits. Using Traditional first fills your tax brackets gradually.
             """
         )
 
@@ -55,13 +55,13 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
                        (cfg._FILING_HOH, "head of household")))
     st.markdown(
         f"""
-        When enabled, the simulator converts Traditional → Roth during low-income early-retirement years,
-        filling up to the top of the 12% tax bracket for your filing status ({_top}; 2024 values).
-        This creates tax-free growth in Roth and reduces future RMDs from Traditional balances
+        When on, the simulator moves money from Traditional to Roth in low-income early-retirement years,
+        up to the top of the 12% tax bracket for your filing status ({_top}; 2024 values).
+        That money then grows tax-free and your future RMDs get smaller
         (your RMD age is {_rmd_age}).
 
-        Conversions typically run from retirement age through the Social Security claim age (often 67),
-        which is the period of lowest earned income. They are **capped** at \\${_cap:,.0f}/year (change it in Assumptions).
+        Conversions usually run from retirement through the Social Security claim age (often 67),
+        when your earned income is lowest. They are **capped** at \\${_cap:,.0f}/year (change it in Assumptions).
         """
     )
 
@@ -79,4 +79,4 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
             logging.exception("withdrawal_tab: chart render failed")
             st.info("This chart isn't available for this run.")
     else:
-        st.info("Detailed per-year withdrawal composition not available for this run.")
+        st.info("No year-by-year withdrawal breakdown for this run.")

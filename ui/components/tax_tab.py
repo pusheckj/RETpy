@@ -67,16 +67,16 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
     ctx = _tax_context(st)
     series = _series(ctx)
     if not tax_rows:
-        st.info("Per-year tax data not available.")
+        st.info("No year-by-year tax data yet.")
         st.markdown(
             f"""
-            **Tax model summary:**
-            - **Federal income tax**: 2024 brackets for {ctx['status_label']} (10% - 37%)
+            **How taxes are modeled:**
+            - **Federal income tax**: 2024 brackets for {ctx['status_label']} (10% to 37%)
             - **State ({ctx['state_name']})**: that state's 2024 tax table
             - **Payroll (FICA)**: Social Security and Medicare tax on pay
             - **Federal LTCG**: 0% / 15% / 20% based on taxable income
             - **NIIT**: 3.8% surtax on investment income above {ctx['niit']} MAGI
-            - **Medicare IRMAA**: Higher Part B/D premiums based on MAGI tier
+            - **Medicare IRMAA**: higher Part B and D premiums at higher incomes
             """
         )
         return
@@ -179,7 +179,7 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
         yaxis_tickformat = "$,.3~s"
         yaxis_ticksuffix = ""
     else:
-        subtitle = "Effective tax rate by source (share of gross income)"
+        subtitle = "Effective tax rate by source, as a share of gross income"
         yaxis_title = "Effective tax rate"
         yaxis_tickformat = ".1f"
         yaxis_ticksuffix = "%"
@@ -215,22 +215,22 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
     with st.expander("About these tax categories"):
         st.markdown(
             f"""
-            - **Federal income tax** — 2024 brackets for {ctx['status_label']}, applied to ordinary income (wages, Traditional 401(k)/IRA withdrawals, Social Security up to 85%).{two_returns}
-            - **{ctx['state_label']}** — {ctx['state_name']} income tax from its 2024 tax table (brackets, deductions, and whether it taxes Social Security and retirement income). In retirement years it is included in the Federal band, since the simulation records one combined income-tax figure per year.
-            - **Payroll (FICA)** — Social Security and Medicare tax on working-year pay.
-            - **LTCG** — Long-term capital gains (0% / 15% / 20%) on taxable brokerage withdrawals.
-            - **NIIT** — Net Investment Income Tax: 3.8% surtax on investment income when MAGI > {ctx['niit']}.
-            - **RMDs** — from your RMD start age (72, 73 or 75 depending on birth
+            - **Federal income tax**: 2024 brackets for {ctx['status_label']}, applied to ordinary income: wages, Traditional 401(k)/IRA withdrawals, and up to 85% of Social Security.{two_returns}
+            - **{ctx['state_label']}**: {ctx['state_name']} income tax from its 2024 tax table (brackets, deductions, and whether it taxes Social Security and retirement income). In retirement years it's counted in the Federal band, because the simulation records one combined income-tax figure per year.
+            - **Payroll (FICA)**: Social Security and Medicare tax on working-year pay.
+            - **LTCG**: long-term capital gains tax (0%, 15% or 20%) on taxable brokerage withdrawals.
+            - **NIIT**: Net Investment Income Tax, a 3.8% surtax on investment income when MAGI is above {ctx['niit']}.
+            - **RMDs**: from your RMD start age (72, 73 or 75 depending on birth
               year, per SECURE 2.0; each owner uses their own age, so a younger
               partner starts later) the IRS forces a minimum withdrawal from
-              Traditional 401(k)/IRA balances each year. The simulation models
-              these: the forced amount is withdrawn, taxed as ordinary income, and
-              any part you don't need for spending is reinvested into taxable
-              brokerage. The **"Withdrawal rate by source"** chart breaks them out
-              as their own amber *RMD (IRS-forced)* band, so you can see how much
-              of a year's draw was mandatory rather than chosen — hover it for the
-              forced / spent / reinvested split. Roth conversions before that age
-              shrink them (often to zero).
-            - **IRMAA** (not shown here): higher Medicare premiums in retirement based on MAGI 2 years prior. Captured in retirement expenses.
+              Traditional 401(k)/IRA balances each year. The simulation takes
+              that amount out, taxes it as ordinary income, and puts any part you
+              don't need for spending back into taxable brokerage. The
+              **"Withdrawal rate by source"** chart shows RMDs as their own amber
+              *RMD (IRS-forced)* band, so you can see how much of a year's
+              withdrawal was required. Hover it for the forced, spent and
+              reinvested split. Roth conversions before that age shrink RMDs,
+              often to zero.
+            - **IRMAA** (not shown here): higher Medicare premiums in retirement, based on income from 2 years earlier. They're counted in retirement expenses.
             """
         )
