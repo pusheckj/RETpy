@@ -137,8 +137,8 @@ def _results_are_stale() -> bool:
 
 
 # Shared help text on a Run button that is inactive because results are current.
-_FRESH_RUN_HELP = ("Results already reflect your current inputs. Change a "
-                   "sidebar parameter (or the simulation count) to re-enable.")
+_FRESH_RUN_HELP = ("Results already match your inputs. Change an input or the "
+                   "simulation count to run again.")
 
 
 def _validate_run_inputs(overrides: dict, target_age: int) -> list:
@@ -230,7 +230,7 @@ def _autorun_all(progress_container=None) -> None:
         logging.getLogger("retirement_ui").exception("Auto-run failed")
         st.warning(
             f"Couldn't finish preparing the plan automatically ({e}). "
-            "Use Run to try again."
+            "Click Run to try again."
         )
     finally:
         prog.empty()
@@ -371,7 +371,7 @@ def _run_simulation(progress_container=None) -> None:
         return
 
     _pc = progress_container if progress_container is not None else st
-    prog = _pc.progress(0.0, text="Running Monte Carlo… 0%")
+    prog = _pc.progress(0.0, text="Running simulations… 0%")
 
     try:
         target_age = int(st.session_state.user_overrides.get("TARGET_RETIREMENT_AGE", 55))
@@ -380,7 +380,7 @@ def _run_simulation(progress_container=None) -> None:
         def _cb(frac, msg):
             try:
                 f = min(1.0, max(0.0, float(frac)))
-                prog.progress(f, text=f"Running Monte Carlo… {int(round(f * 100))}%")
+                prog.progress(f, text=f"Running simulations… {int(round(f * 100))}%")
             except Exception:
                 pass
 
@@ -538,7 +538,7 @@ def _topbar_sims(_st) -> None:
         format_func=lambda n: f"{n:,}",
         key="n_simulations",
         label_visibility="collapsed",
-        help="Number of Monte Carlo simulations. More = smoother, more precise results (and a longer run).",
+        help="How many simulations to run. More gives smoother, more precise results but takes longer.",
     )
 
 
@@ -649,11 +649,11 @@ def _privacy_controls(_st) -> None:
     if "remember_device_toggle" not in st.session_state:
         st.session_state.remember_device_toggle = bool(st.session_state.get("remember_device"))
     on = _st.toggle("Remember me on this device", key="remember_device_toggle", disabled=unavailable,
-                    help="Saves your inputs in this browser only, so they're here next time. "
-                         "The saved copy lives in this browser only; the server does not store it.")
+                    help="Saves your inputs in this browser so they're here next time. "
+                         "The server doesn't store them.")
     st.session_state.remember_device = bool(on)
     if unavailable:
-        _st.caption("This browser blocks saving (private browsing?), so nothing can be remembered.")
+        _st.caption("This browser is blocking saving (private browsing?), so your inputs won't be remembered.")
     elif on:
         _st.caption("Your inputs are saved in this browser only.")
     if _st.button("Forget my data on this device", key="device_forget", type="tertiary",
@@ -1007,9 +1007,9 @@ def main() -> None:
     _phone_bar(results)
 
     if _results_are_stale():
-        st.warning("Your inputs changed since this simulation ran — the results "
-                   "below (including the top-bar success rate) are from the "
-                   "previous inputs. Click **Run simulation** to refresh.")
+        st.warning("Your inputs changed since this simulation ran. The results "
+                   "below, including the success rate at the top, still use the "
+                   "old inputs. Click **Run simulation** to refresh.")
 
     # ============================ 1. RETIREMENT ============================
     with st.container(border=True, key="mc-tile-retirement"):
@@ -1036,7 +1036,7 @@ def main() -> None:
                     _lazy_ph("ret_more", 700)
             _sec_ret_more()
         else:
-            _run_hint("your earliest retirement age, success rate, and portfolio projection")
+            _run_hint("your earliest retirement age, chance of success and portfolio projection")
 
     # ==================== 1b. NET WORTH TO RETIRE (FI number) ====================
     # "How much do we need?" (net-worth trigger) as a complement to "when?".
@@ -1131,8 +1131,7 @@ def main() -> None:
         @_as_fragment
         def _tile_whatif():
             if not results:
-                st.caption("Run a simulation to see what-if scenario comparisons and "
-                           "deep-dive analyses.")
+                st.caption("Run a simulation to see what-if comparisons and deeper charts.")
             elif st.session_state.get("_lz_whatif"):
                 _safe_render("components.whatif_retirement_curve", results=results)
                 st.divider()

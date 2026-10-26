@@ -101,7 +101,7 @@ def render(st) -> None:
 
           btn.addEventListener('click', function(){
             try {
-              status.textContent = 'Capturing styles\\u2026';
+              status.textContent = 'Saving\\u2026';
               const liveRoot = doc.documentElement;
               const clone = liveRoot.cloneNode(true);
 

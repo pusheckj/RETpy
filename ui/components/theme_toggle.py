@@ -609,7 +609,7 @@ def render(st) -> None:
         options=list(FONT_OPTIONS.keys()),
         label_visibility="collapsed",
         key="font_choice",
-        help="Experiment with the app's typeface. Applies everywhere on the next rerun.",
+        help="Changes the typeface across the app.",
     )
 
     st.markdown(
@@ -628,7 +628,6 @@ def render(st) -> None:
         options=list(PALETTES.keys()),
         label_visibility="collapsed",
         key="palette_choice",
-        help="Color scheme for chart series. Semantic colors (success/risk, the "
-             "teal brand accent, median-vs-downside bands) stay fixed; only "
-             "categorical series (accounts, income sources, spending buckets) recolor.",
+        help="Colors for chart series. Success, risk and median colors stay the same. "
+             "Accounts, income sources and spending buckets change.",
     )
