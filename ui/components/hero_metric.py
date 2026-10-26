@@ -30,7 +30,7 @@ def render(st, results: dict) -> None:
     if earliest is None:
         big_num = "Not achieved"
         big_color, big_cls = "#64748b", ""  # muted; dark theme lightens it
-        subtitle = "No retirement age we checked reaches your target. Try saving more, spending less, or changing the return scenario."
+        subtitle = "None of the retirement ages checked reach your success target. Try saving more, spending less, or changing the return scenario."
     else:
         big_num = str(earliest)
         big_color, big_cls = "#0d9488", "mc-teal"

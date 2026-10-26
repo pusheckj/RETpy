@@ -8,7 +8,7 @@ from retirement_sim import config as cfg
 
 def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
     st.markdown('<div class="mc-section">Tax-efficient withdrawal order</div>', unsafe_allow_html=True)
-    st.caption("Each year the simulator takes money from your accounts in this order to keep lifetime taxes low, "
+    st.caption("Each year the plan takes money from your accounts in this order to keep lifetime taxes low, "
                "unless you turn on an early-access strategy (72(t) payments or a Roth ladder).")
 
     col_a, col_b = st.columns(2)
@@ -16,7 +16,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
         st.markdown(
             """
             **Before age 59½**
-            1. Cash / savings: no tax
+            1. Cash: no tax
             2. Taxable brokerage: LTCG rates (0/15/20%)
             3. Roth contributions: no tax or penalty (not earnings)
             4. Traditional 401(k) / IRA: income tax **+ 10% penalty**
@@ -29,7 +29,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
         st.markdown(
             """
             **Age 59½ and after**
-            1. Cash / savings
+            1. Cash
             2. Taxable brokerage: LTCG
             3. Traditional 401(k) / IRA: ordinary income tax
             4. Roth: tax-free (saved for last)
@@ -55,7 +55,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
                        (cfg._FILING_HOH, "head of household")))
     st.markdown(
         f"""
-        When on, the simulator moves money from Traditional to Roth in low-income early-retirement years,
+        When on, the plan moves money from Traditional to Roth in low-income early-retirement years,
         up to the top of the 12% tax bracket for your filing status ({_top}; 2024 values).
         That money then grows tax-free and your future RMDs get smaller
         (your RMD age is {_rmd_age}).

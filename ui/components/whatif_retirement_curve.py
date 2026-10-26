@@ -119,7 +119,7 @@ def render(st, results: dict = None) -> None:
                         help="Extra yearly savings, added to your taxable brokerage.")
     with c2:
         st.slider("Investment fees (bps)", 0, 150, key="wifc_fee", step=5,
-                  help="Yearly fund fees in basis points (100 bps = 1%).")
+                  help="Yearly fund fees. 100 bps is 1% of your balance.")
         st.slider("Expected inflation (%)", 0.0, 6.0, key="wifc_infl", step=0.25,
                   help="Long-run inflation used in the alternate scenario.")
         st.toggle("Include Social Security", key="wifc_ss",

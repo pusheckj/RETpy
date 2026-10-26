@@ -115,7 +115,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
             title=dict(
                 text="<b>Investable portfolio range over time</b><br>"
                      f"<span style='font-size:13px;color:#64748b;'>Projected investable "
-                     f"balance across Monte Carlo runs · {mode_label}</span>",
+                     f"balance across simulated runs · {mode_label}</span>",
                 x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
             ),
             height=420, margin=dict(l=50, r=40, t=80, b=50),

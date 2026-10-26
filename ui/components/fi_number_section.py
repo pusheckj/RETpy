@@ -32,8 +32,7 @@ def _inputs_hash(overrides: dict, n_sims):
         return None
 
 
-_FRESH_HELP = ("This matches your current inputs. Change a sidebar setting "
-               "or the simulation count to recalculate.")
+_FRESH_HELP = ("Up to date. Change an input or the simulation count to recalculate.")
 
 
 def render(st, results: dict = None) -> None:
@@ -47,8 +46,8 @@ def render(st, results: dict = None) -> None:
         "need to stop working. "
         + ("You both keep" if couple else "You keep")
         + " working and saving until the balance first hits a target, then retire "
-        "that year. Your **number** is the smallest target that still meets your success "
-        "goal. It leaves out home equity and 529 college funds"
+        "that year. Your **number** is the smallest target balance that still meets your success "
+        "target. It leaves out home equity and 529 college funds"
         + (". It assumes you both work until the target and retire together, so your "
            "partner's own retirement age isn't used here." if couple else ".")
     )
@@ -138,8 +137,8 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
                            "your number.")
         elif not_reached:
             st.metric("Portfolio needed to retire", f"Over {money(top, shorten=True)}",
-                      help=f"No target we tried, up to {money(top, shorten=True)}, "
-                           f"reached your {target:.0%} goal.")
+                      help=f"No target up to {money(top, shorten=True)} "
+                           f"reached your {target:.0%} success target.")
         else:
             st.metric("Portfolio needed to retire", money(num, shorten=True),
                       help=f"Smallest investable portfolio with at least a {target:.0%} chance of success, "
@@ -150,7 +149,7 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
                       help="Retiring today already meets your target.")
         elif not_reached:
             st.metric("Best success found", f"{best:.0%}",
-                      help="The best chance of success any target we tried reached.")
+                      help="The best chance of success any target reached.")
         else:
             st.metric(
                 "Typically reached at age", f"{age:.0f}" if age else "—",
@@ -166,7 +165,7 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
             # The sweep never met the success target, even at the top of the range —
             # the household is the FURTHEST from FI, not "there".
             st.metric("Status", "Not reached",
-                      help="No target we tried met your success goal.")
+                      help="No target met your success target.")
         else:
             gap = num - cur
             st.metric(
@@ -179,13 +178,13 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
         # before the work cap, so those runs retire at the cap with less.
         capped = bool(curve) and (curve[-1].get("median_retire_age") or 0) >= cap
         st.info(
-            f"No target up to {money(top, shorten=True)} reached your {target:.0%} goal. The "
+            f"No target up to {money(top, shorten=True)} reached your {target:.0%} success target. The "
             f"best was {best:.0%}. "
             + (f"The biggest targets usually aren't reached before age {cap}, the latest "
                "this check lets you work, so those runs retire then with less. "
                if capped else "")
             + "To get there, spend less in retirement, save more now, or lower the "
-            "success goal. Then recalculate."
+            "success target. Then recalculate."
         )
 
     xs = [c["networth"] for c in curve]

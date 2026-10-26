@@ -29,8 +29,8 @@ def render(st) -> None:
     st.caption(
         "A range of likely lifespans, adjusted for your own risk factors (not your "
         "partner's). It sets how long your money needs to last. Plan for a high percentile, "
-        "not the average. This is an educational estimate (Gompertz mortality with "
-        "relative-risk multipliers from public studies), **not medical advice**."
+        "not the average. This is an educational estimate (a standard mortality "
+        "model scaled by risk factors from public studies), **not medical advice**."
     )
 
     # ---- Inputs ----

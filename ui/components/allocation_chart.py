@@ -48,7 +48,7 @@ def render(st, results: dict, chart_key: str = "allocation_main") -> None:
             x=retire_age,
             line_dash="dash",
             line_color="#94a3b8",
-            annotation_text=f"Retire @ {retire_age}",
+            annotation_text=f"Retire at {retire_age}",
             annotation_position="top right",
             annotation_font=dict(size=11, color="#64748b"),
         )

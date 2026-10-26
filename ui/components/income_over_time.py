@@ -383,8 +383,8 @@ def retirement_caption(results: dict | None) -> str:
            else f"all {runs} (none last the whole plan)")
     return (f"Retirement years show the median year across {who}, split by source "
             "using their average mix. Costs that hit only some runs, such as a year of "
-            "long-term care or a large required minimum distribution, count toward "
-            "the success rate but aren't drawn as the typical year.")
+            "long-term care or a large required minimum distribution, count against "
+            "your chance of success but aren't drawn as the typical year.")
 
 
 def render(st, results: dict = None, chart_key: str = "income_over_time_main") -> None:

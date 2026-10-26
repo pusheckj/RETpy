@@ -230,5 +230,5 @@ def _render_compare_inputs(st, pinned: Dict[str, Any]) -> None:
             if new_success is not None and base_success is not None:
                 d_success = new_success - base_success
             age_str = f"{d_age:+d}yr" if d_age is not None else "—"
-            succ_str = f"{d_success * 100:+.1f}pp" if d_success is not None else "—"
+            succ_str = f"{d_success * 100:+.1f} points" if d_success is not None else "—"
             st.caption(f"earliest {age_str} · success {succ_str}")

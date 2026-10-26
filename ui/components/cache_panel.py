@@ -39,7 +39,7 @@ def render(st) -> None:
         )
         st.caption(
             "Saved results are reused when you reload or restart. They clear "
-            "automatically when the model changes, so use this only to force "
+            "automatically when the simulation code changes, so use this only to force "
             "a fresh run."
         )
         if st.button("↻ Recompute everything", key="cache_clear_btn",
