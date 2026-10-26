@@ -6,7 +6,7 @@ simulation is unaffected until a user explicitly opts in:
     the portfolio).
   - Home moves: a list of dated events (cfg.HOME_EVENTS) — buy a home, sell
     and buy another, sell and rent. Today's home is set in Expenses.
-  - Retirement vacation: extra "go-go years" spending from retirement
+  - Retirement vacation: extra early-retirement spending from retirement
     until a chosen slow-down age.
 """
 from __future__ import annotations
@@ -158,7 +158,7 @@ def _move_row(st, i: int, event: dict, owns_before: bool) -> dict:
             down = _num_input(st, "Down payment (%)", f"bp_ev{i}_down",
                               round(safe_float(down0, 0.2) * 100, 2), min_value=0.0,
                               max_value=100.0, step=1.0,
-                              help="Under 20% down usually adds PMI. The model doesn't "
+                              help="Under 20% down usually adds PMI. The plan doesn't "
                                    "charge it separately.") / 100
         with c6:
             years = safe_int(_num_input(st, "Loan term (years)", f"bp_ev{i}_years", years0,
@@ -423,7 +423,7 @@ def render_body(st) -> None:
     st.divider()
 
     # ===== Retirement vacation =====
-    _section_label(st, "Retirement vacation (go-go years)")
+    _section_label(st, "Retirement vacation (early years)")
 
     ensure_default(st, "bp_vacation_enable",
                    bool(get_override(st, "RETIREMENT_VACATION_ENABLED", False)))

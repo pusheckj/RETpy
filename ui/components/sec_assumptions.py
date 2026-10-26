@@ -63,15 +63,16 @@ def render_body(st) -> None:
     # Interpret INVESTMENT_FEE_RATE as fraction. bps = fee_rate * 10_000.
     cur_fee_bps = max(0, min(100, int(round(safe_float(get_override(st, "INVESTMENT_FEE_RATE", 0.0), 0.0) * 10_000))))
     ensure_default(st, "sa_fee_bps", cur_fee_bps)
-    v = st.slider("Investment fee (basis points)", min_value=0, max_value=100,
+    v = st.slider("Investment fee (bps)", min_value=0, max_value=100,
                   step=5, key="sa_fee_bps",
-                  help="100 bps = 1% a year. Index ETFs run about 3-15 bps, active funds 50-100.")
+                  help="What your funds charge each year. 100 basis points (bps) = 1%. "
+                       "Index ETFs run about 3-15 bps, active funds 50-100.")
     set_override(st, "INVESTMENT_FEE_RATE", v / 10_000)
 
     ensure_default(st, "sa_vol_drag", bool(get_override(st, "APPLY_VOLATILITY_DRAG", True)))
-    v = st.toggle("Apply volatility drag", key="sa_vol_drag",
+    v = st.toggle("Lower returns for volatility", key="sa_vol_drag",
                     help="Bumpy returns compound slower than their average. "
-                         "When on, the model lowers average returns to account for that.")
+                         "When on, the plan lowers average returns to account for that.")
     set_override(st, "APPLY_VOLATILITY_DRAG", bool(v))
 
     st.divider()
@@ -209,7 +210,7 @@ def render_body(st) -> None:
                             help="Before 65, without a work plan, you buy insurance on the "
                                  "marketplace. Enter the price of the second-cheapest Silver "
                                  "plan for a 40-year-old in your area, before subsidies "
-                                 "(healthcare.gov, by ZIP code). The model prices other ages "
+                                 "(healthcare.gov, by ZIP code). The plan prices other ages "
                                  "from it and works out subsidies itself.")
         set_override(st, "ACA_BENCHMARK_MONTHLY_AT_40", safe_int(v))
     with c8:

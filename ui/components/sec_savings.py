@@ -80,7 +80,7 @@ def render_body(st) -> None:
     with row2[0]: st.metric("− Expenses", money(expenses, shorten=True))
     with row2[1]: st.metric("= Left to save", money(disposable, shorten=True),
                             help="What's left of this year's pay after tax and "
-                                 "expenses. With either Auto option the simulation "
+                                 "expenses. With either option below, the plan "
                                  "saves all of it; your employer match comes on top.")
 
     if disposable <= 0:
@@ -135,7 +135,7 @@ def render_body(st) -> None:
         ensure_default(st, "sv_primary_housing",
                        bool(get_override(st, "PRIMARY_PAYS_HOUSING", False)))
         pph = st.toggle(
-            "I pay the full mortgage; we split the rest evenly",
+            "I pay the full mortgage; we split the rest",
             key="sv_primary_housing",
             help="Sets how leftover savings split between your two taxable brokerage "
                  "accounts. Off: all expenses split evenly. On: you pay the whole "
@@ -150,9 +150,10 @@ def render_body(st) -> None:
     ensure_default(st, "sv_after_tax_401k",
                    safe_float(get_override(st, "YOUR_AFTER_TAX_401K_PCT", 0.0), 0.0) * 100)
     atp = st.slider(
-        "After-tax 401(k) → Roth · mega backdoor (% of base pay)",
+        "After-tax 401(k) → Roth (% of base pay)",
         min_value=0.0, max_value=20.0, step=0.5, key="sv_after_tax_401k",
-        help="Extra after-tax 401(k) contributions, converted to Roth inside the plan. "
+        help="Extra after-tax 401(k) contributions, converted to Roth inside the plan "
+             "(the \"mega backdoor Roth\"). "
              "They use the room left under the total 401(k) limit (yours plus employer) "
              "after your regular contribution and match, come out of take-home pay, and "
              "replace taxable brokerage savings. Leave at 0 if your plan doesn't allow it.",
@@ -223,7 +224,7 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
     st.caption(
         "Fills accounts in this order: **401(k) → HSA → Roth IRA → Taxable brokerage** "
         "(whatever is left). Each is capped at its 2024 limit, in today's dollars. "
-        "Use Custom % or Manual for a different split."
+        "To set your own amounts, choose Keep my amounts."
     )
 
     # Visualization: stacked horizontal bar

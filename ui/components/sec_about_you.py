@@ -132,7 +132,7 @@ def render_body(st) -> None:
     # two, so a younger partner is covered to their own plan-until age.
     ensure_default(st, "ay_plan_until",
                    safe_int(get_override(st, "PLAN_UNTIL_AGE", 95), 95))
-    plan_until = st.slider("Plan until age", min_value=75, max_value=100,
+    plan_until = st.slider("Plan-until age", min_value=75, max_value=100,
                            step=1, key="ay_plan_until",
                            help="Your money needs to last through this age."
                                 + ("" if household == JUST_ME else
@@ -152,7 +152,7 @@ def render_body(st) -> None:
         if diff:
             who = "younger" if end_partner < end_you else "older"
             st.caption(f"The plan runs until {plan_end_text(values)}. Your partner is {diff} "
-                       f"year{'' if diff == 1 else 's'} {who}, so the plan runs until the later "
+                       f"year{'' if diff == 1 else 's'} {who}, so it uses the later "
                        f"of your two plan-until ages.")
         else:
             st.caption(f"The plan runs until {plan_end_text(values)}.")

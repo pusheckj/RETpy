@@ -45,7 +45,7 @@ def _ss_factor(claim_age: int) -> float:
 
 
 def _lifestyle(st, overrides: dict) -> None:
-    """Go-go years extra and the later-years drop (cfg.EARLY_RETIREMENT_LEISURE_*,
+    """Early-retirement extra and the later-years drop (cfg.EARLY_RETIREMENT_LEISURE_*,
     LATE_RETIREMENT_*). The extra follows household size until you change it."""
     _section_label(st, "Early and later retirement")
     adults = 2 if safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0 else 1
@@ -173,17 +173,18 @@ def render_body(st) -> None:
     with c1:
         ensure_default(st, "rg_your_fra",
                        safe_int(get_override(st, "YOUR_SS_MONTHLY_FRA", 2_000), 2_000))
-        v = st.number_input("Your monthly benefit at FRA ($)",
+        v = st.number_input("Your monthly benefit ($)",
                             min_value=0, max_value=5_000, step=50,
                             key="rg_your_fra",
-                            help="Your benefit at full retirement age (FRA). Find yours at "
+                            help="Your monthly benefit at full retirement age. Find yours at "
                                  "https://www.ssa.gov/myaccount. The average is about $1,900/mo.")
         set_override(st, "YOUR_SS_MONTHLY_FRA", safe_int(v))
     with c2:
         if has_partner:
             ensure_default(st, "rg_partner_fra",
                            safe_int(get_override(st, "PARTNER_SS_MONTHLY_FRA", 1_800), 1_800))
-            v = st.number_input("Partner monthly at FRA ($)",
+            v = st.number_input("Partner's monthly benefit ($)",
+                                help="Their monthly benefit at full retirement age.",
                                 min_value=0, max_value=5_000, step=50,
                                 key="rg_partner_fra")
             set_override(st, "PARTNER_SS_MONTHLY_FRA", safe_int(v))
@@ -202,9 +203,9 @@ def render_body(st) -> None:
                            + max(0, partner_fra / 2 - your_fra) * cfg.ss_spousal_factor(claim_age))
     if include and annual_ss > 0:
         st.caption(
-            (f"At age {claim_age} (**{factor:.0%}** of FRA): " if not has_partner else
+            (f"At age {claim_age} (**{factor:.0%}** of your full-age benefit): " if not has_partner else
              "Once you've both claimed: ")
-            + f"household SS ≈ {money_md(annual_ss, shorten=True)}/yr "
+            + f"your Social Security ≈ {money_md(annual_ss, shorten=True)}/yr "
             f"({money_md(annual_ss / 12, shorten=True)}/mo combined)."
         )
 
@@ -237,7 +238,7 @@ def render_body(st) -> None:
         cost = st.number_input("Annual care cost ($, today's dollars)", min_value=0,
                                step=5_000, key="rg_ltc_cost",
                                help="Nursing-home care costs about $105k-120k/yr today "
-                                    "(Genworth median). The model raises it with inflation "
+                                    "(Genworth median). The plan raises it with inflation "
                                     "to the year care is needed.")
         set_override(st, "LTC_ANNUAL_COST", safe_int(cost))
 
@@ -264,15 +265,15 @@ def render_body(st) -> None:
         )
 
     # ----- Success threshold -----
-    _section_label(st, "Plan success threshold")
+    _section_label(st, "Success target")
     current_thr = safe_float(get_override(st, "TARGET_SUCCESS_RATE", 0.80), 0.80)
     ensure_default(st, "rg_target_success",
                    max(70, min(95, int(round(current_thr * 100)))))
-    v = st.slider("Target success rate (%)", min_value=70, max_value=95, step=1,
+    v = st.slider("Success target (%)", min_value=70, max_value=95, step=1,
                   key="rg_target_success",
                   help="Your plan counts as a success if the money lasts in at least this "
-                       "share of simulated futures. 80% is a common default; FIRE "
-                       "planners often aim for 90-95%.")
+                       "share of simulated futures. 80% is a common default; "
+                       "early retirees often aim for 90-95%.")
     set_override(st, "TARGET_SUCCESS_RATE", v / 100)
 
 
