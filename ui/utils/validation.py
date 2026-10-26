@@ -32,8 +32,8 @@ def validate_run_inputs(overrides: dict, target_age=None) -> list:
         if target_age < your_age:
             errs.append(
                 f"Target retirement age ({target_age}) is below your current age ({your_age}). "
-                "Fix it in **About you** — otherwise the result would silently apply to a "
-                "different age than the one shown."
+                "Fix it in **About you**, or the result would apply to a different age "
+                "than the one shown."
             )
         if plan_until <= target_age:
             errs.append(

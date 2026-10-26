@@ -310,7 +310,7 @@ def _plan_card(res: sf.PayoffResult, name: str, sub: str, best: bool, badge: str
     else:
         big = "Won't pay off at these payments"
         meta = (f"After {sf.MAX_PAYOFF_MONTHS // 12} years you'd still owe "
-                f"{_m(res.remaining_balance)}. Add an extra amount each month or raise "
+                f"{_m(res.remaining_balance)}. Pay extra each month or raise "
                 f"the payments.")
         rows = "".join(f'<li><span>{_h(r["name"])}</span><span>'
                        f'{"paid off " + _h(r["payoff_date"]) if r["payoff_date"] else "not paid off"}'
@@ -431,9 +431,9 @@ def render(st) -> None:
     _seed(ss, inputs, force=ss.get(_SYNC_KEY) != inputs)
 
     st.markdown('<div class="mc-section">Money check-up</div>', unsafe_allow_html=True)
-    st.markdown('<div class="simple-sub">Five quick checks: how much you save, your safety '
-                'cushion, where your next dollar should go, the fastest way out of '
-                'debt, and a 50/30/20 budget check.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="simple-sub">Five quick checks: your savings rate, your emergency '
+                'fund, where your next dollar should go, paying off debt, and the '
+                '50/30/20 budget.</div>', unsafe_allow_html=True)
 
     with st.container(border=True, key="mc-tile-simple-inputs"):
         _render_inputs(st, inputs)
