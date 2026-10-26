@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 try:
+    from utils.section_icon import section_expander
+except ImportError:  # pragma: no cover
+    from ui.utils.section_icon import section_expander  # type: ignore
+
+try:
     from utils.coerce import safe_int, ensure_default
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, ensure_default  # type: ignore
@@ -161,5 +166,5 @@ def render_body(st) -> None:
 
 def render(st) -> None:
     """Standalone expander."""
-    with st.expander("About you", expanded=False, icon=":material/person:"):
+    with section_expander(st, "About you", "person"):
         render_body(st)

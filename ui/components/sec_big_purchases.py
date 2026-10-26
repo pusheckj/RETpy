@@ -12,6 +12,11 @@ simulation is unaffected until a user explicitly opts in:
 from __future__ import annotations
 
 try:
+    from utils.section_icon import section_expander
+except ImportError:  # pragma: no cover
+    from ui.utils.section_icon import section_expander  # type: ignore
+
+try:
     from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money_md
 except ImportError:  # pragma: no cover
@@ -448,5 +453,5 @@ def render_body(st) -> None:
 
 
 def render(st) -> None:
-    with st.expander("Big purchases & goals", expanded=False, icon=":material/shopping_bag:"):
+    with section_expander(st, "Big purchases & goals", "shopping_bag"):
         render_body(st)

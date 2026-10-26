@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 try:
+    from utils.section_icon import section_expander
+except ImportError:  # pragma: no cover
+    from ui.utils.section_icon import section_expander  # type: ignore
+
+try:
     from retirement_sim import config as cfg
 except ImportError:  # pragma: no cover
     cfg = None  # type: ignore
@@ -274,5 +279,5 @@ def render_body(st) -> None:
 
 
 def render(st) -> None:
-    with st.expander("Retirement goals", expanded=False, icon=":material/flag:"):
+    with section_expander(st, "Retirement goals", "flag"):
         render_body(st)

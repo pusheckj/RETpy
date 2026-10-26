@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 try:
+    from utils.section_icon import section_expander
+except ImportError:  # pragma: no cover
+    from ui.utils.section_icon import section_expander  # type: ignore
+
+try:
     from utils.coerce import safe_float, ensure_default
     from utils.formatting import money, money_md, pct
     from utils.derived import sidebar_savings_budget, files_two_returns
@@ -109,5 +114,5 @@ def render_body(st) -> None:
 
 
 def render(st) -> None:
-    with st.expander("Taxes", expanded=False, icon=":material/receipt_long:"):
+    with section_expander(st, "Taxes", "receipt_long"):
         render_body(st)

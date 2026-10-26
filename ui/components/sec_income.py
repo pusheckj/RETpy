@@ -1,6 +1,11 @@
 """Section 2: Income — sources by partner + growth rates + comp table."""
 from __future__ import annotations
 
+try:
+    from utils.section_icon import section_expander
+except ImportError:  # pragma: no cover
+    from ui.utils.section_icon import section_expander  # type: ignore
+
 import pandas as pd
 
 try:
@@ -226,5 +231,5 @@ def render_body(st) -> None:
 
 
 def render(st) -> None:
-    with st.expander("Income", expanded=False, icon=":material/payments:"):
+    with section_expander(st, "Income", "payments"):
         render_body(st)

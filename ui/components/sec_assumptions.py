@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 try:
+    from utils.section_icon import section_expander
+except ImportError:  # pragma: no cover
+    from ui.utils.section_icon import section_expander  # type: ignore
+
+try:
     from utils.coerce import safe_int, safe_float, as_fraction, ensure_default
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, as_fraction, ensure_default  # type: ignore
@@ -220,5 +225,5 @@ def render_body(st) -> None:
 
 
 def render(st) -> None:
-    with st.expander("Assumptions (advanced)", expanded=False, icon=":material/tune:"):
+    with section_expander(st, "Assumptions (advanced)", "tune"):
         render_body(st)
