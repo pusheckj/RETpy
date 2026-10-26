@@ -452,7 +452,8 @@ _ANIM_JS = """
     // Rect cached on enter (no per-move layout reads); transform written on move
     // (GPU). A transient .mc-tilting class makes it follow instantly, then it
     // eases back on leave.
-    if(!reduce){
+    // Pointer devices only: on touch a tap left the tapped card tilted and lifted 4px.
+    if(!reduce && window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches){
       var _tEl = null, _tR = null, _TMAX = 5;
       D.addEventListener('pointerover', function(e){
         var card = e.target.closest && e.target.closest('.mc-stat-card');
