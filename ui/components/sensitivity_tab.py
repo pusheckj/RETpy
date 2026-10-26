@@ -13,8 +13,8 @@ from utils.formatting import pct, money
 def render(st, results: dict) -> None:
     st.markdown('<div class="mc-section">Sensitivity analysis</div>', unsafe_allow_html=True)
     st.caption(
-        "How the success rate at your target retirement age shifts as key inputs move. "
-        "Each row is a fresh Monte Carlo run."
+        "How your chance of success at your target retirement age changes as inputs move. "
+        "Each row is a new simulation."
     )
 
     if not results:
@@ -49,8 +49,8 @@ def render(st, results: dict) -> None:
 
         rows = []
         status_placeholder = st.empty()
-        status_placeholder.info(f"Starting sensitivity analysis: {len(scenarios)} scenarios, ~10 seconds each...")
-        progress = st.progress(0.0, text="Preparing scenarios...")
+        status_placeholder.info(f"Running {len(scenarios)} scenarios, about 10 seconds each...")
+        progress = st.progress(0.0, text="Getting scenarios ready...")
         with st.spinner("Running sensitivity analysis..."):
             for i, (name, delta, age) in enumerate(scenarios):
                 progress.progress(
@@ -92,7 +92,7 @@ def render(st, results: dict) -> None:
         df["P10 final"] = df["P10 final"].apply(lambda v: money(v, shorten=True))
         st.dataframe(df, width="stretch", hide_index=True)
     else:
-        st.info("Click **Run sensitivity analysis** above to see how the plan responds to input changes.")
+        st.info("Click **Run sensitivity analysis** above to see how your plan responds when inputs change.")
 
     st.divider()
     _render_break_even(st, base_overrides, target_age)
@@ -126,8 +126,8 @@ def _render_break_even(st, base_overrides: dict, target_age: int) -> None:
 
     st.markdown("#### Break-even finder")
     st.caption(
-        "Sweep one input across a small grid (retirement age fixed) to find the "
-        "smallest value that hits your target success rate."
+        "Try a range of values for one input, with retirement age fixed, to find the "
+        "smallest value that reaches your target success rate."
     )
 
     # Read the USER's target, not cfg's module default. sim_runner restores cfg
@@ -168,7 +168,7 @@ def _render_break_even(st, base_overrides: dict, target_age: int) -> None:
         be_value = sweep_state.get("break_even_value")
         if be_value is None:
             st.warning(
-                f"No value in the tested range for **{sweep_state['label']}** reaches "
+                f"No value we tested for **{sweep_state['label']}** reaches "
                 f"{pct(sweep_state['target_success_rate'])} success."
             )
         else:

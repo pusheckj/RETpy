@@ -375,14 +375,14 @@ def retirement_caption(results: dict | None) -> str:
     not one run's (whose long-term-care years or giant forced RMDs would read
     as the typical plan)."""
     if not results:
-        return "Run the simulation to see retirement portfolio drawdown by source."
+        return "Run the simulation to see where retirement withdrawals come from."
     basis = (results.get("primary_result", {}) or {}).get("withdrawals_basis") or {}
     n = safe_int(basis.get("n_runs"), 0)
     runs = f"{n:,} simulated runs" if n else "simulated runs"
     who = (f"the {runs} that last the whole plan" if basis.get("survivors_only", True)
            else f"all {runs} (none last the whole plan)")
     return (f"Retirement years show the median year across {who}, split by source "
-            "in their average mix. Costs that hit only some runs, such as a year of "
+            "using their average mix. Costs that hit only some runs, such as a year of "
             "long-term care or a large required minimum distribution, count toward "
             "the success rate but aren't drawn as the typical year.")
 
@@ -439,17 +439,17 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
 
         if not series:
             st.info(
-                "Set your income in the sidebar (base salary, bonus, RSU) to see "
-                "your household income projected over time."
+                "Enter your income in the sidebar (base salary, bonus, RSU) to see "
+                "your household income over time."
             )
             return
 
         if future_dollars:
             subtitle = (
-                f"Gross household income by source · future (nominal) dollars · "
+                f"Gross household income by source · future dollars · "
                 f"inflated at {inflation_rate * 100:.2f}%/yr"
             )
-            yaxis_title = "Annual gross income ($, nominal)"
+            yaxis_title = "Annual gross income ($, future)"
         else:
             subtitle = "Gross household income by source · today's dollars"
             yaxis_title = "Annual gross income ($, today)"

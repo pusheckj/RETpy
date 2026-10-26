@@ -37,8 +37,8 @@ def render(st, results: dict = None, chart_key: str = "mortgage_paydown") -> Non
     res = st.session_state.get(STATE_KEY)
     if not res or not res.get("curve"):
         st.caption(
-            "The mortgage-paydown sweep runs with the rest of the page. "
-            "If it hasn't finished yet, give it a moment or press Run."
+            "The mortgage paydown check runs with the rest of the page. "
+            "If it's not done yet, give it a moment or press Run."
         )
         return
 
@@ -55,22 +55,22 @@ def render(st, results: dict = None, chart_key: str = "mortgage_paydown") -> Non
         st.info(
             f"**Prepaying doesn't clearly help this plan.** No extra-payment level "
             f"beat the baseline by more than the ±{noise:.1f}pp noise floor at "
-            f"{res.get('n_simulations', 0):,} simulations. The dollars do just as "
-            f"much good invested."
+            f"{res.get('n_simulations', 0):,} simulations. Investing the money does just as "
+            f"well."
         )
     else:
         st.success(
             f"**Prepaying helps.** {money(best['extra'])}/yr extra raises success "
             f"from {pct(base['success_rate'])} to {pct(best['success_rate'])} "
-            f"(**{best['delta_success'] * 100:+.1f}pp**) and owns the house outright "
-            f"at **{best['payoff_age']}** instead of {base['payoff_age']} — "
-            f"{best.get('years_saved') or 0} years earlier, avoiding "
+            f"(**{best['delta_success'] * 100:+.1f}pp**) and you own the house outright "
+            f"at **{best['payoff_age']}** instead of {base['payoff_age']}. That's "
+            f"{best.get('years_saved') or 0} years earlier and saves "
             f"{money((base.get('total_interest') or 0) - (best.get('total_interest') or 0))} "
-            f"of interest."
+            f"in interest."
         )
         if cheapest_sig is not None and cheapest_sig["extra"] != best["extra"]:
             st.caption(
-                f"Smallest amount that still clears the noise floor: "
+                f"Smallest amount that still beats the noise floor: "
                 f"**{money(cheapest_sig['extra'])}/yr** "
                 f"({cheapest_sig['delta_success'] * 100:+.1f}pp)."
             )
@@ -133,10 +133,10 @@ def render(st, results: dict = None, chart_key: str = "mortgage_paydown") -> Non
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
     st.caption(
-        f"Success is a Monte Carlo estimate at {res.get('n_simulations', 0):,} runs, "
-        f"so differences under ±{noise:.1f}pp are not meaningful — those are marked "
-        "*(noise)*. Payoff age and interest are exact: amortisation doesn't depend "
-        "on market returns. The extra payment is charged as real cash, so this is a "
-        "genuine contest between prepaying and investing the same dollars, and the "
-        "scheduled payment correctly stops once the loan is gone."
+        f"Success rate is an estimate from {res.get('n_simulations', 0):,} simulations, "
+        f"so differences under ±{noise:.1f}pp don't mean much. Those are marked "
+        "*(noise)*. Payoff age and interest are exact, since they don't depend "
+        "on market returns. The extra payment comes out as real cash, so this is a "
+        "fair test of prepaying against investing the same money. The regular payment "
+        "stops once the loan is paid off."
     )

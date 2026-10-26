@@ -126,7 +126,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> No
     fig.update_layout(
         barmode="stack", bargap=0.15,
         title=dict(
-            text="<b>Withdrawal rate by source</b><br><span style='font-size:13px;'>Annual withdrawal as % of current portfolio, colored by account type</span>",
+            text="<b>Withdrawal rate by source</b><br><span style='font-size:13px;'>Yearly withdrawal as % of your portfolio, by account type</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),
         height=400,
@@ -143,9 +143,9 @@ def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> No
     st.caption(
         "Each bar is the median year across the simulated runs that last the plan: "
         "the fraction of the portfolio withdrawn that year, split by account type in "
-        "those runs' average mix. The rate trends toward 0% in later years because the portfolio "
-        "grows faster than spending (and Social Security covers part of the need) — a "
-        "sign of an over-funded plan, not a data gap. The dotted purple line (if shown) "
-        "is Roth conversions — money moved from Traditional to Roth accounts, not spent."
+        "those runs' average mix. The rate often falls toward 0% in later years because the portfolio "
+        "grows faster than spending and Social Security covers part of the need. That "
+        "means the plan is well funded, not that data is missing. The dotted purple line (if shown) "
+        "is Roth conversions: money moved from Traditional to Roth, not spent."
     )
 

@@ -103,8 +103,8 @@ def render(st, results: dict = None, chart_key: str = "spending_range_main") -> 
                 annotation_position="top left", annotation_font=dict(size=10, color="#64748b"),
             )
 
-        mode_label = "future (nominal) dollars" if future else "today's dollars"
-        unit = "$, nominal" if future else "$, today"
+        mode_label = "future dollars" if future else "today's dollars"
+        unit = "$, future" if future else "$, today"
         # Zoom the y-axis onto the data. From $0 the boxes were a few pixels tall
         # (spending barely moves between runs next to its own level), so frame the
         # p10-p90 spread with 10% padding and at least a quarter of the top value
@@ -118,8 +118,8 @@ def render(st, results: dict = None, chart_key: str = "spending_range_main") -> 
         fig.update_layout(
             title=dict(
                 text="<b>Spending range across market scenarios</b><br>"
-                     f"<span style='font-size:13px;color:#64748b;'>Distribution of guardrail-adjusted "
-                     f"annual living spending across Monte Carlo runs · {mode_label}</span>",
+                     f"<span style='font-size:13px;color:#64748b;'>Guardrail-adjusted "
+                     f"living spending across simulated runs · {mode_label}</span>",
                 x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
             ),
             height=420, margin=dict(l=50, r=40, t=80, b=50),
@@ -144,13 +144,13 @@ def render(st, results: dict = None, chart_key: str = "spending_range_main") -> 
         based_on = (f"Based on all {n:,} simulated runs (the same runs as the success rate)"
                     if n >= runs else f"Based on {n:,} of the {runs:,} simulated runs")
         st.caption(
-            "Each box is the spread of **annual spending across all simulated market paths** at that age: "
-            "the box spans the middle 50% (25th–75th percentile), the whiskers reach the 10th–90th, and the "
-            "line is the median. Spending is flat while you're working, then **fans out in retirement** as the "
-            "**spending guardrails** raise or cut discretionary spending in response to how markets treated the "
-            f"portfolio. {based_on} · guardrail-adjusted living spending "
-            "(healthcare and long-term care are modeled separately and excluded here). "
-            "The vertical axis is zoomed to the spending range, so it does not start at $0."
+            "Each box shows how **annual spending varies across simulated market paths** at that age. "
+            "The box covers the middle 50% (25th to 75th percentile), the whiskers reach the 10th and 90th, and the "
+            "line is the median. Spending is flat while you work, then **spreads out in retirement** as the "
+            "**spending guardrails** raise or cut discretionary spending based on how markets treated your "
+            f"portfolio. {based_on}. This is living spending after guardrails. "
+            "Healthcare and long-term care are modeled separately and left out. "
+            "The vertical axis is zoomed in, so it doesn't start at $0."
         )
 
     # Rendered directly (not in st.fragment) so is_dark()/style_fig() see the theme.

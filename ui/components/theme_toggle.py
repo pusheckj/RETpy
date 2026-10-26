@@ -295,7 +295,7 @@ button[data-testid="stNumberInputStepDown"] {
 }
 }
 
-/* Form-submit buttons (e.g. "Pin current scenario") — match the primary style. */
+/* Form-submit buttons (e.g. "Pin this scenario") — match the primary style. */
 [data-testid="stFormSubmitButton"] > button {
     background-color: #14b8a6 !important;
     border-color: #14b8a6 !important;

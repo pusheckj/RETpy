@@ -87,9 +87,9 @@ def render(st, results: dict = None) -> None:
     st.markdown('<div class="mc-section">What-if: when can you retire?</div>', unsafe_allow_html=True)
     overrides = st.session_state.get("user_overrides", {}) or {}
     st.caption(
-        "Compare your **current plan** against an **alternate scenario** you tweak right here. "
-        "The changes below apply only to this comparison — your sidebar inputs and the main "
-        "results are untouched. Each line shows your success rate at every retirement age."
+        "Compare your **current plan** with an **alternate scenario** you set up here. "
+        "The changes below only affect this comparison. Your sidebar inputs and main "
+        "results stay the same. Each line shows your chance of success at every retirement age."
     )
 
     # ---- Alternate-scenario controls (default to your current settings) ----
@@ -109,24 +109,24 @@ def render(st, results: dict = None) -> None:
     with c1:
         st.selectbox("Return scenario", _SCENARIOS, key="wifc_scenario",
                      format_func=lambda s: s.capitalize(),
-                     help="Market assumptions for the alternate scenario.")
+                     help="Market returns used in the alternate scenario.")
         st.slider("Stock allocation (%)", 0, 100, key="wifc_stock", step=5,
-                  help="Higher stock = higher expected return and volatility.")
+                  help="More stock means higher expected returns and bigger swings.")
         st.slider("Retirement spending (% of today's)", 40, 150, key="wifc_spend", step=5,
-                  help="Scale retirement living expenses vs. today. 100% = unchanged.")
+                  help="Retirement living costs compared with today. 100% means the same.")
         st.number_input("Extra annual savings ($/yr)", min_value=0, max_value=200_000,
                         step=1_000, key="wifc_savings",
-                        help="Additional yearly savings into your taxable brokerage.")
+                        help="Extra yearly savings, added to your taxable brokerage.")
     with c2:
         st.slider("Investment fees (bps)", 0, 150, key="wifc_fee", step=5,
-                  help="Annual expense ratio in basis points (100 bps = 1%).")
+                  help="Yearly fund fees in basis points (100 bps = 1%).")
         st.slider("Expected inflation (%)", 0.0, 6.0, key="wifc_infl", step=0.25,
-                  help="Long-run inflation assumption for the alternate scenario.")
+                  help="Long-run inflation used in the alternate scenario.")
         st.toggle("Include Social Security", key="wifc_ss",
-                  help="Whether the alternate scenario counts Social Security income.")
+                  help="Count Social Security income in the alternate scenario.")
         if st.session_state.get("wifc_ss", True):
             st.slider("Claim age", 62, 70, key="wifc_ss_claim", step=1,
-                      help="Age Social Security benefits begin in the alternate scenario.")
+                      help="Age Social Security starts in the alternate scenario.")
 
     n_sims = int(st.session_state.get("n_simulations", 1000))
     target = int(overrides.get("TARGET_RETIREMENT_AGE", 55))
@@ -137,7 +137,7 @@ def render(st, results: dict = None) -> None:
 
     if st.button("✓ Comparison up to date" if fresh else "Compare scenarios",
                  key="wifc_btn", type="primary", disabled=fresh, width="stretch",
-                 help="Re-runs both age-scans. Change a lever above to re-enable." if fresh else None):
+                 help="Runs both scenarios again. Change a setting above to turn this back on." if fresh else None):
         prog = st.progress(0.0, text="Running both scenarios…")
 
         def _cb(frac, msg):
@@ -167,7 +167,7 @@ def render(st, results: dict = None) -> None:
 
     stored = st.session_state.get("wifc_result")
     if not stored:
-        st.caption("Set the alternate scenario above, then click **Compare scenarios**.")
+        st.caption("Set up the alternate scenario above, then click **Compare scenarios**.")
         return
 
     _render_plot(st, stored)
@@ -178,7 +178,7 @@ def _render_plot(st, stored: dict) -> None:
     alt = stored.get("alt", {}) or {}
     tgt = float(stored.get("target_success", 0.80))
     if not base and not alt:
-        st.info("No age-scan data to compare.")
+        st.info("Nothing to compare yet.")
         return
 
     dark = is_dark(st)
@@ -194,18 +194,18 @@ def _render_plot(st, stored: dict) -> None:
     # ---- headline verdict ----
     cols = st.columns(3)
     with cols[0]:
-        st.metric("Current plan — retire by", f"age {base_e}" if base_e else "beyond range",
-                  help=f"Earliest age clearing the {tgt:.0%} success target on your current inputs.")
+        st.metric("Current plan: retire by", f"age {base_e}" if base_e else "beyond range",
+                  help=f"Earliest age that reaches the {tgt:.0%} success target with your current inputs.")
     with cols[1]:
-        st.metric("Alternate — retire by", f"age {alt_e}" if alt_e else "beyond range",
-                  help="Earliest age clearing the target under the tweaked scenario.")
+        st.metric("Alternate: retire by", f"age {alt_e}" if alt_e else "beyond range",
+                  help="Earliest age that reaches the target in the alternate scenario.")
     with cols[2]:
         if base_e is not None and alt_e is not None:
             d = base_e - alt_e
             st.metric("Difference", f"{abs(d)} yr {'earlier' if d > 0 else ('later' if d < 0 else 'same')}",
                       delta=("earlier" if d > 0 else ("later" if d < 0 else None)),
                       delta_color=("normal" if d > 0 else ("inverse" if d < 0 else "off")),
-                      help="How much sooner (or later) the alternate scenario lets you retire.")
+                      help="How much sooner or later the alternate scenario lets you retire.")
         else:
             st.metric("Difference", "—")
 
@@ -233,7 +233,7 @@ def _render_plot(st, stored: dict) -> None:
                       annotation_font=dict(size=10, color=alt_col))
     fig.update_layout(
         title=dict(
-            text="<b>When can you retire? — current vs. alternate</b><br>"
+            text="<b>When can you retire? Current vs. alternate</b><br>"
                  "<span style='font-size:13px;color:#64748b;'>Success rate at each retirement age</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),
@@ -245,7 +245,7 @@ def _render_plot(st, stored: dict) -> None:
     )
     show_chart(st, fig, f"wifc_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
     st.caption(
-        "The dotted **Alternate** line reflects the levers above; the solid **Current plan** line is your "
-        "sidebar inputs. Where a line first crosses the target, that's the earliest age you could retire under "
-        "that scenario."
+        "The dotted **Alternate** line uses the settings above. The solid **Current plan** line uses your "
+        "sidebar inputs. Where a line first reaches the target is the earliest age you could retire "
+        "in that scenario."
     )

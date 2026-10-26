@@ -106,7 +106,7 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
         title=dict(
             text="<b>Projected savings by account</b><br>"
                  "<span style='font-size:13px;color:#64748b;'>"
-                 "Annual contributions by destination · "
+                 "Yearly contributions by account · "
                  f"{money(cumulative[-1], shorten=True)} total by age {ages[-1]} · "
                  f"{dollars}, <em>before</em> returns</span>",
             x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
@@ -142,9 +142,8 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
     show_chart(st, fig, f"{chart_key}_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
 
     st.caption(
-        "Stacked bars show **where each year's savings goes**, as the simulation "
-        "makes it: your contributions, your employer's match, and everything else "
-        "you don't spend invested in a taxable brokerage account. Hover a bar to see "
-        "the running total (no investment growth yet). Investment returns "
-        "compound on top of these contributions in the Monte Carlo simulation."
+        "Each bar shows **where that year's savings go**: your contributions, your "
+        "employer's match, and whatever you don't spend, which goes into a taxable "
+        "brokerage account. Hover a bar to see the running total, before any "
+        "investment growth. The simulation adds returns on top of these amounts."
     )

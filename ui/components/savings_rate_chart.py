@@ -56,7 +56,7 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
 
     ages, rates = _rate_series(rows, post_tax)
     if not ages:
-        st.info("No working-year income available to compute a savings rate.")
+        st.info("No working-year income to calculate a savings rate from.")
         return
 
     avg = sum(rates) / len(rates)
@@ -80,8 +80,8 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
     fig.update_layout(
         title=dict(
             text="<b>Savings rate</b><br><span style='font-size:13px;color:#64748b;'>"
-                 f"Household contributions (incl. employer match) as a % of {basis_label} "
-                 "income, per working year</span>",
+                 f"Household contributions, including employer match, as a % of {basis_label} "
+                 "income each working year</span>",
             x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
         ),
         height=380,
@@ -97,13 +97,12 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
 
     tail = (
         "take-home (after-tax) income. This runs higher than the pre-tax view because "
-        "pre-tax 401(k)/HSA dollars are saved before they'd ever show up in take-home pay."
+        "pre-tax 401(k) and HSA dollars come out before take-home pay."
         if post_tax else
         "gross (pre-tax) income."
     )
     st.caption(
-        "Share of household income saved each working year — the same savings as the "
-        "bars above: 401(k) (incl. employer match), HSA, Roth IRA, and taxable-brokerage "
-        "contributions, divided by " + tail
+        "Share of household income you save each working year. It uses the same savings as the "
+        "bars above (401(k) with employer match, HSA, Roth IRA, and taxable brokerage), divided by " + tail
         + " The dashed line is the working-years average."
     )
