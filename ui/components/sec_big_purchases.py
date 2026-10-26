@@ -158,8 +158,8 @@ def _move_row(st, i: int, event: dict, owns_before: bool) -> dict:
             down = _num_input(st, "Down payment (%)", f"bp_ev{i}_down",
                               round(safe_float(down0, 0.2) * 100, 2), min_value=0.0,
                               max_value=100.0, step=1.0,
-                              help="Below 20% typically adds PMI, which this model "
-                                   "does not charge separately.") / 100
+                              help="Under 20% down usually adds PMI. The model doesn't "
+                                   "charge it separately.") / 100
         with c6:
             years = safe_int(_num_input(st, "Loan term (years)", f"bp_ev{i}_years", years0,
                                         min_value=1, max_value=40, step=1))
@@ -207,10 +207,10 @@ def _move_summary(st, event: dict, owns_before: bool) -> None:
         ret = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60)
         if payoff > ret:
             st.warning(
-                f"This loan is paid off at **{payoff}**, **{payoff - ret} years into "
-                f"retirement** (you target {ret}). Those payments come out of your "
-                f"savings. A shorter term costs more per month while you're earning "
-                f"but often lets you retire *sooner*, so it's worth testing both."
+                f"This loan runs until **{payoff}**, **{payoff - ret} years into "
+                f"retirement** (you plan to retire at {ret}). Those payments come "
+                f"out of your savings. A shorter term costs more each month while "
+                f"you work, but can let you retire *sooner*. Try both."
             )
 
 
@@ -247,9 +247,9 @@ def _home_moves(st) -> None:
                        safe_float(get_override(st, "NEW_HOME_ESCROW_PCT", 0.0135), 0.0135) * 100)
         v = st.number_input("Property tax + insurance (%/yr)", min_value=0.0, max_value=5.0,
                             step=0.05, key="bp_new_home_escrow_pct",
-                            help="Percent of the home's value per year, added to the "
-                                 "monthly payment and kept once the loan is paid off. "
-                                 "Varies by state (California is about 1.1% tax + 0.25% insurance).")
+                            help="Yearly cost as a percent of the home's value. It's added to "
+                                 "the monthly payment and continues after the loan is "
+                                 "paid off. California is about 1.1% tax plus 0.25% insurance.")
         set_override(st, "NEW_HOME_ESCROW_PCT", v / 100)
     if owns_today and stored:
         value = safe_int(ov.get("HOME_VALUE", 0), 0)
@@ -259,11 +259,11 @@ def _home_moves(st) -> None:
             "What you paid for your home ($)", min_value=0, max_value=20_000_000, step=10_000,
             key="bp_home_cost_basis",
             help="Include improvements. When you sell, a gain above $250,000 per owner "
-                 "($500,000 for a married couple) is taxed. Leave it at the home's "
-                 "value if you're not sure."))
+                 "($500,000 for a married couple) is taxed. If you're not sure, "
+                 "leave it at the home's value."))
         set_override(st, "HOME_COST_BASIS", None if v == value else v)
-    st.caption("Sale money (price − loan left − selling costs − any tax) goes into your "
-               "savings; down payments and moving costs come out of them.")
+    st.caption("Sale proceeds (price minus loan balance, selling costs and any tax) go "
+               "into your savings. Down payments and moving costs come out of them.")
 
 
 def render_body(st) -> None:
@@ -274,8 +274,8 @@ def render_body(st) -> None:
                    bool(get_override(st, "CAR_ONETIME_ENABLED", False)))
     onetime_on = st.toggle("Plan a one-time car purchase",
                              key="bp_car_onetime_enable",
-                             help="A single cash outlay in the chosen year, paid from "
-                                  "the portfolio (accumulation or retirement).")
+                             help="A one-time cash payment at the age you choose, taken "
+                                  "from your portfolio.")
     set_override(st, "CAR_ONETIME_ENABLED", bool(onetime_on))
     if onetime_on:
         c1, c2 = st.columns(2, vertical_alignment="bottom")
@@ -291,14 +291,14 @@ def render_body(st) -> None:
             v = st.number_input("Purchase amount ($)", min_value=0, max_value=500_000,
                                 step=1_000, key="bp_car_onetime_amount")
             set_override(st, "CAR_ONETIME_AMOUNT", safe_int(v))
-        st.caption("One-time cash outlay in the chosen year, paid from the portfolio.")
+        st.caption("Paid in cash from your portfolio at this age.")
 
     ensure_default(st, "bp_car_recurring_enable",
                    bool(get_override(st, "CAR_RECURRING_ENABLED", False)))
     recurring_on = st.toggle("Plan recurring car replacements",
                                key="bp_car_recurring_enable",
-                               help="Repeats a cash outlay every N years, starting at "
-                                    "the chosen age.")
+                               help="Buys a car in cash every N years, starting at the "
+                                    "age you choose.")
     set_override(st, "CAR_RECURRING_ENABLED", bool(recurring_on))
     if recurring_on:
         c3, c4 = st.columns(2, vertical_alignment="bottom")
@@ -319,8 +319,7 @@ def render_body(st) -> None:
         v = st.number_input("Amount ($)", min_value=0, max_value=500_000,
                             step=1_000, key="bp_car_recurring_amount")
         set_override(st, "CAR_RECURRING_AMOUNT", safe_int(v))
-        st.caption("Replaces the car every N years starting at the given age, "
-                   "paid from the portfolio.")
+        st.caption("Paid in cash from your portfolio.")
 
     st.divider()
 
@@ -339,16 +338,16 @@ def render_body(st) -> None:
                   if e["action"] != "sell_rent" and e["loan"] > 0]
     _has_loan = safe_int(get_override(st, "MORTGAGE_BALANCE", 0), 0) > 0 or bool(_loan_ages)
     if not _has_loan:
-        st.caption(":gray[No mortgage configured, so there's nothing to pay down.]")
+        st.caption(":gray[You have no mortgage, so there's nothing to pay down.]")
     else:
         ensure_default(st, "bp_extra_mortgage",
                        safe_int(get_override(st, "EXTRA_MORTGAGE_PAYMENT_ANNUAL", 0), 0))
         extra = st.number_input(
             "Extra principal per year ($)", min_value=0, max_value=300_000, step=1_000,
             key="bp_extra_mortgage",
-            help="Paid on top of the scheduled payment. Charged as real cash, so it "
-                 "competes with investing the same dollars — and the scheduled "
-                 "payment stops once the loan is gone.")
+            help="Paid on top of your regular payment. That money isn't "
+                 "invested, and your regular payment stops once the loan is "
+                 "paid off.")
         set_override(st, "EXTRA_MORTGAGE_PAYMENT_ANNUAL", safe_int(extra))
 
         _your_age = safe_int(get_override(st, "YOUR_AGE", 32), 32)
@@ -367,8 +366,8 @@ def render_body(st) -> None:
                     key="bp_extra_mortgage_start_radio",
                     format_func=lambda a: (f"{a} (now)" if a == _your_age
                                             else f"{a} (after you buy)"),
-                    help="Before a move, extra principal mostly just raises your sale "
-                         "proceeds; after it, it attacks the new loan.")
+                    help="Before a move, extra payments mostly just raise your sale "
+                         "proceeds. After it, they pay down the new loan.")
             else:
                 start = _your_age
             set_override(st, "EXTRA_MORTGAGE_PAYMENT_START_AGE", safe_int(start))
@@ -405,21 +404,21 @@ def render_body(st) -> None:
                     interest = (base.get("total_interest") or 0) - (now.get("total_interest") or 0)
                     if saved > 0:
                         st.success(
-                            f"Paid off at **{n_age}** instead of {b_age} — "
-                            f"**{saved} year{'s' if saved != 1 else ''} earlier**, "
-                            f"saving {money_md(interest)} of interest."
+                            f"Paid off at **{n_age}** instead of {b_age}, "
+                            f"**{saved} year{'s' if saved != 1 else ''} earlier**. "
+                            f"You save {money_md(interest)} of interest."
                         )
                     else:
                         st.caption(f":gray[Payoff age unchanged at {n_age}.]")
             except Exception:
                 pass
-            st.caption("See **What if → Mortgage paydown** for what this does to your "
-                       "success rate.")
+            st.caption("See **What if → Mortgage paydown** for the effect on your "
+                       "chance of success.")
         else:
             set_override(st, "EXTRA_MORTGAGE_PAYMENT_START_AGE", None)
-            st.caption("Set an amount to model paying the mortgage down faster. "
-                       "Freeing that payment before retirement removes a large fixed "
-                       "cost from the years most exposed to a bad market.")
+            st.caption("Enter an amount to see the effect of paying off your mortgage "
+                       "sooner. Having no payment in retirement lowers your fixed "
+                       "costs when a bad market hurts most.")
 
     st.divider()
 
@@ -430,9 +429,9 @@ def render_body(st) -> None:
                    bool(get_override(st, "RETIREMENT_VACATION_ENABLED", False)))
     vacation_on = st.toggle("Plan extra travel spending early in retirement",
                               key="bp_vacation_enable",
-                              help="Extra annual spending from retirement until a "
-                                   "chosen slow-down age. It is on top of the "
-                                   "\"Extra for travel and hobbies\" in Retirement goals.")
+                              help="Extra yearly spending from retirement until the age "
+                                   "you slow down. It comes on top of \"Extra for "
+                                   "travel and hobbies\" in Retirement goals.")
     set_override(st, "RETIREMENT_VACATION_ENABLED", bool(vacation_on))
     if vacation_on:
         c8, c9 = st.columns(2, vertical_alignment="bottom")

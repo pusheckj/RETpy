@@ -54,9 +54,9 @@ def _render_body(st) -> None:
     retire_age = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60)
 
     st.caption(
-        "Retirement accounts normally charge a 10% penalty before age 59.5. "
-        "These are the standard ways around it — turn them on one at a time to "
-        "see what each is worth, then layer them."
+        "Retirement accounts charge a 10% penalty on withdrawals before 59½. "
+        "These are the usual ways around it. Try them one at a time to see "
+        "what each is worth."
     )
 
     # --- 1. Taxable brokerage (always on) -----------------------------------
@@ -66,10 +66,10 @@ def _render_body(st) -> None:
                + safe_float(get_override(st, "YOUR_CASH", 0), 0.0)
                + safe_float(get_override(st, "PARTNER_CASH", 0), 0.0))
     st.caption(
-        f":gray[Always active — no age limit and no penalty, just long-term "
-        f"capital-gains tax. You currently hold **{_md(money(taxable, shorten=True))}** "
-        f"in taxable + cash, which is what funds the years before any of the "
-        f"strategies below are needed.]"
+        f":gray[Always on. No age limit and no penalty, only long-term "
+        f"capital-gains tax. You hold **{_md(money(taxable, shorten=True))}** "
+        f"in taxable brokerage and cash, which pays for the early years "
+        f"before you need the options below.]"
     )
 
     # --- 2. Rule of 55 -------------------------------------------------------
@@ -77,20 +77,19 @@ def _render_body(st) -> None:
     ensure_default(st, "ea_rule55", bool(get_override(st, "RULE_OF_55_ENABLED", False)))
     v = st.toggle(
         "Use the Rule of 55", key="ea_rule55",
-        help="Leave your employer during or after the year you turn 55 and that "
-             "employer's 401(k) becomes penalty-free. IRAs do NOT qualify, and "
-             "rolling the 401(k) into an IRA forfeits it.",
+        help="If you leave your employer in or after the year you turn 55, that "
+             "employer's 401(k) is penalty-free. IRAs don't qualify, and rolling "
+             "the 401(k) into an IRA loses it.",
     )
     set_override(st, "RULE_OF_55_ENABLED", bool(v))
     if v:
         if retire_age >= 55:
-            st.caption(f":gray[Retiring at {retire_age} — qualifies. Your 401(k) is "
-                       f"penalty-free from {retire_age} instead of 59.5.]")
+            st.caption(f":gray[Retiring at {retire_age} qualifies. Your 401(k) is "
+                       f"penalty-free from {retire_age} instead of 59½.]")
         else:
             st.warning(
-                f"You're targeting retirement at **{retire_age}**, before 55, so this "
-                f"does nothing — the exception needs you to leave the employer at 55+. "
-                f"It applies only if you push retirement to 55 or later."
+                f"You plan to retire at **{retire_age}**, before 55, so this has no "
+                f"effect. You have to leave your employer at 55 or later."
             )
 
     # --- 3. 72(t) SEPP -------------------------------------------------------
@@ -98,10 +97,9 @@ def _render_body(st) -> None:
     ensure_default(st, "ea_sepp", bool(get_override(st, "SEPP_72T_ENABLED", False)))
     v = st.toggle(
         "Take 72(t) equal periodic payments", key="ea_sepp",
-        help="Fixed annual withdrawals from retirement accounts, penalty-free at "
-             "any age. Once started they must continue for the longer of 5 years "
-             "or until 59.5 — breaking the schedule retroactively penalizes every "
-             "payment taken.",
+        help="Fixed yearly withdrawals, penalty-free at any age. You must keep "
+             "them going for 5 years or until 59½, whichever is longer. Stopping "
+             "early means the penalty applies to every payment you took.",
     )
     set_override(st, "SEPP_72T_ENABLED", bool(v))
     if v:
@@ -117,8 +115,8 @@ def _render_body(st) -> None:
                            safe_float(get_override(st, "SEPP_72T_RATE", 0.05), 0.05) * 100)
             r = st.number_input("Rate (%)", min_value=0.0, max_value=10.0, step=0.25,
                                 key="ea_sepp_rate",
-                                help="IRS allows the greater of 5% or 120% of the "
-                                     "mid-term AFR for the amortization method.")
+                                help="The most the IRS allows is the greater of 5% or 120% "
+                                     "of the mid-term federal rate (AFR).")
             set_override(st, "SEPP_72T_RATE", r / 100)
         start = safe_int(get_override(st, "SEPP_72T_START_AGE", retire_age), retire_age)
         rate = safe_float(get_override(st, "SEPP_72T_RATE", 0.05), 0.05)
@@ -130,12 +128,11 @@ def _render_body(st) -> None:
         ensure_default(st, "ea_sepp_carveout",
                        safe_int(get_override(st, "SEPP_72T_CARVEOUT", 0), 0))
         co = st.number_input(
-            "Designated balance ($, 0 = entire traditional)",
+            "Designated balance ($, 0 = all traditional)",
             min_value=0, max_value=20_000_000, step=25_000, key="ea_sepp_carveout",
-            help="Split this much of your traditional savings into a separate IRA "
-                 "for the 72(t). The payment is computed only on this amount, and "
-                 "the rest stays outside the schedule — no 5-year lock-in and "
-                 "still available for Roth conversions.",
+            help="Move this much of your traditional savings into a separate IRA "
+                 "for the 72(t). Payments are based only on this amount. The rest "
+                 "has no lock-in and stays available for Roth conversions.",
         )
         set_override(st, "SEPP_72T_CARVEOUT", safe_int(co))
 
@@ -144,59 +141,56 @@ def _render_body(st) -> None:
             if co > 0:
                 pay = _cfg.sepp_72t_annual_amount(co, start, rate)
                 st.caption(
-                    f":gray[A **{_md(money(co, shorten=True))}** carve-out pays about "
+                    f":gray[Designating **{_md(money(co, shorten=True))}** pays about "
                     f"**{_md(money(pay, shorten=True))}/yr** from age {start}. "
-                    f"Rule of thumb: about "
+                    f"Rule of thumb: designate about "
                     f"**{_md(money(_cfg.sepp_72t_balance_for_payment(50_000, start, rate), shorten=True))}** "
-                    f"designated per \\$50k/yr of bridge income you need.]"
+                    f"for each \\$50k/yr you need.]"
                 )
             else:
                 st.warning(
-                    "**0 designates your whole traditional balance** — an all-or-nothing "
-                    "72(t). That forces the largest possible mandatory draw and "
+                    "**0 means your whole traditional balance** goes into the 72(t). "
+                    "That forces the biggest possible required withdrawal and "
                     "competes with your Roth conversions for the same low tax "
-                    "brackets. Enter only the amount you actually need to bridge."
+                    "brackets. Enter only what you need to bridge the gap."
                 )
         except Exception:
             pass
 
         locked_until = max(start + 5, 60)
         st.caption(f":gray[Locked in until about age {locked_until} "
-                   f"(the longer of 5 years or 59.5). The annual amount is fixed "
-                   f"at the start age from the designated balance — it does not "
-                   f"flex if markets move.]")
+                   f"(5 years or 59½, whichever is longer). The yearly amount is set "
+                   f"at the start age from the designated balance and doesn't "
+                   f"change with the market.]")
 
     # --- 4. Roth conversion ladder ------------------------------------------
     _section_label(st, "4 · Roth conversion ladder")
     ensure_default(st, "ea_ladder", bool(get_override(st, "ROTH_LADDER_ENABLED", False)))
     v = st.toggle(
         "Enforce the 5-year conversion ladder", key="ea_ladder",
-        help="Converted principal becomes withdrawable tax- and penalty-free 5 "
-             "years after each conversion. Turning this ON makes the model track "
-             "conversions as dated cohorts and enforce that waiting period — "
-             "stricter, and more realistic, than assuming Roth money is always "
-             "reachable.",
+        help="Converted money can be withdrawn without tax or penalty 5 years "
+             "after each conversion. When on, the model tracks each year's "
+             "conversion and enforces that wait. That's stricter and more "
+             "realistic than assuming Roth money is always available.",
     )
     set_override(st, "ROTH_LADDER_ENABLED", bool(v))
     conversions_on = bool(get_override(st, "ENABLE_ROTH_CONVERSION", True))
     if v and not conversions_on:
         st.warning(
-            "The ladder has nothing to climb: **Roth conversion** is switched off "
-            "under Assumptions → Roth conversion. Turn it on to actually build the "
-            "rungs."
+            "The ladder needs conversions, and **Roth conversion** is off under "
+            "Assumptions → Roth conversion. Turn it on to build the ladder."
         )
     elif v:
-        st.caption(":gray[Each year's conversion unlocks 5 years later, so the "
-                   "first rung needs to be built 5 years before you retire.]")
+        st.caption(":gray[Each year's conversion is available 5 years later, so "
+                   "start converting 5 years before you retire.]")
 
     # --- 5. Coast FIRE -------------------------------------------------------
     _section_label(st, "5 · Coast FIRE")
     ensure_default(st, "ea_coast", bool(get_override(st, "COAST_FIRE_ENABLED", False)))
     v = st.toggle(
         "Coast from a chosen age", key="ea_coast",
-        help="Stop saving but keep working enough to cover expenses. The portfolio "
-             "compounds untouched — no new contributions, no withdrawals — until "
-             "your real retirement age.",
+        help="Stop saving but keep working enough to cover expenses. Your portfolio "
+             "grows with no contributions or withdrawals until your retirement age.",
     )
     set_override(st, "COAST_FIRE_ENABLED", bool(v))
     if v:
@@ -213,12 +207,12 @@ def _render_body(st) -> None:
         set_override(st, "COAST_FIRE_AGE", safe_int(a))
         coast_age = safe_int(a)
         if coast_age >= retire_age:
-            st.caption(f":gray[Coasting from {coast_age} has no effect — you already "
+            st.caption(f":gray[Coasting from {coast_age} has no effect, since you already "
                        f"retire at {retire_age}.]")
         else:
-            st.caption(f":gray[Saving stops at {coast_age}; you keep covering "
-                       f"expenses until {retire_age}, so the portfolio grows on "
-                       f"compounding alone for {retire_age - coast_age} years.]")
+            st.caption(f":gray[Saving stops at {coast_age}. You cover your own expenses until "
+                       f"{retire_age}, so your portfolio grows by compounding alone "
+                       f"for {retire_age - coast_age} years.]")
 
 
 def render(st) -> None:

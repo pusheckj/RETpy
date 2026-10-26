@@ -113,8 +113,8 @@ def render_body(st) -> None:
         current_mode = modes[0]
     ensure_default(st, "rg_spend_mode", current_mode)
     mode = st.radio("How much will you spend in retirement?", modes, key="rg_spend_mode",
-                    help="Most retirees spend ~70-100% of pre-retirement expenses: "
-                         "healthcare rises, commute/work costs fall.")
+                    help="Most retirees spend about 70-100% of what they spent while "
+                         "working. Healthcare costs rise and work costs fall.")
     set_override(st, "RETIREMENT_SPENDING_MODE", mode)
 
     if mode == "% of today's expenses":
@@ -123,7 +123,7 @@ def render_body(st) -> None:
         v = st.slider("Retirement spending (% of today's)", min_value=50.0,
                       max_value=150.0, step=5.0, key="rg_spend_pct")
         set_override(st, "RETIREMENT_SPENDING_PCT", v / 100)
-        st.caption(f"= {v:.0f}% of current annual expenses, inflated each year.")
+        st.caption(f"= {v:.0f}% of your current yearly expenses, rising with inflation.")
     elif mode == "Absolute amount ($/yr)":
         ensure_default(st, "rg_spend_abs",
                        safe_int(get_override(st, "RETIREMENT_SPENDING_ABSOLUTE", 60_000), 60_000))
@@ -131,9 +131,9 @@ def render_body(st) -> None:
                             max_value=1_000_000, step=1_000, key="rg_spend_abs")
         set_override(st, "RETIREMENT_SPENDING_ABSOLUTE", safe_int(v))
         st.caption(f"= {money(safe_int(v), shorten=True)}/yr in today's dollars, "
-                   f"inflated each year.")
+                   f"rising with inflation each year.")
     else:
-        st.caption("Same as today's expenses, inflation-adjusted each year.")
+        st.caption("Same as today's expenses, rising with inflation each year.")
 
     _lifestyle(st, overrides)
 
@@ -145,7 +145,7 @@ def render_body(st) -> None:
                    bool(get_override(st, "INCLUDE_SOCIAL_SECURITY", True)))
     include = st.toggle("Include Social Security",
                           key="rg_ss_include",
-                          help="Stress-test what happens if SS is reduced or eliminated.")
+                          help="Turn off to see your plan without Social Security.")
     set_override(st, "INCLUDE_SOCIAL_SECURITY", bool(include))
 
     ensure_default(st, "rg_ss_claim",
@@ -164,7 +164,7 @@ def render_body(st) -> None:
                                 claim_age))
         partner_claim = st.slider("Partner's claim age", min_value=62, max_value=70, step=1,
                                   key="rg_partner_ss_claim",
-                                  help="When your partner starts, in their own age.")
+                                  help="The age your partner starts claiming.")
         set_override(st, "PARTNER_SS_CLAIM_AGE", safe_int(partner_claim))
     else:
         set_override(st, "PARTNER_SS_CLAIM_AGE", None)
@@ -176,8 +176,8 @@ def render_body(st) -> None:
         v = st.number_input("Your monthly benefit at FRA ($)",
                             min_value=0, max_value=5_000, step=50,
                             key="rg_your_fra",
-                            help="Find yours at https://www.ssa.gov/myaccount. "
-                                 "Average retired-worker benefit is ~$1,900/mo.")
+                            help="Your benefit at full retirement age (FRA). Find yours at "
+                                 "https://www.ssa.gov/myaccount. The average is about $1,900/mo.")
         set_override(st, "YOUR_SS_MONTHLY_FRA", safe_int(v))
     with c2:
         if has_partner:
@@ -216,11 +216,10 @@ def render_body(st) -> None:
     ltc_on = st.toggle(
         "Model long-term care costs",
         key="rg_ltc_enabled",
-        help="Adds the risk of large end-of-life care costs (nursing home / in-home "
-             "care) at advanced ages. Each year from the start age has a set chance of "
-             "incurring the annual cost, drawn independently per year in the Monte "
-             "Carlo, inflated over time and scaled up ~15% at 87+ and ~25% at 90+. On "
-             "by default; uncheck if you have LTC insurance or expect family care.",
+        help="Adds the risk of a big care bill late in life (nursing home or in-home "
+             "care). From the start age, each year has a set chance of the annual cost, "
+             "which grows with inflation and is ~15% higher at 87+ and ~25% higher at "
+             "90+. Turn off if you have LTC insurance or expect family care.",
     )
     set_override(st, "LTC_ENABLED", bool(ltc_on))
     if ltc_on:
@@ -237,10 +236,9 @@ def render_body(st) -> None:
                                 120_000))
         cost = st.number_input("Annual care cost ($, today's dollars)", min_value=0,
                                step=5_000, key="rg_ltc_cost",
-                               help="Median U.S. nursing-home care runs ~$105k-120k/yr today "
-                                    "(Genworth). The engine inflates this to the year care is "
-                                    "actually incurred, so the modeled cost reflects real "
-                                    "future prices.")
+                               help="Nursing-home care costs about $105k-120k/yr today "
+                                    "(Genworth median). The model raises it with inflation "
+                                    "to the year care is needed.")
         set_override(st, "LTC_ANNUAL_COST", safe_int(cost))
 
         ensure_default(st, "rg_ltc_prob",
@@ -250,19 +248,19 @@ def render_body(st) -> None:
                                       0.20) * 100)))))
         prob = st.slider("Chance of needing care each year (%)", min_value=0, max_value=100,
                          step=5, key="rg_ltc_prob",
-                         help="Chance of incurring the cost in any year from the start "
-                              "age (independent per year). Lower it if you have LTC "
-                              "insurance or expect family care.")
+                         help="Chance of paying the cost in any one year from the start "
+                              "age. Lower it if you have LTC insurance or expect "
+                              "family care.")
         set_override(st, "LTC_PROBABILITY", prob / 100)
 
         # Rough exposure preview (before inflation / age scaling).
         plan_until = plan_end_ages(st.session_state.get("user_overrides", {}) or {})[0]
         exp_years = max(0, plan_until - safe_int(start) + 1) * (prob / 100)
         st.caption(
-            f"≈ **{exp_years:.1f}** expected care-years over the plan at "
-            f"{money_md(safe_int(cost), shorten=True)}/yr "
-            f"(≈ {money_md(exp_years * safe_int(cost), shorten=True)} total, before "
-            f"inflation & age scaling)."
+            f"About **{exp_years:.1f}** expected years of care at "
+            f"{money_md(safe_int(cost), shorten=True)}/yr, roughly "
+            f"{money_md(exp_years * safe_int(cost), shorten=True)} total before "
+            f"inflation and age increases."
         )
 
     # ----- Success threshold -----
@@ -272,9 +270,9 @@ def render_body(st) -> None:
                    max(70, min(95, int(round(current_thr * 100)))))
     v = st.slider("Target success rate (%)", min_value=70, max_value=95, step=1,
                   key="rg_target_success",
-                  help="Plan succeeds if this fraction of Monte Carlo simulations "
-                       "don't run out of money. 80% is a common default; FIRE often "
-                       "targets 90-95%.")
+                  help="Your plan counts as a success if the money lasts in at least this "
+                       "share of simulated futures. 80% is a common default; FIRE "
+                       "planners often aim for 90-95%.")
     set_override(st, "TARGET_SUCCESS_RATE", v / 100)
 
 
