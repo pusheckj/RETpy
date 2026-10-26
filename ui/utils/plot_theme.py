@@ -264,8 +264,11 @@ def _wrap_title(fig, compact: bool = False) -> None:
         height += n * (22 if i == 0 else 18)
     # Pin the title to the top of the figure so extra wrapped lines grow DOWN
     # into the reserved margin instead of being centred over the plot.
+    # Plotly's top anchor puts a wrapped (multi-line) title ~11px per extra line too high, so
+    # on a phone a two-line title sat ~8px under the card top: push it down to match one line.
+    top_pad = 20 + 11 * (len(out) - 1) if compact else 14
     fig.update_layout(title=dict(text="<br>".join(out), yref="container", y=1,
-                                 yanchor="top", pad=dict(t=20 if compact else 14, l=10 if compact else 0)))
+                                 yanchor="top", pad=dict(t=top_pad, l=10 if compact else 0)))
     if compact:
         _set_margin(fig, t=20 + height + 14)   # same ~20px below the title for one and two lines
     else:

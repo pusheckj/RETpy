@@ -2681,6 +2681,13 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
     [data-testid="stMarkdownContainer"] ol > li::before { content: counter(k1n) "."; display: inline-block; width: 1.6em; text-indent: 0; }
 }
 
+@media (max-width: 640px) {
+    /* K1-16: the stat-card hover/tap popup (240px) ran off the right edge from the right-hand card of
+       each 2-up row. Narrower, and the right-hand cards open it leftwards (anchored to their right edge). */
+    section[data-testid="stMain"] .mc-stat-wrap .mc-tip { min-width: 0; width: 230px; max-width: calc(100vw - 54px); box-sizing: border-box; }
+    section[data-testid="stMain"] [data-testid="stColumn"]:nth-child(even) .mc-stat-wrap .mc-tip { left: auto; right: 0; }
+}
+
 /* -- end phone polish K1 -- */
 
 
