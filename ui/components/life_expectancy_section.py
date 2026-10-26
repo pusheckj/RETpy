@@ -11,11 +11,13 @@ import plotly.graph_objects as go
 
 try:
     from utils.coerce import safe_int
+    from utils.formatting import metric_row
     from utils.household import plan_end_ages
     from utils.mortality import life_distribution, RISK_FACTORS, CONDITIONS
     from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
+    from ui.utils.formatting import metric_row  # type: ignore
     from ui.utils.household import plan_end_ages  # type: ignore
     from ui.utils.mortality import life_distribution, RISK_FACTORS, CONDITIONS  # type: ignore
     from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
@@ -68,24 +70,21 @@ def render(st) -> None:
     reach_plan = float(dist["reach_fn"].get(plan_until, 0.0)) if plan_until > current_age else 1.0
 
     # ---- Headline metrics ----
-    m = st.columns(4)
-    with m[0]:
-        st.metric("Median lifespan", f"{dist['median']}",
-                  help="Half of people with your profile live longer than this.")
-    with m[1]:
-        st.metric("Life expectancy", f"{dist['mean']:.0f}",
-                  help="Mean age at death (the average).")
-    with m[2]:
-        st.metric("1-in-10 reach", f"{dist['p90']}",
-                  help="90th-percentile age — a 10% chance of living even longer. A prudent "
-                       "planning horizon.")
-    with m[3]:
-        st.metric("Outlive your plan", f"{reach_plan:.0%}",
-                  delta="risk" if reach_plan >= 0.25 else "low",
-                  delta_color=("inverse" if reach_plan >= 0.25 else "normal"),
-                  delta_arrow=("up" if reach_plan >= 0.25 else "down"),
-                  help=f"Chance you're still alive when the plan ends (you're {plan_until}). "
-                       "If high, your plan may end while you're still spending.")
+    metric_row(st, [
+        ("Median lifespan", f"{dist['median']}",
+         dict(help="Half of people with your profile live longer than this.")),
+        ("Life expectancy", f"{dist['mean']:.0f}",
+         dict(help="Mean age at death (the average).")),
+        ("1-in-10 reach", f"{dist['p90']}",
+         dict(help="90th-percentile age — a 10% chance of living even longer. A prudent "
+                   "planning horizon.")),
+        ("Outlive your plan", f"{reach_plan:.0%}",
+         dict(delta="risk" if reach_plan >= 0.25 else "low",
+              delta_color=("inverse" if reach_plan >= 0.25 else "normal"),
+              delta_arrow=("up" if reach_plan >= 0.25 else "down"),
+              help=f"Chance you're still alive when the plan ends (you're {plan_until}). "
+                   "If high, your plan may end while you're still spending.")),
+    ])
 
     # ---- Distribution plot ----
     dark = is_dark(st)

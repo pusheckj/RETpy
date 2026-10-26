@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import plotly.graph_objects as go
 
-from utils.formatting import money, pct
+from utils.formatting import metric_row, money, pct
 
 
 try:
@@ -111,27 +111,14 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
     working_gross = _gross(working_rows)
     ret_gross = _gross(ret_rows)
 
-    cols = st.columns(4)
-    with cols[0]:
-        st.metric("Working-years tax", money(working_tax, shorten=True))
-    with cols[1]:
-        st.metric("Retirement-years tax", money(ret_tax, shorten=True))
-    with cols[2]:
-        if working_gross > 0:
-            st.metric(
-                "Effective working rate",
-                f"{_effective_rate(working_tax, working_gross):.1f}%",
-            )
-        else:
-            st.metric("Effective working rate", "—")
-    with cols[3]:
-        if ret_gross > 0:
-            st.metric(
-                "Effective retirement rate",
-                f"{_effective_rate(ret_tax, ret_gross):.1f}%",
-            )
-        else:
-            st.metric("Effective retirement rate", "—")
+    metric_row(st, [
+        ("Working-years tax", money(working_tax, shorten=True), {}),
+        ("Retirement-years tax", money(ret_tax, shorten=True), {}),
+        ("Effective working rate",
+         f"{_effective_rate(working_tax, working_gross):.1f}%" if working_gross > 0 else "—", {}),
+        ("Effective retirement rate",
+         f"{_effective_rate(ret_tax, ret_gross):.1f}%" if ret_gross > 0 else "—", {}),
+    ])
 
     ages = [r.get("age") for r in tax_rows]
 
