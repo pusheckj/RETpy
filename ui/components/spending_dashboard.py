@@ -720,7 +720,7 @@ def monthly_figure(table: pd.DataFrame, incomplete: List[pd.Period], dark: bool,
     fig.update_xaxes(range=[table.index[0].start_time, (table.index[-1] + 1).start_time])
     fig.update_layout(barmode="relative", barcornerradius=4, bargap=0.25, height=440,
                       hovermode="closest", legend=dict(orientation="h", y=-0.24 if compact else -0.15),
-                      margin=dict(t=36, b=10, l=10, r=_CARD_CLIP),
+                      margin=dict(t=36, b=10, l=10, r=10 if compact else _CARD_CLIP),
                       yaxis=dict(tickformat="$,.0f", title=None),
                       xaxis=dict(title=None, dtick="M3" if compact else "M1", tickformat="%b<br>%Y",
                                  ticklabelmode="period"))
@@ -755,7 +755,7 @@ def category_trend_figure(tx: pd.DataFrame, category: str, start: pd.Period, end
     _shade_incomplete(fig, list(months), incomplete, dark)
     fig.update_xaxes(range=[start.start_time, (end + 1).start_time])
     fig.update_layout(height=330, barcornerradius=4, bargap=0.3, hovermode="x unified",
-                      legend=dict(orientation="h", y=-0.3), margin=dict(t=36, b=10, l=10, r=_CARD_CLIP),
+                      legend=dict(orientation="h", y=-0.3), margin=dict(t=36, b=10, l=10, r=10 if compact else _CARD_CLIP),
                       yaxis=dict(tickformat="$,.0f", title=None),
                       xaxis=dict(title=None, dtick="M3" if compact else "M1", tickformat="%b<br>%Y",
                                  ticklabelmode="period"))
@@ -1042,8 +1042,8 @@ def render(st, **_kwargs) -> None:
         _chart(st, lambda compact: category_trend_figure(view, pick, start, chart_end, incomplete,
                                                          dark, window, compact),
                "sp_cat_trend", PLOTLY_CONFIG)
-        merchants = _merchants_per_year(view, start, end, complete, pick, 10).assign(
-            **{"Per year": lambda d: d["Per year"].map(money)})
+        raw_merchants = _merchants_per_year(view, start, end, complete, pick, 10)
+        merchants = raw_merchants.assign(**{"Per year": lambda d: d["Per year"].map(money)})
         summary = category_summary(view, start, end, complete)
         det = summary.reset_index().rename(columns={"category": "Category"})
         det = det[det["Expense category"] == pick][["Category", "Per month", "Per year"]]
@@ -1056,8 +1056,9 @@ def render(st, **_kwargs) -> None:
             st.markdown(f"**Top merchants — {pick}**")
             _phone_df(st, "sp_merchants", merchants,
                       {"Merchant": st.column_config.Column(width=170),
-                       "Per year": st.column_config.Column(width=82),
-                       "Visits": st.column_config.Column(width=58)},
+                       "Per year": st.column_config.NumberColumn(format="dollar", width=82),
+                       "Visits": st.column_config.NumberColumn(width=58)},
+                      phone_df=raw_merchants.assign(**{"Per year": raw_merchants["Per year"].round().astype(int)}),
                       column_config={"Merchant": st.column_config.Column(width=130),
                                      "Category": st.column_config.Column(width=90),
                                      "Per year": st.column_config.Column(width=66),

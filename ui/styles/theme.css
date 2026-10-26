@@ -2451,7 +2451,7 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     .st-key-sp_period [data-baseweb="button-group"] button *,
     .st-key-sp_ma [data-baseweb="button-group"] button *,
     .st-key-sp_view [data-baseweb="button-group"] button * {
-        color: #64748b !important; font-weight: 600 !important; white-space: nowrap; line-height: 1.2;
+        color: var(--mc-muted) !important; font-weight: 600 !important; white-space: nowrap; line-height: 1.2;
     }
     .st-key-sp_period [data-baseweb="button-group"] button[kind="segmented_controlActive"],
     .st-key-sp_ma [data-baseweb="button-group"] button[kind="segmented_controlActive"],
@@ -2461,5 +2461,14 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     .st-key-sp_view [data-baseweb="button-group"] button[kind="segmented_controlActive"] * { color: #0d9488 !important; }
     .st-key-sp_period [data-baseweb="button-group"] button { flex: 1 1 auto !important; }
 }
+
+/* I1-5: dark mode: unselected category pills (Trends picker, Transactions picker) were
+   the light cream with light text. Scoped to dark via the theme's own <style> tag. */
+.stApp:has([id$="dark-theme"]) :is(.st-key-sp_cat, .st-key-sp_groups, .st-key-sp_tx_cat) button[kind="pills"] {
+    background-color: transparent !important; border-color: var(--mc-tile-border) !important;
+}
+.stApp:has([id$="dark-theme"]) :is(.st-key-sp_cat, .st-key-sp_groups, .st-key-sp_tx_cat) button[kind="pills"] p { color: var(--mc-ink) !important; }
+.stApp:has([id$="dark-theme"]) :is(.st-key-sp_cat, .st-key-sp_groups, .st-key-sp_tx_cat) [data-baseweb="button-group"] { border: 0 !important; }
+.stApp:has([id$="dark-theme"]) :is(.st-key-sp_period, .st-key-sp_ma, .st-key-sp_view) [data-baseweb="button-group"] button[kind="segmented_controlActive"] * { color: #2dd4bf !important; }
 
 /* -- end phone polish I1 -- */
