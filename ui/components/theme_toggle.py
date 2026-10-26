@@ -187,7 +187,7 @@ details summary,
     border-color: #47434f !important;
     color: #e8e3da !important;
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
     summary:hover,
     [data-testid="stExpander"] summary:hover {
         background-color: #3d3947 !important;
@@ -231,8 +231,10 @@ button[data-testid="stNumberInputStepDown"] {
     background-color: #302d38 !important;
     color: #e8e3da !important;
 }
+@media (hover: hover) and (pointer: fine) {
 [data-baseweb="menu"] li:hover {
     background-color: #3d3947 !important;
+}
 }
 
 /* Radio and checkbox */
@@ -261,11 +263,13 @@ button[data-testid="stNumberInputStepDown"] {
     color: #201e27 !important;
     border-color: #14b8a6 !important;
 }
+@media (hover: hover) and (pointer: fine) {
 .stButton > button:hover,
 [data-testid="stButton"] > button:hover,
 [data-testid="stDownloadButton"] > button:hover {
     background-color: #0d9488 !important;
     color: #ffffff !important;
+}
 }
 .stButton > button[kind="secondary"],
 [data-testid="stButton"] > button[kind="secondary"] {
@@ -285,8 +289,10 @@ button[data-testid="stNumberInputStepDown"] {
 [data-testid="stPopover"] button span {
     color: #e8e3da !important;
 }
+@media (hover: hover) and (pointer: fine) {
 [data-testid="stPopover"] button:hover {
     background-color: #3d3947 !important;
+}
 }
 
 /* Form-submit buttons (e.g. "Pin current scenario") — match the primary style. */
@@ -299,12 +305,14 @@ button[data-testid="stNumberInputStepDown"] {
 [data-testid="stFormSubmitButton"] > button span {
     color: #201e27 !important;
 }
+@media (hover: hover) and (pointer: fine) {
 [data-testid="stFormSubmitButton"] > button:hover {
     background-color: #0d9488 !important;
 }
 [data-testid="stFormSubmitButton"] > button:hover,
 [data-testid="stFormSubmitButton"] > button:hover p {
     color: #ffffff !important;
+}
 }
 
 /* Tabs (soft segmented) */
@@ -345,7 +353,7 @@ button[data-testid="stNumberInputStepDown"] {
 /* Select chevrons were the light theme's dark ink on the dark field (invisible). */
 [data-baseweb="select"] svg { color: var(--mc-ink) !important; fill: var(--mc-ink) !important; }
 [data-testid="stBaseButton-segmented_controlActive"] p { color: #2dd4bf !important; }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
     [data-testid="stBaseButton-segmented_control"]:hover { background-color: #3d3947 !important; }
     [data-testid="stBaseButton-segmented_control"]:hover p { color: var(--mc-ink) !important; }
 }
@@ -469,10 +477,12 @@ hr {
 :root button[data-testid="stBaseButton-tertiary"],
 :root button[data-testid="stBaseButton-tertiary"] p,
 :root button[data-testid="stBaseButton-tertiary"] span { color: var(--mc-ink) !important; }
+@media (hover: hover) and (pointer: fine) {
 :root button[data-testid="stBaseButton-secondary"]:hover,
 :root button[data-testid="stBaseButton-tertiary"]:hover { background: #3d3947 !important; }
 :root button[data-testid="stBaseButton-secondary"]:hover p,
 :root button[data-testid="stBaseButton-tertiary"]:hover p { color: var(--mc-ink) !important; }
+}
 
 /* ...except link-style tertiaries, which stay plain links as in light mode. */
 :root .st-key-gs_skip button[data-testid="stBaseButton-tertiary"],
@@ -480,7 +490,7 @@ hr {
     background: transparent !important; border: none !important;
 }
 :root .st-key-gs_skip button[data-testid="stBaseButton-tertiary"] p { color: var(--mc-muted) !important; }
-:root .st-key-gs_skip button[data-testid="stBaseButton-tertiary"]:hover p { color: var(--mc-ink) !important; }
+@media (hover: hover) and (pointer: fine) { :root .st-key-gs_skip button[data-testid="stBaseButton-tertiary"]:hover p { color: var(--mc-ink) !important; } }
 /* Placeholders ("Required") were dark on the dark field. */
 input::placeholder, textarea::placeholder { color: var(--mc-muted) !important; opacity: .85 !important; }
 

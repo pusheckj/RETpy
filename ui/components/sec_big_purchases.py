@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover
 
 # Plain-language choices for a move, by what you have just before it.
 _RENTING_CHOICES = ("Buy a home", "Move to another rental")
-_OWNING_CHOICES = ("Sell and buy another home", "Sell and rent")
+_OWNING_CHOICES = ("Sell, buy another", "Sell and rent")
 _MEDIAN_HOME_PRICE = 420_000      # US median existing-home price, a starting point
 
 

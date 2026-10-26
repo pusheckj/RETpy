@@ -263,10 +263,12 @@ section[data-testid="stSidebar"] .stTextInput input {
     box-shadow: none;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .stButton > button:hover {
     border-color: #cbb48c;
     background-color: #faf6ec;
     box-shadow: none;
+}
 }
 
 .stButton > button[kind="primary"],
@@ -290,6 +292,7 @@ section[data-testid="stSidebar"] .stTextInput input {
     transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .stButton > button[kind="primary"]:hover,
 .stButton > button[data-testid="baseButton-primary"]:hover {
     background: linear-gradient(90deg, #0f766e 0%, #16a34a 100%);
@@ -300,6 +303,7 @@ section[data-testid="stSidebar"] .stTextInput input {
     box-shadow: none;
     filter: drop-shadow(0 6px 16px rgba(13, 148, 136, 0.5));
     transform: translateY(-1px);
+}
 }
 
 /* Remove the browser/Streamlit focus outline + focus box-shadow — the
@@ -998,10 +1002,12 @@ footer { display: none !important; }
     box-shadow: none !important;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .mc-card:hover,
 .mc-stat-card:hover {
     transform: translateY(-3px);
     box-shadow: 0 14px 30px rgba(120, 96, 52, 0.20) !important;
+}
 }
 
 [data-testid="stExpander"] {
@@ -1572,7 +1578,7 @@ footer { display: none !important; }
 .st-key-mc-setup-nav > .st-key-gs_skip + .st-key-gs_next { margin-left: 0; }
 .st-key-gs_skip button { color: var(--mc-muted); text-decoration: underline; text-underline-offset: 3px;
     padding: 0 12px; }
-.st-key-gs_skip button:hover { color: var(--mc-ink); }
+@media (hover: hover) and (pointer: fine) { .st-key-gs_skip button:hover { color: var(--mc-ink); } }
 /* Spending-view chips: Trends' picker has the same flat look as Include's. */
 .st-key-sp_cat [data-testid="stButtonGroup"] > div:not([data-testid]),
 .st-key-sp_groups [data-testid="stButtonGroup"] > div:not([data-testid]) {
@@ -2760,5 +2766,69 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
 /* ==========================================================================
    Desktop + touch-hover polish L1. Only fixer L1 edits this block.
    ========================================================================== */
+
+/* L1-2: segmented radios keep no gap for the hidden radio dot at ANY width (the 8px left
+   padding put the text 8px right of centre: 10/2, 24/16). The sidebar switch also gets
+   breathing room on the right. */
+:is([role="radiogroup"].mc-seg,
+    [class*="st-key-mc-mode-switch"] [role="radiogroup"],
+    [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"],
+    [class*="st-key-"][class*="_basis"] [role="radiogroup"],
+    .st-key-portfolio_breakdown_main_view [role="radiogroup"],
+    .st-key-net_worth_box_main_style [role="radiogroup"],
+    .st-key-spending_range_main_style [role="radiogroup"],
+    .st-key-tax_tab_view [role="radiogroup"],
+    .st-key-sa_scenario [role="radiogroup"],
+    .st-key-theme_mode [role="radiogroup"]) label > div:last-child { padding-left: 0 !important; }
+@media (min-width: 641px) { section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label { padding: 7px 6px !important; } }
+
+/* L1-1: a delta chip under one metric (e.g. "low", "overspending") pushed its row-mates 24px
+   lower on desktop. Delta-less metrics in that row reserve the chip's height, at every width
+   (the phone block above does it for 2-up/4-up rows). Narrower widths wrap the columns (next rule). */
+@media (min-width: 1101px) {
+    section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetricDelta"]) [data-testid="stMetric"]:not(:has([data-testid="stMetricDelta"])) { padding-bottom: 28px; }
+}
+/* 641-1100px: columns wrap two-up; there the delta metric's row-mates are top-aligned instead
+   (padding would add a gap under rows that have no chip). */
+@media (min-width: 641px) and (max-width: 1100px) {
+    section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetricDelta"]) [data-testid="stMetric"] > div { justify-content: flex-start; }
+}
+
+/* L1-3: "By category" donut: no inner side padding and a left-aligned chart, so its title
+   sits at the same inset (11px) as the "By account" title next to it (was 25px). */
+@media (min-width: 641px) {
+    [class*="st-key-mc-wide-"][class*="_category"] { padding: 0 !important; }
+    [class*="st-key-mc-wide-"][class*="_category"] > [data-testid="stElementContainer"] { margin: 0 !important; }
+    [class*="st-key-mc-wide-"][class*="_category"] [data-testid="stFullScreenFrame"] { margin-left: 0 !important; }
+}
+
+/* L1-5: text, number and select controls start their text at the same inner offset at every
+   width (the phone value: 19px from the outer edge). Text was 13, select 27. */
+.stTextInput input { padding-left: 18px; padding-right: 18px; }
+.stSelectbox [data-baseweb="select"] > div { padding-left: 6px; }
+.stMultiSelect [data-baseweb="select"] > div { padding-left: 8px; }
+section[data-testid="stMain"] .st-key-mc-topbar [data-baseweb="select"] > div > div:first-child { padding-left: 12px !important; }
+
+/* L1-6: a caption under a radio group (setup steps) is not pulled up into the last option. */
+@media (min-width: 641px) {
+    .st-key-mc-setup-root [data-testid="stElementContainer"]:has([data-testid="stRadio"]) + [data-testid="stElementContainer"]:has([data-testid="stCaptionContainer"]) { margin-top: 0; }
+}
+
+/* L1-7: the top-bar pills are one height (44px, the select's): switch group, Up to date, select, Settings. */
+@media (min-width: 641px) {
+    .st-key-mc-topbar [data-testid="stButtonGroup"] button { min-height: 34px; }
+    .st-key-mc-topbar [data-testid^="stBaseButton"]:not([data-testid^="stBaseButton-segmented"]),
+    .st-key-mc-topbar [data-testid="stPopoverButton"] { min-height: 44px; }
+}
+
+/* L1-10: alerts have one border (the container's); the outer wrapper's duplicated it. */
+[data-testid="stAlert"] { border: 0 !important; box-shadow: none !important; }
+
+/* L1-8: Settings "Forget my data" spans the popover like the selects above it. */
+.st-key-device_forget, .st-key-device_forget button { width: 100% !important; }
+
+/* L1-4: sidebar charts (the auto-allocation bar): Plotly sizes its SVG to the card's outer
+   width, so the card's 10px side padding pushed the plot 12px past the box. No side padding there. */
+@media (min-width: 641px) { section[data-testid="stSidebar"] [data-testid="stPlotlyChart"] { padding-left: 0; padding-right: 0; } }
 
 /* -- end polish L1 -- */
