@@ -2329,6 +2329,27 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish G1 (lower tiles: lifespan/tax/savings stat rows, wide tables). Only fixer G1 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* G1-1: metric rows built by utils.formatting.metric_row. A column that holds
+       the hidden .mc-l2-mark makes both labels of its pair reserve two lines, so
+       the values share a baseline (the marker's own row is not drawn). */
+    section[data-testid="stMain"] [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] .mc-l2-mark) { display: none; }
+    section[data-testid="stMain"] [data-testid="stColumn"]:has(.mc-l2-mark) [data-testid="stMetricLabel"] { min-height: calc(2 * 1.42em); min-height: 2lh; align-items: flex-start; }
+}
+
+@media (max-width: 640px) {
+    /* G1-3: the top card's Run button label ("Run simulation") was clipped by its
+       nowrap column: tighter padding and a touch smaller type make it fit. */
+    .st-key-topbar_run_button button { padding-left: 10px; padding-right: 10px; }
+    .st-key-topbar_run_button button p { font-size: 0.9rem; }
+}
+
+@media (max-width: 640px) {
+    /* G1-3b: the Spending view's two figures (Avg spend / Months counted) both show:
+       the generic phone rule that sheds the 3rd metric (Income) hid the second. */
+    .mc-topbar.mc-topbar-stats .mc-topbar-metric:nth-of-type(3) { display: flex; flex: 1 1 30%; min-width: 0; align-items: center; text-align: center; }
+}
+
 /* -- end phone polish G1 -- */
 
 

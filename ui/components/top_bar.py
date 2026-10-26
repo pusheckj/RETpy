@@ -191,7 +191,8 @@ def render(st, results: Optional[dict] = None,
     success_str, success_hint = _resolve_success(results)
 
     html_parts = []
-    html_parts.append('<div class="mc-topbar">')
+    html_parts.append('<div class="mc-topbar mc-topbar-stats">' if stats is not None
+                      else '<div class="mc-topbar">')
     html_parts.append(f'<span class="mc-topbar-title">{escape(title)}</span>')
     html_parts.append(_metric_html("Name(s)", names))
     if stats is not None:       # Spending view: figures from the statements instead

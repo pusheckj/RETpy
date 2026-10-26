@@ -102,3 +102,17 @@ def signed_pct(value: Union[float, None], precision: int = 1) -> str:
         return "—"
     sign = "+" if value >= 0 else "-"
     return f"{sign}{abs(value) * 100:.{precision}f}%"
+
+
+def metric_row(st, items: list, wrap_chars: int = 14) -> None:
+    """A row of ``st.metric`` cells (``(label, value, kwargs)`` tuples) that stays
+    aligned on a phone, where the row wraps to two per line: a pair whose longer
+    label may wrap gets a hidden marker, so theme.css makes both labels reserve
+    two lines and the values share a baseline."""
+    cols = st.columns(len(items))
+    for i, (label, value, kw) in enumerate(items):
+        pair = items[i - i % 2: i - i % 2 + 2]
+        with cols[i]:
+            if any(len(p[0]) > wrap_chars for p in pair):
+                st.markdown('<span class="mc-l2-mark"></span>', unsafe_allow_html=True)
+            st.metric(label, value, **kw)
