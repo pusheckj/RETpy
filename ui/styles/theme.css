@@ -2646,6 +2646,22 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
    Phone polish K2 (round 4). Only fixer K2 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* K2-18: metric rows in the side panel (Taxes 2-up, Income YOU/PARTNER/TOTAL 3-up) stay
+       side by side instead of stacking one per row with a ~55px gap. */
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(input)):not(:has(button)) {
+        flex-wrap: nowrap !important; gap: 8px !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]):not(:has(input)):not(:has(button)) > [data-testid="stColumn"] {
+        min-width: 0 !important; flex: 1 1 0 !important; width: auto !important;
+    }
+
+    /* K2-10: a tap leaves :hover stuck on the button under the finger, and the primary-button
+       hover nudge (translateX 3px on the label) then shows as 13/7 padding on "Show my results"
+       / Next. No nudge on touch screens. */
+    .stButton > button[kind="primary"]:hover > * { transform: none !important; }
+}
+
 /* -- end phone polish K2 -- */
 
 
