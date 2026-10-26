@@ -2784,4 +2784,16 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
     .mc-phonebar-sp .mc-phonebar-status { font-size: 16px; }
 }
 
+@media (max-width: 640px) {
+    /* M1-3: the planner's mode switch stays centred on the page's centre line (balanced with
+       the cards below, ">>" in the left margin), but now with a real gap: the old 52px margin
+       let the 40px button (ends at 58px) touch the switch. Equal 64px margins keep it clear. */
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-gutter) { left: 64px; right: 64px; }
+    .st-key-mc-mode-switch-gutter [role="radiogroup"][role="radiogroup"] label { flex: 1 1 auto; padding: 4px 6px !important; }
+}
+@media (max-width: 380px) {
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-gutter) { left: 60px; right: 60px; }
+    .st-key-mc-mode-switch-gutter [role="radiogroup"][role="radiogroup"] label { padding: 4px 3px !important; }
+}
+
 /* -- end phone polish M1 -- */
