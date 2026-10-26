@@ -337,11 +337,13 @@ button[data-testid="stNumberInputStepDown"] {
 /* st.segmented_control: unselected segments default to the light theme's cream
    surface; give them the dark tile with muted text (selected keeps its teal). */
 [data-testid="stBaseButton-segmented_control"] {
-    background-color: var(--mc-tile) !important;
+    background-color: #26232f !important;   /* inset, like the light theme's cream pill on a white card */
     border-color: var(--mc-tile-border) !important;
 }
 [data-testid="stBaseButton-segmented_control"],
 [data-testid="stBaseButton-segmented_control"] p { color: var(--mc-muted) !important; }
+/* Select chevrons were the light theme's dark ink on the dark field (invisible). */
+[data-baseweb="select"] svg { color: var(--mc-ink) !important; fill: var(--mc-ink) !important; }
 [data-testid="stBaseButton-segmented_controlActive"] p { color: #2dd4bf !important; }
 @media (hover: hover) {
     [data-testid="stBaseButton-segmented_control"]:hover { background-color: #3d3947 !important; }

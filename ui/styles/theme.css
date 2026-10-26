@@ -2357,6 +2357,59 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish H1 (round 3). Only fixer H1 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* H1-1: the sticky section bar spans the whole viewport (the layout wrapper kept its
+       366px width, so the negative margin only moved it left). */
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-phonebar) { width: calc(100% + 24px); max-width: none; }
+
+    /* H1-2: Streamlit's hidden heading-anchor span still takes inline width and shifts
+       centred headings left. */
+    [data-testid="stHeaderActionElements"] { display: none !important; }
+
+    /* H1-3: Settings popover: centred with the 12px card gutters instead of hanging off the gear. */
+    [data-testid="stPopoverBody"] {
+        position: fixed !important;
+        transform: none !important;
+        left: 12px !important;
+        right: 12px !important;
+        top: 72px !important;
+        margin: 0 !important;
+        width: auto !important;
+        max-width: none !important;
+        max-height: calc(100dvh - 84px) !important;
+        overflow-y: auto !important;
+    }
+
+    /* H1-8: wrapped headings sit tighter than body text. */
+    section[data-testid="stMain"] h1,
+    section[data-testid="stMain"] h2,
+    section[data-testid="stMain"] h3 { line-height: 1.2 !important; }
+
+    /* H1-24: a card's description starts right under the value (it was pushed to the card
+       bottom, so "value $0" sat a line lower than the two-line "taxable brokerage + cash"). */
+    .mc-stat-card > div:last-child { margin-top: 0 !important; }
+
+    /* H1-27: "More" overlaid the end of line three and cut a glyph in half. The fold is now a
+       three-line max-height, and "More" a float on the third line (margin-top = two lines), so
+       the text wraps around it and the last line always ends at a whole word. */
+    [data-mc-clamp]:not([data-mc-open]) { display: block; -webkit-line-clamp: unset; max-height: 3lh; }
+    [data-mc-clamp]:not([data-mc-open])::after { content: none; }
+    [data-mc-clamp]:not([data-mc-open])::before {
+        content: "More";
+        float: right;
+        margin: 2lh 0 0 8px;
+        color: var(--mc-teal);
+        font-weight: 600;
+    }
+
+    /* H1-29: text, number and select controls start their text at the same inner offset (19px
+       from the outer edge: the number input's 18px padding + border). Selects had 27, text 13. */
+    .stTextInput input { padding-left: 18px; padding-right: 18px; }
+    .stSelectbox [data-baseweb="select"] > div { padding-left: 6px; }
+    .stMultiSelect [data-baseweb="select"] > div { padding-left: 8px; }
+    section[data-testid="stMain"] .st-key-mc-topbar [data-baseweb="select"] > div > div:first-child { padding-left: 12px !important; }
+}
+
 /* -- end phone polish H1 -- */
 
 
