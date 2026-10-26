@@ -430,6 +430,13 @@ _ANIM_JS = """
         var fold = t0 && t0.closest('[data-mc-clamp]');
         if(fold){ if(fold.hasAttribute('data-mc-open')) fold.removeAttribute('data-mc-open');
                   else fold.setAttribute('data-mc-open', ''); }
+        // tab strips scroll sideways on phones: bring the chosen tab to the middle
+        var tab = t0 && t0.closest('button[role="tab"]');
+        if(tab){ P.setTimeout(function(){
+          var tl = tab.closest('[role="tablist"]'); if(!tl || tl.scrollWidth <= tl.clientWidth) return;
+          var a = tab.getBoundingClientRect(), b = tl.getBoundingClientRect();
+          tl.scrollBy({left: (a.left + a.width / 2) - (b.left + b.width / 2), behavior: reduce ? 'auto' : 'smooth'});
+        }, 60); }
         // ripple
         var btn = ev.target.closest && ev.target.closest('.stButton > button, [data-testid="stFormSubmitButton"] > button, button[kind]');
         if(btn && !reduce){

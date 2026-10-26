@@ -237,6 +237,11 @@ def _wrap_title(fig, compact: bool = False) -> None:
         if m and len(m.group(2)) > limit:
             pre, inner, post = m.groups()
             pieces = textwrap.wrap(inner, limit)
+            if compact and len(pieces) > 1:
+                # Balance the lines so a phone title never ends on a one-word orphan.
+                even = textwrap.wrap(inner, min(limit, -(-len(inner) // len(pieces)) + 4))
+                if len(even) == len(pieces):
+                    pieces = even
             out.extend(f"{pre}{p}{post}" for p in pieces)
             n = len(pieces)
         else:
@@ -246,9 +251,9 @@ def _wrap_title(fig, compact: bool = False) -> None:
     # Pin the title to the top of the figure so extra wrapped lines grow DOWN
     # into the reserved margin instead of being centred over the plot.
     fig.update_layout(title=dict(text="<br>".join(out), yref="container", y=1,
-                                 yanchor="top", pad=dict(t=14, l=10 if compact else 0)))
+                                 yanchor="top", pad=dict(t=20 if compact else 14, l=10 if compact else 0)))
     if compact:
-        _set_margin(fig, t=14 + height + 22)
+        _set_margin(fig, t=20 + height + 14)   # same ~20px below the title for one and two lines
     else:
         _set_margin(fig, t=max(fig.layout.margin.t or 0, 36 + height))
 
