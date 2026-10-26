@@ -12,6 +12,11 @@ status line so the set of five reads as a complete menu rather than four.
 from __future__ import annotations
 
 try:
+    from utils.section_icon import section_expander
+except ImportError:  # pragma: no cover
+    from ui.utils.section_icon import section_expander  # type: ignore
+
+try:
     from utils.coerce import safe_int, safe_float, ensure_default
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
@@ -217,6 +222,5 @@ def _render_body(st) -> None:
 
 
 def render(st) -> None:
-    with st.expander("Early retirement access", expanded=False,
-                     icon=":material/lock_open:"):
+    with section_expander(st, "Early retirement access", "lock_open"):
         _render_body(st)

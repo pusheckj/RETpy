@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 try:
+    from utils.section_icon import section_expander
+except ImportError:  # pragma: no cover
+    from ui.utils.section_icon import section_expander  # type: ignore
+
+try:
     from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money, money_md
 except ImportError:  # pragma: no cover
@@ -288,5 +293,5 @@ def render_body(st) -> None:
 
 
 def render(st) -> None:
-    with st.expander("Expenses", expanded=False, icon=":material/shopping_cart:"):
+    with section_expander(st, "Expenses", "shopping_cart"):
         render_body(st)

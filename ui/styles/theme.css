@@ -2446,6 +2446,55 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish H5 (round 3). Only fixer H5 edits this block.
    ========================================================================== */
 
+/* Marker emitted by utils/section_icon.py: never takes space (desktop: hidden). */
+section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-ico) { display: none; }
+
+@media (max-width: 640px) {
+    /* H5-31: an open section keeps its category icon in the left chip; Streamlit's chevron
+       (which replaces that icon while open) moves to the right edge instead. The icon glyph
+       is drawn by the out-of-flow marker, positioned over the summary chip. */
+    section[data-testid="stSidebar"] [data-testid="stExpander"] { position: relative; }
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-ico) {
+        display: flex; position: absolute; left: 7px; top: 0; width: 34px; height: 46px;
+        align-items: center; justify-content: center; pointer-events: none; z-index: 1;
+    }
+    section[data-testid="stSidebar"] .mc-sec-ico {
+        display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+        border-radius: 50%; background: rgba(13, 148, 136, 0.14); color: var(--mc-teal);
+        font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
+        font-size: 19px; line-height: 1; font-weight: 400; font-style: normal;
+        letter-spacing: normal; text-transform: none; white-space: nowrap;
+        font-feature-settings: normal; -webkit-font-smoothing: antialiased;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] > details[open] > summary > span > span > [data-testid="stIconMaterial"] {
+        position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+        background: none; margin: 0; width: 24px; height: 24px; min-width: 24px;
+        font-size: 24px !important; color: var(--mc-ink-soft, var(--mc-ink)) !important;
+    }
+
+    /* H5-32: sidebar sub-headings ("You", "Partner", "Child 2") sit closer to their own fields
+       than to the block above (about 28 above / 8 below instead of 16 / 16). */
+    section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stElementContainer"]:not(:first-child):has(> [data-testid="stMarkdown"] p > strong:only-child) {
+        margin-top: 12px; margin-bottom: -8px;
+    }
+
+    /* H5-33: slider min/max labels are always shown (Streamlit only reveals them on the
+       focused slider, so one slider looked different). Room is reserved for them. */
+    section[data-testid="stSidebar"] [data-testid="stSliderTickBar"] { opacity: 1 !important; }
+    section[data-testid="stSidebar"] [data-testid="stSlider"] { padding-bottom: 10px; }
+
+    /* H5-33: a wrapped label keeps its help icon right after the last word (same recipe as the
+       toggle labels), not at the far right of a full-width text box. */
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"]:has([data-testid="stTooltipIcon"]) {
+        display: block; padding-right: 20px; box-sizing: border-box;
+    }
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"]:has([data-testid="stTooltipIcon"]) > [data-testid="stMarkdownContainer"],
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"]:has([data-testid="stTooltipIcon"]) > [data-testid="stMarkdownContainer"] > p { display: inline; }
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"]:has([data-testid="stTooltipIcon"]) > :has([data-testid="stTooltipIcon"]) {
+        display: inline-flex; vertical-align: -3px; margin: 0 -20px 0 4px !important;
+    }
+}
+
 /* -- end phone polish H5 -- */
 
 

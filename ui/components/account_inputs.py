@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 try:
+    from utils.section_icon import section_expander
+except ImportError:  # pragma: no cover
+    from ui.utils.section_icon import section_expander  # type: ignore
+
+try:
     from utils.coerce import safe_int, safe_float, ensure_default  # noqa: F401
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # noqa: F401
@@ -40,7 +45,7 @@ def _rows(st, rows) -> None:
 
 
 def render(st) -> None:
-    with st.expander("Accounts", expanded=False, icon=":material/account_balance:"):
+    with section_expander(st, "Accounts", "account_balance"):
         st.caption("Edit individual account balances. Totals flow into the simulation.")
 
         st.markdown("**You**")
