@@ -59,7 +59,7 @@ def render(st) -> None:
                 key="save_load_download_btn",
             )
         except Exception as exc:
-            st.error(f"Could not prepare download: {exc}")
+            st.error(f"Couldn't prepare the download: {exc}")
 
         st.caption("Save your inputs to restore or share later.")
 
@@ -86,28 +86,28 @@ def render(st) -> None:
                     raw_text = str(raw)
                 preview = deserialize_overrides(raw_text)
             except ValueError as exc:
-                st.error(f"Could not parse file: {exc}")
+                st.error(f"Couldn't read that file: {exc}")
                 preview = None
             except Exception as exc:  # pragma: no cover
-                st.error(f"Unexpected error reading file: {exc}")
+                st.error(f"Something went wrong reading that file: {exc}")
                 preview = None
 
             if isinstance(preview, dict):
-                st.caption(f"**{uploaded.name}** — {len(preview)} input(s) ready.")
+                st.caption(f"**{uploaded.name}**: {len(preview)} inputs ready to load.")
                 if st.button(
-                    "📥 Load staged profile",
+                    "Load these inputs",
                     key="save_load_apply_btn",
                     width="stretch",
                     type="primary",
                 ):
                     _apply_restored(st, preview, uploaded.name)
-                    st.success(f"Loaded {len(preview)} input(s) from {uploaded.name}.")
+                    st.success(f"Loaded {len(preview)} inputs from {uploaded.name}.")
                     try:
                         st.rerun()
                     except Exception:
                         pass
             elif preview is not None:
-                st.error("Uploaded file did not contain a valid overrides dict.")
+                st.error("That file doesn't contain saved inputs.")
 
         # Show the last-loaded filename (nice touch for the user).
         last = st.session_state.get("_save_load_last_load")

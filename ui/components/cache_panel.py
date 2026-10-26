@@ -34,17 +34,17 @@ def render(st) -> None:
 
         mb = s.get("bytes", 0) / 1_048_576.0
         st.caption(
-            f"**{s.get('entries', 0)}** saved result(s) · {mb:.1f} MB · "
+            f"**{s.get('entries', 0)}** saved results · {mb:.1f} MB · "
             f"model `{s.get('engine', '?')}`"
         )
         st.caption(
-            "Results are reused across reloads and restarts. Editing the model "
-            "invalidates them automatically, so this is only for forcing a "
-            "fresh recompute."
+            "Saved results are reused when you reload or restart. They clear "
+            "automatically when the model changes, so use this only to force "
+            "a fresh run."
         )
         if st.button("↻ Recompute everything", key="cache_clear_btn",
                      width="stretch",
-                     help="Delete saved results and re-run the simulations now."):
+                     help="Deletes saved results and re-runs every simulation."):
             clear_cache(include_disk=True)
             # Drop the warmed results + the once-per-session autorun guard so
             # _autorun_all fires again on the next script run.
@@ -53,7 +53,7 @@ def render(st) -> None:
                       "stress_preset_results", "last_run_inputs_hash",
                       "_autorun_done"):
                 st.session_state.pop(k, None)
-            st.success("Cache cleared — recomputing.")
+            st.success("Cache cleared. Recomputing now.")
             try:
                 st.rerun()
             except Exception:
