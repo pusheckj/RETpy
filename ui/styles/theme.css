@@ -2653,4 +2653,18 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
    Phone polish K3 (round 4). Only fixer K3 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* K3-22: Period / Moving average / Show are full pills like the planner's controls, and the
+       category chips grow to fill each row so both edges line up instead of a ragged right side. */
+    .st-key-sp_period [data-baseweb="button-group"],
+    .st-key-sp_ma [data-baseweb="button-group"],
+    .st-key-sp_view [data-baseweb="button-group"] { border-radius: 999px !important; }
+    .st-key-sp_period [data-baseweb="button-group"] button,
+    .st-key-sp_ma [data-baseweb="button-group"] button,
+    .st-key-sp_view [data-baseweb="button-group"] button { border-radius: 999px !important; }
+    :is(.st-key-sp_groups, .st-key-sp_cat, .st-key-sp_tx_cat) [data-testid="stButtonGroup"] button {
+        flex: 1 1 auto !important; justify-content: center; text-align: center;
+    }
+}
+
 /* -- end phone polish K3 -- */

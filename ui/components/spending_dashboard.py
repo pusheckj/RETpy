@@ -399,18 +399,33 @@ def differing(overrides: Dict, actual: Dict[str, int]) -> List[str]:
     return list(g.loc[g["Difference"].abs() >= 0.5, "Expense category"])
 
 
-def _phone_df(st, key: str, df: pd.DataFrame, phone_cols: dict, phone_df=None, **kwargs) -> None:
+def _md_escape(text: str) -> str:
+    """Escape markdown/LaTeX specials in free text (merchant names) for st.markdown."""
+    return re.sub(r"([\\`*_{}\[\]<>$|~#])", r"\\\1", str(text))
+
+
+def _merchant_list(df: pd.DataFrame) -> str:
+    """Top merchants as a numbered list: long names wrap instead of being cut at a table column edge."""
+    return "\n".join(f"{i}. **{_md_escape(name)}** — {money_md(per_year)}/yr · {visits}×"
+                      for i, (name, per_year, visits) in enumerate(zip(df["Merchant"], df["Per year"], df["Visits"]), 1))
+
+
+def _phone_df(st, key: str, df: pd.DataFrame, phone_cols: dict, phone_df=None, narrow_md=None, **kwargs) -> None:
     """A dataframe drawn twice, like ``plot_theme.show_chart``: the full table for wide
     screens and a compact one for phones (theme.css shows the one that fits).
     ``phone_cols`` maps the kept columns to their phone ``column_config``: fewer
     columns at pixel widths that fit ~330px, so nothing scrolls sideways.
-    ``phone_df`` optionally replaces the data there (shorter cell text)."""
+    ``phone_df`` optionally replaces the data there (shorter cell text).
+    ``narrow_md`` (a string) replaces the phone table with that markdown (wrapping text)."""
     if not hasattr(st, "container"):  # stub st (tests / print): the full table only
         st.dataframe(df, hide_index=True, width="stretch", **kwargs)
         return
     with st.container(key=f"mc-wide-{key}"):
         st.dataframe(df, hide_index=True, width="stretch", **kwargs)
     with st.container(key=f"mc-narrow-{key}"):
+        if narrow_md is not None:
+            st.markdown(narrow_md or "_No merchants._")
+            return
         st.dataframe((df if phone_df is None else phone_df)[list(phone_cols)], hide_index=True, width="stretch",
                      height=kwargs.get("height", "auto"), column_config=phone_cols)
 
@@ -1058,7 +1073,7 @@ def render(st, **_kwargs) -> None:
                       {"Merchant": st.column_config.Column(width=170),
                        "Per year": st.column_config.NumberColumn(format="dollar", width=82),
                        "Visits": st.column_config.NumberColumn(width=58)},
-                      phone_df=raw_merchants.assign(**{"Per year": raw_merchants["Per year"].round().astype(int)}),
+                      narrow_md=_merchant_list(raw_merchants),
                       column_config={"Merchant": st.column_config.Column(width=130),
                                      "Category": st.column_config.Column(width=90),
                                      "Per year": st.column_config.Column(width=66),
