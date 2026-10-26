@@ -87,7 +87,7 @@ def render_body(st) -> None:
         st.warning(
             f"Nothing is left to save "
             f"({money_md(income)} − {money_md(taxes)} − {money_md(expenses)}). "
-            "Adjust income, expenses, or taxes before setting savings."
+            "Change your income, expenses or taxes first."
         )
 
     # ---- Mode selector ----
@@ -123,11 +123,9 @@ def render_body(st) -> None:
     v = st.toggle(
         "Show contributions in future (nominal) dollars",
         key="sv_inflation_adjust",
-        help="Display option for the savings-projection chart only: scales each "
-             "year's contribution up by ~2.75%/yr so you see nominal dollars. "
-             "The Monte Carlo always holds contributions constant in today's "
-             "dollars (which already keeps real purchasing power constant), so "
-             "this does not move your success rate.",
+        help="Changes the savings chart only: contributions grow about 2.75% a "
+             "year so you see future dollars. The simulation keeps them flat in "
+             "today's dollars, so your chance of success doesn't change.",
     )
     set_override(st, "SAVINGS_INFLATION_ADJUST", bool(v))
 
@@ -139,11 +137,10 @@ def render_body(st) -> None:
         pph = st.toggle(
             "I pay the full mortgage; we split the rest evenly",
             key="sv_primary_housing",
-            help="How leftover savings split between your two taxable brokerage accounts. "
-                 "Off = split all expenses evenly. On = you cover the whole "
-                 "mortgage and the rest splits 50/50, so more leftover lands in "
-                 "your taxable brokerage. (Car purchases stay a shared outflow. This only "
-                 "re-labels which taxable brokerage gets the savings; both are taxable.)",
+            help="Sets how leftover savings split between your two taxable brokerage "
+                 "accounts. Off: all expenses split evenly. On: you pay the whole "
+                 "mortgage and the rest splits 50/50, so more leftover goes to your "
+                 "account. Car purchases stay shared, and both accounts are taxable.",
         )
         set_override(st, "PRIMARY_PAYS_HOUSING", bool(pph))
     else:
@@ -155,11 +152,10 @@ def render_body(st) -> None:
     atp = st.slider(
         "After-tax 401(k) → Roth · mega backdoor (% of base pay)",
         min_value=0.0, max_value=20.0, step=0.5, key="sv_after_tax_401k",
-        help="Extra after-tax 401(k) contributions converted in-plan to Roth. The engine "
-             "fills the total 401(k) limit (employee + employer) left after your regular "
-             "deferral and match, funds it from take-home, and grows it tax-free — moving "
-             "savings from your taxable brokerage into Roth. Set 0 if your plan lacks "
-             "after-tax contributions + in-plan Roth conversion.",
+        help="Extra after-tax 401(k) contributions, converted to Roth inside the plan. "
+             "They use the room left under the total 401(k) limit (yours plus employer) "
+             "after your regular contribution and match, come out of take-home pay, and "
+             "replace taxable brokerage savings. Leave at 0 if your plan doesn't allow it.",
     )
     set_override(st, "YOUR_AFTER_TAX_401K_PCT", atp / 100.0)
     if atp > 0:
@@ -180,7 +176,7 @@ def render_body(st) -> None:
         limit_s = money(total_limit, shorten=True).replace("$", "\\$")
         st.caption(
             f"≈ {est_s}/yr into Roth (capped at ~{room_s}: the {limit_s} total 401(k) "
-            "limit minus your contribution and match). Redirects that much from "
+            "limit minus your contribution and match). That much moves out of "
             "taxable brokerage."
         )
 
@@ -192,8 +188,8 @@ def _render_employer_match(st, overrides: dict) -> None:
     v = st.number_input(
         "Your employer's 401(k) match (% of pay)", min_value=0.0, max_value=25.0,
         step=0.5, format="%.2f", key="sv_match_pct",
-        help="The most your employer adds, as in \"we match up to 4%\". They match "
-             "what you put in, so contributing less than this gets less match.",
+        help="The most your employer adds, like \"we match up to 4%\". If you "
+             "contribute less than that, you get less match.",
     )
     set_override(st, "YOUR_401K_MATCH_PCT", float(v) / 100.0)
     if safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0:
@@ -225,9 +221,9 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
         set_override(st, key, 0 if "BROKERAGE" in key else int(amount))
 
     st.caption(
-        "Fills accounts in order: **401(k) → HSA → IRA/Roth → Taxable brokerage "
-        "residual**, each capped at the 2024 limits (2024 values, in today's dollars). "
-        "Switch to Custom % or Manual for different splits."
+        "Fills accounts in this order: **401(k) → HSA → Roth IRA → Taxable brokerage** "
+        "(whatever is left). Each is capped at its 2024 limit, in today's dollars. "
+        "Use Custom % or Manual for a different split."
     )
 
     # Visualization: stacked horizontal bar
@@ -285,8 +281,8 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
 
 def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
     """Custom %: user provides allocation percentages."""
-    st.caption("Set what share of what's left to save goes to each account. "
-               "Each gets that share, capped at the 2024 limits (2024 values, in today's dollars).")
+    st.caption("Choose what share of your leftover savings goes to each account. "
+               "Each is capped at its 2024 limit, in today's dollars.")
 
     # Defaults (100% either way) and amounts come from utils.derived, which
     # also uses them to work out what's left to save (sidebar_savings_budget).
@@ -311,14 +307,13 @@ def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
     else:
         if total_pct < 100:
             st.warning(
-                f"Percentages sum to **{total_pct}%** "
-                f"({100 - total_pct}% unallocated — that money sits unused). "
-                "Adjust sliders to total 100%."
+                f"Shares add up to **{total_pct}%**, so {100 - total_pct}% "
+                "isn't saved. Adjust the sliders to reach 100%."
             )
         else:
             st.warning(
-                f"Percentages sum to **{total_pct}%** "
-                f"(over by {total_pct - 100}%). Contributions will exceed what's left to save."
+                f"Shares add up to **{total_pct}%**, over by {total_pct - 100}%. "
+                "Contributions will exceed what's left to save."
             )
 
 
@@ -353,8 +348,8 @@ def _render_keep_amounts(st, overrides: dict) -> None:
     spend invested in a taxable brokerage account. The engine sweeps the un-spent
     residual for any SAVINGS_MODE starting with "Auto"; the brokerage floor is
     set to 0 so it gets exactly what's left."""
-    st.caption("Your 401(k), HSA and IRA stay at these amounts. Whatever else you don't "
-               "spend is invested in a taxable brokerage account each year.")
+    st.caption("Your 401(k), HSA and Roth IRA stay at these amounts. Anything else you "
+               "don't spend goes into taxable brokerage each year.")
     c1, c2 = st.columns(2)
     with c1:
         _manual_amount(st, "sv_manual_your_401k", "YOUR_401K_CONTRIBUTION",
@@ -376,8 +371,9 @@ def _render_keep_amounts(st, overrides: dict) -> None:
 
 def _render_manual(st, disposable: int, overrides: dict) -> None:
     """Manual: explicit dollar amount per account."""
-    st.caption("Enter exact annual dollars per account. Useful when savings "
-               "doesn't follow income − tax − expenses (inheritance, side income, etc.).")
+    st.caption("Enter the exact yearly dollars for each account. Use this when your "
+               "savings don't match income minus tax and expenses, for example "
+               "with side income.")
 
     c1, c2 = st.columns(2)
     with c1:
@@ -405,10 +401,9 @@ def _render_manual(st, disposable: int, overrides: dict) -> None:
     manual_total = sum(safe_int(overrides2.get(k, 0), 0) for _, k, _ in _ACCOUNT_LABELS)
     if manual_total > disposable + 1000:
         st.warning(
-            f"Manual contributions total **{money_md(manual_total, shorten=True)}** but "
-            f"only {money_md(disposable, shorten=True)} is left to save. The simulator "
-            f"uses these amounts as set; just note the math only works if you have "
-            f"other income sources."
+            f"Your contributions total **{money_md(manual_total, shorten=True)}**, but "
+            f"only {money_md(disposable, shorten=True)} is left to save. The simulation "
+            f"uses them as entered. That only works if you have other money coming in."
         )
     else:
         st.caption(f"**Manual total**: {money_md(manual_total, shorten=True)} of "

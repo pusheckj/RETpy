@@ -39,8 +39,8 @@ def render_body(st) -> None:
     current_label = scen_map.get(current_scen, "Historical")
     ensure_default(st, "sa_scenario", current_label)
     scen = st.radio("Return scenario", scen_options, horizontal=True, key="sa_scenario",
-                    help="Real stock/bond returns. Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%. "
-                         "Historical (the default) is the more optimistic choice; Conservative gives a planner-style result.")
+                    help="Real (after-inflation) stock/bond returns. Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%. "
+                         "Historical is the default and the most optimistic; Conservative is closer to typical planner assumptions.")
     set_override(st, "ACTIVE_RETURN_SCENARIO", scen.lower())
 
     c1, c2 = st.columns(2)
@@ -65,12 +65,13 @@ def render_body(st) -> None:
     ensure_default(st, "sa_fee_bps", cur_fee_bps)
     v = st.slider("Investment fee (basis points)", min_value=0, max_value=100,
                   step=5, key="sa_fee_bps",
-                  help="100 bps = 1% expense ratio. Index ETFs ≈ 3-15 bps; active funds ≈ 50-100 bps.")
+                  help="100 bps = 1% a year. Index ETFs run about 3-15 bps, active funds 50-100.")
     set_override(st, "INVESTMENT_FEE_RATE", v / 10_000)
 
     ensure_default(st, "sa_vol_drag", bool(get_override(st, "APPLY_VOLATILITY_DRAG", True)))
-    v = st.toggle("Apply volatility drag (geometric vs arithmetic mean)",
-                    key="sa_vol_drag")
+    v = st.toggle("Apply volatility drag", key="sa_vol_drag",
+                    help="Bumpy returns compound slower than their average. "
+                         "When on, the model lowers average returns to account for that.")
     set_override(st, "APPLY_VOLATILITY_DRAG", bool(v))
 
     st.divider()
@@ -89,7 +90,7 @@ def render_body(st) -> None:
     # ===== Glide path =====
     _section_label(st, "Glide path")
     ensure_default(st, "sa_glide_enable", bool(get_override(st, "GLIDE_PATH_ENABLED", True)))
-    v = st.toggle("Enable glide path (shift bonds-heavier with age)",
+    v = st.toggle("Shift toward bonds with age (glide path)",
                     key="sa_glide_enable")
     set_override(st, "GLIDE_PATH_ENABLED", bool(v))
     if st.session_state.get("sa_glide_enable", True):
@@ -119,15 +120,17 @@ def render_body(st) -> None:
         _age = safe_int(get_override(st, "YOUR_AGE", _cfg.YOUR_AGE), _cfg.YOUR_AGE)
         _rmd_age = _cfg.get_rmd_start_age(_cfg.CURRENT_YEAR - _age)   # birth year follows from age
         st.caption(
-            f"From age **{_rmd_age}** (your SECURE 2.0 RMD start age) the IRS forces "
-            "minimum withdrawals from Traditional balances, taxed as income. "
-            "Converting to Roth before then shrinks those forced withdrawals."
+            f"From age **{_rmd_age}**, the IRS requires minimum withdrawals (RMDs) from "
+            "traditional accounts, taxed as income. Converting to Roth before then "
+            "shrinks them."
         )
     except Exception:
         pass
     ensure_default(st, "sa_roth_enable", bool(get_override(st, "ENABLE_ROTH_CONVERSION", True)))
     v = st.toggle("Enable Roth conversion strategy", key="sa_roth_enable",
-                    help="Convert Traditional to Roth during low-income early retirement years.")
+                    help="Move money from traditional to Roth in low-income early "
+                          "retirement years. You pay the tax now, and later "
+                          "withdrawals are tax-free.")
     set_override(st, "ENABLE_ROTH_CONVERSION", bool(v))
     if st.session_state.get("sa_roth_enable", True):
         c5, c6 = st.columns(2, vertical_alignment="bottom")
@@ -148,9 +151,9 @@ def render_body(st) -> None:
             ensure_default(st, "sa_roth_target", _auto if _stored is None else safe_int(_stored, _auto))
             v = st.number_input("Fill up to income of ($)", min_value=0, max_value=250_000,
                                 step=5_000, key="sa_roth_target",
-                                help=f"Each year, convert until your income reaches this. "
-                                     f"Default ${_auto:,} = the top of the 12% bracket "
-                                     f"for your filing status.")
+                                help=f"Each year, convert until your income reaches this amount. "
+                                     f"The default, ${_auto:,}, is the top of the 12% "
+                                     f"bracket for your filing status.")
             set_override(st, "ROTH_CONVERSION_TARGET_BRACKET",
                          None if safe_int(v) == _auto else safe_int(v))
         with c6:
@@ -182,7 +185,7 @@ def render_body(st) -> None:
     set_override(st, "DYNAMIC_SPENDING_ENABLED", bool(v))
 
     ensure_default(st, "sa_ret_spend", bool(get_override(st, "RETURN_BASED_SPENDING_ENABLED", True)))
-    v = st.toggle("Enable return-based spending (cut in down years)",
+    v = st.toggle("Cut spending after down years",
                     key="sa_ret_spend")
     set_override(st, "RETURN_BASED_SPENDING_ENABLED", bool(v))
 
@@ -191,7 +194,7 @@ def render_body(st) -> None:
     # ===== Healthcare / LTC =====
     _section_label(st, "Healthcare (before Medicare)")
     ensure_default(st, "sa_aca", bool(get_override(st, "ACA_ENABLED", True)))
-    v = st.toggle("ACA subsidy modeling (pre-Medicare years)", key="sa_aca")
+    v = st.toggle("Include ACA subsidies before Medicare", key="sa_aca")
     set_override(st, "ACA_ENABLED", bool(v))
 
     # Marketplace prices before age 65. These replace a "Pre-Medicare healthcare
@@ -203,11 +206,11 @@ def render_body(st) -> None:
                                              getattr(cfg, "ACA_BENCHMARK_MONTHLY_AT_40", 650)), 650))
         v = st.number_input("Marketplace plan, age 40 ($/mo)", min_value=0, max_value=5_000,
                             step=25, key="sa_aca_benchmark",
-                            help="Before age 65 without a work plan you buy insurance on the "
+                            help="Before 65, without a work plan, you buy insurance on the "
                                  "marketplace. Enter the price of the second-cheapest Silver "
-                                 "plan for one 40-year-old where you live, before any "
-                                 "subsidy (healthcare.gov, by ZIP code). Other ages are "
-                                 "priced from it; subsidies are worked out for you.")
+                                 "plan for a 40-year-old in your area, before subsidies "
+                                 "(healthcare.gov, by ZIP code). The model prices other ages "
+                                 "from it and works out subsidies itself.")
         set_override(st, "ACA_BENCHMARK_MONTHLY_AT_40", safe_int(v))
     with c8:
         ensure_default(st, "sa_aca_child",
