@@ -130,7 +130,7 @@ _PRINT_TEMPLATE = """<!DOCTYPE html>
   <div class="muted">Generated {today}. Today's dollars unless noted.</div>
 
   <div class="card">
-    <div class="muted">Earliest retirement age at your target chance of success</div>
+    <div class="muted">Earliest retirement age that meets your success target</div>
     <div class="headline">{earliest}</div>
     <div class="muted">At target age {target_age}: {success_str} chance of success</div>
   </div>
@@ -145,7 +145,7 @@ _PRINT_TEMPLATE = """<!DOCTYPE html>
   {narrative}
 
   <div class="muted" style="margin-top:24px;">
-    Made with the Retirement Monte Carlo simulator. This is not financial advice.
+    Made with Retirement planner. This is not financial advice.
   </div>
 </body></html>
 """

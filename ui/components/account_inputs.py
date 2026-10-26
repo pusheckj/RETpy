@@ -24,13 +24,13 @@ _YOU = [
     [("ai_your_trad", "Traditional IRA ($)", "YOUR_TRADITIONAL_IRA", 0, 1_000),
      ("ai_your_hsa", "HSA ($)", "YOUR_HSA", 500, 500)],
     [("ai_your_brk", "Taxable brokerage ($)", "YOUR_BROKERAGE", 2_500, 1_000),
-     ("ai_your_cash", "Cash / savings ($)", "YOUR_CASH", 4_000, 500)],
+     ("ai_your_cash", "Cash ($)", "YOUR_CASH", 4_000, 500)],
 ]
 _PARTNER = [
     [("ai_partner_401k", "401(k) ($)", "PARTNER_401K", 7_000, 1_000),
      ("ai_partner_roth", "Roth IRA ($)", "PARTNER_ROTH_IRA", 2_500, 1_000)],
     [("ai_partner_brk", "Taxable brokerage ($)", "PARTNER_BROKERAGE", 1_000, 1_000),
-     ("ai_partner_cash", "Cash / savings ($)", "PARTNER_CASH", 3_000, 500)],
+     ("ai_partner_cash", "Cash ($)", "PARTNER_CASH", 3_000, 500)],
 ]
 
 

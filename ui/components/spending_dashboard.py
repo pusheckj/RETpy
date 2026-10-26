@@ -74,7 +74,7 @@ _GROUP_OF = {c: g for g, _, cats in EXPENSE_GROUPS for c in cats}
 
 def expense_group(category: str) -> str:
     """Expenses-section bucket for a detailed spending category."""
-    return _GROUP_OF.get(category, "Other / miscellaneous")
+    return _GROUP_OF.get(category, "Other")
 
 
 def plan_monthly(overrides: Dict, group: str) -> float:
@@ -796,7 +796,7 @@ def _settings_form(st, data_dir: str, ok: bool) -> None:
     path = st.text_input(
         "Statements folder", value=data_dir, key="sp_dir_input",
         help="Folder with your bank, card and Venmo statements (CSV or PDF, "
-             "subfolders are fine). It stays where it is. Nothing is copied into the app.")
+             "subfolders are fine). It stays where it is. Nothing is copied.")
     c1, c2 = st.columns(2)
     if c1.button("Save & load", key="sp_save", width="stretch"):
         save_data_dir(os.path.expanduser(path.strip()))
@@ -1021,7 +1021,7 @@ def render(st, **_kwargs) -> None:
                        "Actual": st.column_config.Column("Actual"),
                        "Difference": st.column_config.Column("Diff.")},
                       phone_df=pva.assign(**{"Expense category": pva["Expense category"].replace(
-                          {"Entertainment / discretionary": "Entertainment", "Other / miscellaneous": "Other",
+                          {"Fun and discretionary": "Fun",
                            "Healthcare premiums": "Healthcare"})}),
                       # Pixel widths that add up to a phone screen (the grid still fills
                       # a wider card): no half-hidden last column.

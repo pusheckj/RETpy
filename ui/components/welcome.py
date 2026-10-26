@@ -7,7 +7,7 @@ from typing import Optional
 
 PATHS = [
     ("simple", "Money check-up",
-     "Your savings rate, emergency fund, where your next dollar should go, a debt "
+     "Your savings rate, emergency fund, where your next dollar goes, a debt "
      "payoff plan and a 50/30/20 budget check. About three minutes.",
      "Start the money check-up"),
     ("full", "Retirement planner",

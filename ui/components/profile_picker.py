@@ -135,7 +135,7 @@ DEFAULT_PROFILE = next(iter(PROFILES))
 
 
 def render(st) -> None:
-    st.markdown('<div style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Profile</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Start from</div>', unsafe_allow_html=True)
     names = list(PROFILES.keys())
 
     # Keep the selectbox in sync with an EXTERNAL profile change (e.g. a JSON
@@ -216,7 +216,7 @@ def render(st) -> None:
         st.session_state["_anim_epoch"] = st.session_state.get("_anim_epoch", 0) + 1
 
     st.selectbox(
-        "Profile",
+        "Start from",
         options=names,
         label_visibility="collapsed",
         key="profile_selectbox",
