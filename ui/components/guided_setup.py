@@ -520,7 +520,7 @@ def draw_home(st) -> None:
                    OWN if owns else RENT, None, horizontal=True)
     if c:
         _cue(st, f"The needs from your check-up ({money_md(c['needs'])} a month) include this "
-                 "payment. We take it out of Other on the next step.")
+                 "payment, so the next step leaves it out of your other spending.")
     if home == RENT:
         _money(st, "gs_rent", "Monthly rent", ov.get("SPEND_RENT_MONTHLY") if not owns else None,
                None, hi=20_000, step=50)
