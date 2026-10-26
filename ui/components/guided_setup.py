@@ -342,14 +342,16 @@ def draw_state(st) -> None:
     _seed(st, "gs_state", _state_saved(ov), None)
     where = st.selectbox("Where do you live?", list(STATES), key="gs_state",
                          placeholder="Choose your state")
-    _cue(st, "Used for state income tax, with your state's own rates and rules. Texas, "
-             "Florida, Washington, Nevada, Tennessee and a few others have none.")
+    note = "Used for state income tax, with your state's own rates and rules. Texas, " \
+           "Florida, Washington, Nevada, Tennessee and a few others have none."
+    if where in STATES and where != _STATE_FLAT_LABEL and \
+            cfg.state_tax_rules(STATES[where])["confidence"] == "approx":
+        note += " We use approximate figures for this state."     # one paragraph, not two
+    _cue(st, note)
     if where == _STATE_FLAT_LABEL:
         _pct(st, "gs_state_rate", "Your state's income tax rate", _num(
             ov.get("YOUR_MARGINAL_TAX_RATE"), 0.05) * 100, 5.0)
         _cue(st, "Search \"[your state] income tax rate\". Not sure? Keep 5%.")
-    elif where in STATES and cfg.state_tax_rules(STATES[where])["confidence"] == "approx":
-        _cue(st, "We use approximate figures for this state.")
 
 
 def commit_state(st) -> None:
@@ -814,8 +816,14 @@ def render(st) -> None:
         step.commit(st)
         blank = {k for k in st.session_state.get("_gs_drawn", []) if st.session_state.get(k) is None}
         s["seen"] = [k for k in s["seen"] if k not in blank]
-        if s.get("error"):
-            st.warning(s["error"], icon=":material/info:")
+        if s.get("error") or step.check is not _nothing:
+            # On steps with a required answer the alert's room is always reserved
+            # (CSS, phone), so the buttons below don't move when it appears.
+            with st.container(key="mc-setup-alert"):
+                if s.get("error"):
+                    st.warning(s["error"], icon=":material/info:")
+                else:
+                    st.markdown('<span class="mc-setup-alert-room"></span>', unsafe_allow_html=True)
         with st.container(key="mc-setup-nav", horizontal=True, vertical_alignment="center"):
             if i > 0:
                 st.button("Back", key="gs_back", on_click=_go, args=(st, -1),

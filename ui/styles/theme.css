@@ -2228,6 +2228,44 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish H2 (round 3). Only fixer H2 edits this block.
    ========================================================================== */
 
+/* Desktop: the alert's reserved room is a phone-only thing; with no alert it takes no space. */
+[data-testid="stLayoutWrapper"]:has(> .st-key-mc-setup-alert .mc-setup-alert-room) { display: none; }
+@media (max-width: 640px) {
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-setup-alert .mc-setup-alert-room) { display: block; }
+    /* Nav row: the same three slots on every step (Back | Skip | Next), so no
+       button changes size or place between steps. The last step has no Skip, so
+       "Show my results" takes the two right-hand slots. */
+    .st-key-mc-setup-nav { display: grid !important; grid-template-columns: 1fr 1.35fr 1fr; gap: 8px !important; align-items: stretch !important; }
+    .st-key-mc-setup-nav > * { min-width: 0 !important; margin: 0 !important; width: auto !important; }
+    .st-key-mc-setup-nav > .st-key-gs_back { grid-column: 1; }
+    .st-key-mc-setup-nav > .st-key-gs_skip { grid-column: 2; }
+    .st-key-mc-setup-nav > .st-key-gs_next { grid-column: 3; }
+    .st-key-mc-setup-nav > .st-key-gs_back + .st-key-gs_next { grid-column: 2 / 4; }
+    .st-key-mc-setup-nav button { height: 100%; min-height: 47px; padding-left: 10px !important; padding-right: 10px !important; }
+
+    /* A required-answer alert ("Enter your age...") has its room reserved on the steps
+       that can show it, so the nav row doesn't jump when it appears. */
+    .st-key-mc-setup-alert { min-height: 84px; }
+
+    /* One gap between wrapped columns and between rows of columns. */
+    .st-key-mc-setup [data-testid="stHorizontalBlock"] { row-gap: 16px !important; }
+
+    /* Radios: the dot sits level with the first line of a wrapped label. */
+    .st-key-mc-setup [data-testid="stRadio"] [role="radiogroup"] label {
+        align-items: flex-start !important; padding-top: 9px; padding-bottom: 9px; box-sizing: border-box; }
+    .st-key-mc-setup [data-testid="stRadio"] [role="radiogroup"] label > div:first-child { margin-top: 5px; }
+    .st-key-mc-setup [data-testid="stRadio"] [role="radiogroup"] label > div:last-child { line-height: 26px; }
+
+    /* The first line under the step title sits the same distance from its rule whether it
+       is the intro, a caption or a label. */
+    .st-key-mc-setup [data-testid="stElementContainer"]:has(.mc-section) + [data-testid="stElementContainer"]:has([data-testid="stCaptionContainer"]) { margin-top: 4px; }
+
+    /* Captions clear the 3px focus ring of the input above them. */
+    .st-key-mc-setup [data-testid="stCaptionContainer"] { margin-top: -5px; }
+
+    /* Closing note under the review list. */
+    .st-key-mc-setup [data-testid="stElementContainer"]:has(ul) + [data-testid="stElementContainer"]:has([data-testid="stCaptionContainer"]) { margin-top: 8px; }
+}
 /* -- end phone polish H2 -- */
 
 
