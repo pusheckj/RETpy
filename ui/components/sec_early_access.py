@@ -93,7 +93,7 @@ def _render_body(st) -> None:
             )
 
     # --- 3. 72(t) SEPP -------------------------------------------------------
-    _section_label(st, "3 · 72(t) SEPP")
+    _section_label(st, "3 · 72(t) payments")
     ensure_default(st, "ea_sepp", bool(get_override(st, "SEPP_72T_ENABLED", False)))
     v = st.toggle(
         "Take 72(t) equal periodic payments", key="ea_sepp",
@@ -169,7 +169,7 @@ def _render_body(st) -> None:
     v = st.toggle(
         "Enforce the 5-year conversion ladder", key="ea_ladder",
         help="Converted money can be withdrawn without tax or penalty 5 years "
-             "after each conversion. When on, the model tracks each year's "
+             "after each conversion. When on, the plan tracks each year's "
              "conversion and enforces that wait. That's stricter and more "
              "realistic than assuming Roth money is always available.",
     )
@@ -185,10 +185,10 @@ def _render_body(st) -> None:
                    "start converting 5 years before you retire.]")
 
     # --- 5. Coast FIRE -------------------------------------------------------
-    _section_label(st, "5 · Coast FIRE")
+    _section_label(st, "5 · Stop saving early (Coast FIRE)")
     ensure_default(st, "ea_coast", bool(get_override(st, "COAST_FIRE_ENABLED", False)))
     v = st.toggle(
-        "Coast from a chosen age", key="ea_coast",
+        "Stop saving early", key="ea_coast",
         help="Stop saving but keep working enough to cover expenses. Your portfolio "
              "grows with no contributions or withdrawals until your retirement age.",
     )
@@ -202,12 +202,12 @@ def _render_body(st) -> None:
         suggested = max(your_age + 1, retire_age - max(2, (retire_age - your_age) // 2))
         ensure_default(st, "ea_coast_age",
                        safe_int(get_override(st, "COAST_FIRE_AGE", suggested), suggested))
-        a = st.number_input("Coast from age", min_value=25, max_value=70, step=1,
+        a = st.number_input("Stop saving at", min_value=25, max_value=70, step=1,
                             key="ea_coast_age")
         set_override(st, "COAST_FIRE_AGE", safe_int(a))
         coast_age = safe_int(a)
         if coast_age >= retire_age:
-            st.caption(f":gray[Coasting from {coast_age} has no effect, since you already "
+            st.caption(f":gray[Stopping at {coast_age} has no effect, since you already "
                        f"retire at {retire_age}.]")
         else:
             st.caption(f":gray[Saving stops at {coast_age}. You cover your own expenses until "

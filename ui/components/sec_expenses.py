@@ -161,7 +161,7 @@ def render_body(st) -> None:
         with c2:
             yrs_default = max(0, min(40, safe_int(get_override(st, "MORTGAGE_YEARS_REMAINING", 28), 28)))
             ensure_default(st, "se_mortgage_years", yrs_default)
-            v = st.slider("Years remaining on mortgage", min_value=0, max_value=40,
+            v = st.slider("Years left on mortgage", min_value=0, max_value=40,
                           step=1, key="se_mortgage_years")
             set_override(st, "MORTGAGE_YEARS_REMAINING", safe_int(v))
         if safe_int(get_override(st, "MORTGAGE_BALANCE", 0), 0) > 0:
