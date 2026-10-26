@@ -2562,4 +2562,25 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
    Polish J1 (tablet mode switch, landscape chart subtitles). Only fixer J1 edits this block.
    ========================================================================== */
 
+/* Tablet: the check-up / guided-setup mode switch is centred like on phones
+   (it is right-aligned on desktop). */
+@media (min-width: 641px) and (max-width: 1100px) {
+    [class*="st-key-mc-mode-switch"]:not(.st-key-mc-mode-switch-gutter) { justify-content: center !important; }
+}
+
+/* Touch: the tap-area halo around help icons must not cover a button that
+   carries its own help text (the guided setup's "Skip for now"). */
+@media (hover: none) and (pointer: coarse) {
+    [data-testid="stTooltipHoverTarget"]:has(button)::after { content: none; }
+}
+
+/* Phone landscape (844x390, 932x430): cards are only ~470px wide, but the regular
+   chart wraps its title/subtitle for ~700px and clips them. Use the compact
+   (phone) version there, like portrait. */
+@media (hover: none) and (pointer: coarse) and (max-height: 500px) and (max-width: 960px) {
+    [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-wide-"]) { display: none; }
+    [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-narrow-"]) { display: block; }
+    .js-plotly-plot .modebar-container { display: none !important; }
+}
+
 /* -- end polish J1 -- */
