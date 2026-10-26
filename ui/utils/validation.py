@@ -37,15 +37,13 @@ def validate_run_inputs(overrides: dict, target_age=None) -> list:
             )
         if plan_until <= target_age:
             errs.append(
-                f"The plan ends when you're {plan_until}, which must be after your target "
-                f"retirement age ({target_age}). Raise the plan-until age in **About you** so "
-                "there's a retirement period to model."
+                f"The plan ends when you're {plan_until}, but you plan to retire at {target_age}. "
+                "Raise the plan-until age in **About you** so the plan covers your retirement."
             )
     else:
         if plan_until <= your_age:
             errs.append(
-                f"The plan ends when you're {plan_until}, which must be after your current age "
-                f"({your_age}). Raise the plan-until age in **About you** so there's a horizon "
-                "to model."
+                f"The plan ends when you're {plan_until}, but you're already {your_age}. "
+                "Raise the plan-until age in **About you**."
             )
     return errs

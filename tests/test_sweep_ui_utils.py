@@ -226,7 +226,7 @@ class TestValidateRunInputs:
     # household: with no PARTNER_AGE the config's default partner would count.
     def test_plan_until_equal_to_target_errors(self):
         errs = validate_run_inputs({"YOUR_AGE": 30, "PARTNER_AGE": 0, "PLAN_UNTIL_AGE": 45}, 45)
-        assert len(errs) == 1 and "must be after" in errs[0]
+        assert len(errs) == 1 and "but you plan to retire at" in errs[0]
 
     def test_a_younger_partner_extends_the_horizon(self):
         """Your plan-until age equals the target, but the plan runs until your
@@ -244,7 +244,7 @@ class TestValidateRunInputs:
         single = {"YOUR_AGE": 30, "PARTNER_AGE": 0}
         assert validate_run_inputs({**single, "PLAN_UNTIL_AGE": 31}, None) == []
         errs = validate_run_inputs({**single, "PLAN_UNTIL_AGE": 30}, None)
-        assert len(errs) == 1 and "after your current age" in errs[0]
+        assert len(errs) == 1 and "but you're already" in errs[0]
 
     def test_string_ages_are_accepted(self):
         assert validate_run_inputs({"YOUR_AGE": "30", "PLAN_UNTIL_AGE": "90"}, "45") == []
