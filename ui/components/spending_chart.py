@@ -389,9 +389,8 @@ def _build_figure(
             fp = list(four_pct_series)
         fig.add_trace(go.Scatter(
             x=ages, y=fp, name="4% rule (safe spend)",
-            mode="lines+markers", connectgaps=False,
+            mode="lines", connectgaps=False,
             line=dict(color=four_pct_color, width=2, dash="dot"),
-            marker=dict(size=4, color=four_pct_color),
             hovertemplate="4% rule safe spend: $%{y:,.0f}/yr<extra></extra>",
         ))
     if current_age <= retirement_age <= plan_until:

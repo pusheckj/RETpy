@@ -1050,7 +1050,7 @@ footer { display: none !important; }
    White pill container; active segment = soft teal tint. The
    radio circle is hidden; the whole segment is the click target.
    ========================================================= */
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) {
     display: inline-flex !important;
     background: var(--mc-tile);
     border: 1px solid var(--mc-tile-border);
@@ -1059,27 +1059,27 @@ footer { display: none !important; }
     gap: 2px;
     box-shadow: 0 2px 8px rgba(120, 96, 52, 0.08);
 }
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label {
     margin: 0 !important;
     padding: 7px 16px !important;
     border-radius: 9px;
     cursor: pointer;
     transition: background-color .15s ease, color .15s ease;
 }
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label > div:first-child { display: none !important; }  /* radio circle */
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label input { position: absolute; opacity: 0; width: 0; height: 0; }
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label,
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label div,
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label p {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label > div:first-child { display: none !important; }  /* radio circle */
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label input { position: absolute; opacity: 0; width: 0; height: 0; }
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label,
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label div,
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label p {
     color: #64748b !important;
     font-weight: 600 !important;
 }
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label:has(input:checked) {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked) {
     background: rgba(13, 148, 136, 0.14);
 }
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label:has(input:checked),
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label:has(input:checked) div,
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label:has(input:checked) p {
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked),
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked) div,
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked) p {
     color: #0d9488 !important;
 }
 
@@ -1744,8 +1744,8 @@ section[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(> [data-test
 
 /* Segmented radios (mode switch, .mc-seg): Streamlit leaves a margin where the
    radio circle was, so the text sat 8px off-centre in its segment. */
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label > div:last-child { margin-left: 0 !important; }
-:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"]) label { justify-content: center; }
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label > div:last-child { margin-left: 0 !important; }
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label { justify-content: center; }
 
 /* Top card: every control is the same pill (switch, Up to date, select, Settings). */
 .st-key-mc-topbar [data-testid="stButtonGroup"] [role="radiogroup"],
@@ -2638,6 +2638,55 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
 /* ==========================================================================
    Phone polish K1 (round 4). Only fixer K1 edits this block.
    ========================================================================== */
+
+@media (max-width: 640px) {
+    /* K1-1: "By category" card = same width/inset as "By account" (the E1 card rule's 10px side padding is dropped). */
+    [class*="st-key-mc-narrow-"][class*="_category"] { padding-left: 0; padding-right: 0; }
+}
+
+@media (max-width: 640px) {
+    /* K1-15: metric delta chips ("low", "risk") hug their text like every other pill. */
+    [data-testid="stMetricDelta"] { width: fit-content; align-self: flex-start; }
+}
+
+@media (max-width: 640px) {
+    /* K1-7: the chip row also fades on its left edge once scrolled (no hard-cut chip). */
+    .mc-phonebar-chips[data-mc-scrolled] {
+        -webkit-mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 28px), transparent);
+        mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 28px), transparent);
+    }
+}
+
+@media (max-width: 640px) {
+    /* K1-8: Retirement plan | Spending reads like the mode switch above it: the selected segment is the
+       tinted, teal one; the other is transparent (no tan fill or border), so it is clear which is active. */
+    .st-key-mc-topbar [data-testid="stButtonGroup"] button[data-testid="stBaseButton-segmented_control"] {
+        background: transparent !important; border-color: transparent !important; color: var(--mc-muted, #64748b) !important;
+    }
+    .st-key-mc-topbar [data-testid="stButtonGroup"] button[data-testid="stBaseButton-segmented_controlActive"] {
+        background: color-mix(in srgb, var(--mc-teal) 14%, var(--mc-tile)) !important; border-color: transparent !important;
+        color: var(--mc-teal) !important; font-weight: 600;
+    }
+    .st-key-mc-topbar [data-testid="stButtonGroup"] button[data-testid="stBaseButton-segmented_control"] p { color: inherit !important; }
+}
+
+@media (max-width: 640px) {
+    /* K1-9: a wrapped section heading is tight (1.25) instead of 1.6; the padding takes up the
+       difference so a one-line heading keeps its height and text position. */
+    .mc-section { line-height: 1.25; padding: 7.5px 0 16px 0; }
+    /* K1-9: numbered lists: the number sits in the body column's left edge (not 7px left of it),
+       and wrapped lines hang under the text. */
+    [data-testid="stMarkdownContainer"] ol { list-style: none; counter-reset: k1n; padding-left: 0; }
+    [data-testid="stMarkdownContainer"] ol > li { counter-increment: k1n; margin-left: 0 !important; padding-left: 1.6em; text-indent: -1.6em; }
+    [data-testid="stMarkdownContainer"] ol > li::before { content: counter(k1n) "."; display: inline-block; width: 1.6em; text-indent: 0; }
+}
+
+@media (max-width: 640px) {
+    /* K1-16: the stat-card hover/tap popup (240px) ran off the right edge from the right-hand card of
+       each 2-up row. Narrower, and the right-hand cards open it leftwards (anchored to their right edge). */
+    section[data-testid="stMain"] .mc-stat-wrap .mc-tip { min-width: 0; width: 230px; max-width: calc(100vw - 54px); box-sizing: border-box; }
+    section[data-testid="stMain"] [data-testid="stColumn"]:nth-child(even) .mc-stat-wrap .mc-tip { left: auto; right: 0; }
+}
 
 /* -- end phone polish K1 -- */
 
