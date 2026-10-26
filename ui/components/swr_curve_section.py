@@ -29,8 +29,8 @@ def _inputs_hash(overrides: dict, n_sims):
         return None
 
 
-_FRESH_HELP = ("Already reflects your current inputs. Change a sidebar "
-               "parameter or the simulation count to recalculate.")
+_FRESH_HELP = ("This matches your current inputs. Change a sidebar setting "
+               "or the simulation count to recalculate.")
 
 
 def render(st, results: dict = None) -> None:
@@ -45,14 +45,14 @@ def render(st, results: dict = None) -> None:
     _years = int(_end) - int(_ret) if _end and _ret else 0
     _horizon = f"{_years}-year horizon" if _years > 0 else "horizon"
     st.caption(
-        "Your personalized 4% rule. It sweeps how much you draw in year 1 "
-        "(as a % of investable assets at retirement), runs the full Monte Carlo "
-        "at each level, and finds the **highest rate that still meets your success "
-        f"target** — factoring in your taxes, Social Security, guardrails, and your "
-        f"{_horizon}, which the generic 4% rule ignores."
+        "Your own version of the 4% rule. It tries different first-year withdrawals "
+        "(as a % of your investable assets at retirement), runs the full Monte Carlo "
+        "at each, and finds the **highest rate that still meets your success "
+        f"target**. Unlike the generic 4% rule, it counts your taxes, Social Security, "
+        f"guardrails, and your {_horizon}."
     )
     st.caption(
-        "Third view of the same plan: **Retirement** gives the earliest age, "
+        "The same plan once more: **Retirement** gives the earliest age, "
         "**Portfolio needed to retire** gives the portfolio you need, and this gives the "
         "spending that portfolio supports."
     )
@@ -77,7 +77,7 @@ def render(st, results: dict = None) -> None:
             for _e in _errs:
                 st.error(_e)
             return
-        prog = st.progress(0.0, text="Sweeping withdrawal rates…")
+        prog = st.progress(0.0, text="Testing withdrawal rates…")
 
         def _cb(frac, msg):
             try:
@@ -93,17 +93,17 @@ def render(st, results: dict = None) -> None:
         st.rerun()  # re-render so the button immediately goes inactive
 
     if not swr:
-        st.caption("Click **Find my safe withdrawal rate** to run the sweep "
-                   "(extra simulations — a few seconds).")
+        st.caption("Click **Find my safe withdrawal rate** to test a range of rates. "
+                   "It runs extra simulations and takes a few seconds.")
         return
     if swr.get("error"):
-        st.info("Couldn't estimate a withdrawal rate — no investable balance at retirement "
-                "for these inputs. Check your accounts / retirement age.")
+        st.info("Couldn't estimate a withdrawal rate. You'd have no investable balance at "
+                "retirement with these inputs. Check your accounts and retirement age.")
         return
 
     if stale:
-        st.warning("Your inputs changed since this was calculated — click "
-                   "**Find my safe withdrawal rate** to refresh.")
+        st.warning("Your inputs changed since this was calculated. Click "
+                   "**Find my safe withdrawal rate** to update it.")
 
     _render_result(st, swr, results)
 
@@ -125,24 +125,24 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
     cols = st.columns(3)
     with cols[0]:
         st.metric("Your withdrawal rate", f"{actual_rate:.1%}" if actual_rate else "run sim",
-                  help="Year-1 portfolio draw ÷ investable balance at retirement, from your last run.")
+                  help="First-year withdrawal ÷ investable balance at retirement, from your last run.")
     with cols[1]:
         st.metric("Safe rate at target",
                   f"{swr_rate:.1%}" if swr_rate else "none",
-                  help=f"Highest initial withdrawal rate that still clears ≥{target:.0%} success.")
+                  help=f"The highest starting withdrawal rate with at least a {target:.0%} chance of success.")
     with cols[2]:
         gap = (swr_rate - actual_rate) if (swr_rate and actual_rate is not None) else None
         st.metric("Headroom", f"{gap:+.1%}" if gap is not None else "—",
                   delta=("cushion" if (gap or 0) >= 0 else "overspending") if gap is not None else None,
                   delta_color=("normal" if (gap or 0) >= 0 else "inverse"),
                   delta_arrow=("up" if (gap or 0) >= 0 else "down"),
-                  help="Safe rate minus your rate. Positive = room to spend more; negative = at risk.")
+                  help="Safe rate minus your rate. Positive means room to spend more. Negative means risk.")
 
     if swr_rate is None:
         st.info(
-            "No withdrawal rate in the tested range meets your success target — even a sharply "
-            "lower first-year spend falls short at this retirement age. Consider retiring later, "
-            "saving more, or lowering the target success rate."
+            "No withdrawal rate we tested meets your success target, even a much "
+            "lower first-year spend. Try retiring later, saving more, or lowering the "
+            "target success rate."
         )
 
     xs = [c["realized_rate"] * 100 for c in curve]
@@ -172,8 +172,8 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
     fig.update_layout(
         title=dict(
             text="<b>Success rate vs. initial withdrawal rate</b><br>"
-                 "<span style='font-size:13px;color:#64748b;'>Higher spending → lower success; "
-                 "your safe rate is where the curve crosses your target</span>",
+                 "<span style='font-size:13px;color:#64748b;'>More spending, less success. "
+                 "Your safe rate is where the curve crosses your target</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),
         height=380, margin=dict(l=50, r=40, t=80, b=50),
@@ -191,7 +191,7 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
 
     show_chart(st, _build, f"swr_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
     st.caption(
-        "Each point re-runs the full Monte Carlo at a different year-1 spending level. The rate is the "
-        "**realized total** first-year draw ÷ investable balance at retirement, directly comparable "
-        "to your plan's rate. Based on today's inputs — **recalculate after changing them**."
+        "Each point re-runs the full Monte Carlo at a different first-year spending level. The rate is the "
+        "**total** first-year withdrawal ÷ investable balance at retirement, so you can compare it "
+        "directly to your plan's rate. This uses today's inputs. **Recalculate after you change them.**"
     )

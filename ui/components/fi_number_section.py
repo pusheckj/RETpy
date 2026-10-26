@@ -32,8 +32,8 @@ def _inputs_hash(overrides: dict, n_sims):
         return None
 
 
-_FRESH_HELP = ("This number reflects your current inputs. Change a sidebar "
-               "parameter (or the simulation count) to recalculate.")
+_FRESH_HELP = ("This matches your current inputs. Change a sidebar setting "
+               "or the simulation count to recalculate.")
 
 
 def render(st, results: dict = None) -> None:
@@ -43,22 +43,22 @@ def render(st, results: dict = None) -> None:
     # Household size as the simulation sees it (cfg.has_partner for these inputs).
     couple = has_partner(overrides)
     st.caption(
-        "Instead of *when* you can retire, this finds the **investable portfolio** that "
-        "lets you stop. "
+        "Instead of asking *when* you can retire, this finds the **investable portfolio** you "
+        "need to stop working. "
         + ("You both keep" if couple else "You keep")
-        + " working and saving until the balance first reaches a target, then retire "
+        + " working and saving until the balance first hits a target, then retire "
         "that year. Your **number** is the smallest target that still meets your success "
-        "threshold. Excludes home equity and earmarked 529 college funds"
-        + ("; assumes you both work until the target and retire together (your "
-           "partner's separate retirement age isn't used here)." if couple else ".")
+        "goal. It leaves out home equity and 529 college funds"
+        + (". It assumes you both work until the target and retire together, so your "
+           "partner's own retirement age isn't used here." if couple else ".")
     )
     # Orient the reader: three tiles answer the same question three ways, and a
     # first-time user otherwise can't tell which number to trust.
     st.caption(
-        "The same plan, asked three ways — **Retirement** answers *when* "
-        "(earliest age), this section answers *how much* (the portfolio you need), "
-        "and **Safe withdrawal rate** answers *how much can I spend* once you stop. "
-        "They're consistent: hit this number and the earliest age is the year you hit it."
+        "The same plan, three questions. **Retirement** says *when* (earliest age). "
+        "This section says *how much* you need. **Safe withdrawal rate** says *how much "
+        "you can spend* once you stop. They agree: the earliest age is the year you hit "
+        "this number."
     )
 
     n_sims = int(st.session_state.get("n_simulations", 1000))
@@ -82,7 +82,7 @@ def render(st, results: dict = None) -> None:
             for _e in _errs:
                 st.error(_e)
             return
-        prog = st.progress(0.0, text="Sweeping net-worth targets…")
+        prog = st.progress(0.0, text="Testing portfolio targets…")
 
         def _cb(frac, msg):
             try:
@@ -97,16 +97,16 @@ def render(st, results: dict = None) -> None:
         st.rerun()  # re-render so the button immediately goes inactive
 
     if not fi:
-        st.caption("Click **Calculate my number** to run the net-worth sweep "
-                   "(extra simulations — a few seconds, up to ~a minute at high "
-                   "sim counts).")
+        st.caption("Click **Calculate my number** to test a range of portfolio targets. "
+                   "It runs extra simulations, so it takes a few seconds, or up to "
+                   "a minute at high simulation counts.")
         return
 
     # Staleness guard: the result is stored in session state and would otherwise
     # keep showing after the user changes inputs or switches profiles.
     if stale:
-        st.warning("Your inputs changed since this was calculated — click "
-                   "**Calculate my number** to refresh.")
+        st.warning("Your inputs changed since this was calculated. Click "
+                   "**Calculate my number** to update it.")
 
     _render_result(st, fi, couple)
 
@@ -134,27 +134,27 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
         if already:
             st.metric("Portfolio needed to retire", money(cur, shorten=True),
                       help=f"Your current investable portfolio ({money(cur, shorten=True)}) "
-                           f"already clears the {target:.0%} target — you're at or past "
+                           f"already clears the {target:.0%} target. You're at or past "
                            "your number.")
         elif not_reached:
             st.metric("Portfolio needed to retire", f"Over {money(top, shorten=True)}",
-                      help=f"None of the targets tried, up to {money(top, shorten=True)}, "
+                      help=f"No target we tried, up to {money(top, shorten=True)}, "
                            f"reached your {target:.0%} goal.")
         else:
             st.metric("Portfolio needed to retire", money(num, shorten=True),
-                      help=f"Smallest investable portfolio with ≥{target:.0%} success, "
-                           "retiring the moment you reach it.")
+                      help=f"Smallest investable portfolio with at least a {target:.0%} chance of success, "
+                           "if you retire the moment you reach it.")
     with cols[1]:
         if already:
             st.metric("When you could stop", "Now",
-                      help="Retiring today already meets your success target.")
+                      help="Retiring today already meets your target.")
         elif not_reached:
             st.metric("Best success found", f"{best:.0%}",
-                      help="The highest success rate any tested target reached.")
+                      help="The best chance of success any target we tried reached.")
         else:
             st.metric(
                 "Typically reached at age", f"{age:.0f}" if age else "—",
-                help=(f"Median age you reach that number at today's savings rate"
+                help=(f"The median age you reach it at today's savings rate"
                       + (f"; most paths land between {lo_age:.0f} and {hi_age:.0f}."
                          if has_range else ".")),
             )
@@ -166,7 +166,7 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
             # The sweep never met the success target, even at the top of the range —
             # the household is the FURTHEST from FI, not "there".
             st.metric("Status", "Not reached",
-                      help="No tested target met your success goal.")
+                      help="No target we tried met your success goal.")
         else:
             gap = num - cur
             st.metric(
@@ -179,13 +179,13 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
         # before the work cap, so those runs retire at the cap with less.
         capped = bool(curve) and (curve[-1].get("median_retire_age") or 0) >= cap
         st.info(
-            f"No target up to {money(top, shorten=True)} reached your {target:.0%} goal; the "
+            f"No target up to {money(top, shorten=True)} reached your {target:.0%} goal. The "
             f"best was {best:.0%}. "
             + (f"The biggest targets usually aren't reached before age {cap}, the latest "
                "this check lets you work, so those runs retire then with less. "
                if capped else "")
-            + "To get there: spend less in retirement, save more now, or lower the "
-            "success goal, then recalculate."
+            + "To get there, spend less in retirement, save more now, or lower the "
+            "success goal. Then recalculate."
         )
 
     xs = [c["networth"] for c in curve]
@@ -212,7 +212,7 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
     fig.update_layout(
         title=dict(
             text="<b>Success rate vs. net worth at retirement</b><br>"
-                 "<span style='font-size:13px;color:#64748b;'>Retire the moment the portfolio "
+                 "<span style='font-size:13px;color:#64748b;'>Retire the moment your portfolio "
                  "hits each target</span>",
             x=0.0, xanchor="left", font=dict(size=16),
         ),
@@ -229,9 +229,8 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
         "Each point: keep working until the investable portfolio first reaches that target, "
         f"then {'you both retire' if couple else 'retire'} and draw down until "
         f"{plan_end_text(st.session_state.get('user_overrides', {}) or {})}. "
-        "Because retirement age is *earned* "
-        "(you stop when you hit the number), reaching it **earlier** — in a strong market — means "
-        "a longer retirement to fund and a **lower** success rate than this headline; reaching it "
-        "later is safer. Assumes today's spending, savings rate, and returns — "
-        "**recalculate after changing inputs**."
+        "You stop when you hit the number, so reaching it **earlier** (in a strong market) means "
+        "a longer retirement to fund and a **lower** chance of success than shown here. Reaching it "
+        "later is safer. This assumes today's spending, savings rate, and returns. "
+        "**Recalculate after you change inputs.**"
     )

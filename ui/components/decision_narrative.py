@@ -36,13 +36,13 @@ def render(st, results: dict = None) -> None:
     if verdict is not None:
         if verdict["funded"]:
             parts.append(
-                "Your penalty-free savings (cash, taxable brokerage, Roth) look "
-                "**sufficient to bridge to 59½** without an early-withdrawal penalty."
+                "Your penalty-free savings (cash, taxable brokerage, Roth) should "
+                "**cover the bridge to 59½** without an early-withdrawal penalty."
             )
         else:
             parts.append(
-                f"Your penalty-free savings look **short starting around age "
-                f"{verdict['first_short']}** — before 59½, that forces a penalized "
+                f"Your penalty-free savings run **short starting around age "
+                f"{verdict['first_short']}**. Before 59½, that means a penalized "
                 f"withdrawal."
             )
 

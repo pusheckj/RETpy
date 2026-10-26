@@ -15,7 +15,7 @@ def render(st, results: dict, chart_key: str = "allocation_main") -> None:
     pr = results.get("primary_result", {}) or {}
     alloc = pr.get("allocation_by_year", []) or []
     if not alloc:
-        st.info("Glide path data not available.")
+        st.info("No glide path data for this plan.")
         return
 
     ages = [row["age"] for row in alloc]
@@ -55,7 +55,7 @@ def render(st, results: dict, chart_key: str = "allocation_main") -> None:
 
     fig.update_layout(
         title=dict(
-            text="<b>Asset allocation</b><br><span style='font-size:13px;color:#64748b;'>Stock/bond mix from today through plan horizon</span>",
+            text="<b>Asset allocation</b><br><span style='font-size:13px;color:#64748b;'>Stock and bond mix from today to the end of your plan</span>",
             x=0.0, xanchor="left", font=dict(size=16, color="#0f172a"),
         ),
         height=280,
