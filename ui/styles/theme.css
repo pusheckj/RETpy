@@ -2129,6 +2129,121 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Only fixer D2 edits this block.
    ========================================================================== */
 
+/* Touch tablets / landscape phones: the sidebar is 260-328px wide, so a two-column
+   number row is ~120px and the 44px -/+ steppers left the value 35px ("1" of
+   "10,000"). Same fix the mouse rule above applies: drop the steppers in
+   those rows (the numeric keypad does the entering). */
+@media (hover: none) and (pointer: coarse) and (min-width: 641px) and (max-width: 1400px) {
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stNumberInputStepUp"],
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stNumberInputStepDown"] { display: none; }
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .stNumberInput input { padding-right: 14px; }
+}
+
+/* Top card metrics on a narrow card (tablet portrait, or the sidebar open next to it):
+   the same equal, centred columns and short labels as the phone, so the last metric
+   never wraps onto a line by itself. Keys off the card's own width. */
+@media (min-width: 641px) and (max-width: 1100px) {
+    @container (max-width: 720px) {
+        .mc-topbar .mc-topbar-metric {
+            flex: 1 1 0; min-width: 0; align-items: center; text-align: center;
+        }
+        .mc-topbar-metric-label { white-space: nowrap; }
+        .mc-lbl-full { display: none; }
+        .mc-lbl-short { display: inline; }
+    }
+}
+
+/* Landscape tablets: the pinned top card is ~257px tall, a third of a 768px-tall
+   screen, with the sidebar already taking a column. Let it scroll away like it
+   does on portrait tablets and phones. */
+@media (min-width: 769px) and (max-width: 1100px) and (max-height: 800px) {
+    [data-testid="stLayoutWrapper"]:has(> [data-testid="stVerticalBlock"].st-key-mc-topbar) { position: static; }
+}
+
+/* Landscape phones: the welcome page spent 150px above the cards, which pushed the
+   buttons below the fold of a 390px-tall screen. */
+@media (max-height: 500px) and (orientation: landscape) {
+    .stApp:has(:is(.st-key-mc-welcome, .st-key-mc-simple-root, .st-key-mc-setup-root)) [data-testid="stMainBlockContainer"] {
+        padding-top: 20px;
+    }
+    .st-key-mc-welcome { margin-top: 0; }
+    .mc-welcome-head { margin-bottom: 12px; }
+    .mc-welcome-head { margin-bottom: 8px; }
+    .mc-welcome-head h1 { font-size: 24px; margin: 2px 0; }
+    .mc-welcome-head p { display: none; }
+    [class*="st-key-mc-welcome-"] { padding: 14px 18px !important; }
+    .mc-welcome-card p { margin-bottom: 10px; font-size: 14px; }
+    .mc-welcome-privacy { margin-top: 10px; }
+}
+
+/* Tab rows (What-if deep dives, 5 tabs = 610px) overran the 510-566px main pane when
+   the sidebar is open ("Mortgage paydov" cut off). Tighter tabs; if they still do not
+   fit, they wrap into a second row instead of scrolling out of view. */
+@media (min-width: 641px) and (max-width: 1100px) {
+    section[data-testid="stMain"] [data-testid="stTabs"] { min-width: 0; max-width: 100%; }
+    section[data-testid="stMain"] [data-baseweb="tab-list"] {
+        max-width: 100% !important; flex-wrap: wrap; box-sizing: border-box;
+    }
+    section[data-testid="stMain"] [data-baseweb="tab-list"] [data-baseweb="tab"] { padding: 7px 10px !important; }
+}
+
+/* Top card controls row: below 1240px the base rule lets these columns shrink to 0, so
+   next to an open sidebar "Up to date" was cut to "Up to". Keep each at its content
+   width; the row wraps when they no longer fit. */
+@media (min-width: 641px) and (max-width: 1100px) {
+    section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:not(:first-child) {
+        min-width: fit-content !important;
+    }
+}
+
+/* Sidebar open on a small tablet / landscape phone leaves a 510-640px main pane: give
+   the controls row the phone layout (run button takes the slack, size select and a
+   gear-only Settings button beside it) so Settings is not stranded on a row of its own. */
+@media (min-width: 641px) and (max-width: 900px) {
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(2) {
+        flex: 1 1 0 !important; width: auto !important; min-width: 130px !important;
+    }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(3) {
+        flex: 0 0 108px !important; width: 108px !important; min-width: 0 !important;
+    }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) section[data-testid="stMain"] .st-key-mc-topbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(4) {
+        flex: 0 0 64px !important; width: 64px !important; min-width: 0 !important;
+    }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) .st-key-mc-topbar [data-testid="stPopoverButton"] [data-testid="stMarkdownContainer"] { display: none; }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) .st-key-mc-topbar [data-baseweb="select"] > div { padding: 4px 6px !important; }
+}
+
+/* Hero card ("Earliest retirement age"): 40px padding + a 72px figure + the right-hand
+   column pushed "Target retirement age" 28px past the card edge when the sidebar is
+   open next to it. Let the left block shrink and wrap, and use the lighter padding. */
+@media (min-width: 641px) and (max-width: 1100px) {
+    .mc-hero-card { padding: 24px 28px !important; gap: 20px; }
+    .mc-hero-card .mc-hero-main { flex: 1 1 0; min-width: 0; }
+    .mc-hero-card .mc-hero-big { font-size: clamp(44px, 7vw, 64px) !important; overflow-wrap: anywhere; }
+    .mc-hero-card .mc-hero-main > div:last-child { max-width: none !important; }
+    .mc-hero-card .mc-hero-side { flex: 0 0 auto; }
+}
+
+/* ...and below ~510px of card (sidebar open on a small tablet / landscape phone) stack it
+   like the phone: figure first, target + success rate beneath, left-aligned. */
+@media (min-width: 641px) and (max-width: 960px) {
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) .mc-hero-card { flex-direction: column !important; align-items: stretch !important; gap: 14px; }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) .mc-hero-card .mc-hero-side {
+        text-align: left !important; padding-top: 12px; border-top: 1px solid var(--mc-tile-border); }
+}
+
+/* Sidebar is 260px wide from 641 to ~900px: a three-up metric row (You / Partner / Total)
+   is 55px a cell, so "$45.0K" was cut to "$45.0I" and "= LEFT TO SAVE" ran out of its
+   cell; and the three-option "Return scenario" switch lost "Pessimistic". Smaller figures,
+   labels that wrap, and a switch that wraps its third option instead of clipping it. */
+@media (min-width: 641px) and (max-width: 900px) {
+    section[data-testid="stSidebar"] [data-testid="stMetricValue"] { font-size: 14px; }
+    section[data-testid="stSidebar"] [data-testid="stMetricLabel"],
+    section[data-testid="stSidebar"] [data-testid="stMetricLabel"] * { white-space: normal !important; overflow-wrap: anywhere; }
+    section[data-testid="stSidebar"] [role="radiogroup"].mc-seg { flex-wrap: wrap !important; }
+    section[data-testid="stSidebar"] [role="radiogroup"].mc-seg label { flex: 1 1 auto; padding-left: 8px !important; padding-right: 8px !important; }
+}
+
 /* -- end tablet polish D2 -- */
 
 
