@@ -515,6 +515,12 @@ div:has(> [data-testid="stNumberInputIcon"]) { background-color: #4a4655 !import
 [data-testid="stNumberInputIcon"], [data-testid="stNumberInputIcon"] * { color: var(--mc-ink) !important; }
 [data-testid="stExpander"] summary [data-testid="stExpanderIcon"] { color: #2dd4bf !important; background-color: rgba(45, 212, 191, 0.16) !important; }
 [role="radiogroup"].mc-seg label:not(:has(input:checked)) p { color: var(--mc-muted) !important; }
+/* Polish M1: theme.css styles these groups through an :is() list that out-ranks the .mc-seg
+   rules above, so their selected label stayed the light-mode teal (2.8:1). Same list, same
+   weight, injected later: every selected segment label uses the bright teal. */
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked),
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked) div,
+:is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"], [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked) p { color: #2dd4bf !important; }
 /* Polish F1: radio dots use the dark palette (they stayed cream) and the text input's
    inner box (cream in light mode) no longer shows as a pale rim around the dark field. */
 label[data-baseweb="radio"]:has(input:not(:checked)) > div:first-child { background-color: #6b6577 !important; }
