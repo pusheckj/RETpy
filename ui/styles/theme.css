@@ -2371,6 +2371,43 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish H3 (round 3). Only fixer H3 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* Row 17: Avalanche / Snowball cards stacked with a 12px gap (the markdown wrapper's
+       -16px bottom margin plus the 16px column gap left them overlapping by 4px);
+       caption 14px like the other body text; balanced wraps avoid a one-word last line. */
+    .simple-plan { margin-bottom: 20px; }
+    .simple-plan-sub { font-size: 14px; line-height: 1.4; text-wrap: balance; }
+    [class*="st-key-mc-tile-simple-debt"] .simple-note { text-wrap: balance; }
+
+    /* Row 18: group subheads (Each month / Savings / ...) get air before their first label. */
+    .simple-group { margin: 10px 0 6px; }
+
+    /* Row 19: the debt Name box is the same pill as the number inputs (border, radius,
+       44px height); Remove matches that height with its text centred. */
+    [class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"] {
+        height: 44px; border: 1px solid var(--mc-tile-border) !important; border-radius: 999px !important;
+        background-color: #ffffff; overflow: hidden; box-sizing: border-box; }
+    [class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"] > div { background-color: transparent !important; height: 100%; }
+    [class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"] input {
+        height: 100% !important; border: 0 !important; border-radius: 0 !important;
+        background-color: transparent !important; padding: 0 18px !important; }
+    [class*="st-key-simple-debt-"] [data-testid="stTextInputRootElement"]:focus-within {
+        border-color: var(--mc-teal) !important; box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12) !important; }
+    [class*="st-key-simple-debt-"] [data-testid="stColumn"] button[kind] {
+        height: 44px; min-height: 44px; padding: 0 16px; display: flex; align-items: center;
+        justify-content: center; }
+    [class*="st-key-simple-debt-"] [data-testid="stColumn"] button[kind] p { line-height: 1; margin: 0; }
+    .st-key-simple_debt_add button { width: 100%; justify-content: center; }
+
+    /* Row 20: ladder - number badge and status pill sit on the first title line; all
+       pills share one width. */
+    .simple-step-head { align-items: flex-start; }
+    .simple-step-num { margin-top: -1px; }
+    .simple-step-title { line-height: 24px; }
+    .simple-step-head .simple-chip { flex: 0 0 88px; box-sizing: border-box; width: 88px;
+        padding: 2px 4px; text-align: center; margin-top: 1px; }
+}
+
 /* -- end phone polish H3 -- */
 
 
