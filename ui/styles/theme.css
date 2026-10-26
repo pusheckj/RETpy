@@ -2422,4 +2422,44 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish I1 (Spending view). Only fixer I1 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* I1-1: no sticky bar in the Spending view, so the ">>" reopen button gets a solid
+       chip and stops printing over the page text as it scrolls underneath. */
+    .stApp:has(.mc-section-spending) [data-testid="stExpandSidebarButton"] {
+        background: var(--mc-tile) !important; border: 1px solid var(--mc-tile-border);
+        border-radius: 12px; box-shadow: 0 2px 8px rgba(120, 96, 52, 0.12);
+    }
+
+    /* I1-2: Period / Moving average / Show: the planner's soft pill (tile container,
+       teal-tinted active segment) instead of square bordered buttons. Segments share the
+       line, grow with their text (so "All complete months" stays on one line) and are
+       the same height. */
+    .st-key-sp_period [data-baseweb="button-group"],
+    .st-key-sp_ma [data-baseweb="button-group"],
+    .st-key-sp_view [data-baseweb="button-group"] {
+        background: var(--mc-tile) !important; border: 1px solid var(--mc-tile-border) !important;
+        border-radius: 12px !important; padding: 4px !important; gap: 2px !important;
+        box-shadow: 0 2px 8px rgba(120, 96, 52, 0.08) !important; box-sizing: border-box;
+    }
+    .st-key-sp_period [data-baseweb="button-group"] button,
+    .st-key-sp_ma [data-baseweb="button-group"] button,
+    .st-key-sp_view [data-baseweb="button-group"] button {
+        border: 0 !important; border-radius: 9px !important; background: transparent !important;
+        box-shadow: none !important; margin: 0 !important; min-height: 36px; align-items: center;
+        padding-top: 4px !important; padding-bottom: 4px !important;
+    }
+    .st-key-sp_period [data-baseweb="button-group"] button *,
+    .st-key-sp_ma [data-baseweb="button-group"] button *,
+    .st-key-sp_view [data-baseweb="button-group"] button * {
+        color: #64748b !important; font-weight: 600 !important; white-space: nowrap; line-height: 1.2;
+    }
+    .st-key-sp_period [data-baseweb="button-group"] button[kind="segmented_controlActive"],
+    .st-key-sp_ma [data-baseweb="button-group"] button[kind="segmented_controlActive"],
+    .st-key-sp_view [data-baseweb="button-group"] button[kind="segmented_controlActive"] { background: rgba(13, 148, 136, 0.14) !important; }
+    .st-key-sp_period [data-baseweb="button-group"] button[kind="segmented_controlActive"] *,
+    .st-key-sp_ma [data-baseweb="button-group"] button[kind="segmented_controlActive"] *,
+    .st-key-sp_view [data-baseweb="button-group"] button[kind="segmented_controlActive"] * { color: #0d9488 !important; }
+    .st-key-sp_period [data-baseweb="button-group"] button { flex: 1 1 auto !important; }
+}
+
 /* -- end phone polish I1 -- */
