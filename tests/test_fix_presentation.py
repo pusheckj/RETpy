@@ -349,15 +349,13 @@ def test_net_worth_projection_does_not_scale_contributions_by_inflation():
 
 
 # ==========================================================================
-# 5. Cumulative-contributions line must be theme-aware
+# 5. Savings projection: one y-axis; the running total lives in the hover
 # ==========================================================================
-def test_savings_projection_cum_line_is_theme_aware():
+def test_savings_projection_single_axis_cumulative_in_hover():
     src = _read("ui", "components", "savings_projection_chart.py")
-    assert "is_dark" in src
-    assert re.search(r'cum_color\s*=\s*"#e2e8f0"\s*if\s*dark\s*else\s*"#0f172a"', src)
-    # The line must use the computed color, not the hardcoded near-black.
-    assert re.search(r"line=dict\(color=cum_color", src)
-    # And the chart key must carry the theme so uirevision doesn't keep it.
+    assert "yaxis2" not in src and "go.Scatter" not in src
+    assert "Cumulative: $%{customdata" in src
+    # The chart key must carry the theme so uirevision doesn't keep it.
     assert re.search(r"f\"\{chart_key\}_\{'dk' if dark else 'lt'\}\"", src)
 
 

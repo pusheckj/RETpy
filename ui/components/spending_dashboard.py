@@ -399,6 +399,22 @@ def differing(overrides: Dict, actual: Dict[str, int]) -> List[str]:
     return list(g.loc[g["Difference"].abs() >= 0.5, "Expense category"])
 
 
+def _phone_df(st, key: str, df: pd.DataFrame, phone_cols: dict, phone_df=None, **kwargs) -> None:
+    """A dataframe drawn twice, like ``plot_theme.show_chart``: the full table for wide
+    screens and a compact one for phones (theme.css shows the one that fits).
+    ``phone_cols`` maps the kept columns to their phone ``column_config``: fewer
+    columns at pixel widths that fit ~330px, so nothing scrolls sideways.
+    ``phone_df`` optionally replaces the data there (shorter cell text)."""
+    if not hasattr(st, "container"):  # stub st (tests / print): the full table only
+        st.dataframe(df, hide_index=True, width="stretch", **kwargs)
+        return
+    with st.container(key=f"mc-wide-{key}"):
+        st.dataframe(df, hide_index=True, width="stretch", **kwargs)
+    with st.container(key=f"mc-narrow-{key}"):
+        st.dataframe((df if phone_df is None else phone_df)[list(phone_cols)], hide_index=True, width="stretch",
+                     height=kwargs.get("height", "auto"), column_config=phone_cols)
+
+
 def category_table(tx: pd.DataFrame, start: pd.Period, end: pd.Period) -> pd.DataFrame:
     """Counted transactions per detailed category in the period: count, total,
     average and largest purchase, biggest total first."""
@@ -1050,10 +1066,14 @@ def render(st, **_kwargs) -> None:
         shown = cats.assign(**{"Expense category": cats["Expense category"].where(
             cats["Expense category"] != cats["Category"], ""),
             **{c: cats[c].round().astype(int) for c in ("Total", "Average", "Largest")}})
-        st.dataframe(shown, hide_index=True, width="stretch",
-                     height=36 * (len(cats) + 1) + 2,
-                     column_config={c: st.column_config.NumberColumn(format="dollar")
-                                    for c in ("Total", "Average", "Largest")})
+        _phone_df(st, "sp_bycat", shown,
+                  {"Category": st.column_config.Column(width=118),
+                   "Transactions": st.column_config.NumberColumn("Count", width=52),
+                   "Total": st.column_config.NumberColumn(format="dollar", width=72),
+                   "Average": st.column_config.NumberColumn(format="dollar", width=72)},
+                  height=36 * (len(cats) + 1) + 2,
+                  column_config={c: st.column_config.NumberColumn(format="dollar")
+                                 for c in ("Total", "Average", "Largest")})
         if not cats.empty:
             labels = {f"{r.Category} · {r.Transactions}": r.Category for r in cats.itertuples()}
             # Start on a category that has purchases to list (housing is a flat payment).
@@ -1083,12 +1103,15 @@ def render(st, **_kwargs) -> None:
                  "transfer": "Between accounts", "income": "Income"}
         show = rows.sort_values("date", ascending=False).assign(
             kind=lambda d: d["kind"].map(plain), cost=lambda d: -d["amount"])
-        st.dataframe(show[["date", "merchant", "category", "kind", "reason", "cost"]],
-                     hide_index=True, width="stretch", height=380,
-                     column_config={"date": st.column_config.DateColumn("Date"),
-                                    "merchant": "Description", "category": "Category",
-                                    "kind": "Counted as", "reason": "Why",
-                                    "cost": st.column_config.NumberColumn("Cost", format="dollar")})
+        _phone_df(st, "sp_search", show[["date", "merchant", "category", "kind", "reason", "cost"]],
+                  {"date": st.column_config.DateColumn("Date", format="MMM D", width=58),
+                   "merchant": st.column_config.Column("Description", width=190),
+                   "cost": st.column_config.NumberColumn("Cost", format="dollar", width=64)},
+                  height=380,
+                  column_config={"date": st.column_config.DateColumn("Date"),
+                                 "merchant": "Description", "category": "Category",
+                                 "kind": "Counted as", "reason": "Why",
+                                 "cost": st.column_config.NumberColumn("Cost", format="dollar")})
         st.caption(f"{len(rows):,} rows. Cost is positive for money you spent, negative for money in.")
 
     with t_data:
@@ -1112,6 +1135,11 @@ def render(st, **_kwargs) -> None:
                .rename(columns={"kind": "Type", "reason": "Reason", "size": "Transactions",
                                 "sum": "Net amount"}))
         why["Net amount"] = why["Net amount"].map(money)
-        st.dataframe(why, hide_index=True, width="stretch")
+        _phone_df(st, "sp_why", why,
+                  {"Type": st.column_config.Column(width=68),
+                   "Reason": st.column_config.Column(width=124),
+                   "Transactions": st.column_config.NumberColumn("Count", width=46),
+                   "Net amount": st.column_config.Column("Net", width=80)},
+                  phone_df=why.assign(Type=why["Type"].replace({"Between accounts": "Transfer"})))
         st.caption("Transfers move your own money between accounts (card payments, savings, Venmo "
                    "cash-outs); counting them would double count purchases.")
