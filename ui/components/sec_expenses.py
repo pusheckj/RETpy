@@ -79,8 +79,8 @@ def _child_row(st, i: int, kid: dict) -> dict:
             yub = _kid_number(st, p + "in", "Born in (years)", yub if yub > 0 else 1, 1, 30, 1)
     with c2:
         cost = _kid_number(st, p + "cost", "Monthly cost ($)", kid["monthly_cost"], 0, 10_000, 100,
-                           "Childcare, food, clothes and activities while they live with "
-                           "you, in today's dollars.")
+                           "Childcare, food, clothes and activities while they live with you, "
+                           "in today's dollars.")
     c3, c4 = st.columns(2, vertical_alignment="bottom")
     with c3:
         leaves = _kid_number(st, p + "leaves", "Leaves home at", kid["leaves_home_age"], 16, 30, 1,
@@ -88,8 +88,8 @@ def _child_row(st, i: int, kid: dict) -> dict:
     with c4:
         pct = _kid_number(st, p + "college", "College you pay (%)",
                           round(100 * float(kid["college_funding_pct"])), 0, 100, 5,
-                          "Share of college you plan to pay. It's saved in a 529 from "
-                          "birth and college is paid from it. 0 = none.")
+                          "Share of college you plan to pay. It's saved in a 529 from birth "
+                          "and paid out at college. 0 means none.")
     return {**kid, "years_until_birth": yub, "monthly_cost": cost, "leaves_home_age": leaves,
             "college_funding_pct": pct / 100.0}
 
@@ -130,8 +130,8 @@ def _statement_sync(st, slot) -> None:
     data = statement_data(st)
     with slot:
         if data is None:
-            st.caption("Add your statements in the Spending tab to fill these in from "
-                       "what you actually spend.")
+            st.caption("Add your statements in the Spending tab to fill these in "
+                       "from what you actually spend.")
         else:
             sync_control(st, data, "se_use_actual")
 
@@ -228,12 +228,12 @@ def render_body(st) -> None:
     }
     preset = st.selectbox("How does spending evolve?", presets, key="se_lifecycle",
         format_func=lambda p: _preset_short.get(p, p),
-        help="Flat: no preset change (the retirement extra and later drop in "
-             "Retirement goals still apply). Travel boom: discretionary +50% early in "
-             "retirement, -20% in later years. Conservative senior: discretionary "
-             "-30% in later years. Empty-nest: food/discretionary +30% while any "
-             "child is at home, -25% once all have left. Early and later years are "
-             "set in Retirement goals.")
+        help="Flat: no change (the extra early in retirement and the later drop "
+             "in Retirement goals still apply). Travel boom: discretionary +50% early "
+             "in retirement, -20% later. Conservative senior: discretionary -30% later. "
+             "Empty-nest: food and discretionary +30% while any child is at home, "
+             "-25% once all have left. Early and later years are set in "
+             "Retirement goals.")
     set_override(st, "SPEND_LIFECYCLE_PRESET", preset)
 
     # ----- Live total -----
@@ -287,7 +287,7 @@ def render_body(st) -> None:
         ["your planned moves"] if (overrides.get("HOME_EVENTS") or overrides.get("HOUSE_MOVE_ENABLED"))
         else []) + ["healthcare in retirement"]
     st.caption("Per year: " + " · ".join(parts)
-               + ".  This is the figure the simulation spends today; it changes with "
+               + ". This is what the plan spends today. It changes with "
                + (", ".join(changes[:-1]) + " and " if len(changes) > 1 else "")
                + changes[-1] + ".")
 

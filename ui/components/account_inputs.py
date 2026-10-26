@@ -46,7 +46,7 @@ def _rows(st, rows) -> None:
 
 def render(st) -> None:
     with section_expander(st, "Accounts", "account_balance"):
-        st.caption("Edit individual account balances. Totals flow into the simulation.")
+        st.caption("What each account holds today. The plan uses the totals.")
 
         st.markdown("**You**")
         _rows(st, _YOU)

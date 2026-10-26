@@ -38,8 +38,8 @@ def render_body(st) -> None:
     if st.session_state.get("st_state") not in _STATE_OPTIONS:
         st.session_state["st_state"] = current_label
     state = st.selectbox("State", _STATE_OPTIONS, key="st_state",
-                         help="Where you live, for state income tax. Every state uses "
-                              "its own tax table.")
+                         help="Where you live, for state income tax. Each state uses its "
+                              "own tax table.")
     code = state_choice.code_for(state)
     set_override(st, "STATE_CHOICE", code)
     st.caption(state_choice.caption_for(code))
@@ -87,7 +87,7 @@ def render_body(st) -> None:
             st.caption("You're not married, so each of you files your own return "
                        "and is taxed on your own income.")
     else:
-        st.caption("Enter income above to see your tax estimate.")
+        st.caption("Enter your income above to see your tax estimate.")
 
     # What's modeled
     with st.expander("What's modeled", expanded=False):
@@ -108,8 +108,8 @@ def render_body(st) -> None:
         )
 
     st.caption(
-        "Retirement-year taxes (withdrawals, Social Security, Roth conversions) "
-        "are computed by the simulation year by year with the same rules."
+        "Taxes in retirement (withdrawals, Social Security, Roth conversions) "
+        "are worked out year by year with the same rules."
     )
 
 

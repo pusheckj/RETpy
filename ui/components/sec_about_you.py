@@ -74,8 +74,8 @@ def render_body(st) -> None:
     set_override(st, "TARGET_RETIREMENT_AGE", safe_int(target))
     if target < your_age:
         st.warning(
-            f"Target retirement age ({target}) is below your current age ({your_age}). "
-            "The simulation won't run until the target age is at least your current age."
+            f"Your target retirement age ({target}) is below your current age ({your_age}). "
+            "Raise it to at least your age to run the plan."
         )
 
     # Partner's own retirement age (only when a partner exists). Independent of
@@ -100,10 +100,10 @@ def render_body(st) -> None:
                                 slider_default))
         p_target = st.slider("Partner's retirement age", min_value=25, max_value=75,
                              step=1, key="ay_partner_target_age",
-                             help="When your partner plans to stop working (their age). "
-                                  "Set it apart from yours to model one retiring first: "
-                                  "the working partner keeps earning and saving, and their "
-                                  "take-home offsets the other's withdrawals.")
+                             help="Your partner's age when they stop working. Set it apart "
+                                  "from yours if one of you retires first. The other keeps "
+                                  "earning and saving, and their take-home pay offsets "
+                                  "withdrawals.")
         if not together_in_range and p_target == slider_default:
             # "Retire together" isn't representable on the slider and the user
             # hasn't moved it -> keep None so results match the retire-together default.
@@ -117,15 +117,15 @@ def render_body(st) -> None:
             your_year_partner_retires = p_target + age_gap
             gap_vs_you = your_year_partner_retires - target
             if gap_vs_you == 0:
-                st.caption(f"Partner retires at {p_target} — the same year you do.")
+                st.caption(f"Partner retires at {p_target}, the same year you do.")
             else:
                 when = "after you" if gap_vs_you > 0 else "before you"
                 n = abs(gap_vs_you)
-                st.caption(f"Partner retires at {p_target} — {n} year{'' if n == 1 else 's'} {when}.")
+                st.caption(f"Partner retires at {p_target}, {n} year{'' if n == 1 else 's'} {when}.")
             if p_target < partner_age:
                 st.warning(
                     f"Partner's retirement age ({p_target}) is below their current age "
-                    f"({partner_age}); the simulator treats them as already retired."
+                    f"({partner_age}), so they count as already retired."
                 )
 
     # Plan-until age: each person's own. The plan runs until the later of the
@@ -134,7 +134,7 @@ def render_body(st) -> None:
                    safe_int(get_override(st, "PLAN_UNTIL_AGE", 95), 95))
     plan_until = st.slider("Plan until age", min_value=75, max_value=100,
                            step=1, key="ay_plan_until",
-                           help="Model your finances through this age."
+                           help="Your money needs to last through this age."
                                 + ("" if household == JUST_ME else
                                    " About 30-40% of couples have one partner live past 90."))
     set_override(st, "PLAN_UNTIL_AGE", safe_int(plan_until))
@@ -143,7 +143,7 @@ def render_body(st) -> None:
                        safe_int(get_override(st, "PARTNER_PLAN_UNTIL_AGE", None) or plan_until,
                                 plan_until))
         p_until = st.slider("Partner's plan-until age", min_value=75, max_value=100, step=1,
-                            key="ay_partner_plan_until", help="The same, in your partner's age.")
+                            key="ay_partner_plan_until", help="Same idea, using your partner's age.")
         set_override(st, "PARTNER_PLAN_UNTIL_AGE", safe_int(p_until))
         # Whoever is covered longer sets the end; every result uses this horizon.
         values = st.session_state.get("user_overrides", {}) or {}
@@ -159,8 +159,8 @@ def render_body(st) -> None:
     end = plan_end_age(st.session_state.get("user_overrides", {}) or {})
     if end <= target:
         st.warning(
-            f"The plan ends when you're {end}, which is not after your target retirement "
-            f"age ({target}). Raise the plan-until age so there's a retirement to simulate."
+            f"The plan ends when you're {end}, which isn't after your target retirement "
+            f"age ({target}). Raise the plan-until age."
         )
 
 

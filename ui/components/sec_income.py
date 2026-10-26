@@ -22,8 +22,8 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
     from ui.utils.config_builder import QUICK_INCOME_SAVINGS_RATE as _SAVED_SHARE  # type: ignore
 
-_OTHER_INCOME_HELP = ("Taxable income that isn't pay, such as rent, interest or side "
-                      "work. Counted while working; no Social Security/Medicare tax.")
+_OTHER_INCOME_HELP = ("Taxable income that isn't pay, like rent, interest or side work. "
+                      "Counted while you work. No Social Security or Medicare tax.")
 
 
 def _income_input(st, label: str, widget_key: str, override_key: str,
@@ -74,7 +74,7 @@ def render_body(st) -> None:
 
     ensure_default(st, "si_your_growth",
                    safe_float(get_override(st, "YOUR_SALARY_GROWTH_RATE", 0.02), 0.02) * 100)
-    r = st.slider("Your salary growth rate (%/yr, real)", min_value=0.0,
+    r = st.slider("Your salary growth (%/yr, real)", min_value=0.0,
                   max_value=10.0, step=0.5, key="si_your_growth")
     set_override(st, "YOUR_SALARY_GROWTH_RATE", r / 100)
     you_growth = r / 100
@@ -99,7 +99,7 @@ def render_body(st) -> None:
 
         ensure_default(st, "si_partner_growth",
                        safe_float(get_override(st, "PARTNER_SALARY_GROWTH_RATE", 0.02), 0.02) * 100)
-        r = st.slider("Partner salary growth rate (%/yr, real)", min_value=0.0,
+        r = st.slider("Partner salary growth (%/yr, real)", min_value=0.0,
                       max_value=10.0, step=0.5, key="si_partner_growth")
         set_override(st, "PARTNER_SALARY_GROWTH_RATE", r / 100)
 
@@ -108,7 +108,7 @@ def render_body(st) -> None:
         # bonus, RSU and other income itself.
         set_override(st, "PARTNER_SALARY", safe_int(p_base))
     else:
-        st.caption("Single household — no partner income.")
+        st.caption("No partner, so no partner income.")
         # Zero out partner fields
         for k in ("PARTNER_BASE_SALARY", "PARTNER_BONUS_AMOUNT", "PARTNER_RSU_AMOUNT",
                   "PARTNER_OTHER_INCOME", "PARTNER_SALARY"):
@@ -135,8 +135,8 @@ def render_body(st) -> None:
 
     # Comp table editor (advanced)
     with st.expander("Your pay by year (advanced)", expanded=False):
-        st.caption("Year-by-year base/bonus/RSU, auto-derived from your inputs above. "
-                   "Edit any cell to customize a year, or click 🔄 to resync.")
+        st.caption("Base, bonus and RSU for each year, built from your inputs above. "
+                   "Edit any cell to change a year, or click 🔄 to reset.")
 
         if "si_comp_customized" not in st.session_state:
             st.session_state["si_comp_customized"] = False
@@ -147,9 +147,9 @@ def render_body(st) -> None:
         # the label wrapped to one character per line and the button rendered as
         # a 47x347px vertical stack of letters.
         if customized:
-            st.caption("✏️ Customized — manual edits preserved.")
+            st.caption("✏️ Edited by hand. Your changes are kept.")
         else:
-            st.caption("🔄 Auto-derived from base/bonus/RSU + growth rate above.")
+            st.caption("🔄 Built from your base, bonus, RSU and growth rate.")
 
         if st.button("🔄 Sync to inputs", key="si_comp_sync", width="stretch"):
             if "si_comp_editor" in st.session_state:
