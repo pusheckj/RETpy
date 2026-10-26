@@ -2228,10 +2228,7 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    Phone polish H2 (round 3). Only fixer H2 edits this block.
    ========================================================================== */
 
-/* Desktop: the alert's reserved room is a phone-only thing; with no alert it takes no space. */
-[data-testid="stLayoutWrapper"]:has(> .st-key-mc-setup-alert .mc-setup-alert-room) { display: none; }
 @media (max-width: 640px) {
-    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-setup-alert .mc-setup-alert-room) { display: block; }
     /* Nav row: the same three slots on every step (Back | Skip | Next), so no
        button changes size or place between steps. The last step has no Skip, so
        "Show my results" takes the two right-hand slots. */
@@ -2242,10 +2239,6 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     .st-key-mc-setup-nav > .st-key-gs_next { grid-column: 3; }
     .st-key-mc-setup-nav > .st-key-gs_back + .st-key-gs_next { grid-column: 2 / 4; }
     .st-key-mc-setup-nav button { height: 100%; min-height: 47px; padding-left: 10px !important; padding-right: 10px !important; }
-
-    /* A required-answer alert ("Enter your age...") has its room reserved on the steps
-       that can show it, so the nav row doesn't jump when it appears. */
-    .st-key-mc-setup-alert { min-height: 84px; }
 
     /* One gap between wrapped columns and between rows of columns. */
     .st-key-mc-setup [data-testid="stHorizontalBlock"] { row-gap: 16px !important; }

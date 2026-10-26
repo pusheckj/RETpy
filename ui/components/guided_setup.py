@@ -816,14 +816,8 @@ def render(st) -> None:
         step.commit(st)
         blank = {k for k in st.session_state.get("_gs_drawn", []) if st.session_state.get(k) is None}
         s["seen"] = [k for k in s["seen"] if k not in blank]
-        if s.get("error") or step.check is not _nothing:
-            # On steps with a required answer the alert's room is always reserved
-            # (CSS, phone), so the buttons below don't move when it appears.
-            with st.container(key="mc-setup-alert"):
-                if s.get("error"):
-                    st.warning(s["error"], icon=":material/info:")
-                else:
-                    st.markdown('<span class="mc-setup-alert-room"></span>', unsafe_allow_html=True)
+        if s.get("error"):
+            st.warning(s["error"], icon=":material/info:")
         with st.container(key="mc-setup-nav", horizontal=True, vertical_alignment="center"):
             if i > 0:
                 st.button("Back", key="gs_back", on_click=_go, args=(st, -1),
