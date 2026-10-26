@@ -2137,14 +2137,6 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
    ========================================================================== */
 
 @media (max-width: 640px) {
-    /* E1-1: the donut's card rule ([class*="_category"]) also matched the
-       mc-wide-/mc-narrow- wrapper that show_chart adds, so the donut sat in a
-       card inside a card (11px inset, double border). Only the chart keeps it. */
-    [class*="st-key-mc-narrow-"][class*="_category"],
-    [class*="st-key-mc-wide-"][class*="_category"] {
-        background: none; border: 0; box-shadow: none; padding: 0; margin: 0;
-    }
-
     /* E1-2: metric help icons follow the last word of their label instead of
        floating at the right edge of the (possibly 3-line) label box. */
     section[data-testid="stMain"] [data-testid="stMetricLabel"] { display: block; padding-right: 20px; box-sizing: border-box; }
@@ -2182,6 +2174,38 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
 /* ==========================================================================
    Polish F1 (round-2 leftovers: donut card, wrapped-toggle help icons). Only fixer F1 edits this block.
    ========================================================================== */
+
+/* F1-1: "By category" donut = ONE card at every width. The wrapper show_chart adds
+   (mc-wide-/mc-narrow-) is the card (rule near "By category" above); the keyed
+   element container inside it is plain, and the card is as tall as the "By account"
+   card next to it (340px incl. border) so the two align. */
+[class*="st-key-"][class*="_category"]:not([class*="st-key-mc-"]) {
+    background: none; border: 0; box-shadow: none; padding: 0; margin: 0;
+}
+[class*="st-key-mc-wide-"][class*="_category"],
+[class*="st-key-mc-narrow-"][class*="_category"] {
+    box-sizing: border-box; flex: 0 0 340px; height: 340px; overflow: visible;
+}
+
+/* F1-2: toggle/checkbox labels that wrap: the help icon follows the LAST word instead of
+   sitting at the far right of the (full-width) label box. Text and icon flow inline; the
+   box keeps a 20px gutter on the right that the icon (negative right margin) occupies, so
+   the icon never drops onto a line of its own. Same recipe as the metric labels (E1-2). */
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] { display: block; padding-right: 20px; box-sizing: border-box; line-height: 22px; }
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] > [data-testid="stMarkdownContainer"],
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] > [data-testid="stMarkdownContainer"] > p { display: inline; line-height: 22px !important; }
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] > label { display: inline-flex; vertical-align: -3px; min-height: 0 !important; margin: 0 -20px 0 4px !important; }
+
+/* F1-4: Savings tile "basis" radio (% of pre-tax | % of take-home) spans the tile like the
+   other phone segmented radios; at 430 it was its natural width, hugging the left edge. */
+@media (max-width: 640px) {
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"],
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [data-testid="stRadio"] { width: 100% !important; }
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [role="radiogroup"] { display: flex !important; width: 100% !important; max-width: none !important; box-sizing: border-box; }
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [role="radiogroup"] label { flex: 1 1 0 !important; min-width: 0; justify-content: center; text-align: center; }
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [role="radiogroup"] label > div:last-child { padding-left: 0 !important; }
+    [class*="st-key-mc-tile-"] [class*="st-key-"][class*="_basis"] [role="radiogroup"] label p { text-align: center; }
+}
 
 /* -- end polish F1 -- */
 

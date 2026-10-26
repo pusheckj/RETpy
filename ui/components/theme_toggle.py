@@ -513,6 +513,12 @@ div:has(> [data-testid="stNumberInputIcon"]) { background-color: #4a4655 !import
 [data-testid="stNumberInputIcon"], [data-testid="stNumberInputIcon"] * { color: var(--mc-ink) !important; }
 [data-testid="stExpander"] summary [data-testid="stExpanderIcon"] { color: #2dd4bf !important; background-color: rgba(45, 212, 191, 0.16) !important; }
 [role="radiogroup"].mc-seg label:not(:has(input:checked)) p { color: var(--mc-muted) !important; }
+/* Polish F1: radio dots use the dark palette (they stayed cream) and the text input's
+   inner box (cream in light mode) no longer shows as a pale rim around the dark field. */
+label[data-baseweb="radio"]:has(input:not(:checked)) > div:first-child { background-color: #6b6577 !important; }
+label[data-baseweb="radio"]:has(input:not(:checked)) > div:first-child > div { background-color: #26232f !important; }
+label[data-baseweb="radio"]:has(input:checked) > div:first-child > div { background-color: #201e27 !important; }
+[data-testid="stTextInputRootElement"] [data-baseweb="base-input"] { background-color: transparent !important; }
 </style>
 """
 
