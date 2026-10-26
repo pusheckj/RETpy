@@ -2662,6 +2662,15 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
     .stButton > button[kind="primary"]:hover > * { transform: none !important; }
 }
 
+@media (max-width: 640px) {
+    /* K2-14: Savings rate / Emergency fund end in a bare <div>, so Streamlit's -1rem markdown
+       margin (meant to cancel a paragraph's margin) pulled the last line to 1-2px from the
+       card edge. Cancel it and give the bottom the same air as the top (~9px). */
+    [class*="st-key-mc-tile-simple-rate"] [data-testid="stMarkdownContainer"],
+    [class*="st-key-mc-tile-simple-fund"] [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
+    .st-key-mc-tile-simple-rate, .st-key-mc-tile-simple-fund { padding-bottom: 8px !important; }
+}
+
 /* -- end phone polish K2 -- */
 
 
