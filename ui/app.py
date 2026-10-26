@@ -459,6 +459,18 @@ def _phone_bar(results) -> None:
                     unsafe_allow_html=True)
 
 
+def _spending_bar(stats) -> None:
+    """Phone-only sticky bar for the Spending view (the planner's bar, minus the
+    chips): the title and the average, shown once the top card has scrolled away,
+    with room on the left for the ">>" button so no content scrolls under it.
+    The page script toggles .mc-stuck exactly as it does for the planner's bar."""
+    avg = next((v for k, v, *_ in stats if k.startswith("Average")), None) if stats else None
+    tail = f' · <b>{avg}</b> / month' if avg else ""
+    with st.container(key="mc-phonebar-sp"):
+        st.markdown(f'<div class="mc-phonebar mc-phonebar-sp"><span class="mc-phonebar-status">'
+                    f'Spending{tail}</span></div>', unsafe_allow_html=True)
+
+
 def _lazy_ph(key: str, min_h: int = 320) -> None:
     """Skeleton placeholder + a hidden 'load' button for a lazy section. The
     animation engine's IntersectionObserver clicks the button when this nears
@@ -944,6 +956,7 @@ def main() -> None:
         progress_slot.progress(0.9, text="Finishing in your browser…")
 
     # Now that the sidebar has synced user_overrides, paint the top bar.
+    spending_stats = _spending_stats(st) if spending_view else None
     with topbar_body:
         _safe_render("components.top_bar",
                      results=st.session_state.results,
@@ -954,7 +967,7 @@ def main() -> None:
                      settings_render=_topbar_settings,
                      in_card=True, control_slots=control_slots,
                      title="Spending" if spending_view else "Retirement Monte Carlo",
-                     stats=_spending_stats(st) if spending_view else None)
+                     stats=spending_stats)
 
 
     # Spending view: statements only, no simulation.
@@ -964,6 +977,7 @@ def main() -> None:
     _save_to_device()
 
     if spending_view:
+        _spending_bar(spending_stats)
         _safe_render("components.spending_dashboard")
         return
 

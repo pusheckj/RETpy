@@ -2768,4 +2768,20 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
    Phone polish M1 (Spending view sticky bar, dark selected labels). Only fixer M1 edits this block.
    ========================================================================== */
 
+[data-testid="stLayoutWrapper"]:has(> .st-key-mc-phonebar-sp) { display: none; }
+
+@media (max-width: 640px) {
+    /* M1-1: Spending view sticky bar (app._spending_bar). Zero-height sticky wrapper so it
+       appears over the content without shifting it; shown once the top card has scrolled
+       away (the page script adds .mc-stuck), with a gutter for the ">>" button. */
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-phonebar-sp) {
+        display: block; position: sticky; top: 0; z-index: 99; height: 0; overflow: visible;
+        margin: 0 -12px; width: calc(100% + 24px); max-width: none;
+    }
+    .st-key-mc-phonebar-sp [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
+    .mc-phonebar.mc-phonebar-sp { display: none; min-height: 60px; box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
+    .mc-phonebar.mc-phonebar-sp.mc-stuck { display: flex; }
+    .mc-phonebar-sp .mc-phonebar-status { font-size: 16px; }
+}
+
 /* -- end phone polish M1 -- */
