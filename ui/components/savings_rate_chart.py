@@ -45,6 +45,9 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
     mode = st.radio(
         "Savings-rate basis",
         options=["% of pre-tax income", "% of take-home (post-tax)"],
+        # Short display text so the second option never wraps on a phone; the
+        # stored value is unchanged (the subtitle already says "after-tax").
+        format_func=lambda o: o.replace(" (post-tax)", ""),
         horizontal=True,
         key=f"{chart_key}_basis",
         label_visibility="collapsed",

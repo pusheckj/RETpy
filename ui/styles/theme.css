@@ -2639,6 +2639,37 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
    Phone polish K1 (round 4). Only fixer K1 edits this block.
    ========================================================================== */
 
+@media (max-width: 640px) {
+    /* K1-1: "By category" card = same width/inset as "By account" (the E1 card rule's 10px side padding is dropped). */
+    [class*="st-key-mc-narrow-"][class*="_category"] { padding-left: 0; padding-right: 0; }
+}
+
+@media (max-width: 640px) {
+    /* K1-15: metric delta chips ("low", "risk") hug their text like every other pill. */
+    [data-testid="stMetricDelta"] { width: fit-content; align-self: flex-start; }
+}
+
+@media (max-width: 640px) {
+    /* K1-7: the chip row also fades on its left edge once scrolled (no hard-cut chip). */
+    .mc-phonebar-chips[data-mc-scrolled] {
+        -webkit-mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 28px), transparent);
+        mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 28px), transparent);
+    }
+}
+
+@media (max-width: 640px) {
+    /* K1-8: Retirement plan | Spending reads like the mode switch above it: the selected segment is the
+       tinted, teal one; the other is transparent (no tan fill or border), so it is clear which is active. */
+    .st-key-mc-topbar [data-testid="stButtonGroup"] button[data-testid="stBaseButton-segmented_control"] {
+        background: transparent !important; border-color: transparent !important; color: var(--mc-muted, #64748b) !important;
+    }
+    .st-key-mc-topbar [data-testid="stButtonGroup"] button[data-testid="stBaseButton-segmented_controlActive"] {
+        background: color-mix(in srgb, var(--mc-teal) 14%, var(--mc-tile)) !important; border-color: transparent !important;
+        color: var(--mc-teal) !important; font-weight: 600;
+    }
+    .st-key-mc-topbar [data-testid="stButtonGroup"] button[data-testid="stBaseButton-segmented_control"] p { color: inherit !important; }
+}
+
 /* -- end phone polish K1 -- */
 
 

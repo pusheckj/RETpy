@@ -661,6 +661,13 @@ _ANIM_JS = """
       }, {root: main, threshold: 0});
       P.__mcBarIO.observe(card);
     }
+    // Left fade on the chip row only once it has scrolled (a chip is cut there).
+    var nav = bar.querySelector('.mc-phonebar-chips');
+    if(nav && !nav.__mcFade){
+      nav.__mcFade = true;
+      var fade = function(){ nav.toggleAttribute('data-mc-scrolled', nav.scrollLeft > 2); };
+      nav.addEventListener('scroll', fade, {passive: true}); fade();
+    }
     // Highlight the section under a fixed line 40% down the screen (checked on
     // scroll, once per frame) and keep its chip in view in the chip row.
     markActive();
