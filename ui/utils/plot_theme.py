@@ -180,6 +180,20 @@ _SUB_CHARS = {False: 100, True: 46}
 _LEGEND_ASSUMED_PX = 330  # conservative chart width when estimating legend rows
 
 
+def _bars_reach(fig, y, left: bool) -> bool:
+    """True if a bar in the first (left) / last quarter of a bar chart rises above y,
+    i.e. a label sitting just above a horizontal line at y would overlap it."""
+    if not isinstance(y, (int, float)):
+        return False
+    for t in fig.data:
+        if t.type == "bar" and t.y is not None and len(t.y) >= 4:
+            ys = [v for v in t.y if isinstance(v, (int, float))]
+            q = max(1, len(ys) // 4)
+            if max(ys[:q] if left else ys[-q:], default=0) > y:
+                return True
+    return False
+
+
 def _set_margin(fig, **new) -> None:
     """Apply margins; grow a fixed figure height by the same amount so the plot
     area keeps the size the chart was designed with."""
@@ -441,6 +455,8 @@ def style_fig(fig, st, compact: bool = False):
         for a in fig.layout.annotations or []:
             if a.xref in ("paper", "x domain") and (a.x or 0) >= 1 and a.xanchor in (None, "auto", "left"):
                 a.update(xanchor="left", x=0, yanchor="bottom", yshift=2)
+                if _bars_reach(fig, a.y, left=True) and not _bars_reach(fig, a.y, left=False):
+                    a.update(xanchor="right", x=1)   # bars at the left end poke through the label: use the right
     if compact:
         # Right-hand axis title + a wide gutter squeezed a ~300px plot (and the
         # legend, which is clipped to the plot width); the legend already names
