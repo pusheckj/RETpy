@@ -263,7 +263,7 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
         fig.update_layout(
             barmode="stack",
             height=150,
-            margin=dict(l=0, r=10, t=6, b=6),
+            margin=dict(l=8, r=18, t=6, b=6),
             xaxis=dict(showgrid=False, zeroline=False, tickformat="$,.2~s",
                        nticks=4, tickfont=dict(size=11)),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),

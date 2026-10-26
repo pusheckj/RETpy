@@ -435,7 +435,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
         bargap=0.15,
         title=dict(
             text="<b>Projected net worth by account</b><br>"
-                 "<span style='font-size:13px;'>"
+                 "<span style='font-size:13px;color:#64748b;'>"
                  "Deterministic projection from today through retirement · "
                  "auto-updates as you edit inputs</span>",
             x=0.0, xanchor="left", font=dict(size=16),

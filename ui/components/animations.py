@@ -33,8 +33,9 @@ _ANIM_CSS = """
    border repaint on ONE hovered element is cheap; the box-shadow SPREAD that
    caused stutter stays off). */
 [data-testid="stPlotlyChart"]{ transition: transform .18s ease, border-color .25s ease, box-shadow .3s ease; }
+@media (hover: hover) and (pointer: fine){
 [data-testid="stPlotlyChart"]:hover{ transform: translateY(-2px); border-color: rgba(13,148,136,.45) !important;
-  box-shadow: 0 16px 34px rgba(15,118,110,.20), 0 0 0 4px rgba(94,234,212,.16) !important; }
+  box-shadow: 0 16px 34px rgba(15,118,110,.20), 0 0 0 4px rgba(94,234,212,.16) !important; } }
 .mc-stat-card{ transition: transform .18s ease; position: relative; }
 /* cursor-following sheen (⑤) — shown while tilting; --mx/--my set by the tilt handler */
 .mc-stat-card::after{ content:""; position:absolute; inset:0; border-radius:16px; pointer-events:none; opacity:0;
@@ -43,16 +44,17 @@ _ANIM_CSS = """
 .mc-stat-card.mc-tilting::after{ opacity:1; }
 .mc-stat-card > *{ position: relative; z-index:1; }
 section[data-testid="stSidebar"] [data-testid="stExpander"]{ transition: transform .15s ease; }
-@media (hover: hover){ section[data-testid="stSidebar"] [data-testid="stExpander"]:hover{ transform: translateX(4px); } }
+@media (hover: hover) and (pointer: fine){ section[data-testid="stSidebar"] [data-testid="stExpander"]:hover{ transform: translateX(4px); } }
 section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stExpanderIcon"]{ transition: transform .3s cubic-bezier(.22,1,.36,1); }
-@media (hover: hover){ section[data-testid="stSidebar"] [data-testid="stExpander"]:hover [data-testid="stExpanderIcon"]{ transform: scale(1.14); } }
+@media (hover: hover) and (pointer: fine){ section[data-testid="stSidebar"] [data-testid="stExpander"]:hover [data-testid="stExpanderIcon"]{ transform: scale(1.14); } }
 
 /* Primary / Run button (⑥): play-icon + label nudge on hover, gentle press on
    active — transform only. */
 .stButton > button[kind="primary"] > *, [data-testid="stFormSubmitButton"] > button > *{
   transition: transform .3s cubic-bezier(.22,1,.36,1); }
+@media (hover: hover) and (pointer: fine){
 .stButton > button[kind="primary"]:hover > *, [data-testid="stFormSubmitButton"] > button:hover > *{
-  transform: translateX(3px); }
+  transform: translateX(3px); } }
 .stButton > button:active{ transform: translateY(1px) scale(.985); }
 
 /* Delta-arrow pop (⑪): small scale-overshoot when a metric delta renders — on
@@ -106,8 +108,8 @@ section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stExpa
 
 /* ---------------- Slider / toggle / checkbox (㉒㉓㉔) ---------------- */
 [data-testid="stSliderThumbValue"]{ transition: transform .15s ease; }
-[data-baseweb="slider"]:hover [data-testid="stSliderThumbValue"],
 [data-baseweb="slider"]:active [data-testid="stSliderThumbValue"]{ transform: scale(1.12); }
+@media (hover: hover) and (pointer: fine){ [data-baseweb="slider"]:hover [data-testid="stSliderThumbValue"]{ transform: scale(1.12); } }
 [data-baseweb="slider"] [role="slider"]{ transition: box-shadow .15s ease, scale .12s ease; }
 /* NOTE: use the standalone `scale` property, NOT `transform: scale(...)`.
    BaseWeb positions the thumb with an INLINE `transform: translate(...)`, and an
