@@ -2252,6 +2252,26 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     /* H1-24: a card's description starts right under the value (it was pushed to the card
        bottom, so "value $0" sat a line lower than the two-line "taxable brokerage + cash"). */
     .mc-stat-card > div:last-child { margin-top: 0 !important; }
+
+    /* H1-27: "More" overlaid the end of line three and cut a glyph in half. The fold is now a
+       three-line max-height, and "More" a float on the third line (margin-top = two lines), so
+       the text wraps around it and the last line always ends at a whole word. */
+    [data-mc-clamp]:not([data-mc-open]) { display: block; -webkit-line-clamp: unset; max-height: 3lh; }
+    [data-mc-clamp]:not([data-mc-open])::after { content: none; }
+    [data-mc-clamp]:not([data-mc-open])::before {
+        content: "More";
+        float: right;
+        margin: 2lh 0 0 8px;
+        color: var(--mc-teal);
+        font-weight: 600;
+    }
+
+    /* H1-29: text, number and select controls start their text at the same inner offset (19px
+       from the outer edge: the number input's 18px padding + border). Selects had 27, text 13. */
+    .stTextInput input { padding-left: 18px; padding-right: 18px; }
+    .stSelectbox [data-baseweb="select"] > div { padding-left: 6px; }
+    .stMultiSelect [data-baseweb="select"] > div { padding-left: 8px; }
+    section[data-testid="stMain"] .st-key-mc-topbar [data-baseweb="select"] > div > div:first-child { padding-left: 12px !important; }
 }
 
 /* -- end phone polish H1 -- */
