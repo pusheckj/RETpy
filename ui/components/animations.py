@@ -754,6 +754,40 @@ _ANIM_JS = """
 """
 
 
+# A tab left open across a redeploy asks for Streamlit scripts that no longer
+# exist, and every lazily loaded widget (number inputs first) turns into a red
+# "TypeError: Importing a module script failed" box. Reloading fetches the new
+# files, so do that once; the 60 s guard stops a real outage from looping.
+_RECOVER_JS = """
+<script>
+(function(){
+  var P = window.parent, D = P.document;
+  if (P.__mcRecover) return;
+  P.__mcRecover = true;
+  var BAD = /Importing a module script failed|Failed to fetch dynamically imported module|error loading dynamically imported module|Loading chunk \\d+ failed/i;
+  var timer = null;
+  function check(){
+    timer = null;
+    var hit = false;
+    D.querySelectorAll('[data-testid="stAlertContentError"]').forEach(function(n){
+      if (BAD.test(n.textContent || '')) hit = true;
+    });
+    if (!hit) return;
+    try {
+      var last = parseInt(P.sessionStorage.getItem('mcChunkReload') || '0', 10);
+      if (Date.now() - last < 60000) return;
+      P.sessionStorage.setItem('mcChunkReload', String(Date.now()));
+    } catch(e) {}
+    P.location.reload();
+  }
+  new MutationObserver(function(){
+    if (!timer) timer = setTimeout(check, 600);
+  }).observe(D.body, {childList: true, subtree: true});
+})();
+</script>
+"""
+
+
 def inject_animations(st) -> None:
     """Inject the animation CSS (app doc) + JS engine (parent doc via a 0-height
     component). Call once per run, after the theme CSS."""
@@ -772,7 +806,7 @@ def inject_animations(st) -> None:
         epoch = str(st.session_state.get("_anim_epoch", 0))
     except Exception:
         epoch = "0"
-    js = _ANIM_JS.replace("__MC_SIM_LABEL__", label).replace("__MC_EPOCH__", epoch)
+    js = _ANIM_JS.replace("__MC_SIM_LABEL__", label).replace("__MC_EPOCH__", epoch) + _RECOVER_JS
     try:
         import streamlit.components.v1 as components
         components.html(js, height=0)
