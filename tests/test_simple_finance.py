@@ -218,6 +218,204 @@ class TestLadder:
 
 
 # ---------------------------------------------------------------------------
+# Roth IRA income limits (2026: single $153,000-$168,000, joint $242,000-$252,000)
+# ---------------------------------------------------------------------------
+def _roth(**kw):
+    base = dict(retirement_contrib_pct=0.0, hsa_eligible=False, hsa_contrib_annual=0.0)
+    return sf.roth_check(_inputs(**{**base, **kw}), TODAY)
+
+
+class TestRothLimits:
+    def test_table_is_labelled_2026(self):
+        assert sf.ROTH_PHASEOUT[2026] == {"single": (153_000, 168_000), "joint": (242_000, 252_000)}
+        assert sf.roth_phaseout(False, TODAY) == (153_000, 168_000)
+        assert sf.roth_phaseout(True, TODAY) == (242_000, 252_000)
+        assert sf.roth_phaseout(True, date(2031, 1, 1)) == (242_000, 252_000)   # latest known year
+
+    def test_earlier_years_fall_back_to_the_engines_2024_ranges(self):
+        d = date(2024, 5, 1)
+        assert sf.roth_phaseout(False, d) == cfg.ROTH_IRA_PHASEOUT_BY_STATUS["S"]
+        assert sf.roth_phaseout(True, d) == cfg.ROTH_IRA_PHASEOUT_BY_STATUS["MFJ"]
+
+    @pytest.mark.parametrize("married", [False, True])
+    def test_straight_line_from_full_to_zero(self, married):
+        lo, hi = sf.roth_phaseout(married, TODAY)
+        for magi in (0, lo - 1, lo, lo + 1, (lo + hi) / 2, hi - 1, hi, hi + 1, 1e7):
+            expected = 7_500 if magi <= lo else 0 if magi >= hi else math.floor(7_500 * (hi - magi) / (hi - lo))
+            assert sf.roth_direct_limit(magi, married, TODAY) == expected
+
+    def test_formula_shape_matches_the_engine_on_the_fallback_years(self):
+        d = date(2024, 5, 1)
+        for married, status in ((False, "Single"), (True, "Married filing jointly")):
+            lo, hi = sf.roth_phaseout(married, d)
+            for magi in (0, lo, lo + 1, (lo + hi) / 2, hi - 1, hi, hi + 5):
+                eng = cfg.roth_ira_allowed(sf.contribution_limits(False, d)["ira"], magi, status)
+                assert sf.roth_direct_limit(magi, married, d) == pytest.approx(math.floor(eng + 1e-9))
+
+    # -- single --------------------------------------------------------------
+    def test_single_below_range_is_direct(self):
+        r = _roth(gross_salary_annual=100_000)
+        assert (r.case, r.direct_limit) == ("direct", 7_500)
+        assert "full $7,500" in r.note
+
+    def test_single_at_bottom_of_range_is_still_full(self):
+        assert _roth(gross_salary_annual=153_000).case == "direct"
+
+    def test_single_inside_range_is_reduced(self):
+        r = _roth(gross_salary_annual=160_500)               # halfway
+        assert (r.case, r.direct_limit) == ("reduced", 3_750)
+        assert "$3,750" in r.note and "backdoor Roth" in r.note
+
+    def test_single_reduced_amount_rounds_down_to_a_whole_dollar(self):
+        assert _roth(gross_salary_annual=160_001).direct_limit == 3_999    # 3999.5
+        assert _roth(gross_salary_annual=153_001).direct_limit == 7_499    # 7499.5
+
+    def test_single_at_or_over_top_is_backdoor_only(self):
+        for pay in (168_000, 200_000, 2_000_000):
+            r = _roth(gross_salary_annual=pay)
+            assert (r.case, r.direct_limit) == ("backdoor", 0.0), pay
+
+    def test_a_dollar_under_the_top_that_rounds_to_zero_is_backdoor_only(self):
+        r = _roth(gross_salary_annual=167_999)               # 0.5 -> $0 direct
+        assert (r.case, r.direct_limit) == ("backdoor", 0.0)
+
+    # -- married filing jointly ----------------------------------------------
+    def test_joint_uses_the_higher_range(self):
+        assert _roth(married=True, gross_salary_annual=200_000).case == "direct"
+        r = _roth(married=True, gross_salary_annual=150_000, partner_salary_annual=100_000)
+        assert (r.case, r.direct_limit) == ("reduced", 1_500)            # $250,000 in $242-252k
+        assert _roth(married=True, gross_salary_annual=252_000).case == "backdoor"
+
+    def test_same_income_is_backdoor_single_but_direct_when_joint_alone(self):
+        assert _roth(gross_salary_annual=200_000).case == "backdoor"
+        assert _roth(married=True, gross_salary_annual=200_000).case == "direct"
+
+    def test_partner_pay_pushes_a_married_couple_over(self):
+        assert _roth(married=True, gross_salary_annual=120_000,
+                     partner_salary_annual=150_000).case == "backdoor"
+
+    def test_partner_pay_is_ignored_when_not_married(self):
+        r = _roth(married=False, gross_salary_annual=100_000, partner_salary_annual=500_000)
+        assert (r.case, r.magi) == ("direct", 100_000)
+
+    def test_salary_zero(self):
+        r = _roth(gross_salary_annual=0)
+        assert (r.case, r.magi, r.direct_limit) == ("direct", 0, 7_500)
+        assert _roth(gross_salary_annual=0, married=True, partner_salary_annual=300_000).case == "backdoor"
+        assert _roth(gross_salary_annual=0, partner_salary_annual=300_000).case == "direct"
+
+    # -- what lowers MAGI ----------------------------------------------------
+    def test_401k_deferral_lowers_magi(self):
+        assert _roth(gross_salary_annual=170_000).case == "backdoor"
+        r = _roth(gross_salary_annual=170_000, retirement_contrib_pct=5)       # -8,500
+        assert (r.magi, r.case, r.direct_limit) == (161_500, "reduced", 3_250)
+        r = _roth(gross_salary_annual=170_000, retirement_contrib_pct=10)      # -17,000
+        assert (r.magi, r.case) == (153_000, "direct")
+
+    def test_401k_deferral_is_capped_at_the_yearly_limit(self):
+        r = _roth(gross_salary_annual=400_000, retirement_contrib_pct=100)
+        assert r.magi == 400_000 - 24_500
+
+    def test_hsa_contribution_lowers_magi_only_when_eligible(self):
+        r = _roth(gross_salary_annual=170_000, retirement_contrib_pct=5,
+                  hsa_eligible=True, hsa_contrib_annual=4_000)
+        assert (r.magi, r.case, r.direct_limit) == (157_500, "reduced", 5_250)
+        r = _roth(gross_salary_annual=170_000, retirement_contrib_pct=5,
+                  hsa_eligible=False, hsa_contrib_annual=4_000)
+        assert r.magi == 161_500
+
+    def test_partner_pay_and_your_deferrals_combine(self):
+        i = _inputs(married=True, gross_salary_annual=150_000, partner_salary_annual=100_000,
+                    retirement_contrib_pct=10, hsa_eligible=True, hsa_contrib_annual=5_000)
+        assert sf.roth_magi(i, TODAY) == 150_000 + 100_000 - 15_000 - 5_000
+
+    def test_magi_never_goes_negative(self):
+        assert sf.roth_magi(_inputs(gross_salary_annual=10_000, hsa_eligible=True,
+                                    hsa_contrib_annual=50_000), TODAY) == 0
+
+    # -- the ladder step -----------------------------------------------------
+    def test_step_under_the_range_is_unchanged(self):
+        s = _steps(_inputs(gross_salary_annual=100_000))["roth_ira"]
+        assert s.title == "Max out a Roth IRA" and s.target == 7_500
+        assert s.target_label == "$7,500/yr"
+
+    def test_step_inside_the_range_aims_for_the_reduced_amount(self):
+        s = _steps(_inputs(gross_salary_annual=160_500, retirement_contrib_pct=0))["roth_ira"]
+        assert s.key == "roth_ira" and s.number == 6
+        assert s.title == "Max out a Roth IRA" and s.target == 3_750
+        assert s.target_label == "$3,750/yr"
+        assert "cuts the direct Roth limit to $3,750" in s.detail
+        assert "backdoor Roth" in s.detail
+
+    def test_step_inside_the_range_is_done_at_the_reduced_amount(self):
+        base = dict(gross_salary_annual=160_500, retirement_contrib_pct=0)
+        assert _steps(_inputs(**base, ira_contrib_annual=3_749))["roth_ira"].status != "done"
+        s = _steps(_inputs(**base, ira_contrib_annual=3_750))["roth_ira"]
+        assert s.status == "done" and "cuts the direct Roth limit" in s.detail
+
+    def test_step_over_the_range_becomes_a_backdoor_roth(self):
+        s = _steps(_inputs(gross_salary_annual=200_000, retirement_contrib_pct=0))["roth_ira"]
+        assert s.key == "roth_ira" and s.number == 6
+        assert s.title == "Max out a backdoor Roth IRA"
+        assert s.target == 7_500 and s.target_label == "$7,500/yr"
+        assert "too much to put money in a Roth directly" in s.why
+        assert "traditional IRA" in s.why and "convert" in s.why
+        assert "pro-rata rule" in s.why
+
+    def test_the_pro_rata_caution_only_shows_over_the_range(self):
+        for pay in (50_000, 160_500):
+            s = _steps(_inputs(gross_salary_annual=pay, retirement_contrib_pct=0))["roth_ira"]
+            assert "pro-rata" not in s.why + s.detail
+
+    def test_still_one_ladder_in_the_same_order(self):
+        for pay in (50_000, 160_500, 200_000):
+            steps = sf.priority_ladder(_inputs(gross_salary_annual=pay), TODAY)
+            assert [x.key for x in steps] == _ORDER
+
+    def test_married_couple_step_uses_the_joint_range(self):
+        s = _steps(_inputs(married=True, gross_salary_annual=150_000, partner_salary_annual=100_000,
+                           retirement_contrib_pct=0))["roth_ira"]
+        assert s.target == 1_500 and "$1,500" in s.detail
+
+    def test_analyze_ladder_follows_roth_case(self):
+        res = sf.analyze(_inputs(gross_salary_annual=200_000, retirement_contrib_pct=0), TODAY)
+        assert next(x for x in res["ladder"] if x.key == "roth_ira").title.startswith("Max out a backdoor")
+
+
+class TestMax401kPct:
+    def test_percent_that_reaches_the_limit(self):
+        assert sf.max_401k_pct(100_000, TODAY) == 24.5
+        assert sf.max_401k_pct(50_000, TODAY) == 49.0
+
+    def test_rounds_up_so_the_limit_is_reached(self):
+        pct = sf.max_401k_pct(65_000, TODAY)                  # 37.6923...
+        assert pct == 37.7 and 65_000 * pct / 100 >= 24_500
+
+    def test_caps_at_100_and_no_salary_gives_none(self):
+        assert sf.max_401k_pct(20_000, TODAY) == 100.0
+        assert sf.max_401k_pct(0, TODAY) is None
+
+
+class TestNormalizeRothFields:
+    def test_defaults(self):
+        assert sf.DEFAULT_INPUTS["married"] is False and sf.DEFAULT_INPUTS["partner_salary_annual"] == 0.0
+        assert sf.normalize_inputs(None)["married"] is False
+
+    def test_old_saved_dicts_load(self):
+        old = {k: v for k, v in sf.DEFAULT_INPUTS.items() if k not in ("married", "partner_salary_annual")}
+        d = sf.normalize_inputs(old)
+        assert d["married"] is False and d["partner_salary_annual"] == 0.0
+        assert d["gross_salary_annual"] == old["gross_salary_annual"]
+
+    def test_coercion_and_clamps(self):
+        d = sf.normalize_inputs({"married": "yes", "partner_salary_annual": "$85,000"})
+        assert d["married"] is True and d["partner_salary_annual"] == 85_000.0
+        d = sf.normalize_inputs({"married": "maybe", "partner_salary_annual": -5})
+        assert d["married"] is False and d["partner_salary_annual"] == 0.0
+        assert sf.normalize_inputs({"partner_salary_annual": 1e12})["partner_salary_annual"] == sf.BALANCE_MAX
+
+
+# ---------------------------------------------------------------------------
 # Debt payoff
 # ---------------------------------------------------------------------------
 _MIXED = [_debt("Big card", 8000, 22.0, 200), _debt("Small loan", 1500, 5.0, 60),
@@ -492,3 +690,76 @@ class TestPage:
         text = self._markdown_text(page)
         assert "No debts entered" in text
         assert "Add your take-home pay" in text
+
+    # -- Roth income note and "Max out" buttons ------------------------------
+    def _button_keys(self, page):
+        return {b.key for b in page.button}
+
+    def _captions(self, page):
+        return " ".join(c.value for c in page.caption)
+
+    def test_roth_note_says_which_case_applies(self, page):
+        page.run()
+        assert "full $7,500 directly" in self._markdown_text(page).replace("&#36;", "$")
+        page.session_state["simple_inputs"] = {"gross_salary_annual": 160_500, "retirement_contrib_pct": 0}
+        page.run()
+        assert "cuts the direct Roth limit to $3,750" in self._markdown_text(page).replace("&#36;", "$")
+        page.session_state["simple_inputs"] = {"gross_salary_annual": 200_000, "retirement_contrib_pct": 0}
+        page.run()
+        assert "backdoor Roth is the way in" in self._markdown_text(page)
+
+    def test_partner_pay_input_shows_only_when_married(self, page):
+        page.run()
+        assert not any(w.key == "simple_w_partner_salary_annual" for w in page.number_input)
+        page.toggle(key="simple_w_married").set_value(True).run()
+        assert not page.exception, page.exception
+        _by_key(page.number_input, "simple_w_partner_salary_annual").set_value(90_000.0).run()
+        saved = page.session_state["simple_inputs"]
+        assert saved["married"] is True and saved["partner_salary_annual"] == 90_000.0
+
+    def test_partner_pay_survives_hiding_the_input(self, page):
+        page.session_state["simple_inputs"] = {"married": True, "partner_salary_annual": 70_000}
+        page.run()
+        page.toggle(key="simple_w_married").set_value(False).run()
+        page.toggle(key="simple_w_married").set_value(True).run()
+        assert page.session_state["simple_inputs"]["partner_salary_annual"] == 70_000.0
+
+    def test_max_out_401k_sets_the_percent_and_then_steps_aside(self, page):
+        page.run()
+        _by_key(page.button, "simple_max_retirement_contrib_pct").click().run()
+        assert not page.exception, page.exception
+        assert page.session_state["simple_inputs"]["retirement_contrib_pct"] == 37.7   # $65,000 salary
+        assert "simple_max_retirement_contrib_pct" not in self._button_keys(page)
+        assert "At the limit" in self._captions(page)
+        step = next(x for x in sf.priority_ladder(page.session_state["simple_inputs"]) if x.key == "max_401k")
+        assert step.status == "done"
+
+    def test_no_401k_button_without_a_salary(self, page):
+        page.session_state["simple_inputs"] = {"gross_salary_annual": 0}
+        page.run()
+        assert "simple_max_retirement_contrib_pct" not in self._button_keys(page)
+
+    def test_max_out_hsa_only_when_eligible(self, page):
+        page.run()
+        assert "simple_max_hsa_contrib_annual" not in self._button_keys(page)
+        page.toggle(key="simple_w_hsa_eligible").set_value(True).run()
+        _by_key(page.button, "simple_max_hsa_contrib_annual").click().run()
+        assert page.session_state["simple_inputs"]["hsa_contrib_annual"] == 4_400.0
+        page.toggle(key="simple_w_hsa_family").set_value(True).run()
+        _by_key(page.button, "simple_max_hsa_contrib_annual").click().run()      # family limit is higher
+        assert page.session_state["simple_inputs"]["hsa_contrib_annual"] == 8_750.0
+        assert "simple_max_hsa_contrib_annual" not in self._button_keys(page)
+
+    def test_max_out_ira_and_its_tooltip_names_the_backdoor(self, page):
+        page.run()
+        btn = _by_key(page.button, "simple_max_ira_contrib_annual")
+        assert "$7,500" in btn.help and "backdoor" not in btn.help
+        btn.click().run()
+        assert page.session_state["simple_inputs"]["ira_contrib_annual"] == 7_500.0
+        assert "simple_max_ira_contrib_annual" not in self._button_keys(page)
+        for pay in (160_500, 200_000):
+            page.session_state["simple_inputs"] = {"gross_salary_annual": pay,
+                                                   "retirement_contrib_pct": 0, "ira_contrib_annual": 0}
+            page.run()
+            assert "backdoor Roth" in _by_key(page.button, "simple_max_ira_contrib_annual").help
+

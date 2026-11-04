@@ -70,6 +70,8 @@ DEFAULT_INPUTS: Dict[str, Any] = {
     "hsa_family": False,              # family coverage has the higher HSA limit
     "hsa_contrib_annual": 0.0,
     "ira_contrib_annual": 0.0,
+    "married": False,                 # married filing jointly (sets the Roth IRA income limit)
+    "partner_salary_annual": 0.0,     # partner's yearly pay; only counts when married
     "emergency_target_months": DEFAULT_EMERGENCY_MONTHS,
     "debts": [
         {"name": "Credit card", "balance": 6_500.0, "apr_pct": 24.0, "min_payment": 160.0},
@@ -92,6 +94,8 @@ _FIELD_SPECS: Dict[str, tuple] = {
     "hsa_family": ("bool", None, None),
     "hsa_contrib_annual": ("money", 0.0, BALANCE_MAX),
     "ira_contrib_annual": ("money", 0.0, BALANCE_MAX),
+    "married": ("bool", None, None),
+    "partner_salary_annual": ("money", 0.0, BALANCE_MAX),
     "emergency_target_months": ("int", EMERGENCY_MIN_MONTHS, EMERGENCY_MAX_MONTHS),
     "extra_debt_payment_monthly": ("money", 0.0, MONTHLY_MAX),
 }
@@ -219,6 +223,93 @@ def contribution_limits(hsa_family: bool = False, today: Optional[date] = None) 
         "ira": float(cfg.get_inflation_adjusted_limit("ira", 0)),
         "hsa": float(cfg.get_inflation_adjusted_limit(hsa_key, 0)),
     }
+
+
+# Roth IRA income phase-out (modified AGI), IRS Notice 2025-67, same notice as
+# the limits above: (low, high) for "single" (also head of household) and
+# "joint" (married filing jointly). Direct contributions shrink from the full
+# IRA limit at ``low`` to zero at ``high``. Years before the table fall back to
+# the engine's 2024 ranges (retirement_sim.config.ROTH_IRA_PHASEOUT_BY_STATUS).
+ROTH_PHASEOUT = {
+    2026: {"single": (153_000, 168_000), "joint": (242_000, 252_000)},
+}
+
+
+def roth_phaseout(married: bool = False, today: Optional[date] = None) -> tuple:
+    """``(low, high)`` MAGI range for the year shown to the visitor."""
+    year = (today or date.today()).year
+    known = [y for y in ROTH_PHASEOUT if y <= year]
+    if known:
+        lo, hi = ROTH_PHASEOUT[max(known)]["joint" if married else "single"]
+        return float(lo), float(hi)
+    lo, hi = cfg.ROTH_IRA_PHASEOUT_BY_STATUS[
+        cfg.normalize_filing_status("Married filing jointly" if married else "Single")]
+    return float(lo), float(hi)
+
+
+def roth_direct_limit(magi: float, married: bool = False, today: Optional[date] = None) -> float:
+    """What you can put into a Roth IRA directly at ``magi``, in whole dollars:
+    the full IRA limit at or below the range, zero at or above it, and a straight
+    line between (same shape as the engine's ``roth_ira_allowed``)."""
+    limit = contribution_limits(False, today)["ira"]
+    lo, hi = roth_phaseout(married, today)
+    if magi <= lo:
+        return limit
+    if magi >= hi:
+        return 0.0
+    return float(math.floor(limit * (hi - magi) / (hi - lo) + 1e-9))
+
+
+@dataclass
+class RothCheck:
+    case: str               # direct | reduced | backdoor
+    magi: float             # estimate; see roth_magi
+    low: float
+    high: float
+    direct_limit: float     # whole dollars you can put in a Roth directly
+    ira_limit: float
+    note: str               # one line saying which case applies
+
+
+def roth_magi(inputs: Dict[str, Any], today: Optional[date] = None) -> float:
+    """Estimated MAGI for the Roth test: your pay, plus your partner's when
+    married, less your 401(k) deferral and your HSA contribution. An estimate:
+    the partner's own deferrals and other adjustments aren't known."""
+    i = normalize_inputs(inputs)
+    limits = contribution_limits(i["hsa_family"], today)
+    deferral = min(i["gross_salary_annual"] * i["retirement_contrib_pct"] / 100.0, limits["401k"])
+    hsa = i["hsa_contrib_annual"] if i["hsa_eligible"] else 0.0
+    partner = i["partner_salary_annual"] if i["married"] else 0.0
+    return max(0.0, i["gross_salary_annual"] + partner - deferral - hsa)
+
+
+def roth_check(inputs: Dict[str, Any], today: Optional[date] = None) -> RothCheck:
+    i = normalize_inputs(inputs)
+    magi = roth_magi(i, today)
+    lo, hi = roth_phaseout(i["married"], today)
+    ira = contribution_limits(False, today)["ira"]
+    direct = roth_direct_limit(magi, i["married"], today)
+    if magi <= lo:
+        case = "direct"
+        note = f"Your income is under the Roth limit, so you can put in the full {money(ira)} directly."
+    elif direct > 0:
+        case = "reduced"
+        note = (f"Your income cuts the direct Roth limit to {money(direct)}. "
+                f"The rest can go through a backdoor Roth.")
+    else:
+        case = "backdoor"
+        note = "You earn too much for a direct Roth. A backdoor Roth is the way in."
+    return RothCheck(case, magi, lo, hi, direct, ira, note)
+
+
+def max_401k_pct(salary: float, today: Optional[date] = None) -> Optional[float]:
+    """The ``retirement_contrib_pct`` that puts in this year's 401(k) limit, capped
+    at 100 and rounded up to 2 decimals so the contribution is never a few dollars
+    short of the limit. ``None`` when there is no salary."""
+    if salary <= 0:
+        return None
+    limit = contribution_limits(False, today)["401k"]
+    return min(PCT_MAX, math.ceil(round(limit / salary * 10_000, 6)) / 100.0)
 
 
 # ---------------------------------------------------------------------------
@@ -403,14 +494,27 @@ def priority_ladder(inputs: Dict[str, Any], today: Optional[date] = None) -> Lis
         "Triple tax break: tax-free in, tax-free growth, tax-free out for medical costs.",
         detail5, hsa_have))
 
-    # 6. Roth IRA
+    # 6. Roth IRA (the income limit decides: direct, reduced, or backdoor only)
     ira_have = i["ira_contrib_annual"]
-    st6 = "done" if ira_have >= limits["ira"] else "pending"
+    roth = roth_check(i, today)
+    title6 = "Max out a Roth IRA"
+    why6 = ("Grows tax-free, and you can take out what you put in at any time. "
+            "Earn too much for a Roth? High earners use a \"backdoor Roth\".")
+    goal6, detail_lead = limits["ira"], ""
+    if roth.case == "reduced":
+        goal6 = roth.direct_limit
+        detail_lead = roth.note + " "
+    elif roth.case == "backdoor":
+        title6 = "Max out a backdoor Roth IRA"
+        why6 = ("You earn too much to put money in a Roth directly. A backdoor Roth gets "
+                "around that: put it in a traditional IRA, then convert it to Roth right away. "
+                "Caution: if you hold other traditional IRA money, the conversion is "
+                "partly taxable (the pro-rata rule).")
+    st6 = "done" if ira_have >= goal6 else "pending"
     steps.append(LadderStep(
-        6, "roth_ira", "Max out a Roth IRA", st6, limits["ira"], f"{money(limits['ira'])}/yr",
-        "Grows tax-free, and you can take out what you put in at any time. "
-        "Earn too much for a Roth? High earners use a \"backdoor Roth\".",
-        f"You put in {money(ira_have)} this year." if st6 == "pending" else "", ira_have))
+        6, "roth_ira", title6, st6, goal6, f"{money(goal6)}/yr", why6,
+        (detail_lead + (f"You put in {money(ira_have)} this year." if st6 == "pending" else "")).strip(),
+        ira_have))
 
     # 7. 401(k) to the limit
     if salary <= 0:
