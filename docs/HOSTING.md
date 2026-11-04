@@ -8,8 +8,8 @@ the first time; after that, every `git push` redeploys the app.
 - A first screen that asks what they want: the simple **money check-up**
   (savings rate, emergency fund, which debt to pay first, where the next
   dollar goes) or the **retirement planner**. A *Money check-up | Retirement
-  planner* switch at the top right of every page flips between them; each
-  keeps its own answers.
+  planner* switch flips between them (at the top of the page; in the planner,
+  at the top of the side panel while it is open); each keeps its own answers.
 - The retirement planner opens with a short guided setup (10 screens, a few
   questions each, with a "how to answer" line under every question). Anyone
   coming from the check-up starts with those answers filled in. *Skip for now*

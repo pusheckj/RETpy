@@ -158,7 +158,9 @@ def test_a_profile_still_loads_into_the_moved_widgets(draw):
 
 def test_planner_renders_the_sections_in_the_new_order():
     src = open(os.path.join(_UI, "app.py"), encoding="utf-8").read()
-    body = src[src.index("    with st.sidebar:\n        # Linear walkthrough"):]
+    head = src[:src.index("        # Linear walkthrough")]
+    assert '_mode_switch("full", place="sidebar")' in head[-400:]      # the version switch sits above About you
+    body = src[src.index("        # Linear walkthrough"):]
     body = body[:body.index('_safe_render("components.faq")')]
     order = re.findall(r'_safe_render\("components\.(\w+)"\)', body)
     assert order == ["sec_about_you", "sec_family", "account_inputs", "sec_income", "sec_taxes",
