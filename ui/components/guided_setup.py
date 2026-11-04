@@ -20,6 +20,7 @@ callback runs before the script, so only it can save that value.
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 from retirement_sim import config as cfg
@@ -32,6 +33,7 @@ try:
     from utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH, household_of,
                                  clear_partner)
     from utils import state_choice as sc
+    from utils import planner_max as pm
 except ImportError:  # pragma: no cover
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
@@ -40,6 +42,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH,  # type: ignore
                                     household_of, clear_partner)
     from ui.utils import state_choice as sc  # type: ignore
+    from ui.utils import planner_max as pm  # type: ignore
 
 STATE = "setup"
 _DOLLAR = ":material/attach_money:"
@@ -442,6 +445,42 @@ def commit_saved(st) -> None:
             ov[ok] = int(_val(st, key))
 
 
+def _set_widget(st, key: str, value: Any) -> None:
+    st.session_state[key] = value
+
+
+def _max_out(st, widget_key: str, okey: str, pct: bool = False) -> None:
+    """A "Max out" button under a contribution question (or "At the limit").
+
+    ``okey`` is the contribution it fills (planner_max). A 401(k) question asks
+    for a % of pay, so there the button sets the % that reaches the limit. It
+    sets the widget in a callback, which runs before the question is drawn."""
+    ov = dict(_ov(st))
+    for pk, wk in ((pm.YOUR_401K, "gs_401k_pct"), (pm.PARTNER_401K, "gs_p401k_pct")):
+        if _val(st, wk) is not None:            # a % typed this run, not yet committed
+            base = _num(ov.get("YOUR_BASE_SALARY" if pk == pm.YOUR_401K else "PARTNER_BASE_SALARY"))
+            ov[pk] = s2f.contribution_401k(base, _num(_val(st, wk)),
+                                           pm.irs_limit(pk, ov))
+    target = pm.max_out_target(okey, ov, pm.INPUT_MAX[okey])
+    now = _num(_val(st, widget_key))
+    if target <= 0:
+        return
+    if pct:
+        salary = _num(ov.get("YOUR_BASE_SALARY" if okey == pm.YOUR_401K else "PARTNER_BASE_SALARY"))
+        if salary <= 0:
+            return
+        value = min(100.0, math.ceil(target * 1000.0 / salary) / 10.0)
+        full = s2f.contribution_401k(salary, now, pm.irs_limit(okey, ov)) >= target
+    else:
+        value, full = target, now >= target
+    if full:
+        st.caption("✓ At the limit")
+    else:
+        st.button(pm.max_out_label(target), key=f"gs_max_{widget_key}",
+                  on_click=_set_widget, args=(st, widget_key, value),
+                  help=pm.max_out_help(okey, ov, target))
+
+
 def draw_saving(st) -> None:
     ov = _ov(st)
     c = state(st).get("checkup") or {}
@@ -449,6 +488,7 @@ def draw_saving(st) -> None:
     pct_saved = 100.0 * _num(ov.get("YOUR_401K_CONTRIBUTION")) / salary if salary else 0.0
     _pct(st, "gs_401k_pct", "What % of your pay goes into your 401(k)?", pct_saved,
          c.get("pct_401k", 0.0))
+    _max_out(st, "gs_401k_pct", pm.YOUR_401K, pct=True)
     _cue(st, "It's on your pay stub or benefits site, often 3–10%. Enter 0 if you don't put "
              "anything in or don't have one.", _from_checkup(st, "YOUR_401K_CONTRIBUTION"))
     _pct(st, "gs_match", "Your employer matches up to what % of your pay?",
@@ -466,11 +506,13 @@ def draw_saving(st) -> None:
                ov.get("YOUR_HSA_CONTRIBUTION"),
                ov.get("YOUR_HSA_CONTRIBUTION") if _from_checkup(st, "YOUR_HSA_CONTRIBUTION") else 0,
                hi=s2f.CONTRIB_MAX)
+        _max_out(st, "gs_hsa_amt", pm.YOUR_HSA)
         _cue(st, "Include anything your employer puts in.")
     _money(st, "gs_ira", "How much do you put into an IRA each year?",
            ov.get("YOUR_BACKDOOR_ROTH"),
            ov.get("YOUR_BACKDOOR_ROTH") if _from_checkup(st, "YOUR_BACKDOOR_ROTH") else 0,
            hi=s2f.CONTRIB_MAX)
+    _max_out(st, "gs_ira", pm.YOUR_ROTH)
     so_far = c.get("ira_so_far") or 0
     _cue(st, (f"Your check-up had {money_md(so_far)} so far this year; enter what you'll put in "
               "over a full year. " if so_far else "")
@@ -479,6 +521,7 @@ def draw_saving(st) -> None:
         p_salary = _num(ov.get("PARTNER_BASE_SALARY"))
         p_pct = 100.0 * _num(ov.get("PARTNER_401K_CONTRIBUTION")) / p_salary if p_salary else 0.0
         _pct(st, "gs_p401k_pct", "What % of their pay goes into their 401(k)?", p_pct, 0.0)
+        _max_out(st, "gs_p401k_pct", pm.PARTNER_401K, pct=True)
     _choice(st, "gs_invest", "What should happen to the money you don't spend?", [KEEP, FILL],
             KEEP if ov.get("SAVINGS_MODE") == KEEP_AMOUNTS_MODE else FILL, KEEP)
     _cue(st, "Either way, every dollar you don't spend gets invested. Keeping your amounts shows "

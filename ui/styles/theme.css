@@ -2867,3 +2867,12 @@ section[data-testid="stMain"] .st-key-mc-topbar [data-baseweb="select"] > div > 
 }
 
 /* -- end phone polish M1 -- */
+
+/* The small "Max out" buttons under the savings inputs (sidebar and guided setup). One
+   line each, so the amount fits a half-width sidebar column; touch keeps its 44px height.
+   (With a tooltip the button loses its .stButton wrapper, so the pill shape is set here.) */
+[class*="st-key-sv_max_"] button, [class*="st-key-gs_max_"] button { padding: 4px 10px; border-radius: 999px; }
+[class*="st-key-sv_max_"] button p, [class*="st-key-gs_max_"] button p { font-size: 13px; white-space: nowrap; }
+@media (hover: hover) and (pointer: fine) {
+    [class*="st-key-sv_max_"] button, [class*="st-key-gs_max_"] button { min-height: 32px; }
+}

@@ -31,6 +31,11 @@ try:
 except ImportError:  # pragma: no cover
     from ui.utils.plot_theme import series_color  # type: ignore
 
+try:
+    from utils import planner_max as pm
+except ImportError:  # pragma: no cover
+    from ui.utils import planner_max as pm  # type: ignore
+
 
 _ACCOUNT_LABELS = [
     ("Your 401(k)",          "YOUR_401K_CONTRIBUTION",        "#0d9488"),
@@ -318,8 +323,44 @@ def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
             )
 
 
+def _apply_max_out(st, keys) -> None:
+    """on_click for a Max out button: set each account's input AND its override.
+
+    Runs before the script, so writing the widget keys is allowed. It reads the
+    widgets too, because an amount typed just before the click is there a rerun
+    before it is in the overrides."""
+    for key, amount in pm.max_out_updates(pm.live_overrides(st.session_state), keys).items():
+        st.session_state[pm.MANUAL_WIDGETS[key]] = amount
+        set_override(st, key, amount)
+
+
+def _max_out_control(st, cfg_key: str, max_value: int) -> None:
+    """Under a manual input: a Max out button while there is room, a short
+    note once it is full, or why a partner's Roth can't be filled."""
+    overrides = pm.live_overrides(st.session_state)
+    m = pm.max_out_state(cfg_key, overrides, max_value)
+    if m.state == pm.BUTTON:
+        st.button(pm.max_out_label(m.target), key=f"sv_max_{cfg_key.lower()}",
+                  on_click=_apply_max_out, args=(st, (cfg_key,)), width="stretch",
+                  help=pm.max_out_help(cfg_key, overrides, m.target))
+    elif m.state == pm.AT_LIMIT:
+        st.caption("✓ At the limit")
+    elif m.state == pm.OVER_INCOME:
+        st.caption(pm.over_income_note(overrides))
+
+
+def _max_out_all(st) -> None:
+    """One button under the inputs that applies every Max out at once."""
+    overrides = pm.live_overrides(st.session_state)
+    if pm.max_out_updates(overrides):
+        st.button("Max out all tax-advantaged accounts", key="sv_max_all",
+                  on_click=_apply_max_out, args=(st, pm.MAX_OUT_ORDER), width="stretch",
+                  help="Sets your 401(k), HSA and Roth IRA, and your partner's 401(k) and "
+                       "Roth IRA, to their limits. Taxable brokerage has no limit.")
+
+
 def _manual_amount(st, widget_key: str, cfg_key: str, label: str,
-                   max_value: int, step: int) -> None:
+                   max_value: int, step: int, max_out: bool = False) -> None:
     """Render one manual-dollars number_input, seeded from the current override.
 
     The seed MUST be clamped to ``max_value``: Auto / Custom-% modes write
@@ -329,19 +370,25 @@ def _manual_amount(st, widget_key: str, cfg_key: str, label: str,
     ``StreamlitValueAboveMaxError``, which ``app.py::_safe_render`` swallowed —
     replacing the WHOLE Savings section (mode radio included) with a
     placeholder, so the user could not even switch back to Auto.
+
+    ``max_out``: add the Max out button (or note) under the input; for the
+    accounts that have a limit (planner_max).
     """
     ensure_default(st, widget_key,
                    min(max_value, safe_int(get_override(st, cfg_key, 0), 0)))
     v = st.number_input(label, min_value=0, max_value=max_value, step=step,
                         key=widget_key)
     set_override(st, cfg_key, safe_int(v))
+    if max_out:
+        _max_out_control(st, cfg_key, max_value)
 
 
 # 401(k) employee-deferral ceiling for the manual inputs. Must clear the
 # age-50+ catch-up limit ($23,000 + $7,500 = $30,500); kept a fixed generous
 # bound rather than an age-derived one so an age edit can never push an already
 # stored widget value above the max (which would crash the section).
-_MANUAL_401K_MAX = 40_000
+_MANUAL_401K_MAX = pm.INPUT_MAX[pm.YOUR_401K]
+_CAP = pm.INPUT_MAX
 
 
 def _render_keep_amounts(st, overrides: dict) -> None:
@@ -354,18 +401,24 @@ def _render_keep_amounts(st, overrides: dict) -> None:
     c1, c2 = st.columns(2)
     with c1:
         _manual_amount(st, "sv_manual_your_401k", "YOUR_401K_CONTRIBUTION",
-                       "Your 401(k) ($/yr)", _MANUAL_401K_MAX, 500)
+                       "Your 401(k) ($/yr)", _CAP[pm.YOUR_401K],
+                       500, max_out=True)
         _manual_amount(st, "sv_manual_your_hsa", "YOUR_HSA_CONTRIBUTION",
-                       "Your HSA ($/yr)", 10_000, 250)
+                       "Your HSA ($/yr)", _CAP[pm.YOUR_HSA],
+                       250, max_out=True)
         _manual_amount(st, "sv_manual_your_roth", "YOUR_BACKDOOR_ROTH",
-                       "Your Roth IRA ($/yr)", 10_000, 500)
+                       "Your Roth IRA ($/yr)", _CAP[pm.YOUR_ROTH],
+                       500, max_out=True)
     with c2:
         if _has_partner(overrides):
             _manual_amount(st, "sv_manual_partner_401k", "PARTNER_401K_CONTRIBUTION",
-                           "Partner 401(k) ($/yr)", _MANUAL_401K_MAX, 500)
+                           "Partner 401(k) ($/yr)", _CAP[pm.PARTNER_401K],
+                           500, max_out=True)
             _manual_amount(st, "sv_manual_partner_roth", "PARTNER_ROTH_CONTRIBUTION",
-                           "Partner Roth IRA ($/yr)", 10_000, 500)
+                           "Partner Roth IRA ($/yr)", _CAP[pm.PARTNER_ROTH],
+                           500, max_out=True)
     _zero_partner_contributions(st, overrides)
+    _max_out_all(st)
     set_override(st, "YOUR_BROKERAGE_CONTRIBUTION", 0)
     set_override(st, "PARTNER_BROKERAGE_CONTRIBUTION", 0)
 
@@ -379,23 +432,29 @@ def _render_manual(st, disposable: int, overrides: dict) -> None:
     c1, c2 = st.columns(2)
     with c1:
         _manual_amount(st, "sv_manual_your_401k", "YOUR_401K_CONTRIBUTION",
-                       "Your 401(k) ($/yr)", _MANUAL_401K_MAX, 500)
+                       "Your 401(k) ($/yr)", _CAP[pm.YOUR_401K],
+                       500, max_out=True)
         _manual_amount(st, "sv_manual_your_hsa", "YOUR_HSA_CONTRIBUTION",
-                       "Your HSA ($/yr)", 10_000, 250)
+                       "Your HSA ($/yr)", _CAP[pm.YOUR_HSA],
+                       250, max_out=True)
         _manual_amount(st, "sv_manual_your_roth", "YOUR_BACKDOOR_ROTH",
-                       "Your Roth IRA ($/yr)", 10_000, 500)
+                       "Your Roth IRA ($/yr)", _CAP[pm.YOUR_ROTH],
+                       500, max_out=True)
         _manual_amount(st, "sv_manual_your_brk", "YOUR_BROKERAGE_CONTRIBUTION",
                        "Your taxable brokerage ($/yr)", 500_000, 1_000)
 
     with c2:
         if _has_partner(overrides):
             _manual_amount(st, "sv_manual_partner_401k", "PARTNER_401K_CONTRIBUTION",
-                           "Partner 401(k) ($/yr)", _MANUAL_401K_MAX, 500)
+                           "Partner 401(k) ($/yr)", _CAP[pm.PARTNER_401K],
+                           500, max_out=True)
             _manual_amount(st, "sv_manual_partner_roth", "PARTNER_ROTH_CONTRIBUTION",
-                           "Partner Roth IRA ($/yr)", 10_000, 500)
+                           "Partner Roth IRA ($/yr)", _CAP[pm.PARTNER_ROTH],
+                           500, max_out=True)
             _manual_amount(st, "sv_manual_partner_brk", "PARTNER_BROKERAGE_CONTRIBUTION",
                            "Partner taxable brokerage ($/yr)", 500_000, 1_000)
     _zero_partner_contributions(st, overrides)
+    _max_out_all(st)
 
     # Sum check
     overrides2 = st.session_state.get("user_overrides", {}) or {}
