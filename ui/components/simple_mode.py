@@ -24,10 +24,12 @@ import plotly.graph_objects as go
 
 try:
     from utils import simple_finance as sf
+    from utils import simple_to_full
     from utils.formatting import money, money_md
     from utils.plot_theme import is_dark, style_fig
 except ImportError:  # pragma: no cover
     from ui.utils import simple_finance as sf  # type: ignore
+    from ui.utils import simple_to_full  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.plot_theme import is_dark, style_fig  # type: ignore
 
@@ -424,9 +426,30 @@ def _render_budget(st, buckets: List[sf.BudgetBucket]) -> None:
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
+def _open_on_own_numbers(ss) -> None:
+    """On the owner's own machine the check-up opens on the numbers already in
+    their planner profile, once per session, unless they have entered or
+    restored check-up answers of their own. Hosted visitors always start from
+    the example numbers."""
+    if ss.get("_simple_planner_seeded"):
+        return
+    ss["_simple_planner_seeded"] = True
+    if simple_to_full.used(ss.get(STATE_KEY)) or not ss.get("user_overrides"):
+        return
+    try:
+        from utils.hosting import is_hosted
+        from components.profile_picker import load_personal_profile
+        if is_hosted() or load_personal_profile() is None:
+            return
+        ss[STATE_KEY] = simple_to_full.from_planner(ss["user_overrides"])
+    except Exception:
+        pass            # keep the example numbers rather than break the page
+
+
 def render(st) -> None:
     """Draw the page. Reads/writes ``st.session_state["simple_inputs"]``."""
     ss = st.session_state
+    _open_on_own_numbers(ss)
     inputs = sf.normalize_inputs(ss.get(STATE_KEY))
     _seed(ss, inputs, force=ss.get(_SYNC_KEY) != inputs)
 
