@@ -122,6 +122,11 @@ def _remove_debt(ss, index: int) -> None:
     ss[_SYNC_KEY] = None
 
 
+def _set_widget(ss, key: str, value: float) -> None:
+    """Button callback: runs before the widgets are drawn, so it may set their keys."""
+    ss[key] = value
+
+
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
@@ -134,6 +139,19 @@ def _money_input(st, field: str, label: str, help_text: str, step: float = 50.0,
 def _pct_input(st, field: str, label: str, help_text: str) -> None:
     st.number_input(label, min_value=0.0, max_value=sf.PCT_MAX, step=0.5, format="%.1f",
                     key=_W + field, help=help_text, icon=_PCT)
+
+
+def _max_out(st, field: str, current: float, target: Any, tip: str) -> None:
+    """A "Max out" button under an input that is below its yearly limit (it sets the
+    input to ``target``), or a small check once it is there. Nothing when there is
+    no target."""
+    if target is None:
+        return
+    if current + 1e-6 >= target:
+        st.caption("✓ At the limit")
+    else:
+        st.button("Max out", key=f"simple_max_{field}", help=tip, width="content",
+                  on_click=_set_widget, args=(st.session_state, _W + field, target))
 
 
 def _render_inputs(st, inputs: Dict[str, Any]) -> None:
@@ -169,6 +187,9 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
                               "steady; closer to 6 if it's irregular or others rely on you.")
 
     _group(st, "Work and retirement")
+    now = _collect(ss, inputs)                   # what the widgets hold on this run
+    today = date.today()
+    limits = sf.contribution_limits(now["hsa_family"], today)
     c1, c2, c3 = st.columns(3)
     with c1:
         _money_input(st, "gross_salary_annual", "Yearly salary (before tax)",
@@ -177,15 +198,44 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
     with c2:
         _pct_input(st, "retirement_contrib_pct", "You put in (% of pay)",
                    "The percent of each paycheck going into your 401(k) or 403(b).")
+        _max_out(st, "retirement_contrib_pct", now["retirement_contrib_pct"],
+                 sf.max_401k_pct(now["gross_salary_annual"], today),
+                 f"Sets this to the share of your pay that reaches this year's "
+                 f"{money_md(limits['401k'])} 401(k) limit.")
     with c3:
         _pct_input(st, "employer_match_pct", "Employer matches up to (%)",
                    "Your employer adds money when you contribute, up to this percent of "
                    "your pay. Check your benefits site. 0 if there's no match.")
+    c1, c2 = st.columns(2, vertical_alignment="bottom")
+    with c1:
+        st.toggle("Married, filing jointly", key=_W + "married",
+                  help="Married couples filing together have a higher Roth IRA income "
+                       "limit. We add your partner's pay to yours to estimate where you "
+                       "fall. It's an estimate: your partner's own 401(k) and other "
+                       "deductions aren't known.")
+    with c2:
+        if ss.get(_W + "married"):
+            _money_input(st, "partner_salary_annual", "Partner's yearly pay (before tax)",
+                         "Only used to estimate your Roth IRA income limit. It's an "
+                         "estimate, since your partner's own 401(k) isn't known.",
+                         step=1000.0, hi=sf.BALANCE_MAX)
+    roth = sf.roth_check(now, today)
     c1, c2 = st.columns(2)
     with c1:
         _money_input(st, "ira_contrib_annual", "Put into an IRA this year",
-                     "Roth or traditional IRA contributions so far this year.", step=100.0,
-                     hi=sf.BALANCE_MAX)
+                     "Roth or traditional IRA contributions so far this year. How much can "
+                     "go into a Roth directly depends on your income. We estimate that from "
+                     "your pay, your partner's pay, and your 401(k) and HSA contributions.",
+                     step=100.0, hi=sf.BALANCE_MAX)
+        tip = f"Sets this to this year's {money_md(roth.ira_limit)} IRA limit."
+        if roth.case == "reduced":
+            tip += (f" Only {money_md(roth.direct_limit)} can go into a Roth directly. "
+                    "The rest goes through a backdoor Roth.")
+        elif roth.case == "backdoor":
+            tip += " The amount goes through a backdoor Roth."
+        _max_out(st, "ira_contrib_annual", now["ira_contrib_annual"], roth.ira_limit, tip)
+        st.markdown(f'<div class="simple-note" style="margin-bottom:12px">{_h(roth.note)}</div>',
+                    unsafe_allow_html=True)
     with c2:
         st.toggle("Your health plan is HSA-eligible", key=_W + "hsa_eligible",
                   help="Health Savings Accounts are only for high-deductible health plans. "
@@ -197,6 +247,9 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
         _money_input(st, "hsa_contrib_annual", "Put into your HSA this year",
                      "Your HSA contributions so far this year, including any from your employer.",
                      step=100.0, hi=sf.BALANCE_MAX)
+        _max_out(st, "hsa_contrib_annual", now["hsa_contrib_annual"], limits["hsa"],
+                 f"Sets this to this year's {money_md(limits['hsa'])} "
+                 f"{'family' if now['hsa_family'] else 'self-only'} HSA limit.")
 
     _group(st, "Debts")
     st.caption("Credit cards, car loans, student loans, personal loans. "

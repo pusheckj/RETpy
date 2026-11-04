@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from retirement_sim import config as cfg
+
 try:
     from utils.simple_finance import DEFAULT_INPUTS, normalize_inputs
     from utils.derived import KEEP_AMOUNTS_MODE, PRETAX_KEYS, savings_budget
@@ -70,7 +72,8 @@ def carried(simple: Any) -> Dict[str, Any]:
     """Planner overrides from the check-up's answers.
 
     Saving keeps the visitor's own 401(k) / HSA / IRA amounts and invests the
-    rest (KEEP_AMOUNTS_MODE). Housing starts at 0, with all of the check-up's
+    rest (KEEP_AMOUNTS_MODE). ``married`` and ``partner_salary_annual`` are
+    check-up only (they set the Roth IRA income limit), so they are left out. Housing starts at 0, with all of the check-up's
     needs (rent included) in Other, so total spending equals the check-up's
     until the setup asks about housing and calls ``spending_split`` again.
     """
@@ -134,6 +137,7 @@ def from_planner(overrides: Any) -> Dict[str, Any]:
     partner = num("PARTNER_OTHER_MONTHLY") if num("PARTNER_AGE") > 0 else 0.0
     wants = min(num("SPEND_DISCRETIONARY_MONTHLY") + partner, spend)
     salary = num("YOUR_BASE_SALARY") + num("YOUR_BONUS_AMOUNT")
+    married = num("PARTNER_AGE") > 0 and cfg.normalize_filing_status(ov.get("FILING_STATUS")) == "MFJ"
     hsa = saved("YOUR_HSA_CONTRIBUTION")
     out: Dict[str, Any] = {
         "take_home_monthly": max(take_home, 0.0),
@@ -147,6 +151,8 @@ def from_planner(overrides: Any) -> Dict[str, Any]:
         "hsa_family": num("PARTNER_AGE") > 0 or bool(ov.get("CHILDREN")),
         "hsa_contrib_annual": hsa,
         "ira_contrib_annual": saved("YOUR_BACKDOOR_ROTH"),
+        "married": married,
+        "partner_salary_annual": num("PARTNER_BASE_SALARY") + num("PARTNER_BONUS_AMOUNT"),
         "debts": [],
     }
     return normalize_inputs({**DEFAULT_INPUTS, **out})

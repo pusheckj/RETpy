@@ -61,10 +61,36 @@ def test_pay_and_retirement_answers_are_yours():
     assert normalize_inputs(r) == r
 
 
+def test_married_and_partner_pay_are_seeded():
+    r = s2f.from_planner(PLANNER)
+    assert r["married"] is True
+    assert r["partner_salary_annual"] == 80_000
+    r = s2f.from_planner({**PLANNER, "PARTNER_BONUS_AMOUNT": 12_000})
+    assert r["partner_salary_annual"] == 92_000
+    assert normalize_inputs(r) == r
+
+
+def test_married_needs_a_partner_and_a_joint_filing_status():
+    assert s2f.from_planner({**PLANNER, "FILING_STATUS": "Single"})["married"] is False
+    assert s2f.from_planner({**PLANNER, "FILING_STATUS": "Head of household"})["married"] is False
+    assert s2f.from_planner({**PLANNER, "FILING_STATUS": "MFJ"})["married"] is True      # short code works too
+    assert s2f.from_planner({**PLANNER, "PARTNER_AGE": 0})["married"] is False           # no partner
+    no_status = {k: v for k, v in PLANNER.items() if k != "FILING_STATUS"}
+    assert s2f.from_planner(no_status)["married"] is True                                # planner default is MFJ
+
+
+def test_carried_leaves_the_roth_fields_alone():
+    base = normalize_inputs({**DEFAULT_INPUTS, "gross_salary_annual": 130_000.0})
+    both = normalize_inputs({**base, "married": True, "partner_salary_annual": 80_000.0})
+    assert s2f.carried(both) == s2f.carried(base)
+    assert s2f.summary(both) == s2f.summary(base)
+
+
 def test_single_without_hsa_or_partner():
     r = s2f.from_planner({"YOUR_AGE": 30, "YOUR_BASE_SALARY": 60_000, "YOUR_401K_CONTRIBUTION": 3_000,
                           "SAVINGS_MODE": KEEP_AMOUNTS_MODE})
     assert not r["hsa_eligible"] and not r["hsa_family"]
+    assert r["married"] is False and r["partner_salary_annual"] == 0
     assert r["take_home_monthly"] > 0
 
 
