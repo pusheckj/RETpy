@@ -110,6 +110,7 @@ class _FakeSt:
 # are legitimately absent from the reset set.
 _NON_INPUT_SEC_KEYS = {
     "si_comp_sync",         # a button ("Sync to inputs")
+    "sv_max_all",           # a button ("Max out all tax-advantaged accounts")
     "sv_auto_alloc_chart",  # st.plotly_chart element key
 }
 
