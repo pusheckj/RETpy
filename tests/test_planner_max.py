@@ -15,6 +15,7 @@ for _p in (_ROOT, UI):
         sys.path.insert(0, _p)
 
 from utils import planner_max as pm  # noqa: E402
+from utils import derived  # noqa: E402
 from utils.derived import KEEP_AMOUNTS_MODE, MANUAL_MODE  # noqa: E402
 
 K401, P401, HSA, ROTH, PROTH = (pm.YOUR_401K, pm.PARTNER_401K, pm.YOUR_HSA,
@@ -319,3 +320,13 @@ def test_guided_setup_has_max_out_for_401k_hsa_and_ira(monkeypatch):
     assert sum(c.value == "✓ At the limit" for c in at.caption) == 3
     at.button(key="gs_max_gs_p401k_pct").click().run()
     assert at.session_state["user_overrides"][P401] == 23_000
+
+
+def test_hsa_limit_is_self_only_for_a_single_person_without_children():
+    single = {"YOUR_AGE": 35, "CHILDREN": []}
+    assert pm.irs_limit(pm.YOUR_HSA, single) == derived.get_limit("hsa", 35, family=False)
+    with_partner = {"YOUR_AGE": 35, "PARTNER_AGE": 33, "CHILDREN": []}
+    assert pm.irs_limit(pm.YOUR_HSA, with_partner) == derived.get_limit("hsa", 35, family=True)
+    one_child = {"YOUR_AGE": 35, "CHILDREN": [{"years_until_birth": -2, "leaves_home_age": 18,
+                                                "monthly_cost": 1000}]}
+    assert pm.irs_limit(pm.YOUR_HSA, one_child) == derived.get_limit("hsa", 35, family=True)

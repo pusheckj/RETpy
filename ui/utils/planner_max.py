@@ -7,8 +7,9 @@ buttons and writes the amounts; this module only decides them.
 How each limit is worked out (the same as the simulation and Auto-allocate):
 * 401(k): the IRS deferral limit for the person's age (catch-up from 50), and
   no more than their pay.
-* HSA: the family limit (catch-up from 55), as Auto-allocate and the engine
-  use, and no more than their pay left after the 401(k).
+* HSA: the family limit when there is a partner or a child, else the self-only
+  limit (catch-up from 55), and no more than their pay left after the 401(k).
+  (Auto-allocate and the engine always use the family limit.)
 * Your Roth IRA: the IRA limit (catch-up from 50). It is modeled as a backdoor
   Roth, so there is no income limit.
 * Partner Roth IRA: a direct Roth, so the IRA limit cut by the income
@@ -84,6 +85,11 @@ def _pay(overrides: dict, key: str) -> int:
     return int(kw["partner_wages" if key.startswith("PARTNER_") else "your_wages"])
 
 
+def hsa_family(overrides: dict) -> bool:
+    """Family HSA coverage: a partner or at least one child in the plan."""
+    return _age(overrides, "PARTNER_AGE", 0) > 0 or bool(derived.cfg.children_in(overrides))
+
+
 def irs_limit(key: str, overrides: dict) -> int:
     """The IRS limit for the account, at the person's own age. 0 if the person
     isn't in the plan or the key has no limit."""
@@ -92,7 +98,7 @@ def irs_limit(key: str, overrides: dict) -> int:
     if key == YOUR_401K:
         return derived.get_limit("401k", your_age)
     if key == YOUR_HSA:
-        return derived.get_limit("hsa", your_age, family=True)
+        return derived.get_limit("hsa", your_age, family=hsa_family(overrides))
     if key == YOUR_ROTH:
         return derived.get_limit("ira", your_age)
     if partner_age <= 0:
@@ -193,7 +199,8 @@ def max_out_help(key: str, overrides: dict, target: int) -> str:
     if target < limit:
         return f"Sets this to {amount}, as much as your pay allows. The limit is \\${limit:,}."
     if key in (YOUR_HSA,):
-        note = "the 2024 family limit" + (", with the catch-up for 55 and over" if age >= 55 else "")
+        note = (f"the 2024 {'family' if hsa_family(overrides) else 'self-only'} limit"
+                + (", with the catch-up for 55 and over" if age >= 55 else ""))
     elif key in (YOUR_401K, PARTNER_401K):
         note = "the 2024 limit" + (", with the catch-up for 50 and over" if age >= 50 else "")
     else:
