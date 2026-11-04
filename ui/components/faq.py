@@ -79,7 +79,7 @@ QUESTIONS: list[tuple[str, str]] = [
     ),
     (
         "What if I rent, or I'm single?",
-        "If you rent, choose Renting under Expenses and enter your rent. If "
+        "If you rent, choose Renting under House and enter your rent. If "
         "you're single, choose \"Just me\" under About you. The partner inputs "
         "disappear, and the plan has no partner accounts, pay, savings or "
         "Social Security. If you and your partner aren't married, choose "

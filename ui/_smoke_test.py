@@ -63,6 +63,8 @@ def test_imports():
         "components.sec_about_you",
         "components.sec_income",
         "components.sec_taxes",
+        "components.sec_family",
+        "components.sec_house",
         "components.sec_expenses",
         "components.sec_big_purchases",
         "components.sec_savings",

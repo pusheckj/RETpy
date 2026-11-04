@@ -120,6 +120,14 @@ def files_two_returns(overrides: dict) -> bool:
     return cfg.files_two_returns(kw["status"], kw["partner"])
 
 
+def children_at_home_now(overrides: dict) -> list:
+    """The children living at home today: born already and not yet at their
+    leaves-home age (the rule ``cfg.calculate_child_expenses`` applies at your
+    current age)."""
+    return [kid for kid in cfg.children_in(overrides)
+            if 0 <= -kid["years_until_birth"] < kid["leaves_home_age"]]
+
+
 def compute_expenses_today(overrides: dict) -> int:
     """Sum of all monthly spending categories × 12 + housing (mortgage or rent) × 12.
 
@@ -169,9 +177,8 @@ def compute_expenses_today(overrides: dict) -> int:
     # Children living at home today, each at their own monthly cost: the same
     # rule cfg.calculate_child_expenses applies at your current age. (This used
     # to count only the first child, even with two at home.)
-    for kid in cfg.children_in(overrides):
-        if 0 <= -kid["years_until_birth"] < kid["leaves_home_age"]:
-            monthly += safe_int(kid["monthly_cost"], 0)
+    for kid in children_at_home_now(overrides):
+        monthly += safe_int(kid["monthly_cost"], 0)
 
     annual = monthly * 12 + round(carrying)
 

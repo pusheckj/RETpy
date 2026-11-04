@@ -1,6 +1,7 @@
 """The monthly expense categories, in one place.
 
-The Expenses section's inputs (components/sec_expenses.py), the Spending tab's
+The Expenses section's inputs (components/sec_expenses.py; the housing ones are in
+components/sec_house.py), the Spending tab's
 buckets (components/spending_dashboard.py) and the widget sync table
 (utils/widget_sync.py) are all built from this list, so every statement
 category lands in the input it informs and the two screens can't drift apart.
@@ -14,7 +15,7 @@ class Category(NamedTuple):
     label: str
     key: str                      # config / override key, $ per month
     statement: Tuple[str, ...]    # Spending-tab categories that add up to it
-    widget: str                   # the Expenses-section input's session key
+    widget: str                   # the input's session key
     default: int
     max_value: int
     step: int

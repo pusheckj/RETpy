@@ -313,10 +313,12 @@ def _panel_script():
     import sys
     sys.path[:0] = [os.environ["HH_TEST_UI"], os.path.dirname(os.environ["HH_TEST_UI"])]
     import streamlit as st
-    from components import (account_inputs, sec_about_you, sec_expenses,
-                            sec_retirement_goals, sec_savings)
+    from components import (account_inputs, sec_about_you, sec_expenses, sec_family,
+                            sec_house, sec_retirement_goals, sec_savings)
     sec_about_you.render_body(st)
+    sec_family.render_body(st)
     account_inputs.render(st)
+    sec_house.render_body(st)
     sec_expenses.render_body(st)
     sec_savings.render_body(st)
     sec_retirement_goals.render_body(st)

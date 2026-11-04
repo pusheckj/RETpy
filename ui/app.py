@@ -929,11 +929,14 @@ def main() -> None:
 
     # -------- Sidebar (inputs) --------
     with st.sidebar:
-        # Linear walkthrough, in advisor order (9 sections + FAQ).
+        # Linear walkthrough, in advisor order (11 sections + FAQ). House comes
+        # before Expenses: Expenses reads its rent-or-own choice for the total.
         _safe_render("components.sec_about_you")
+        _safe_render("components.sec_family")
         _safe_render("components.account_inputs")     # 🏦 Starting balances
         _safe_render("components.sec_income")
         _safe_render("components.sec_taxes")
+        _safe_render("components.sec_house")
         _safe_render("components.sec_expenses")
         _safe_render("components.sec_big_purchases")
         _safe_render("components.sec_savings")

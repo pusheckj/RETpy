@@ -81,7 +81,7 @@ Add fields for partner Traditional IRA or HSA if relevant by copying the pattern
 ### Housing timeline: buy, move, downsize
 
 `HOME_EVENTS` lists what changes later, each at an age of yours (the app's
-*Big purchases → Home moves*). Empty = stay put. One home at a time.
+*House → Home moves*). Empty = stay put. One home at a time.
 
 ```python
 HOME_EVENTS = [
@@ -184,6 +184,8 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 
 ### Housing and recurring expenses
 
+The app sets the housing rows in its *House* section and the monthly spending rows in *Expenses*.
+
 | Parameter | Default | Description |
 |---|---|---|
 | `MORTGAGE_MONTHLY` | `$0` | Principal + interest + escrow. |
@@ -193,6 +195,8 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 | `PARTNER_OTHER_MONTHLY` | `$1,500` | Partner's own spending, added to household expenses every year. The app's *Partner spending* input sets it and `PARTNER_MONTHLY_SPENDING` (the partner-savings math) together, and sets both to $0 for a single household (partner age 0). |
 
 ### Children
+
+The app's *Family* section sets these.
 
 | Parameter | Default | Description |
 |---|---|---|
