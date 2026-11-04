@@ -503,6 +503,7 @@ def priority_ladder(inputs: Dict[str, Any], today: Optional[date] = None) -> Lis
     goal6, detail_lead = limits["ira"], ""
     if roth.case == "reduced":
         goal6 = roth.direct_limit
+        why6 = "Grows tax-free, and you can take out what you put in at any time."
         detail_lead = roth.note + " "
     elif roth.case == "backdoor":
         title6 = "Max out a backdoor Roth IRA"

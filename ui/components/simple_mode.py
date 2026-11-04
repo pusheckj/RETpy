@@ -234,7 +234,8 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
         elif roth.case == "backdoor":
             tip += " The amount goes through a backdoor Roth."
         _max_out(st, "ira_contrib_annual", now["ira_contrib_annual"], roth.ira_limit, tip)
-        st.markdown(f'<div class="simple-note">{_h(roth.note)}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="simple-note" style="margin-bottom:12px">{_h(roth.note)}</div>',
+                    unsafe_allow_html=True)
     with c2:
         st.toggle("Your health plan is HSA-eligible", key=_W + "hsa_eligible",
                   help="Health Savings Accounts are only for high-deductible health plans. "
