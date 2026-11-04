@@ -672,17 +672,27 @@ def _on_mode_switch(key: str) -> None:
     st.session_state.app_mode = next(m for m, label in MODES.items() if label == picked)
 
 
-def _mode_switch(current: str, in_gutter: bool = False) -> None:
-    """Money check-up | Retirement planner: the same switch, top right, on the
-    check-up, the setup walkthrough and the planner. Each version keeps its own
-    answers; switching never loses them. A horizontal radio styled as a
-    segmented toggle (it always has a choice, unlike st.segmented_control, and
-    Streamlit's AppTest can rerun it). ``in_gutter``: the planner's sits in the
-    page's top gutter (theme.css), so its top card keeps the side panel's top edge."""
-    key = f"mode_switch_{current}"
+def _mode_switch(current: str, place: str = "top") -> None:
+    """Money check-up | Retirement planner: the same switch on the check-up, the
+    setup walkthrough and the planner. Each version keeps its own answers;
+    switching never loses them. A horizontal radio styled as a segmented toggle
+    (it always has a choice, unlike st.segmented_control, and Streamlit's
+    AppTest can rerun it).
+
+    ``place``: "top" is the top of the page content (check-up, setup). In the
+    planner there are two radios that do the same thing, because Streamlit
+    cannot draw one widget twice: "gutter" (key ``mode_switch_full``, the page's
+    top gutter, used on phones and while the side panel is closed) and "sidebar"
+    (key ``mode_switch_full_sidebar``, the top of the side panel). theme.css
+    ("Mode switch in sidebar") shows exactly one of them."""
+    key = f"mode_switch_{current}" + ("_sidebar" if place == "sidebar" else "")
     st.session_state[key] = MODES[current]
-    with st.container(key="mc-mode-switch-gutter" if in_gutter else "mc-mode-switch",
-                      horizontal=True, horizontal_alignment="right"):
+    if place == "sidebar":
+        box = st.container(key="mc-mode-switch-sidebar")
+    else:
+        box = st.container(key="mc-mode-switch-gutter" if place == "gutter" else "mc-mode-switch",
+                           horizontal=True, horizontal_alignment="right")
+    with box:
         st.radio("Version", list(MODES.values()), key=key, horizontal=True,
                  label_visibility="collapsed", on_change=_on_mode_switch, args=(key,))
 
@@ -895,7 +905,7 @@ def main() -> None:
             _safe_render("components.guided_setup")
         _save_to_device()
         return
-    _mode_switch("full", in_gutter=True)
+    _mode_switch("full", place="gutter")
 
     # Full-width slot for the Run-simulation progress bar. Created BEFORE the top
     # bar (whose Run button fires inline during its own render) so the bar has the
@@ -929,6 +939,9 @@ def main() -> None:
 
     # -------- Sidebar (inputs) --------
     with st.sidebar:
+        # The version switch, above the first section (the page's own copy is
+        # shown instead on phones and while this panel is closed).
+        _mode_switch("full", place="sidebar")
         # Linear walkthrough, in advisor order (11 sections + FAQ). House comes
         # before Expenses: Expenses reads its rent-or-own choice for the total.
         _safe_render("components.sec_about_you")
