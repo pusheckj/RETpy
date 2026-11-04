@@ -17,13 +17,17 @@ A simple, elegant UI for the retirement Monte Carlo simulator, built with Stream
 | up | Planner | Success rate by retirement age                  |
 |--------------| Portfolio needed to retire, withdrawal rate,    |
 | > About you  | bridge to 59.5                                  |
-| > Accounts   | Spending | Savings | Income | Tax                |
-| > Income     | Life expectancy                                 |
-| > Taxes      | > What if (scenarios, deep dives)               |
+| > Family     | Spending | Savings | Income | Tax               |
+| > Accounts   | Life expectancy                                 |
+| > Income     | > What if (scenarios, deep dives)               |
+| > Taxes      |                                                 |
+| > House      |                                                 |
 | > Expenses   |                                                 |
+| > Purchases  |                                                 |
 | > Savings    |                                                 |
 | > Retirement |                                                 |
-|   goals      |                                                 |
+|    goals     |                                                 |
+| >Early access|                                                 |
 | > Assumptions|                                                 |
 | FAQ          |                                                 |
 +--------------+-------------------------------------------------+
@@ -46,7 +50,7 @@ The app opens at http://localhost:8501.
 
 - **Welcome**: pick the *Money check-up* or the *Retirement planner*. A switch at the top of the sidebar moves between them at any time.
 - **Guided setup** (planner, first visit): a short series of screens with a "how to answer" line under each question. Check-up answers carry over. *Skip for now* goes straight to the planner, and a banner offers to finish later.
-- **Linear sidebar** (one section at a time, in advisor order): About you, Accounts (starting balances), Income, Taxes, Expenses, Savings, Retirement goals, Assumptions. Each section reads and writes `st.session_state.user_overrides`.
+- **Linear sidebar** (one section at a time, in advisor order): About you, Family (children, college), Accounts (starting balances), Income, Taxes, House (rent or mortgage, home moves, extra mortgage payments), Expenses, Big purchases & goals (car, retirement vacation), Savings, Retirement goals, Early retirement access, Assumptions. Each section reads and writes `st.session_state.user_overrides`.
 - **Top bar**: your household numbers, the **Run** button, the simulation count, and the **Settings** popover (privacy and Remember me, theme, profile presets, Save / Load profile, print summary, export).
 - **Results run automatically** when you change an input; Run re-runs on demand. The page shows the hero metric (earliest retirement age at your target success rate), success rate by retirement age, key stats, the portfolio needed to retire, withdrawal rate, bridge to 59.5, then Spending, Savings, Income and Tax sections and a life-expectancy view.
 - **What if**: a collapsed section with scenario comparisons and deep dives (trajectories, withdrawal, sensitivity, stress tests, mortgage paydown).
@@ -72,12 +76,16 @@ ui/
 │   ├── top_bar.py
 │   ├── profile_picker.py
 │   ├── sec_about_you.py
+│   ├── sec_family.py
 │   ├── account_inputs.py
 │   ├── sec_income.py
 │   ├── sec_taxes.py
+│   ├── sec_house.py
 │   ├── sec_expenses.py
+│   ├── sec_big_purchases.py
 │   ├── sec_savings.py
 │   ├── sec_retirement_goals.py
+│   ├── sec_early_access.py
 │   ├── sec_assumptions.py
 │   ├── ...
 │   ├── hero_metric.py

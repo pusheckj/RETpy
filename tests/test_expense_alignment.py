@@ -23,8 +23,9 @@ def _script():
     import sys
     sys.path.insert(0, os.environ["SPENDING_TEST_UI_DIR"])
     import streamlit as st
-    from components import sec_expenses, spending_dashboard as sd
+    from components import sec_expenses, sec_house, spending_dashboard as sd
     with st.sidebar:
+        sec_house.render_body(st)
         sec_expenses.render_body(st)
     data = sd.statement_data(st)
     if data is not None:
@@ -38,8 +39,9 @@ def _full_tab():
     import sys
     sys.path.insert(0, os.environ["SPENDING_TEST_UI_DIR"])
     import streamlit as st
-    from components import sec_expenses, spending_dashboard
+    from components import sec_expenses, sec_house, spending_dashboard
     with st.sidebar:
+        sec_house.render_body(st)
         sec_expenses.render_body(st)
     spending_dashboard.render(st)
 

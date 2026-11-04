@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file. Format: [Ke
 ## [Unreleased]
 
 ### Added
+- Planner sidebar: new **Family** section (children and college) and **House** section (rent or mortgage, home moves, extra mortgage payments), each with a short summary line. The controls moved out of Expenses and Big purchases & goals; keys and saved profiles are unchanged
 - Interactive Streamlit UI in `ui/` — financial-advisor-style dashboard with Monte Carlo fan chart, success-by-age visualization, allocation glide path, income-source breakdown, tax analysis, withdrawal strategy, and sensitivity analysis tabs
 - Profile presets: median US 25-year-old household, young professional, mid-career couple, near-retirement
 - Editable compensation table in the UI (`st.data_editor`)

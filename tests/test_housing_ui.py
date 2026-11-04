@@ -1,7 +1,7 @@
 """Sidebar inputs for housing, healthcare and retirement lifestyle (AppTest).
 
-Big purchases: the "Add a move" list writes HOME_EVENTS; an old plan's single
-house move shows up in it with its exact loan and payment. Expenses: the current
+House: the "Add a move" list writes HOME_EVENTS; an old plan's single
+house move shows up in it with its exact loan and payment; the current
 loan's rate. Assumptions: marketplace prices (replacing a dead healthcare box).
 Retirement goals: go-go extra and later-years drop.
 """
@@ -50,7 +50,7 @@ RENTER = {"YOUR_AGE": 27, "PARTNER_AGE": 27, "SPEND_RENT_MONTHLY": 2_000,
 
 
 def test_add_a_move_for_a_renter(section):
-    at = section("sec_big_purchases", **RENTER)
+    at = section("sec_house", **RENTER)
     at.button(key="bp_add_move").click().run()
     events = at.session_state["user_overrides"]["HOME_EVENTS"]
     assert len(events) == 1 and events[0]["action"] == "buy" and events[0]["age"] == 32
@@ -71,7 +71,7 @@ def test_add_a_move_for_a_renter(section):
 
 def test_old_plan_house_move_is_listed_with_its_exact_loan(section):
     ov = load_sample_household()
-    at = section("sec_big_purchases", **ov)
+    at = section("sec_house", **ov)
     new = at.session_state["user_overrides"]
     assert new["HOUSE_MOVE_ENABLED"] is False
     (e,) = new["HOME_EVENTS"]
@@ -88,7 +88,7 @@ def test_old_plan_house_move_is_listed_with_its_exact_loan(section):
 
 
 def test_cost_basis_input_for_an_owner_who_sells(section):
-    at = section("sec_big_purchases", YOUR_AGE=58, PARTNER_AGE=0, HOME_VALUE=650_000,
+    at = section("sec_house", YOUR_AGE=58, PARTNER_AGE=0, HOME_VALUE=650_000,
                  HOME_EVENTS=[{"age": 72, "action": "sell_rent", "rent": 2_500}])
     assert at.number_input(key="bp_home_cost_basis").value == 650_000
     assert at.session_state["user_overrides"].get("HOME_COST_BASIS") is None
@@ -97,12 +97,12 @@ def test_cost_basis_input_for_an_owner_who_sells(section):
 
 
 def test_current_loan_rate_input(section):
-    at = section("sec_expenses", YOUR_AGE=40, HOME_VALUE=600_000, MORTGAGE_BALANCE=400_000,
+    at = section("sec_house", YOUR_AGE=40, HOME_VALUE=600_000, MORTGAGE_BALANCE=400_000,
                  MORTGAGE_MONTHLY=3_000, MORTGAGE_YEARS_REMAINING=25)
     assert at.number_input(key="se_mortgage_rate").value == pytest.approx(6.5)
     at.number_input(key="se_mortgage_rate").set_value(3.25).run()
     assert at.session_state["user_overrides"]["MORTGAGE_RATE_FOR_PAYOFF"] == pytest.approx(0.0325)
-    renter = section("sec_expenses", **RENTER)
+    renter = section("sec_house", **RENTER)
     assert "se_mortgage_rate" not in [w.key for w in renter.number_input]
 
 

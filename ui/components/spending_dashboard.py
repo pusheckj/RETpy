@@ -549,7 +549,7 @@ def group_averages(tx: pd.DataFrame, months: List[pd.Period]) -> pd.Series:
 
 
 # ---------------------------------------------------------------------------
-# "Use my actual spending": shared by this tab and the Expenses section
+# "Use my actual spending": shared by this tab and the Expenses section (its housing inputs are in House)
 # ---------------------------------------------------------------------------
 
 def statement_data(st) -> Optional[Dict]:
@@ -1031,7 +1031,7 @@ def render(st, **_kwargs) -> None:
                                      "Difference": st.column_config.Column(width=84)})
             no_partner = ((g["Expense category"] == "Partner spending") & g["Actual"].isna()
                           & (g["Your plan"] > 0)).any()
-            st.caption("Plan is the monthly inputs in the Expenses section. Actual is your accounts averaged "
+            st.caption("Plan is your monthly inputs in Expenses, plus rent or mortgage in House. Actual is your accounts averaged "
                        "over every complete month (not just the period above), after paybacks. "
                        "Housing is your current payment."
                        + (" Partner spending isn't in your statements, so the plan keeps its own "

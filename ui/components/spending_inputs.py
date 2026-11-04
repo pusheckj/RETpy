@@ -2,7 +2,7 @@
 
 .. warning::
    **This module is HALF LIVE — do not delete it.** Its ``render()`` /
-   ``render_body()`` UI is superseded by ``sec_expenses.py`` and is no longer
+   ``render_body()`` UI is superseded by ``sec_expenses.py`` (housing: ``sec_house.py``) and is no longer
    called from ``app.py``, but its *compute helpers* are load-bearing:
 
      * ``components/spending_chart.py`` imports ``SPENDING_CATEGORIES`` and
@@ -47,7 +47,7 @@ LIFECYCLE_PRESETS = [
 
 # Spending categories: (widget_key, override_key, label, default_monthly)
 # NOTE: Housing intentionally NOT here — it's auto-derived from the mortgage
-# inputs in sec_expenses.py (drops to $0 once the mortgage is paid off, or
+# inputs in sec_house.py (drops to $0 once the mortgage is paid off, or
 # uses Monthly rent for renters).
 SPENDING_CATEGORIES = [
     ("sp_utilities",     "SPEND_UTILITIES_MONTHLY",     "Utilities",                        200),

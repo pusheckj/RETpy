@@ -57,7 +57,7 @@ STATES = {**{label: sc.code_for(label) for label in sc.STATE_LABELS},
 RENT, OWN = "Rent", "Own"
 KEEP, FILL = KEEP_AMOUNTS_LABEL, AUTO_ALLOCATE_LABEL
 SS_YES, SS_NO = "Yes", "No, plan without it"
-# Children: at most this many in all (the Expenses section shows one row each),
+# Children: at most this many in all (the Family section shows one row each),
 # planned ones spaced this many years apart, and each child after the first
 # costing this share of the first (the planner's default family: $2,100 for one,
 # $1,400 more for the second).
@@ -287,7 +287,7 @@ def draw_kids(st) -> None:
                hi=10_000, step=100)
         _cue(st, "Childcare, food, clothes and activities, until they turn 18. Each child "
                  "after the first counts at about two-thirds of this. A guess is fine. "
-                 "You can set each child separately later under Expenses.")
+                 "You can set each child separately later under Family.")
 
 
 def commit_kids(st) -> None:

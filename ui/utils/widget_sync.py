@@ -181,16 +181,16 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "st_state":           ("STATE_CHOICE", _state_code_to_label),
     "st_marginal":        ("YOUR_MARGINAL_TAX_RATE", _as_pct(5.0, 0.0, 15.0)),
 
-    # sec_expenses.py
+    # sec_house.py (rent or own, today's home) -- keys keep their old "se_" names
     "se_home_value":      ("HOME_VALUE", _as_int(0, 0, 10_000_000)),
     "se_mortgage_balance":("MORTGAGE_BALANCE", _as_int(0, 0, 5_000_000)),
     "se_mortgage_monthly":("MORTGAGE_MONTHLY", _as_int(0, 0, 20_000)),
     "se_mortgage_years":  ("MORTGAGE_YEARS_REMAINING", _as_int(0, 0, 40)),
     "se_mortgage_rate":   ("MORTGAGE_RATE_FOR_PAYOFF", _as_pct(6.5, 0.0, 20.0)),
     "se_rent_monthly":    ("SPEND_RENT_MONTHLY", _as_int(1_500, 0, 20_000)),
-    # the monthly spending inputs, one per expense category (incl. se_partner)
+    # sec_expenses.py: the monthly spending inputs, one per expense category (incl. se_partner)
     **{c.widget: (c.key, _as_int(c.default, 0, c.max_value)) for c in CATEGORIES},
-    # (the children rows are synced by _sync_children below)
+    # (the children rows, in sec_family.py, are synced by _sync_children below)
     "se_lifecycle":       ("SPEND_LIFECYCLE_PRESET", lambda v: str(v)),
 
     # sec_savings.py
@@ -208,7 +208,8 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sv_manual_partner_roth":("PARTNER_ROTH_CONTRIBUTION", _as_int(0, 0, 10_000)),
     "sv_manual_partner_brk": ("PARTNER_BROKERAGE_CONTRIBUTION", _as_int(0, 0, 500_000)),
 
-    # sec_big_purchases.py — car / home moves / retirement vacation. These MUST
+    # sec_big_purchases.py (car, retirement vacation) and sec_house.py (home moves,
+    # extra mortgage principal): all keep their "bp_" names. These MUST
     # be listed so a profile switch or JSON load clears them (else a big-purchase
     # plan opted into on one profile bleeds into the next).
     "bp_car_onetime_enable":   ("CAR_ONETIME_ENABLED", lambda v: bool(v)),
@@ -272,7 +273,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
 
 
 def _sync_children(st, overrides: dict) -> None:
-    """The Expenses section's children rows (components/sec_expenses.py): the
+    """The Family section's children rows (components/sec_family.py): the
     count, then each child's inputs, clamped to the widgets' ranges."""
     kids = cfg.children_in(overrides)[:6]
     ss = st.session_state
@@ -393,14 +394,14 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age")
 #   ea_       sec_early_access (Rule of 55 / 72(t) / Roth ladder / Coast FIRE).
 #             Every one of these is pushed to cfg via set_override each rerun,
 #             so a stale toggle re-enables a strategy the loaded plan disabled.
-#   bp_       sec_big_purchases. The home-moves list (bp_ev<i>_*, one set per
+#   bp_       sec_big_purchases and sec_house. The home-moves list (bp_ev<i>_*, one set per
 #             move) and the escrow % are not in DIRECT_MAPPINGS and are written
 #             back into HOME_EVENTS / NEW_HOME_ESCROW_PCT every rerun, so stale
 #             ones would silently rewrite the loaded profile's moves.
 #   wifc_     the what-if levers (plus the cached ``wifc_result`` plot data,
 #             which is stale the moment the inputs change).
 #   le_       life-expectancy card inputs (age / sex / conditions).
-#   se_kid    the Expenses section's children rows (one set per child).
+#   se_kid    the Family section's children rows (one set per child).
 _EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid")
 
 

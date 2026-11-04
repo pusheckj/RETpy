@@ -110,9 +110,9 @@ def test_json_load_also_does_not_refire():
 def test_sidebar_payoff_projection_is_memoised():
     """_payoff_projection_for monkeypatches cfg and recomputes every derived
     constant; the sidebar reruns on every keystroke, so it must be cached."""
-    import components.sec_big_purchases as bp
+    import components.sec_house as house
     import inspect
-    src = inspect.getsource(bp.render_body)
+    src = inspect.getsource(house._extra_principal)
     assert "_bp_payoff_memo" in src, (
         "the sidebar payoff projection is not memoised -- it mutates global "
         "engine state on every keystroke"
