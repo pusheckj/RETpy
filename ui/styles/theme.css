@@ -2876,3 +2876,64 @@ section[data-testid="stMain"] .st-key-mc-topbar [data-baseweb="select"] > div > 
 @media (hover: hover) and (pointer: fine) {
     [class*="st-key-sv_max_"] button, [class*="st-key-gs_max_"] button { min-height: 32px; }
 }
+
+/* ==========================================================================
+   Mode switch in sidebar (app._mode_switch, place="sidebar" and "gutter")
+   The planner draws the Money check-up | Retirement planner switch twice (two
+   radios, same callback): at the top of the side panel, and in the page's top
+   gutter. Exactly one is shown:
+     - side panel open and the screen is wider than a phone: the panel's one;
+     - otherwise (phone, or the panel is closed): the page's one.
+   A hidden one is display:none, so keyboard and screen readers skip it.
+   ========================================================================== */
+
+/* Panel switch: hidden unless the panel is open on a wider-than-phone screen. */
+.stApp:has(section[data-testid="stSidebar"][aria-expanded="false"]) [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-sidebar) {
+    display: none;
+}
+@media (max-width: 640px) {
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-sidebar) { display: none; }
+}
+/* Page switch: hidden while the panel one is shown. */
+@media (min-width: 641px) {
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-gutter) {
+        display: none;
+    }
+}
+
+/* Looks: the same column as the section cards (full width of the panel's
+   content), a pill like the collapsed cards (same height, border and shadow),
+   two equal segments with centred labels. It follows the panel's width.
+   (Selectors start at the panel and repeat [role] so they win over the generic
+   side-panel segmented-radio rules, which the app's JS also applies to it.) */
+.st-key-mc-mode-switch-sidebar { container-type: inline-size; width: 100%; }
+section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [data-testid="stElementContainer"],
+section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [data-testid="stRadio"] { width: 100% !important; }
+section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"][role="radiogroup"] {
+    display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
+    width: 100% !important; max-width: none !important; box-sizing: border-box; height: 49px;
+    gap: 0; padding: 4px !important;
+    border: 1px solid var(--mc-tile-border);
+    border-radius: 999px;
+    background: var(--mc-tile);
+    box-shadow: 0 2px 14px rgba(120, 96, 52, 0.09);
+}
+section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"][role="radiogroup"] label {
+    flex: 1 1 0 !important; min-width: 0; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 0 6px !important; border-radius: 999px;
+}
+section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"] label > div:last-child { margin: 0 !important; padding-left: 0 !important; }
+section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"][role="radiogroup"] label p {
+    font-size: 13px !important; line-height: 1.15; margin: 0 !important; text-align: center;
+    white-space: normal; text-wrap: balance;
+}
+/* "Retirement planner" is ~121px at 13px: one line from a 280px-wide column
+   (the open panel is 288), two centred lines in the narrower 220px tablet one.
+   A wider panel (the user can drag it) gets 14px. */
+@container (min-width: 280px) {
+    section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"][role="radiogroup"] label p { white-space: nowrap; }
+}
+@container (min-width: 320px) {
+    section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"][role="radiogroup"] label p { font-size: 14px !important; }
+}
