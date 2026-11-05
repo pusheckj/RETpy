@@ -2958,4 +2958,345 @@ section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogrou
    QA round A fixes R3. Only fixer R3 edits this block.
    ========================================================================== */
 
+/* ---------- Design tokens: one value per role (dark values are in theme_toggle.py) ----------
+   Measured before choosing (every screen, light/dark, 1440/390): controls are 44px on phone and
+   on the top card, the pill (999px) is the shape of primary buttons, inputs, selects, the top
+   card controls and the Max out chips, 12px/9px is the group/item radius of most segmented
+   controls, 16px is the nested-card radius (charts, expanders, hero card), 20px the tile radius,
+   labels are 15px/600 in the planner side panel (140 of 200). */
+:root {
+    /* inputs, selects, buttons */
+    --mc-ctl-h: 44px;
+    --mc-ctl-r: 999px;
+    --mc-ctl-fill: #ffffff;       /* the typing area; the +/- steppers and $ chips stay cream */
+    --mc-ctl-border: var(--mc-tile-border);
+    --mc-btn-fill: var(--mc-tile);
+    --mc-btn-fill-hover: #faf6ec;
+    --mc-btn-border: var(--mc-tile-border);
+    --mc-btn-border-hover: #cbb48c;
+    --mc-btn-ink: var(--mc-ink);
+    --mc-btn-fs: 16px;
+    --mc-btn-fw: 500;
+    --mc-btn-primary-fw: 600;
+    --mc-pill-h: 32px;            /* small "Max out" chip, mouse only; touch keeps 44px */
+    --mc-pill-fs: 13px;
+    /* segmented controls (radio switches, tabs, st.segmented_control) */
+    --mc-seg-r: 12px;
+    --mc-seg-item-r: 9px;
+    --mc-seg-pad: 4px;
+    --mc-seg-item-h: 34px;        /* group = 34 + 2 x 4 + 2 x 1 = 44 */
+    --mc-seg-fs: 13px;
+    --mc-seg-fw: 600;
+    --mc-seg-bg: var(--mc-tile);
+    --mc-seg-border: var(--mc-tile-border);
+    --mc-seg-shadow: 0 2px 8px rgba(120, 96, 52, 0.08);
+    --mc-seg-off-ink: var(--mc-muted);
+    --mc-seg-on-bg: rgba(13, 148, 136, 0.14);
+    --mc-seg-on-ink: #0f766e;
+    /* nested cards (tiles keep --mc-radius-tile) */
+    --mc-card-r: var(--mc-radius-card);
+    --mc-card-pad: 16px;
+    --mc-card-border: var(--mc-tile-border);
+    /* type */
+    --mc-label-fs: 15px;
+    --mc-label-fw: 600;
+    --mc-cap-fs: 14px;
+    --mc-cap-fw: 400;
+    --mc-eyebrow-fs: 13px;
+    --mc-eyebrow-fw: 400;
+    --mc-eyebrow-ls: 0.05em;
+    --mc-eyebrow-ink: var(--mc-muted);
+    --mc-sub-fs: 16px;
+    --mc-sub-fw: 600;
+}
+@media (hover: none) and (pointer: coarse) {
+    :root { --mc-seg-item-h: 44px; }
+}
+/* The phone copy of the mode switch lives in the 48px page gutter and cannot take a 44px item. */
+.st-key-mc-mode-switch-gutter { --mc-seg-item-h: 34px; }
+
+/* ---------- Buttons: secondary, tertiary, popover trigger ---------- */
+html:root :is(button[data-testid="stBaseButton-secondary"], button[data-testid="stBaseButton-tertiary"],
+              button[data-testid="stBaseButton-primary"], button[data-testid$="FormSubmit"],
+              [data-testid="stPopoverButton"]):not(.st-key-gs_skip *) {
+    min-height: var(--mc-ctl-h) !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    border-radius: var(--mc-ctl-r) !important;
+    box-sizing: border-box;
+    font-size: var(--mc-btn-fs);
+    font-weight: var(--mc-btn-fw);
+}
+html:root :is(button[data-testid="stBaseButton-secondary"], button[data-testid="stBaseButton-tertiary"],
+              button[data-testid="stBaseButton-primary"], button[data-testid$="FormSubmit"],
+              [data-testid="stPopoverButton"]):not(.st-key-gs_skip *) p {
+    font-size: var(--mc-btn-fs) !important;
+    font-weight: var(--mc-btn-fw) !important;
+}
+html:root :is(button[data-testid="stBaseButton-primary"], button[data-testid$="primaryFormSubmit"]):not(.st-key-gs_skip *),
+html:root :is(button[data-testid="stBaseButton-primary"], button[data-testid$="primaryFormSubmit"]):not(.st-key-gs_skip *) p {
+    font-weight: var(--mc-btn-primary-fw) !important;
+}
+html:root :is(button[data-testid="stBaseButton-secondary"], button[data-testid="stBaseButton-secondaryFormSubmit"],
+              [data-testid="stPopoverButton"]):not(.st-key-gs_skip *) {
+    background: var(--mc-btn-fill) !important;
+    border: 1px solid var(--mc-btn-border) !important;
+    color: var(--mc-btn-ink) !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+html:root button[data-testid="stBaseButton-tertiary"]:not(.st-key-gs_skip *) {
+    background: transparent !important;
+    border: 1px solid var(--mc-btn-border) !important;
+    color: var(--mc-btn-ink) !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+html:root :is(button[data-testid="stBaseButton-secondary"], button[data-testid="stBaseButton-secondaryFormSubmit"],
+              button[data-testid="stBaseButton-tertiary"], [data-testid="stPopoverButton"]):not(.st-key-gs_skip *) :is(p, span) {
+    color: var(--mc-btn-ink) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+    html:root :is(button[data-testid="stBaseButton-secondary"], button[data-testid="stBaseButton-secondaryFormSubmit"],
+                  button[data-testid="stBaseButton-tertiary"], [data-testid="stPopoverButton"]):not(.st-key-gs_skip *):not(:disabled):hover {
+        background: var(--mc-btn-fill-hover) !important;
+        border-color: var(--mc-btn-border-hover) !important;
+    }
+}
+/* Small "Max out" chip: the secondary button, scaled down. */
+html:root :is([class*="st-key-simple_max_"], [class*="st-key-sv_max_"], [class*="st-key-gs_max_"]) button[data-testid^="stBaseButton"] {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
+html:root :is([class*="st-key-simple_max_"], [class*="st-key-sv_max_"], [class*="st-key-gs_max_"]) button[data-testid^="stBaseButton"] p {
+    font-size: var(--mc-pill-fs) !important;
+    white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+    html:root :is([class*="st-key-simple_max_"], [class*="st-key-sv_max_"], [class*="st-key-gs_max_"]) button[data-testid^="stBaseButton"] {
+        min-height: var(--mc-pill-h) !important;
+    }
+}
+
+/* ---------- Inputs and selects: one fill, border, height and radius ---------- */
+html:root :is(.stNumberInput [data-testid="stNumberInputContainer"], [data-testid="stTextInputRootElement"]) {
+    height: var(--mc-ctl-h) !important;
+    min-height: var(--mc-ctl-h) !important;
+    box-sizing: border-box !important;
+    border-radius: var(--mc-ctl-r) !important;
+    background-color: var(--mc-ctl-fill) !important;
+    border: 1px solid var(--mc-ctl-border) !important;
+    overflow: hidden;
+}
+html:root .stSelectbox [data-baseweb="select"] > div,
+html:root .stMultiSelect [data-baseweb="select"] > div {
+    min-height: var(--mc-ctl-h) !important;
+    box-sizing: border-box !important;
+    background-color: var(--mc-ctl-fill) !important;
+    border: 1px solid var(--mc-ctl-border) !important;
+}
+html:root .stSelectbox [data-baseweb="select"] > div { border-radius: var(--mc-ctl-r) !important; }
+html:root :is(.stNumberInput [data-baseweb="input"], .stNumberInput [data-baseweb="base-input"],
+              [data-testid="stTextInputRootElement"] [data-baseweb="base-input"]) {
+    height: 100% !important;
+    background-color: transparent !important;
+}
+html:root :is(.stNumberInput input, [data-testid="stTextInputRootElement"] input) {
+    height: 100% !important;
+    background: transparent !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box;
+}
+html:root [data-testid="stTextInputRootElement"] input {
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+}
+html:root :is(.stNumberInput [data-testid="stNumberInputContainer"], [data-testid="stTextInputRootElement"],
+              .stSelectbox [data-baseweb="select"] > div):focus-within {
+    border-color: var(--mc-teal) !important;
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12) !important;
+}
+/* The value box of a select is a fixed 18px box with overflow:hidden that clipped descenders (g, p, y)
+   in the side panel and the page; the popover already had this fix. */
+html:root .stSelectbox [data-baseweb="select"] > div > div:first-child,
+html:root .stSelectbox [data-baseweb="select"] > div > div:first-child > div {
+    height: auto !important;
+    min-height: 24px;
+    overflow: visible !important;
+}
+
+/* ---------- Segmented controls: one shape language ---------- */
+html:root :is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"],
+              [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) {
+    border-radius: var(--mc-seg-r) !important;
+    padding: var(--mc-seg-pad) !important;
+    border: 1px solid var(--mc-seg-border);
+    background: var(--mc-seg-bg);
+    box-shadow: var(--mc-seg-shadow);
+}
+html:root :is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"],
+              [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label {
+    border-radius: var(--mc-seg-item-r) !important;
+    min-height: var(--mc-seg-item-h) !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    display: flex;
+    align-items: center !important;
+    box-sizing: border-box;
+}
+html:root :is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"],
+              [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label p {
+    font-size: var(--mc-seg-fs) !important;
+    font-weight: var(--mc-seg-fw) !important;
+    margin: 0;
+}
+html:root :is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"],
+              [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:not(:has(input:checked)) :is(p, div),
+html:root :is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"],
+              [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:not(:has(input:checked)) {
+    color: var(--mc-seg-off-ink) !important;
+}
+html:root :is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"],
+              [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked) {
+    background: var(--mc-seg-on-bg) !important;
+}
+html:root :is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"],
+              [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked) :is(p, div),
+html:root :is([role="radiogroup"].mc-seg, [class*="st-key-mc-mode-switch"] [role="radiogroup"],
+              [class*="st-key-"][class*="_dollars_mode"] [role="radiogroup"]) label:has(input:checked) {
+    color: var(--mc-seg-on-ink) !important;
+}
+/* The side panel's copy of the mode switch drew its own 49px pill; it is the same segmented control now. */
+html:root section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"][role="radiogroup"] {
+    height: auto;
+    border-radius: var(--mc-seg-r) !important;
+    box-shadow: var(--mc-seg-shadow);
+}
+html:root section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"][role="radiogroup"] label {
+    border-radius: var(--mc-seg-item-r) !important;
+    min-height: var(--mc-seg-item-h) !important;
+}
+html:root section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"][role="radiogroup"] label p {
+    font-size: var(--mc-seg-fs) !important;
+}
+@media (max-width: 640px) {
+    html:root section[data-testid="stSidebar"] [role="radiogroup"].mc-seg:has(> label:nth-of-type(2):last-of-type) label p { font-size: var(--mc-seg-fs) !important; }
+}
+/* Side panel: every segmented choice spans the panel (two options were 145px wide and left-aligned, three were full width). */
+@media (min-width: 641px) {
+    html:root section[data-testid="stSidebar"] [role="radiogroup"].mc-seg { display: flex !important; width: 100% !important; max-width: none !important; }
+    html:root section[data-testid="stSidebar"] [role="radiogroup"].mc-seg > label { flex: 1 1 0 !important; min-width: 0; justify-content: center; text-align: center; }
+    html:root section[data-testid="stSidebar"] [role="radiogroup"].mc-seg > label > div:last-child { padding-left: 0 !important; }
+    html:root section[data-testid="stSidebar"] :is([data-testid="stElementContainer"]:has(> [data-testid="stRadio"] .mc-seg), [data-testid="stRadio"]:has(.mc-seg)) { width: 100% !important; }
+}
+/* Tabs */
+html:root .stTabs [data-baseweb="tab-list"] {
+    border-radius: var(--mc-seg-r);
+    padding: var(--mc-seg-pad);
+    border: 1px solid var(--mc-seg-border);
+    background: var(--mc-seg-bg);
+    box-shadow: var(--mc-seg-shadow);
+}
+html:root .stTabs [data-baseweb="tab"] {
+    border-radius: var(--mc-seg-item-r) !important;
+    height: auto !important;
+    min-height: var(--mc-seg-item-h) !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box;
+}
+html:root .stTabs [data-baseweb="tab"] p {
+    font-size: var(--mc-seg-fs) !important;
+    font-weight: var(--mc-seg-fw) !important;
+}
+html:root .stTabs [data-baseweb="tab"]:not([aria-selected="true"]),
+html:root .stTabs [data-baseweb="tab"]:not([aria-selected="true"]) p { color: var(--mc-seg-off-ink) !important; }
+html:root .stTabs [data-baseweb="tab"][aria-selected="true"] { background: var(--mc-seg-on-bg) !important; }
+html:root .stTabs [data-baseweb="tab"][aria-selected="true"],
+html:root .stTabs [data-baseweb="tab"][aria-selected="true"] p { color: var(--mc-seg-on-ink) !important; }
+/* st.segmented_control (top card Retirement plan | Spending, Spending's Period / Moving average / Show) */
+html:root [data-baseweb="button-group"]:has(> button[data-testid^="stBaseButton-segmented"]) {
+    border-radius: var(--mc-seg-r) !important;
+    padding: var(--mc-seg-pad) !important;
+    gap: 2px !important;
+    border: 1px solid var(--mc-seg-border) !important;
+    background: var(--mc-seg-bg) !important;
+    box-shadow: var(--mc-seg-shadow) !important;
+    box-sizing: border-box;
+}
+html:root [data-testid="stButtonGroup"] button[data-testid^="stBaseButton-segmented"] {
+    border: 0 !important;
+    border-radius: var(--mc-seg-item-r) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    min-height: var(--mc-seg-item-h) !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box;
+}
+html:root [data-testid="stButtonGroup"] button[data-testid^="stBaseButton-segmented"] :is(p, div, span) {
+    font-size: var(--mc-seg-fs) !important;
+    font-weight: var(--mc-seg-fw) !important;
+    color: var(--mc-seg-off-ink) !important;
+    white-space: nowrap;
+}
+html:root [data-testid="stButtonGroup"] button[data-testid="stBaseButton-segmented_controlActive"] { background: var(--mc-seg-on-bg) !important; }
+html:root [data-testid="stButtonGroup"] button[data-testid="stBaseButton-segmented_controlActive"] :is(p, div, span) { color: var(--mc-seg-on-ink) !important; }
+
+/* ---------- Cards: tiles 20px (unchanged); nested cards one radius, border and padding ---------- */
+html:root :is(.mc-stat-card, [class*="st-key-simple-debt-"], .simple-step, .simple-plan) {
+    border-radius: var(--mc-card-r) !important;
+    padding: var(--mc-card-pad) !important;
+}
+html:root :is(.mc-stat-card, .mc-card, [class*="st-key-simple-debt-"]) {
+    border: 1px solid var(--mc-card-border) !important;
+}
+/* Choice chips (st.pills): the small pill, same size and type as "Max out" */
+html:root button[data-testid^="stBaseButton-pills"] {
+    border-radius: var(--mc-ctl-r) !important;
+    font-size: var(--mc-pill-fs);
+    font-weight: var(--mc-btn-fw);
+}
+html:root button[data-testid="stBaseButton-pills"] {
+    background: var(--mc-btn-fill) !important;
+    border: 1px solid var(--mc-btn-border) !important;
+}
+html:root button[data-testid^="stBaseButton-pills"] :is(p, span, div) { font-size: var(--mc-pill-fs) !important; font-weight: var(--mc-btn-fw) !important; }
+html:root button[data-testid="stBaseButton-pills"] :is(p, span, div) { color: var(--mc-btn-ink) !important; }
+html:root button[data-testid="stBaseButton-pillsActive"] {
+    background: var(--mc-seg-on-bg) !important;
+    border: 1px solid var(--mc-teal) !important;
+}
+html:root button[data-testid="stBaseButton-pillsActive"] :is(p, span, div) { color: var(--mc-seg-on-ink) !important; }
+html:root :is(.simple-step, .simple-plan):not(.simple-step--current, .simple-plan--best) { border: 1px solid var(--mc-card-border); }
+html:root :is([data-testid="stAlert"], [data-testid="stAlertContainer"]) { border-radius: var(--mc-card-r) !important; }
+
+/* ---------- Type: one scale per role ---------- */
+/* field and toggle labels */
+html:root :is([data-testid="stWidgetLabel"] p, [data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] p) {
+    font-size: var(--mc-label-fs) !important;
+    font-weight: var(--mc-label-fw) !important;
+}
+/* captions */
+html:root [data-testid="stCaptionContainer"] p { font-size: var(--mc-cap-fs); font-weight: var(--mc-cap-fw); }
+/* eyebrows and metric labels (the top card's kickers keep their own teal style) */
+html:root :is([style*="text-transform: uppercase"], .mc-stat-label, .simple-plan-list-title,
+              [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p):not(.mc-topbar *, .mc-welcome-kicker) {
+    font-size: var(--mc-eyebrow-fs) !important;
+    font-weight: var(--mc-eyebrow-fw) !important;
+    letter-spacing: var(--mc-eyebrow-ls) !important;
+    color: var(--mc-eyebrow-ink) !important;
+}
+/* sub-headings inside cards */
+html:root :is(.simple-group, .simple-plan-name, .simple-step-title) {
+    font-size: var(--mc-sub-fs) !important;
+    font-weight: var(--mc-sub-fw) !important;
+}
+
 /* -- end QA round A R3 -- */
