@@ -532,6 +532,20 @@ def style_fig(fig, st, compact: bool = False):
     return fig
 
 
+def add_target_line(fig, target: float, st=None) -> None:
+    """The success-target reference line, drawn the same way in every chart that
+    has one: dashed slate, labelled "80% target" at the top left, on an opaque
+    chip so the label stays legible where it crosses bars or a curve.
+    ``target`` is a fraction (0.80)."""
+    pct = target * 100
+    fig.add_hline(
+        y=pct, line_dash="dash", line_color="#94a3b8",
+        annotation_text=f"{pct:.0f}% target", annotation_position="top left",
+        annotation_font=dict(size=11, color="#64748b"),
+        annotation_bgcolor=("rgba(15,23,42,0.9)" if (st is not None and is_dark(st))
+                            else "rgba(255,255,255,0.9)"))
+
+
 def show_chart(st, fig, key: str, config: dict | None = None) -> None:
     """Draw a chart twice - regular and phone-compact - and let theme.css show
     the one that fits (the server can't know a visitor's width; see

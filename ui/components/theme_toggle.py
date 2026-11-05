@@ -543,7 +543,7 @@ label[data-baseweb="radio"]:has(input:checked) > div:first-child > div { backgro
 [data-testid="stSliderTickBar"], [data-testid="stSliderTickBar"] * { color: var(--mc-muted) !important; }
 .stMarkdownColoredText[style*="49, 51, 63"] { color: var(--mc-muted) !important; }
 /* Text links were the light theme's dark blue (1.8:1). */
-[data-testid="stMarkdownContainer"] a:not([data-mc-jump]) { color: #5eead4 !important; }
+[data-testid="stMarkdownContainer"] :is(p, li) a { color: #5eead4 !important; }
 /* Multiselect placeholder ("Choose options"). */
 .stMultiSelect [data-baseweb="select"] div:not(:has(*)):not([data-baseweb="tag"]) { color: var(--mc-muted) !important; }
 /* Dataframe toolbar (eye, download, search, expand): the tile surface, not cream. */
