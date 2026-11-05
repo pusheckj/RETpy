@@ -378,7 +378,7 @@ def retirement_caption(results: dict | None) -> str:
         return "Run the simulation to see where retirement withdrawals come from."
     basis = (results.get("primary_result", {}) or {}).get("withdrawals_basis") or {}
     n = safe_int(basis.get("n_runs"), 0)
-    runs = f"{n:,} simulated runs" if n else "simulated runs"
+    runs = f"{n:,} detailed runs" if n else "detailed runs"
     who = (f"the {runs} that last the whole plan" if basis.get("survivors_only", True)
            else f"all {runs} (none last the whole plan)")
     return (f"Retirement years show the median year across {who}, split by source "

@@ -70,6 +70,13 @@ def _init_state() -> None:
         "pinned_scenarios": {},
         "n_simulations": SIM_COUNT_DEFAULT,
     }
+    # A run ends in st.rerun() before the top bar draws the simulation-count select, and
+    # Streamlit then forgets what the select was set to: the count fell back to its first
+    # option, the results looked out of date, and "Run simulation" never went away. The
+    # select keeps the choice in a plain key (see _topbar_sims), put back here.
+    saved_sims = st.session_state.get("_n_simulations_saved")
+    if saved_sims in SIM_COUNT_OPTIONS:
+        st.session_state["n_simulations"] = saved_sims
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -530,6 +537,10 @@ def _topbar_run(_st, progress_container=None) -> None:
         _run_simulation(progress_container)
 
 
+def _remember_sims() -> None:
+    st.session_state["_n_simulations_saved"] = st.session_state.get("n_simulations")
+
+
 def _topbar_sims(_st) -> None:
     """Simulation-count selector — lives in the top bar's Sims column."""
     _st.selectbox(
@@ -539,7 +550,10 @@ def _topbar_sims(_st) -> None:
         key="n_simulations",
         label_visibility="collapsed",
         help="How many simulations to run. More gives smoother, more precise results but takes longer.",
+        on_change=_remember_sims,
     )
+    if "_n_simulations_saved" not in st.session_state:
+        st.session_state["_n_simulations_saved"] = st.session_state.get("n_simulations")
 
 
 def _topbar_head(_st):

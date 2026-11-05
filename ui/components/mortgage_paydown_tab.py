@@ -87,7 +87,9 @@ def render(st, results: dict = None, chart_key: str = "mortgage_paydown") -> Non
     fig.add_hrect(y0=b - noise, y1=b + noise,
                   fillcolor="rgba(148,163,184,0.18)", line_width=0,
                   annotation_text="same as baseline (within noise)",
-                  annotation_position="top left",
+                  # On the right, on the side away from the line, so it doesn't sit on the data
+                  # (the line starts on the baseline at the left).
+                  annotation_position="bottom right" if ys[-1] >= b else "top right",
                   annotation_font=dict(size=10, color="#64748b"))
     fig.add_hline(y=b, line_dash="dash", line_color="#94a3b8")
     fig.add_trace(go.Scatter(

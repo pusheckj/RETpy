@@ -287,7 +287,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         category_colors = [concept_color(name, st) for name in category_labels]
         fig1 = go.Figure(data=[go.Pie(
             labels=category_labels, values=category_values,
-            hole=0.5, marker=dict(colors=category_colors, line=dict(color="#ffffff", width=2)),
+            hole=0.5, marker=dict(colors=category_colors, line=dict(color=("#37343f" if is_dark(st) else "#ffffff"), width=2)),
             textinfo="none", hovertemplate="<b>%{label}</b><br>%{value:$,.0f}<br>%{percent}<extra></extra>",
             # Full-width donut; legend BELOW so long names never clip on a phone.
             domain=dict(x=[0.0, 1.0], y=[0.26, 1.0]),
