@@ -553,6 +553,26 @@ label[data-baseweb="radio"]:has(input:checked) > div:first-child > div { backgro
     --mc-seg-on-ink: #2dd4bf;
 }
 /* -- end QA round A R3 -- */
+
+/* ---- QA round A R2 (dark) ---- */
+/* Slider end labels and gray caption text kept the light theme's dark-grey (1.1-1.2:1). */
+[data-testid="stSliderTickBar"], [data-testid="stSliderTickBar"] * { color: var(--mc-muted) !important; }
+.stMarkdownColoredText[style*="49, 51, 63"] { color: var(--mc-muted) !important; }
+/* Text links were the light theme's dark blue (1.8:1). */
+[data-testid="stMarkdownContainer"] :is(p, li) a { color: #5eead4 !important; }
+/* Multiselect placeholder ("Choose options"). */
+.stMultiSelect [data-baseweb="select"] div:not(:has(*)):not([data-baseweb="tag"]) { color: var(--mc-muted) !important; }
+/* Dataframe toolbar (eye, download, search, expand): the tile surface, not cream. */
+[data-testid="stElementToolbarButtonContainer"] {
+    background-color: var(--mc-tile) !important;
+    border: 1px solid var(--mc-tile-border) !important;
+}
+[data-testid="stElementToolbar"] button, [data-testid="stElementToolbar"] button * { color: var(--mc-ink) !important; }
+/* Dataframe canvas: a tilt toward the app's purple-grey surfaces instead of olive. */
+[data-testid="stDataFrame"] [data-testid="stDataFrameResizable"],
+[data-testid="stDataEditor"] [data-testid="stDataFrameResizable"] {
+    filter: invert(0.9) hue-rotate(20deg) saturate(0.6) brightness(1.3);
+}
 </style>
 """
 
@@ -590,6 +610,11 @@ def inject_theme_css(st) -> None:
     persist_appearance(st)
     if "Dark" in str(st.session_state.get("theme_mode", "")):
         st.markdown(_DARK_CSS, unsafe_allow_html=True)
+    else:
+        # Same slot in Light: when the page gains or loses this element, every element
+        # after it changes position and Streamlit rebuilds the open Settings popover,
+        # which closed it the moment you picked Light or Dark.
+        st.markdown('<style id="mc-light-theme"></style>', unsafe_allow_html=True)
 
 
 def render(st) -> None:

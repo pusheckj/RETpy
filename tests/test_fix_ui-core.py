@@ -388,3 +388,25 @@ def test_stale_check_needs_two_computable_fingerprints():
     body = src[start:src.index("\ndef ", start + 1)]
     assert "last != cur" in body
     assert "last is not None and cur is not None" in body
+
+
+def test_simulation_count_survives_the_run_that_ends_in_rerun():
+    """After "Run simulation" the button never went to "Up to date". The run ends in
+    st.rerun() before the top bar draws the sim-count select, Streamlit then forgot the
+    select's value (it fell back to its first option), so the finished run no longer
+    matched the inputs. The select now mirrors its value into a plain key (via
+    on_change, so a change made in this run wins) and _init_state puts it back."""
+    src = _app_source()
+    assert "on_change=_remember_sims" in src
+    start = src.index("def _init_state()")
+    body = src[start:src.index("\ndef ", start + 1)]
+    assert '_n_simulations_saved' in body and 'st.session_state["n_simulations"] = saved_sims' in body
+    # The mirror survives a profile switch.
+    picker = open(os.path.join(_UI, "components", "profile_picker.py"), encoding="utf-8").read()
+    assert '"_n_simulations_saved"' in picker
+
+    # Behaviour of the callback with a stand-in session state.
+    ns = {"st": type("S", (), {"session_state": {"n_simulations": 5000}})}
+    exec(src[src.index("def _remember_sims()"):src.index("def _topbar_sims")], ns)
+    ns["_remember_sims"]()
+    assert ns["st"].session_state["_n_simulations_saved"] == 5000

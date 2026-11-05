@@ -13,11 +13,11 @@ import plotly.graph_objects as go
 try:
     from utils.formatting import money
     from utils.sim_runner import run_swr_analysis, _hashable
-    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, add_target_line
 except ImportError:  # pragma: no cover
     from ui.utils.formatting import money  # type: ignore
     from ui.utils.sim_runner import run_swr_analysis, _hashable  # type: ignore
-    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
+    from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, add_target_line  # type: ignore
 
 
 def _inputs_hash(overrides: dict, n_sims):
@@ -143,7 +143,6 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
     ys = [c["success"] * 100 for c in curve]
     dark = is_dark(st)
     line = "#14b8a6" if dark else "#0d9488"
-    ref = "#e2e8f0" if dark else "#0f172a"
     you = "#fbbf24" if dark else "#d97706"
 
     fig = go.Figure()
@@ -152,9 +151,7 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
         marker=dict(size=6, color=line), name="success",
         hovertemplate="Withdrawal %{x:.1f}%<br>success %{y:.0f}%<extra></extra>",
     ))
-    fig.add_hline(y=target * 100, line_dash="dash", line_color=ref,
-                  annotation_text=f"target {target:.0%}", annotation_position="bottom right",
-                  annotation_font=dict(size=11, color=ref))
+    add_target_line(fig, target, st)
     if swr_rate:
         fig.add_vline(x=swr_rate * 100, line_dash="dot", line_color=line,
                       annotation_text=f"safe ≈ {swr_rate:.1%}", annotation_position="top left",

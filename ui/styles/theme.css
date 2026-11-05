@@ -3004,6 +3004,76 @@ section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
    QA round A fixes R2. Only fixer R2 edits this block.
    ========================================================================== */
 
+/* Top card toolbar, one line from 1241px up. The switch column used to keep a
+   50% basis, so the wider "Run simulation" label pushed Settings onto a second
+   row (card 193 -> 256px). The switch now takes whatever is left and the three
+   controls keep their own width, so the row never wraps or changes height.
+   Below 1241px the existing two-line layout stays. */
+@media (min-width: 1241px) {
+    .st-key-mc-topbar [data-testid="stHorizontalBlock"] { flex-wrap: nowrap; }
+    .st-key-mc-topbar [data-testid="stColumn"]:first-child { flex: 1 1 auto !important; width: auto !important; }
+    .st-key-mc-topbar [data-testid="stColumn"]:not(:first-child) { flex: 0 0 auto !important; width: auto !important; }
+    .st-key-mc-topbar [data-testid="stColumn"]:nth-child(2) { min-width: 200px; }
+    .st-key-mc-topbar [data-testid="stColumn"]:nth-child(3) { min-width: 120px; }
+}
+/* Same height with and without the primary look (47px vs 44px before). */
+.st-key-topbar_run_button button { height: 44px; padding-top: 0; padding-bottom: 0; }
+
+/* Tablet with the side panel docked: the main pane is only 520-700px wide, but the
+   regular chart is built for ~700px of plot, so titles, subtitles and legends ran
+   past the card. Use the compact chart there (as on a phone) up to the width where
+   the regular one fits. */
+@media (min-width: 641px) and (max-width: 1130px) {
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-wide-"]) { display: none; }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) [data-testid="stLayoutWrapper"]:has(> [class*="st-key-mc-narrow-"]) { display: block; }
+    .stApp:has(section[data-testid="stSidebar"][aria-expanded="true"]) .js-plotly-plot .modebar-container { display: none !important; }
+}
+
+/* Docked side panel on a tablet (641-900px): 260px cut number-input values, select
+   values and the Savings figures. A little wider and with slimmer padding, so the
+   same fields show their values. */
+@media (min-width: 641px) and (max-width: 900px) {
+    section[data-testid="stSidebar"]:not([aria-expanded="false"]) { min-width: 280px; width: 280px; }
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] { padding-left: 10px; padding-right: 10px; }
+    section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] { padding-left: 12px; padding-right: 12px; }
+    section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpanderDetails"] { padding-left: 10px; padding-right: 10px; }
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] { gap: 10px; }
+    section[data-testid="stSidebar"] [data-testid="stNumberInputField"] { padding-left: 8px; padding-right: 4px; }
+    section[data-testid="stSidebar"] [data-baseweb="select"] > div > div:first-child { padding-left: 12px !important; padding-right: 2px !important; font-size: 15px; }
+}
+
+/* Mode switch in a docked 260-280px panel: one line per label (it wrapped to two). */
+@container (max-width: 279px) {
+    section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogroup"][role="radiogroup"] label p { white-space: nowrap; font-size: 12px !important; }
+}
+
+/* Spending view on a phone: the "Show" and "Period" pills were squeezed into one row and
+   cut ("Transfers ...", "Last 12 mon..."). Let them take the width their label needs and
+   wrap onto a second row when the line is full. */
+@media (max-width: 640px) {
+    .st-key-sp_view [data-testid="stButtonGroup"] > div:not([data-testid]),
+    .st-key-sp_period [data-testid="stButtonGroup"] > div:not([data-testid]) { flex-wrap: wrap !important; height: auto; }
+    .st-key-sp_view [data-testid="stButtonGroup"] button,
+    .st-key-sp_period [data-testid="stButtonGroup"] button { flex: 1 1 auto !important; }
+}
+
+/* Settings popover: the dividers carried 24px of margin each side on top of the 16px
+   gaps (80px between sections, 24px elsewhere). */
+[data-testid="stPopoverBody"] hr { margin: 4px 0 !important; }
+
+/* Phone: the Settings panel covers the gear that opened it, so it gets its own Done
+   row, pinned to the bottom of the panel (app.py::_topbar_settings, animations.py). */
+[data-testid="stPopoverBody"] .stElementContainer:has(.mc-popover-done) { display: none; }
+@media (max-width: 640px) {
+    [data-testid="stPopoverBody"] .stElementContainer:has(.mc-popover-done) { display: block; position: sticky; bottom: 0; z-index: 5; }
+    .mc-popover-done { display: block; padding: 12px 0 0; background: linear-gradient(to bottom, transparent, var(--mc-tile) 30%); }
+    .mc-popover-done a {
+        display: flex; align-items: center; justify-content: center; min-height: 44px;
+        border-radius: 999px; background: var(--mc-teal); color: #fff !important;
+        font-weight: 700; font-size: 16px; text-decoration: none !important; cursor: pointer;
+    }
+}
+
 /* -- end QA round A R2 -- */
 
 

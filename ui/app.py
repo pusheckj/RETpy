@@ -70,6 +70,13 @@ def _init_state() -> None:
         "pinned_scenarios": {},
         "n_simulations": SIM_COUNT_DEFAULT,
     }
+    # A run ends in st.rerun() before the top bar draws the simulation-count select, and
+    # Streamlit then forgets what the select was set to: the count fell back to its first
+    # option, the results looked out of date, and "Run simulation" never went away. The
+    # select keeps the choice in a plain key (see _topbar_sims), put back here.
+    saved_sims = st.session_state.get("_n_simulations_saved")
+    if saved_sims in SIM_COUNT_OPTIONS:
+        st.session_state["n_simulations"] = saved_sims
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -530,6 +537,10 @@ def _topbar_run(_st, progress_container=None) -> None:
         _run_simulation(progress_container)
 
 
+def _remember_sims() -> None:
+    st.session_state["_n_simulations_saved"] = st.session_state.get("n_simulations")
+
+
 def _topbar_sims(_st) -> None:
     """Simulation-count selector — lives in the top bar's Sims column."""
     _st.selectbox(
@@ -539,7 +550,10 @@ def _topbar_sims(_st) -> None:
         key="n_simulations",
         label_visibility="collapsed",
         help="How many simulations to run. More gives smoother, more precise results but takes longer.",
+        on_change=_remember_sims,
     )
+    if "_n_simulations_saved" not in st.session_state:
+        st.session_state["_n_simulations_saved"] = st.session_state.get("n_simulations")
 
 
 def _topbar_head(_st):
@@ -718,6 +732,9 @@ def _topbar_settings(_st) -> None:
     _safe_render("components.print_summary")
     _safe_render("components.export_page")
     _safe_render("components.cache_panel")
+    # Phone only (theme.css): the panel covers the gear, so give it a way to close.
+    _st.markdown('<div class="mc-popover-done"><a role="button" data-mc-close-popover="1">Done</a></div>',
+                 unsafe_allow_html=True)
 
 
 def _inject_keyboard_nav() -> None:
@@ -1082,7 +1099,7 @@ def main() -> None:
                     _safe_render("components.spending_range_chart", results=results)
                     _safe_render("components.withdrawal_drawdown_chart", results=results)
             else:
-                _lazy_ph("spending", 460)
+                _lazy_ph("spending", 1450)
     _tile_spending()
 
     # ============================ 3. SAVINGS ============================
@@ -1099,7 +1116,7 @@ def main() -> None:
                 else:
                     _run_hint("your savings by account and savings rate over time")
             else:
-                _lazy_ph("savings", 440)
+                _lazy_ph("savings", 1170)
     _tile_savings()
 
     # ============================ 4. INCOME ============================
@@ -1110,7 +1127,7 @@ def main() -> None:
             if st.session_state.get("_lz_income"):
                 _safe_render("components.income_over_time", results=results)
             else:
-                _lazy_ph("income", 440)
+                _lazy_ph("income", 590)
     _tile_income()
 
     # ============================ 5. TAX ============================
@@ -1124,7 +1141,7 @@ def main() -> None:
                 else:
                     _run_hint("your projected taxes by year")
             else:
-                _lazy_ph("tax", 440)
+                _lazy_ph("tax", 690)
     _tile_tax()
 
     # ======================= LIFE EXPECTANCY =======================
@@ -1136,7 +1153,7 @@ def main() -> None:
             if st.session_state.get("_lz_lifespan"):
                 _safe_render("components.life_expectancy_section")
             else:
-                _lazy_ph("lifespan", 440)
+                _lazy_ph("lifespan", 1030)
     _tile_lifespan()
 
     # ============================ 6. WHAT IF ============================

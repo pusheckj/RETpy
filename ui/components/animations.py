@@ -427,6 +427,11 @@ _ANIM_JS = """
         var t0 = ev.target.closest ? ev.target : null;
         var jump = t0 && t0.closest('[data-mc-jump]');
         if(jump){ ev.preventDefault(); mcJump(jump.getAttribute('data-mc-jump')); return; }
+        var done = t0 && t0.closest('[data-mc-close-popover]');
+        if(done){ ev.preventDefault();
+          // The Done row lives in the top card's Settings panel: its button toggles it shut.
+          var trig = D.querySelector('.st-key-mc-topbar [data-testid="stPopoverButton"]');
+          if(trig) trig.click(); return; }
         var show = t0 && t0.closest('[data-mc-show-results]');
         if(show){ ev.preventDefault(); mcShowResults(); return; }
         var fold = t0 && t0.closest('[data-mc-clamp]');
@@ -619,6 +624,11 @@ _ANIM_JS = """
     var main = mainEl(); if(!main) return;
     var tries = 0, calm = 0, stopped = false;
     var stop = function(){ stopped = true; };
+    // The tapped chip stays lit until the reader scrolls on their own.
+    P.__mcPinned = name;
+    var unpin = function(){ P.__mcPinned = null; markActive(); };
+    main.addEventListener('touchstart', unpin, {once: true, passive: true});
+    main.addEventListener('wheel', unpin, {once: true, passive: true});
     main.addEventListener('touchstart', stop, {once: true, passive: true});
     main.addEventListener('wheel', stop, {once: true, passive: true});
     var step = function(){
@@ -670,8 +680,8 @@ _ANIM_JS = """
       var fade = function(){ nav.toggleAttribute('data-mc-scrolled', nav.scrollLeft > 2); };
       nav.addEventListener('scroll', fade, {passive: true}); fade();
     }
-    // Highlight the section under a fixed line 40% down the screen (checked on
-    // scroll, once per frame) and keep its chip in view in the chip row.
+    // Highlight the section whose top has passed a line just under the bar (its
+    // chip is kept in view in the chip row). Checked on scroll, once per frame.
     markActive();
     if(P.__mcBarMain !== main){
       P.__mcBarMain = main;
@@ -684,11 +694,15 @@ _ANIM_JS = """
   }
   function markActive(){
     var b = D.querySelector('.mc-phonebar'); if(!b || !isPhone()) return;
-    var y = P.innerHeight * 0.4, cur = null;
+    // The last section whose top is above a line just under the bar. (A fixed
+    // line 40% down the screen skipped tiles shorter than that distance: the
+    // chip you tapped went dark and the one below lit up.) A tapped chip stays lit
+    // until the reader scrolls on their own (mcJump sets P.__mcPinned).
+    var y = Math.min(P.innerHeight * 0.4, b.getBoundingClientRect().bottom + 24), cur = null;
     D.querySelectorAll('[class*="st-key-mc-tile-"]').forEach(function(t){
-      var r = t.getBoundingClientRect();
-      if(r.top <= y && r.bottom > y){ var m = /st-key-mc-tile-([a-z]+)/.exec(t.className || ''); if(m) cur = m[1]; }
+      if(t.getBoundingClientRect().top <= y){ var m = /st-key-mc-tile-([a-z]+)/.exec(t.className || ''); if(m) cur = m[1]; }
     });
+    if(P.__mcPinned && D.querySelector('.st-key-mc-tile-' + P.__mcPinned)) cur = P.__mcPinned;
     b.querySelectorAll('[data-mc-jump]').forEach(function(a){
       var on = a.getAttribute('data-mc-jump') === cur;
       if(on && a.getAttribute('aria-current') !== 'true'){

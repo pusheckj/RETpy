@@ -894,7 +894,7 @@ def render(st, **_kwargs) -> None:
     folder_ok = bool(data_dir) and os.path.isdir(data_dir)
     store = _upload_store(st)
     title, gear = st.columns([6, 1], vertical_alignment="bottom")
-    title.markdown('<div class="mc-section mc-section-spending">Spending</div>', unsafe_allow_html=True)
+    title.markdown('<div class="mc-section mc-section-spending">Where your money goes</div>', unsafe_allow_html=True)
     if folder_ok:                                    # local folder: as before
         with gear.popover("Statements", width="stretch"):
             _settings_form(st, data_dir, True)
@@ -1058,7 +1058,8 @@ def render(st, **_kwargs) -> None:
                                                          dark, window, compact),
                "sp_cat_trend", PLOTLY_CONFIG)
         raw_merchants = _merchants_per_year(view, start, end, complete, pick, 10)
-        merchants = raw_merchants.assign(**{"Per year": lambda d: d["Per year"].map(money)})
+        # Numbers stay numeric so Per year and Visits both right-align.
+        merchants = raw_merchants.assign(**{"Per year": lambda d: d["Per year"].round().astype(int)})
         summary = category_summary(view, start, end, complete)
         det = summary.reset_index().rename(columns={"category": "Category"})
         det = det[det["Expense category"] == pick][["Category", "Per month", "Per year"]]
@@ -1076,14 +1077,15 @@ def render(st, **_kwargs) -> None:
                       narrow_md=_merchant_list(raw_merchants),
                       column_config={"Merchant": st.column_config.Column(width=130),
                                      "Category": st.column_config.Column(width=90),
-                                     "Per year": st.column_config.Column(width=66),
-                                     "Visits": st.column_config.Column(width=56)})
+                                     "Per year": st.column_config.NumberColumn(format="dollar", width=66),
+                                     "Visits": st.column_config.NumberColumn(width=56)})
         if b is not None:
             with b:
                 st.markdown("**Inside this expense category**")
-                st.dataframe(det.assign(**{"Per month": lambda d: d["Per month"].map(money),
-                                           "Per year": lambda d: d["Per year"].map(money)}),
-                             hide_index=True, width="stretch")
+                st.dataframe(det.assign(**{c: det[c].round().astype(int) for c in ("Per month", "Per year")}),
+                             hide_index=True, width="stretch",
+                             column_config={c: st.column_config.NumberColumn(format="dollar")
+                                            for c in ("Per month", "Per year")})
         st.caption("Per year over complete months. Merchant totals are before paybacks; categories are after.")
 
     with t_tx:
@@ -1100,7 +1102,7 @@ def render(st, **_kwargs) -> None:
                    "Transactions": st.column_config.NumberColumn("Count", width=52),
                    "Total": st.column_config.NumberColumn(format="dollar", width=72),
                    "Average": st.column_config.NumberColumn(format="dollar", width=72)},
-                  height=36 * (len(cats) + 1) + 2,
+                  height=35 * (len(cats) + 1) + 3,   # Streamlit's own row height: no blank row under the last one
                   column_config={c: st.column_config.NumberColumn(format="dollar")
                                  for c in ("Total", "Average", "Largest")})
         if not cats.empty:

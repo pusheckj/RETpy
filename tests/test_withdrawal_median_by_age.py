@@ -165,10 +165,10 @@ def test_income_chart_labels_and_caption():
     assert "Partner base" not in iot._WORKING_LABELS
     cap = iot.retirement_caption(
         {"primary_result": {"withdrawals_basis": {"n_runs": 250, "survivors_only": True}}})
-    assert "median year across the 250 simulated runs that last the whole plan" in cap
+    assert "median year across the 250 detailed runs that last the whole plan" in cap
     cap = iot.retirement_caption(
         {"primary_result": {"withdrawals_basis": {"n_runs": 40, "survivors_only": False}}})
-    assert "all 40 simulated runs" in cap
+    assert "all 40 detailed runs" in cap
     assert "Run the simulation" in iot.retirement_caption(None)
 
 

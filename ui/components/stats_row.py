@@ -19,7 +19,7 @@ def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a
         <div class="{cls}" style="font-size: 28px; font-weight: 600; color: {color}; line-height: 1.2;">
             {value}
         </div>
-        <div style="font-size: 12px; color: #94a3b8; margin-top: 6px;">
+        <div style="font-size: 12px; color: var(--mc-muted); margin-top: 6px;">
             {sublabel}
         </div>
     </div>

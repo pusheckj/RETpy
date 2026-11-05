@@ -104,8 +104,7 @@ def test_computed_style_inlining_survives_cssom_only_rules_and_stays_aligned():
         return  # jsdom not installed in this environment; skip rather than install it
 
     html = _render_and_capture()
-    style_text_fn = re.search(r"function styleText\(computed\)\{(.*?)\n          \}", html, re.DOTALL).group(1)
-    inline_fn = re.search(r"function inlineComputedStyles\(liveRoot, cloneRoot\)\{(.*?)\n          \}", html, re.DOTALL).group(1)
+    inliner = re.search(r"// ---- style-inliner.*?\n(.*?)// ---- end style-inliner ----", html, re.DOTALL).group(1)
 
     script = f"""
     const {{ JSDOM }} = require('jsdom');
@@ -128,8 +127,8 @@ def test_computed_style_inlining_survives_cssom_only_rules_and_stays_aligned():
     sheet.insertRule('[data-n="3"] {{ background-color: rgb(4, 4, 4); }}', 3);
 
     const P = dom.window;
-    function styleText(computed){{{style_text_fn}}}
-    function inlineComputedStyles(liveRoot, cloneRoot){{{inline_fn}}}
+    const doc = P.document;
+    {inliner}
 
     const liveRoot = doc.documentElement;
     const clone = liveRoot.cloneNode(true);
@@ -193,3 +192,24 @@ def test_embedded_js_is_syntactically_valid():
         assert result.returncode == 0, result.stderr
     finally:
         os.unlink(path)
+
+
+def test_style_inlining_is_pruned_so_the_file_stays_small():
+    """The first version baked ALL ~350 computed properties onto every element
+    (a 67-81 MB file for one page). It now writes only what differs from the
+    parent / the browser default, paints chart SVG with a short property list,
+    and leaves out hidden nodes and the chart toolbar."""
+    html = _render_and_capture()
+    assert "INHERITED" in html and "baselineFor" in html
+    assert "SVG_PAINT" in html
+    assert "modebar-container" in html
+    assert "cs.display === 'none'" in html
+
+
+def test_sheets_and_input_state_survive_the_pruning():
+    """<style>/<link> are display:none but hold the page CSS (and @font-face),
+    so they are never dropped; checked/typed state is copied to attributes so
+    the saved page's own :checked rules match."""
+    html = _render_and_capture()
+    assert "el.localName === 'style'" in html
+    assert "setAttribute('checked'" in html

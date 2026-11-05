@@ -67,3 +67,22 @@ def test_compact_title_drops_subtitle_and_wraps_to_phone_width():
     lines = fig.layout.title.text.split("<br>")
     assert len(lines) >= 2 and "sub" not in fig.layout.title.text
     assert all(len(re.sub(r"<[^>]+>", "", l)) <= pt._TITLE_CHARS[True] for l in lines)
+
+
+def test_target_line_is_drawn_one_way_in_every_chart():
+    """The success target line was styled three different ways in three charts
+    ("80% target" slate top-left, and black "target 80%" bottom-right twice)."""
+    for dark in (False, True):
+        st = _St()
+        st.session_state = {"theme_mode": "Dark" if dark else "Light"}
+        fig = go.Figure()
+        pt.add_target_line(fig, 0.8, st)
+        line = fig.layout.shapes[0]
+        ann = fig.layout.annotations[0]
+        assert line.y0 == 80 and line.line.dash == "dash" and line.line.color == "#94a3b8"
+        assert ann.text == "80% target" and ann.yanchor == "bottom" and ann.xanchor == "left"
+    # and the three charts use it rather than their own add_hline
+    ui = os.path.join(_ROOT, "ui", "components")
+    for name in ("success_by_age", "fi_number_section", "swr_curve_section"):
+        src = open(os.path.join(ui, name + ".py"), encoding="utf-8").read()
+        assert "add_target_line(fig" in src and "target {" not in src
