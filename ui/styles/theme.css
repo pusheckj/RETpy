@@ -2951,6 +2951,21 @@ section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogrou
    QA round A fixes R2. Only fixer R2 edits this block.
    ========================================================================== */
 
+/* Top card toolbar, one line from 1241px up. The switch column used to keep a
+   50% basis, so the wider "Run simulation" label pushed Settings onto a second
+   row (card 193 -> 256px). The switch now takes whatever is left and the three
+   controls keep their own width, so the row never wraps or changes height.
+   Below 1241px the existing two-line layout stays. */
+@media (min-width: 1241px) {
+    .st-key-mc-topbar [data-testid="stHorizontalBlock"] { flex-wrap: nowrap; }
+    .st-key-mc-topbar [data-testid="stColumn"]:first-child { flex: 1 1 auto !important; width: auto !important; }
+    .st-key-mc-topbar [data-testid="stColumn"]:not(:first-child) { flex: 0 0 auto !important; width: auto !important; }
+    .st-key-mc-topbar [data-testid="stColumn"]:nth-child(2) { min-width: 200px; }
+    .st-key-mc-topbar [data-testid="stColumn"]:nth-child(3) { min-width: 120px; }
+}
+/* Same height with and without the primary look (47px vs 44px before). */
+.st-key-topbar_run_button button { height: 44px; padding-top: 0; padding-bottom: 0; }
+
 /* -- end QA round A R2 -- */
 
 

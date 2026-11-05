@@ -15,12 +15,12 @@ import plotly.graph_objects as go
 try:
     from utils.coerce import safe_int
     from utils.household import plan_end_ages
-    from utils.formatting import money
+    from utils.formatting import money, money_md
     from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
     from ui.utils.household import plan_end_ages  # type: ignore
-    from ui.utils.formatting import money  # type: ignore
+    from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
 
 
@@ -218,7 +218,7 @@ def _render_unlucky_analysis(st, retire_age: int, plan_until: int, results: dict
         )
     if draw_pct is not None:
         parts.append(
-            f" while you keep withdrawing about **{money(first_draw, shorten=True)}/yr** ({draw_pct:.1%} of the "
+            f" while you keep withdrawing about **{money_md(first_draw, shorten=True)}/yr** ({draw_pct:.1%} of the "
             f"balance). Selling assets *after* they've dropped locks in the loss, so each later year "
             f"grows from a smaller base. That's **sequence-of-returns risk**."
         )

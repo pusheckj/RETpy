@@ -11,12 +11,12 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 try:
-    from utils.formatting import money
+    from utils.formatting import money, money_md
     from utils.household import has_partner, plan_end_text
     from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
     from utils.sim_runner import run_networth_analysis, _hashable
 except ImportError:  # pragma: no cover
-    from ui.utils.formatting import money  # type: ignore
+    from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.household import has_partner, plan_end_text  # type: ignore
     from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
     from ui.utils.sim_runner import run_networth_analysis, _hashable  # type: ignore
@@ -178,7 +178,7 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
         # before the work cap, so those runs retire at the cap with less.
         capped = bool(curve) and (curve[-1].get("median_retire_age") or 0) >= cap
         st.info(
-            f"No target up to {money(top, shorten=True)} reached your {target:.0%} success target. The "
+            f"No target up to {money_md(top, shorten=True)} reached your {target:.0%} success target. The "
             f"best was {best:.0%}. "
             + (f"The biggest targets usually aren't reached before age {cap}, the latest "
                "this check lets you work, so those runs retire then with less. "

@@ -24,10 +24,10 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 try:
-    from utils.formatting import money, pct
+    from utils.formatting import money, money_md, pct
     from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
-    from ui.utils.formatting import money, pct  # type: ignore
+    from ui.utils.formatting import money, money_md, pct  # type: ignore
     from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
 
 STATE_KEY = "mortgage_paydown_result"
@@ -60,18 +60,18 @@ def render(st, results: dict = None, chart_key: str = "mortgage_paydown") -> Non
         )
     else:
         st.success(
-            f"**Prepaying helps.** {money(best['extra'])}/yr extra raises success "
+            f"**Prepaying helps.** {money_md(best['extra'])}/yr extra raises success "
             f"from {pct(base['success_rate'])} to {pct(best['success_rate'])} "
             f"(**{best['delta_success'] * 100:+.1f} points**) and you own the house outright "
             f"at **{best['payoff_age']}** instead of {base['payoff_age']}. That's "
             f"{best.get('years_saved') or 0} years earlier and saves "
-            f"{money((base.get('total_interest') or 0) - (best.get('total_interest') or 0))} "
+            f"{money_md((base.get('total_interest') or 0) - (best.get('total_interest') or 0))} "
             f"in interest."
         )
         if cheapest_sig is not None and cheapest_sig["extra"] != best["extra"]:
             st.caption(
                 f"Smallest amount that still beats the margin of error: "
-                f"**{money(cheapest_sig['extra'])}/yr** "
+                f"**{money_md(cheapest_sig['extra'])}/yr** "
                 f"({cheapest_sig['delta_success'] * 100:+.1f} points)."
             )
 
