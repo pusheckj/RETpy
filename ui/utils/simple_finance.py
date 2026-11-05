@@ -465,7 +465,7 @@ def priority_ladder(inputs: Dict[str, Any], today: Optional[date] = None) -> Lis
     steps.append(LadderStep(
         3, "high_interest_debt", f"Pay off high-interest debt ({HIGH_APR_PCT:g}%+)",
         "pending" if high else "done", high_total,
-        f"{money(high_total)} to pay off" if high else "None",
+        f"{money(high_total)} to pay off" if high else "$0 owed",
         "Paying off debt at 8% or more is a guaranteed return at that rate. "
         "Go highest rate first.",
         f"In order: {_debt_list(high)}." if high else "No debt at 8% or more."))
@@ -536,7 +536,7 @@ def priority_ladder(inputs: Dict[str, Any], today: Optional[date] = None) -> Lis
     steps.append(LadderStep(
         8, "moderate_debt", f"Moderate-interest debt ({MODERATE_APR_PCT:g}\u2011{HIGH_APR_PCT:g}%)",
         "pending" if moderate else "done", mod_total,
-        f"{money(mod_total)} to pay off" if moderate else "None",
+        f"{money(mod_total)} to pay off" if moderate else "$0 owed",
         "A judgment call: paying it off is a sure return at that rate, investing may "
         "earn more. Many people split extra money between the two.",
         f"Your debts here: {_debt_list(moderate)}." if moderate else "No debt between 4% and 8%."))

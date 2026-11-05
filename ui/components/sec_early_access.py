@@ -44,7 +44,7 @@ def _md(text) -> str:
 
 
 def _section_label(st, txt):
-    st.markdown(f'<div style="font-size: 13px; font-weight: 700; color: var(--mc-ink); '
+    st.markdown(f'<div style="font-size: 13px; color: #64748b; '
                 f'text-transform: uppercase; letter-spacing: 0.05em; margin: 12px 0 6px 0;">{txt}</div>',
                 unsafe_allow_html=True)
 
@@ -66,10 +66,10 @@ def _render_body(st) -> None:
                + safe_float(get_override(st, "YOUR_CASH", 0), 0.0)
                + safe_float(get_override(st, "PARTNER_CASH", 0), 0.0))
     st.caption(
-        f":gray[Always on. No age limit and no penalty, only long-term "
+        f"Always on. No age limit and no penalty, only long-term "
         f"capital-gains tax. You hold **{_md(money(taxable, shorten=True))}** "
         f"in taxable brokerage and cash, which pays for the early years "
-        f"before you need the options below.]"
+        f"before you need the options below."
     )
 
     # --- 2. Rule of 55 -------------------------------------------------------
@@ -84,8 +84,8 @@ def _render_body(st) -> None:
     set_override(st, "RULE_OF_55_ENABLED", bool(v))
     if v:
         if retire_age >= 55:
-            st.caption(f":gray[Retiring at {retire_age} qualifies. Your 401(k) is "
-                       f"penalty-free from {retire_age} instead of 59½.]")
+            st.caption(f"Retiring at {retire_age} qualifies. Your 401(k) is "
+                       f"penalty-free from {retire_age} instead of 59½.")
         else:
             st.warning(
                 f"You plan to retire at **{retire_age}**, before 55, so this has no "
@@ -141,11 +141,11 @@ def _render_body(st) -> None:
             if co > 0:
                 pay = _cfg.sepp_72t_annual_amount(co, start, rate)
                 st.caption(
-                    f":gray[Designating **{_md(money(co, shorten=True))}** pays about "
+                    f"Designating **{_md(money(co, shorten=True))}** pays about "
                     f"**{_md(money(pay, shorten=True))}/yr** from age {start}. "
                     f"Rule of thumb: designate about "
                     f"**{_md(money(_cfg.sepp_72t_balance_for_payment(50_000, start, rate), shorten=True))}** "
-                    f"for each \\$50k/yr you need.]"
+                    f"for each \\$50k/yr you need."
                 )
             else:
                 st.warning(
@@ -158,10 +158,10 @@ def _render_body(st) -> None:
             pass
 
         locked_until = max(start + 5, 60)
-        st.caption(f":gray[Locked in until about age {locked_until} "
+        st.caption(f"Locked in until about age {locked_until} "
                    f"(5 years or 59½, whichever is longer). The yearly amount is set "
                    f"at the start age from the designated balance and doesn't "
-                   f"change with the market.]")
+                   f"change with the market.")
 
     # --- 4. Roth conversion ladder ------------------------------------------
     _section_label(st, "4 · Roth conversion ladder")
@@ -181,8 +181,8 @@ def _render_body(st) -> None:
             "Assumptions → Roth conversion. Turn it on to build the ladder."
         )
     elif v:
-        st.caption(":gray[Each year's conversion is available 5 years later, so "
-                   "start converting 5 years before you retire.]")
+        st.caption("Each year's conversion is available 5 years later, so "
+                   "start converting 5 years before you retire.")
 
     # --- 5. Coast FIRE -------------------------------------------------------
     _section_label(st, "5 · Stop saving early (Coast FIRE)")
@@ -207,12 +207,12 @@ def _render_body(st) -> None:
         set_override(st, "COAST_FIRE_AGE", safe_int(a))
         coast_age = safe_int(a)
         if coast_age >= retire_age:
-            st.caption(f":gray[Stopping at {coast_age} has no effect, since you already "
-                       f"retire at {retire_age}.]")
+            st.caption(f"Stopping at {coast_age} has no effect, since you already "
+                       f"retire at {retire_age}.")
         else:
-            st.caption(f":gray[Saving stops at {coast_age}. You cover your own expenses until "
+            st.caption(f"Saving stops at {coast_age}. You cover your own expenses until "
                        f"{retire_age}, so your portfolio grows by compounding alone "
-                       f"for {retire_age - coast_age} years.]")
+                       f"for {retire_age - coast_age} years.")
 
 
 def render(st) -> None:

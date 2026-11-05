@@ -838,6 +838,43 @@ def _skip(st) -> None:
     _sync_planner(st)
 
 
+# Marks the row-style radios (Yes/No, Rent/Own) so theme.css draws them as pills. The
+# planner's own tagger (app.py::_inject_keyboard_nav) only runs at the end of the
+# planner page, which the walkthrough replaces, so a visitor who arrived here
+# first saw plain circles until they had opened the planner.
+_TAG_PILLS = """<script>
+(function(){
+  var P = window.parent, doc = P.document;
+  function tag(){
+    doc.querySelectorAll('[role="radiogroup"]:not(.mc-seg):not([data-mc-vert])').forEach(function(g){
+      try {
+        if (P.getComputedStyle(g).flexDirection === 'row') g.classList.add('mc-seg');
+        else g.setAttribute('data-mc-vert', '1');
+      } catch(e){}
+    });
+  }
+  tag();
+  if (P.__mcTagObserver) { try { P.__mcTagObserver.disconnect(); } catch(e){} }
+  try {
+    var pending = false;
+    P.__mcTagObserver = new P.MutationObserver(function(){
+      if (pending) return; pending = true;
+      P.setTimeout(function(){ pending = false; tag(); }, 60);
+    });
+    P.__mcTagObserver.observe(doc.body, {childList: true, subtree: true});
+  } catch(e){}
+})();
+</script>"""
+
+
+def _tag_pill_radios(st) -> None:
+    try:
+        import streamlit.components.v1 as components
+        components.html(_TAG_PILLS, height=0)
+    except Exception:       # styling only; never block the walkthrough
+        pass
+
+
 def render(st) -> None:
     s = st.session_state[STATE]
     s.setdefault("seen", [])
@@ -874,6 +911,7 @@ def render(st) -> None:
             st.button("Show my results" if last else "Next", key="gs_next", on_click=_go,
                       args=(st, 1), type="primary",
                       icon=":material/check:" if last else ":material/arrow_forward:")
+    _tag_pill_radios(st)
 
 
 def render_banner(st) -> None:

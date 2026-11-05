@@ -1,6 +1,8 @@
 """Section 5: Savings — derived total + auto/custom%/manual allocation modes."""
 from __future__ import annotations
 
+import html
+
 try:
     from utils.section_icon import section_expander
 except ImportError:  # pragma: no cover
@@ -262,23 +264,32 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
             ))
             cumulative += val
 
+        # The legend is plain HTML under the bar, one account per line. Plotly's own
+        # legend (two columns) clipped long names into their neighbours once there
+        # were 5+ accounts, and scrolled when it was squeezed under a slim bar.
         fig.update_layout(
-            barmode="stack",
-            height=150,
+            barmode="stack", height=96,
             margin=dict(l=8, r=18, t=6, b=6),
             xaxis=dict(showgrid=False, zeroline=False, tickformat="$,.2~s",
                        nticks=4, tickfont=dict(size=11)),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            # Labels live in the legend (11px+), not rotated/tiny inside slim segments.
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="top", y=-0.35, x=0,
-                        font=dict(size=11), itemwidth=30),
+            showlegend=False,
         )
         try:
-            from utils.plot_theme import style_fig, show_chart
+            from utils.plot_theme import style_fig
         except ImportError:  # pragma: no cover
-            from ui.utils.plot_theme import style_fig, show_chart  # type: ignore
-        show_chart(st, fig, "sv_auto_alloc_chart", {"displayModeBar": False})
+            from ui.utils.plot_theme import style_fig  # type: ignore
+        st.plotly_chart(style_fig(fig, st, compact=True), width="stretch",
+                        config={"displayModeBar": False}, key="sv_auto_alloc_chart")
+        st.markdown(
+            '<div style="display:flex;flex-direction:column;gap:3px;margin:-6px 0 6px 8px;'
+            'font-size:13px;color:var(--mc-muted)">'
+            + "".join(
+                f'<div style="display:flex;align-items:center;gap:8px">'
+                f'<span style="flex:0 0 10px;height:10px;border-radius:3px;background:{color}"></span>'
+                f'<span>{html.escape(label)}</span></div>'
+                for label, color in zip(labels, colors))
+            + "</div>", unsafe_allow_html=True)
 
     # Summary line: every dollar left to save is placed.
     total = sum(allocation.values()) + sum(set_aside.values())

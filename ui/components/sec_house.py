@@ -318,7 +318,7 @@ def _extra_principal(st) -> None:
                   if e["action"] != "sell_rent" and e["loan"] > 0]
     _has_loan = safe_int(get_override(st, "MORTGAGE_BALANCE", 0), 0) > 0 or bool(_loan_ages)
     if not _has_loan:
-        st.caption(":gray[You have no mortgage, so there's nothing to pay down.]")
+        st.caption("You have no mortgage, so there's nothing to pay down.")
     else:
         ensure_default(st, "bp_extra_mortgage",
                        safe_int(get_override(st, "EXTRA_MORTGAGE_PAYMENT_ANNUAL", 0), 0))
@@ -389,7 +389,7 @@ def _extra_principal(st) -> None:
                             f"You save {money_md(interest)} of interest."
                         )
                     else:
-                        st.caption(f":gray[Payoff age unchanged at {n_age}.]")
+                        st.caption(f"Payoff age unchanged at {n_age}.")
             except Exception:
                 pass
             st.caption("See **What if → Mortgage paydown** for the effect on your "
@@ -448,8 +448,13 @@ def render_body(st) -> None:
     st.divider()
     _extra_principal(st)
     with summary_slot:
-        st.caption("  \n".join(_summary_lines(house_summary(
-            st.session_state.get("user_overrides", {}) or {}))))
+        summary = house_summary(st.session_state.get("user_overrides", {}) or {})
+        if summary["kind"] == "rent" and st.session_state.get("se_rent_own") == "Own home":
+            # "Own home" is picked but no home or payment is entered yet, so the
+            # plan still treats you as a renter; don't print a rent line for it.
+            st.caption("Enter your home value and mortgage payment to include your housing costs.")
+        else:
+            st.caption("  \n".join(_summary_lines(summary)))
 
 
 def render(st) -> None:

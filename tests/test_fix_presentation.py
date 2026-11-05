@@ -585,7 +585,7 @@ def test_theme_css_lets_metric_labels_wrap(theme_css):
 def test_sync_button_is_not_in_a_narrow_column():
     src = _read_code("ui", "components", "sec_income.py")
     assert re.search(
-        r'st\.button\(\s*"🔄 Sync to inputs"[^)]*width="stretch"', src, re.S
+        r'st\.button\(\s*"Sync to inputs"[^)]*width="stretch"', src, re.S
     ), ("the Sync button must span its row (a 47px sidebar column stacked its "
         "label one character per line)")
     assert "st.columns([3, 1])" not in src

@@ -115,6 +115,7 @@ section.main,
 
 /* Section tiles (keyed st.container) + cards -> muted grey */
 [class*="st-key-mc-tile"],
+[class*="st-key-mc-welcome-"],
 .mc-card,
 .mc-stat-card {
     background-color: #37343f !important;
@@ -449,7 +450,7 @@ hr {
 }
 
 /* Elevated cards + section tiles — deeper shadow on dark */
-.mc-card, .mc-stat-card, [class*="st-key-mc-tile"] {
+.mc-card, .mc-stat-card, [class*="st-key-mc-tile"], [class*="st-key-mc-welcome-"] {
     box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45) !important;
 }
 
@@ -537,6 +538,11 @@ label[data-baseweb="radio"]:has(input:not(:checked)) > div:first-child { backgro
 label[data-baseweb="radio"]:has(input:not(:checked)) > div:first-child > div { background-color: #26232f !important; }
 label[data-baseweb="radio"]:has(input:checked) > div:first-child > div { background-color: #201e27 !important; }
 [data-testid="stTextInputRootElement"] [data-baseweb="base-input"] { background-color: transparent !important; }
+/* QA round A R1: money check-up chips were teal/amber/grey text on a dark tint at 2 to 2.8:1. */
+.stApp .simple-chip { color: #c9c0b4 !important; }
+.stApp .simple-chip--good { color: #5eead4 !important; }
+.stApp .simple-chip--warn { color: #fbbf24 !important; }
+.stApp .simple-chip--current { color: #ffffff !important; }
 </style>
 """
 
