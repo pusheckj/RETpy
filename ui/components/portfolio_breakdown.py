@@ -122,7 +122,7 @@ def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a
     <div class="mc-stat-card" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; height: 100%; min-height: 130px; display: flex; flex-direction: column; justify-content: flex-start; cursor: {cursor};">
         <div class="mc-stat-label{' mc-l2' if two_line else ''}" style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">{label}</div>
         <div class="{cls}" style="font-size: clamp(20px, 17cqi, 52px); font-weight: 700; color: {color}; line-height: 1.1; overflow-wrap: anywhere;">{value}</div>{delta_html}
-        <div style="font-size: 12px; color: #94a3b8; margin-top: auto; padding-top: 6px;">{sublabel}</div>
+        <div style="font-size: 12px; color: var(--mc-muted); margin-top: auto; padding-top: 6px;">{sublabel}</div>
     </div>
     {tip}
     </div>
