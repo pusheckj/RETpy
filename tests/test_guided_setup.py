@@ -104,6 +104,14 @@ def wizard(monkeypatch):
     return make
 
 
+def test_setup_tags_its_row_radios_as_pills_on_first_load(wizard):
+    """The planner's tagger never runs while the walkthrough replaces the planner, so
+    the setup page carries its own (an invisible component that adds `.mc-seg`)."""
+    at = wizard()
+    assert not at.exception, at.exception
+    assert at.get("iframe"), "no tagger component on the setup page"
+
+
 def _next(at):
     at.button(key="gs_next").click().run()
     assert not at.exception, at.exception

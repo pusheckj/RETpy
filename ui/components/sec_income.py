@@ -136,7 +136,7 @@ def render_body(st) -> None:
     # Comp table editor (advanced)
     with st.expander("Your pay by year (advanced)", expanded=False):
         st.caption("Base, bonus and RSU for each year, built from your inputs above. "
-                   "Edit any cell to change a year, or click 🔄 to reset.")
+                   "Edit any cell to change a year, or use Sync to inputs to reset.")
 
         if "si_comp_customized" not in st.session_state:
             st.session_state["si_comp_customized"] = False
@@ -147,11 +147,11 @@ def render_body(st) -> None:
         # the label wrapped to one character per line and the button rendered as
         # a 47x347px vertical stack of letters.
         if customized:
-            st.caption("✏️ Edited by hand. Your changes are kept.")
+            st.caption("Edited by hand. Your changes are kept.")
         else:
-            st.caption("🔄 Built from your base, bonus, RSU and growth rate.")
+            st.caption("Built from your base, bonus, RSU and growth rate.")
 
-        if st.button("🔄 Sync to inputs", key="si_comp_sync", width="stretch"):
+        if st.button("Sync to inputs", key="si_comp_sync", width="stretch", icon=":material/sync:"):
             if "si_comp_editor" in st.session_state:
                 try: del st.session_state["si_comp_editor"]
                 except Exception: pass

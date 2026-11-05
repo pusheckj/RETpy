@@ -2944,6 +2944,59 @@ section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogrou
    QA round A fixes R1. Only fixer R1 edits this block.
    ========================================================================== */
 
+/* Sidebar selects: the value box is 18px tall with overflow hidden but a 22px line, so the
+   bottoms of g, p and y were cut off. Let it size to its line (the popover fix, here too). */
+section[data-testid="stSidebar"] [data-baseweb="select"] > div > div:first-child,
+section[data-testid="stSidebar"] [data-baseweb="select"] > div > div:first-child > div {
+    height: auto !important;
+    min-height: 24px;
+    overflow: visible !important;
+}
+
+/* Sidebar segmented choices (Rent or own?, Return scenario) span the panel at every width.
+   Only the container grows; labels keep their own flex so the 3-option control is unchanged. */
+section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(> [data-testid="stRadio"] .mc-seg),
+section[data-testid="stSidebar"] [data-testid="stRadio"]:has(.mc-seg) { width: 100% !important; }
+
+/* Sidebar sub-headings (You / Partner / Child 1) sit nearer their own fields than the
+   block above. The phone layout already did this; desktop now matches. */
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stElementContainer"]:not(:first-child):has(> [data-testid="stMarkdown"] p > strong:only-child) {
+    margin-top: 12px; margin-bottom: -8px;
+}
+
+/* A help icon never touches the last word of its label ("Leaves home at (?)" had a 2px gap). */
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] { column-gap: 6px; }
+
+/* Nested sub-sections (FAQ questions, "Your pay by year") wrap to 2-3 lines; a 999px radius left the
+   text jammed against the rounded ends. 22px is still a full pill on a one-line header. */
+section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stExpander"] { border-radius: 22px !important; }
+
+/* Sidebar scrollbar: reserve its lane and theme it, so opening a section no longer shrinks every
+   card by the scrollbar's width where scrollbars are always visible. */
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+    scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: rgba(120, 96, 52, 0.35) transparent;
+}
+
+/* Guided setup: a caption pulled up under an input (-10px) also pulled up under the step heading and
+   under the review list, where it sat on top of them. */
+.st-key-mc-setup [data-testid="stElementContainer"]:has(.mc-section) + [data-testid="stElementContainer"] [data-testid="stCaptionContainer"],
+.st-key-mc-setup [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] ul) + [data-testid="stElementContainer"] [data-testid="stCaptionContainer"] { margin-top: 6px; }
+
+/* Money check-up: the Savings rate and Emergency fund tiles share a row, so they share a height. */
+[data-testid="stLayoutWrapper"]:has(> :is(.st-key-mc-tile-simple-rate, .st-key-mc-tile-simple-fund)) { flex: 1 1 auto; }
+
+/* Money check-up chips and meter labels: text at 4.5:1 or better on their own tint. The tick's
+   45% opacity used to fade its label too; it now fades only the tick mark. */
+.simple-chip { color: #475569; }
+.simple-chip--good { color: #0f766e; }
+.simple-chip--warn { color: #92400e; }
+.simple-chip--current { background: #0f766e; color: #ffffff; }
+/* Spacing: the notes in the debt tile hugged the plan cards and the chart; the page intro hugged the first tile. */
+[class*="st-key-mc-tile-simple-debt"] .simple-note { margin-bottom: 12px; }
+.st-key-mc-simple-root > [data-testid="stElementContainer"] .simple-sub { margin-bottom: 22px; }
+.simple-meter-tick { opacity: 1; background: color-mix(in srgb, var(--mc-ink) 45%, transparent); }
+.simple-meter-tick span { color: var(--mc-muted); }
+
 /* -- end QA round A R1 -- */
 
 

@@ -245,3 +245,20 @@ def test_house_summary_for_a_renter_and_a_paid_off_owner():
     assert paid["kind"] == "owned" and paid["payoff_age"] is None
     assert paid["monthly"] == pytest.approx(500_000 * 0.0135 / 12)
     assert "property tax and insurance, no mortgage" in _summary_lines(paid)[0]
+
+
+def test_picking_own_home_with_nothing_entered_does_not_say_rent(draw):
+    house = draw("house", SINGLE)
+    house.radio(key="se_rent_own").set_value("Own home").run()
+    assert not house.exception, house.exception
+    text = _text(house)
+    assert not any(c.startswith("Housing costs") for c in text)
+    assert any("Enter your home value and mortgage payment" in c for c in text)
+
+
+def test_sidebar_captions_have_no_gray_wrapper():
+    """`:gray[...]` stacked its own colour on the caption's 0.6 opacity: about 2:1 in
+    light mode, and dark-on-dark (invisible) in dark mode."""
+    for name in ("sec_early_access.py", "sec_house.py"):
+        with open(os.path.join(_UI, "components", name), encoding="utf-8") as fh:
+            assert ":gray[" not in fh.read(), name

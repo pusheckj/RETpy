@@ -103,7 +103,7 @@ QUESTIONS: list[tuple[str, str]] = [
 
 
 def render(st) -> None:
-    with st.expander("FAQ: what do these settings mean?", expanded=False, icon=":material/help:"):
+    with st.expander("Settings FAQ", expanded=False, icon=":material/help:"):
         for question, answer in QUESTIONS:
             with st.expander(question, expanded=False):
                 st.markdown(answer)

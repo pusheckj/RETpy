@@ -96,6 +96,11 @@ class TestLadder:
         assert [s.key for s in steps] == _ORDER
         assert [s.number for s in steps] == list(range(1, 10))
 
+    def test_debt_steps_with_no_debt_do_not_say_aim_for_none(self):
+        steps = _steps(_inputs(debts=[]))
+        for key in ("high_interest_debt", "moderate_debt"):
+            assert steps[key].status == "done" and steps[key].target_label == "$0 owed"
+
     def test_default_example_statuses(self):
         s = _steps(sf.DEFAULT_INPUTS)
         assert s["starter_emergency"].status == "done"       # $3,500 >= one month ($2,300)
@@ -674,6 +679,14 @@ class TestPage:
     def _markdown_text(self, page):
         return " ".join(m.value for m in page.markdown)
 
+    def test_extra_goes_to_line_only_when_there_is_extra(self, page):
+        page.session_state["simple_inputs"] = {"extra_debt_payment_monthly": 0}
+        page.run()
+        assert "extra goes to" not in self._markdown_text(page)
+        page.session_state["simple_inputs"] = {"extra_debt_payment_monthly": 200}
+        page.run()
+        assert "extra goes to" in self._markdown_text(page)
+
     def test_wont_pay_off_state_renders(self, page):
         page.session_state["simple_inputs"] = {"debts": [_debt("Stuck", 10_000, 24.0, 150)],
                                                "extra_debt_payment_monthly": 0}
@@ -724,6 +737,27 @@ class TestPage:
         page.toggle(key="simple_w_married").set_value(True).run()
         assert page.session_state["simple_inputs"]["partner_salary_annual"] == 70_000.0
 
+    def test_hsa_answers_survive_the_toggle_going_off_and_on(self, page):
+        page.session_state["simple_inputs"] = {"hsa_eligible": True, "hsa_family": True,
+                                               "hsa_contrib_annual": 1_200}
+        page.run()
+        page.toggle(key="simple_w_hsa_eligible").set_value(False).run()
+        page.toggle(key="simple_w_hsa_eligible").set_value(True).run()
+        saved = page.session_state["simple_inputs"]
+        assert saved["hsa_contrib_annual"] == 1_200.0 and saved["hsa_family"] is True
+        assert _by_key(page.number_input, "simple_w_hsa_contrib_annual").value == 1_200.0
+        assert page.toggle(key="simple_w_hsa_family").value is True
+
+    def test_a_typed_ira_above_the_limit_says_over_not_at_the_limit(self, page):
+        page.session_state["simple_inputs"] = {"ira_contrib_annual": 9_000}
+        page.run()
+        assert "simple_max_ira_contrib_annual" not in self._button_keys(page)
+        assert "Over the limit" in self._captions(page)
+
+    def test_max_out_tooltips_say_it_is_this_years_limit(self, page):
+        page.run()
+        assert "this year's limit" in _by_key(page.button, "simple_max_ira_contrib_annual").help
+
     def test_max_out_401k_sets_the_percent_and_then_steps_aside(self, page):
         page.run()
         _by_key(page.button, "simple_max_retirement_contrib_pct").click().run()
@@ -763,3 +797,62 @@ class TestPage:
             page.run()
             assert "backdoor Roth" in _by_key(page.button, "simple_max_ira_contrib_annual").help
 
+
+
+class TestHiddenInputsKeepTheirValues:
+    """Streamlit forgets a widget's value on a run that doesn't draw it, and a number
+    input then reads back as its default (0). In a real browser that wiped the
+    partner's pay and the HSA amount after a version flip or a toggle off and on.
+    AppTest keeps the value, so these use a plain dict for the session and play the
+    forgetting by hand."""
+
+    @staticmethod
+    def _sm():
+        from components import simple_mode
+        return simple_mode
+
+    def _page_away(self, sm):
+        """What the session holds after the planner was shown: the widgets read as
+        their defaults and the toggles are gone."""
+        ss = {sm._W + "partner_salary_annual": 0.0, sm._W + "hsa_contrib_annual": 0.0,
+              sm._W + "hsa_family": False, sm._DRAWN_KEY: {"partner_salary_annual"}}
+        return ss
+
+    def test_back_from_the_planner_reseeds_the_hidden_inputs(self):
+        sm = self._sm()
+        stored = sf.normalize_inputs({"married": True, "partner_salary_annual": 41_000,
+                                      "hsa_eligible": True, "hsa_family": True,
+                                      "hsa_contrib_annual": 1_200})
+        ss = self._page_away(sm)
+        sm._seed(ss, stored, force=False)
+        assert ss[sm._W + "partner_salary_annual"] == 41_000
+        assert ss[sm._W + "hsa_contrib_annual"] == 1_200
+        assert ss[sm._W + "hsa_family"] is True
+
+    def test_toggle_back_on_reseeds_an_input_hidden_on_the_last_run(self):
+        sm = self._sm()
+        stored = sf.normalize_inputs({"partner_salary_annual": 41_000})
+        ss = {sm._W + f: stored[f] for f in sm._SCALARS}
+        ss[sm._W + "partner_salary_annual"] = 0.0          # forgotten while hidden
+        ss[sm._DRAWN_KEY] = set()
+        ss[sm._W + "married"] = True                        # the toggle was just switched on
+        sm._seed(ss, stored, force=False)
+        assert ss[sm._W + "partner_salary_annual"] == 41_000
+
+    def test_a_live_input_is_not_overwritten_by_the_stored_value(self):
+        sm = self._sm()
+        stored = sf.normalize_inputs({"married": True, "partner_salary_annual": 41_000})
+        ss = {sm._W + f: stored[f] for f in sm._SCALARS}
+        ss[sm._W + "partner_salary_annual"] = 52_000        # typed, or set by a button
+        ss[sm._DRAWN_KEY] = {"partner_salary_annual"}
+        sm._seed(ss, stored, force=False)
+        assert ss[sm._W + "partner_salary_annual"] == 52_000
+
+    def test_collect_ignores_a_hidden_widget_value(self):
+        sm = self._sm()
+        base = sf.normalize_inputs({"married": True, "partner_salary_annual": 41_000})
+        ss = {sm._W + f: base[f] for f in sm._SCALARS}
+        ss[sm._W + "married"] = False
+        ss[sm._W + "partner_salary_annual"] = 0.0           # reads back as the default
+        got = sm._collect(ss, base)
+        assert got["partner_salary_annual"] == 41_000 and got["married"] is False

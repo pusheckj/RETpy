@@ -37,6 +37,12 @@ STATE_KEY = "simple_inputs"
 _SYNC_KEY = "_simple_inputs_synced"   # copy of what this page last wrote
 _W = "simple_w_"                      # widget-key prefix
 _SCALARS = [k for k in sf.DEFAULT_INPUTS if k != "debts"]
+# Inputs that are only drawn while a toggle is on. Streamlit forgets a widget's value
+# on any run that doesn't draw it, and a forgotten number reads back as 0, so these
+# are kept in ``simple_inputs`` and pushed back into the widget when it reappears.
+_CONDITIONAL = {"partner_salary_annual": "married",
+                "hsa_family": "hsa_eligible", "hsa_contrib_annual": "hsa_eligible"}
+_DRAWN_KEY = "_simple_inputs_drawn"   # conditional inputs drawn on this page's last run
 _DOLLAR = ":material/attach_money:"
 _PCT = ":material/percent:"
 _TEAL, _SLATE = "#0d9488", "#7a8db3"
@@ -77,10 +83,20 @@ def _debt_key(i: int, field: str) -> str:
     return f"{_W}debt_{i}_{field}"
 
 
+def _visible(ss) -> set:
+    """The conditional inputs this run draws (their toggle is on)."""
+    return {f for f, toggle in _CONDITIONAL.items() if ss.get(_W + toggle)}
+
+
 def _seed(ss, inputs: Dict[str, Any], force: bool) -> None:
-    """Push inputs into widget keys (all of them when ``force``, else only missing ones)."""
+    """Push inputs into widget keys (all of them when ``force``, else only missing ones).
+
+    A conditional input that wasn't drawn on the last run (hidden, or the page was
+    off screen) has lost its widget value, so it is always reseeded."""
+    away = any(_W + f not in ss for f in _SCALARS if f not in _CONDITIONAL)
+    drawn = set() if away else ss.get(_DRAWN_KEY, set())
     for f in _SCALARS:
-        if force or _W + f not in ss:
+        if force or _W + f not in ss or (f in _CONDITIONAL and f not in drawn):
             ss[_W + f] = inputs[f]
     for i, row in enumerate(inputs["debts"]):
         for f in sf.DEBT_FIELDS:
@@ -91,8 +107,9 @@ def _seed(ss, inputs: Dict[str, Any], force: bool) -> None:
 def _collect(ss, base: Dict[str, Any]) -> Dict[str, Any]:
     """Current widget values layered over ``base``, normalised."""
     d = dict(base)
+    hidden = set(_CONDITIONAL) - _visible(ss)       # their widget value is not live
     for f in _SCALARS:
-        if _W + f in ss:
+        if _W + f in ss and f not in hidden:
             d[f] = ss[_W + f]
     debts = []
     for i, row in enumerate(base["debts"]):
@@ -147,9 +164,14 @@ def _max_out(st, field: str, current: float, target: Any, tip: str) -> None:
     no target."""
     if target is None:
         return
-    if current + 1e-6 >= target:
+    if current > target + 1e-6:
+        st.caption("Over the limit")
+    elif current + 1e-6 >= target:
         st.caption("✓ At the limit")
     else:
+        # These are this year's IRS limits in actual dollars. The planner works in 2024
+        # dollars, so its Max out amounts are lower; say so rather than leave a mismatch.
+        tip += " This is this year's limit. The planner uses 2024 dollars, so its limits are lower."
         st.button("Max out", key=f"simple_max_{field}", help=tip, width="content",
                   on_click=_set_widget, args=(st.session_state, _W + field, target))
 
@@ -353,8 +375,9 @@ def _render_ladder(st, steps: List[sf.LadderStep]) -> None:
                    "and don't include age-50+ catch-up amounts.")
 
 
-def _plan_card(res: sf.PayoffResult, name: str, sub: str, best: bool, badge: str) -> str:
-    if res.focus_order:
+def _plan_card(res: sf.PayoffResult, name: str, sub: str, best: bool, badge: str,
+               extra: float = 0.0) -> str:
+    if res.focus_order and extra > 0:
         sub = f"{sub}: extra goes to {res.focus_order[0]} first"
     if res.paid_off:
         big = f"Debt-free by {_h(res.debt_free_date)}"
@@ -388,7 +411,7 @@ def _payoff_chart(st, av: sf.PayoffResult, sb: sf.PayoffResult, start: date) -> 
             x=xs, y=res.balances, name=name, mode="lines",
             line=dict(color=color, width=3, dash=dash),
             hovertemplate=f"{name}: $%{{y:,.0f}}<extra></extra>"))
-    fig.update_layout(height=300, margin=dict(l=8, r=8, t=8, b=40), dragmode=False,
+    fig.update_layout(height=300, margin=dict(l=8, r=28, t=8, b=40), dragmode=False,
                       hovermode="x unified")
     style_fig(fig, st)
     # Readable at tablet width, one font, a neutral hover label and a thin guide.
@@ -428,11 +451,12 @@ def _render_payoff(st, payoff: Dict[str, Any], inputs: Dict[str, Any], start: da
             st.warning(f"The minimum on **{names}** doesn't cover its monthly interest, so on "
                        "its own that balance never shrinks. Paying extra fixes this.")
         saved = payoff["interest_saved"]
-        av_best = av.paid_off and (not sb.paid_off or av.total_interest <= sb.total_interest)
+        # Teal "best" border only when avalanche really costs less; a tie has no winner.
+        av_best = av.paid_off and (not sb.paid_off or av.total_interest < sb.total_interest - 0.5)
         c1, c2 = st.columns(2)
         with c1:
             st.markdown(_plan_card(av, "Avalanche", "Highest interest rate first",
-                                   av_best, "Saves the most" if av_best and saved else ""),
+                                   av_best, "Saves the most" if av_best and saved else "", extra),
                         unsafe_allow_html=True)
         with c2:
             sb_first = (sb.order[0]["payoff_month"] if sb.order and sb.order[0]["payoff_month"]
@@ -441,16 +465,16 @@ def _render_payoff(st, payoff: Dict[str, Any], inputs: Dict[str, Any], start: da
                         else None)
             quick = bool(sb_first and av_first and sb_first < av_first)
             st.markdown(_plan_card(sb, "Snowball", "Smallest balance first", False,
-                                   "Quickest first win" if quick else ""),
+                                   "Quickest first win" if quick else "", extra),
                         unsafe_allow_html=True)
         if saved is not None:
             if saved > 0.5:
-                verdict = (f"Avalanche saves **{money_md(saved)}** in interest. Snowball "
+                verdict = (f"Avalanche saves <b>{_m(saved)}</b> in interest. Snowball "
                            "clears a debt sooner, which keeps some people motivated. "
                            "Either beats paying only the minimums.")
             else:
                 verdict = "Both plans cost about the same here, so pick the one you'll stick with."
-            st.markdown(verdict)
+            st.markdown(f'<div class="simple-note">{verdict}</div>', unsafe_allow_html=True)
         _payoff_chart(st, av, sb, start)
 
 
@@ -515,6 +539,7 @@ def render(st) -> None:
         _render_inputs(st, inputs)
 
     inputs = _collect(ss, inputs)
+    ss[_DRAWN_KEY] = _visible(ss)
     ss[STATE_KEY] = inputs
     ss[_SYNC_KEY] = copy.deepcopy(inputs)
 
