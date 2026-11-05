@@ -128,8 +128,9 @@ def render(st, results: dict = None, chart_key: str = "mortgage_paydown") -> Non
             "vs baseline": "—" if c["extra"] == 0 else (
                 f"{d:+.1f} points" + ("" if c.get("significant") else " (within margin)")
             ),
-            "Owned outright at": c.get("payoff_age") or "—",
-            "Years earlier": c.get("years_saved") or "—",
+            # Text throughout: a column mixing numbers and "—" can't be sent to the browser as one type.
+            "Owned outright at": str(c.get("payoff_age") or "—"),
+            "Years earlier": str(c.get("years_saved") or "—"),
             "Lifetime interest": money(c.get("total_interest") or 0),
         })
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
