@@ -3004,6 +3004,23 @@ section[data-testid="stSidebar"] .st-key-mc-mode-switch-sidebar [role="radiogrou
     .st-key-sp_period [data-testid="stButtonGroup"] button { flex: 1 1 auto !important; }
 }
 
+/* Settings popover: the dividers carried 24px of margin each side on top of the 16px
+   gaps (80px between sections, 24px elsewhere). */
+[data-testid="stPopoverBody"] hr { margin: 4px 0 !important; }
+
+/* Phone: the Settings panel covers the gear that opened it, so it gets its own Done
+   row, pinned to the bottom of the panel (app.py::_topbar_settings, animations.py). */
+[data-testid="stPopoverBody"] .stElementContainer:has(.mc-popover-done) { display: none; }
+@media (max-width: 640px) {
+    [data-testid="stPopoverBody"] .stElementContainer:has(.mc-popover-done) { display: block; position: sticky; bottom: 0; z-index: 5; }
+    .mc-popover-done { display: block; padding: 12px 0 0; background: linear-gradient(to bottom, transparent, var(--mc-tile) 30%); }
+    .mc-popover-done a {
+        display: flex; align-items: center; justify-content: center; min-height: 44px;
+        border-radius: 999px; background: var(--mc-teal); color: #fff !important;
+        font-weight: 700; font-size: 16px; text-decoration: none !important; cursor: pointer;
+    }
+}
+
 /* -- end QA round A R2 -- */
 
 

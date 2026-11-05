@@ -427,6 +427,11 @@ _ANIM_JS = """
         var t0 = ev.target.closest ? ev.target : null;
         var jump = t0 && t0.closest('[data-mc-jump]');
         if(jump){ ev.preventDefault(); mcJump(jump.getAttribute('data-mc-jump')); return; }
+        var done = t0 && t0.closest('[data-mc-close-popover]');
+        if(done){ ev.preventDefault();
+          // The Done row lives in the top card's Settings panel: its button toggles it shut.
+          var trig = D.querySelector('.st-key-mc-topbar [data-testid="stPopoverButton"]');
+          if(trig) trig.click(); return; }
         var show = t0 && t0.closest('[data-mc-show-results]');
         if(show){ ev.preventDefault(); mcShowResults(); return; }
         var fold = t0 && t0.closest('[data-mc-clamp]');

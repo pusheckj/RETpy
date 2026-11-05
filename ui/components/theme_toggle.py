@@ -594,6 +594,11 @@ def inject_theme_css(st) -> None:
     persist_appearance(st)
     if "Dark" in str(st.session_state.get("theme_mode", "")):
         st.markdown(_DARK_CSS, unsafe_allow_html=True)
+    else:
+        # Same slot in Light: when the page gains or loses this element, every element
+        # after it changes position and Streamlit rebuilds the open Settings popover,
+        # which closed it the moment you picked Light or Dark.
+        st.markdown('<style id="mc-light-theme"></style>', unsafe_allow_html=True)
 
 
 def render(st) -> None:
