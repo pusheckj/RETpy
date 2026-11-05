@@ -543,6 +543,16 @@ label[data-baseweb="radio"]:has(input:checked) > div:first-child > div { backgro
 .stApp .simple-chip--good { color: #5eead4 !important; }
 .stApp .simple-chip--warn { color: #fbbf24 !important; }
 .stApp .simple-chip--current { color: #ffffff !important; }
+/* ---- QA round A R3: dark values of the design tokens (theme.css, "QA round A R3") ---- */
+:root {
+    --mc-ctl-fill: #26232f;
+    --mc-btn-fill-hover: #3d3947;
+    --mc-btn-border-hover: #5d5868;
+    --mc-seg-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --mc-seg-on-bg: rgba(45, 212, 191, 0.16);
+    --mc-seg-on-ink: #2dd4bf;
+}
+/* -- end QA round A R3 -- */
 </style>
 """
 
