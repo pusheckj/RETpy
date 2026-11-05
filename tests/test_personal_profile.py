@@ -114,3 +114,13 @@ def test_hosted_app_never_offers_a_personal_profile(monkeypatch, tmp_path):
     assert picker.load_personal_profile(str(path)) is None
     monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "0")
     assert picker.load_personal_profile(str(path)) is not None
+
+
+def test_built_in_presets_have_no_household_names():
+    """"Mid-career couple (40, kids)" put "40, kids" in the top card's Name(s):
+    the parentheses of a preset describe it, they are not names."""
+    for label in picker.PRESET_NAMES:
+        assert _resolve_names(label) == "Your plan", label
+    assert _resolve_names("Mid-career couple (40, kids)") == "Your plan"
+    # A personal profile's own "(Name & Name)" label still names the household.
+    assert _resolve_names("My situation (Primary & Partner)") == "Primary & Partner"

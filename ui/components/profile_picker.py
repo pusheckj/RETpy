@@ -126,6 +126,9 @@ PROFILES = {
     "Custom (keep current values)": None,  # sentinel: don't overwrite
 }
 
+# The built-in starting points (their labels are descriptions, not household names).
+PRESET_NAMES = frozenset(PROFILES)
+
 _MY_SITUATION = load_personal_profile()
 if _MY_SITUATION is not None:
     PROFILES = {_MY_SITUATION[0]: _MY_SITUATION[1], **PROFILES}

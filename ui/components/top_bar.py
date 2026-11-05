@@ -61,16 +61,30 @@ def _num(value) -> float:
         return 0.0
 
 
+def _preset_names() -> frozenset:
+    try:
+        from components.profile_picker import PRESET_NAMES
+    except Exception:  # pragma: no cover
+        try:
+            from ui.components.profile_picker import PRESET_NAMES  # type: ignore
+        except Exception:
+            return frozenset()
+    return PRESET_NAMES
+
+
 def _resolve_names(profile: Optional[str]) -> str:
     """Parse a display name from the profile label.
 
-    "My situation (You & Partner)" -> "You & Partner"; "Custom (...)" -> "Your
-    plan"; else the profile as-is; else "Household". The personal profile's label comes from its JSON file.
+    "My situation (You & Partner)" -> "You & Partner"; "Custom (...)" and the
+    built-in presets (whose parentheses describe the household, e.g. "(40,
+    kids)") -> "Your plan"; else the profile as-is; else "Household". The personal profile's label comes from its JSON file.
     """
     try:
         if profile:
             s = str(profile)
             if s.startswith("Custom"):      # values the visitor entered (setup, JSON load)
+                return "Your plan"
+            if s in _preset_names():        # "Mid-career couple (40, kids)" describes a household, it is no name
                 return "Your plan"
             if "(" in s and ")" in s:
                 inner = s[s.index("(") + 1:s.rindex(")")].strip()
