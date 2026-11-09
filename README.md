@@ -67,7 +67,7 @@ print(f"Median end value: ${result['median_ending_balance']:,.0f}")
 
 ## Try the interactive UI
 
-A polished Streamlit UI ships with the package: a welcome screen (Money check-up or Retirement planner), a short guided setup, a linear sidebar of input sections (About you, Family, Income, Taxes, House, Expenses, Accounts, Investments, Retirement, Assumptions), and a results page that updates as you edit. It includes Plotly charts for Monte Carlo fan projections, success-by-age curves, allocation glide paths and tax flow, plus a What-if section for scenario comparisons.
+A polished Streamlit UI ships with the package: a welcome screen (Money check-up or Retirement planner), a short guided setup, a linear sidebar of input sections (About you, Family, Income, Taxes, House, Expenses, Accounts, Investments, Retirement, Assumptions), and a results page that updates as you edit. It includes Plotly charts for Monte Carlo fan projections, success-by-age curves, allocation glide paths and tax flow, a **Freedom milestones** section (net worth rungs, Coast FIRE and FIRE in places you can edit, and other markers of freedom, each with a *Confirm with simulation* button), plus a What-if section for scenario comparisons.
 
 ```bash
 pip install -r ui/requirements-ui.txt

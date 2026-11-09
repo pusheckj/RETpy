@@ -3316,6 +3316,131 @@ html:root :is(.simple-group, .simple-plan-name, .simple-step-title) {
 /* -- end QA round A R3 -- */
 
 /* ==========================================================================
+   Freedom milestones (components/freedom_milestones.py). Only this block styles
+   the section: the .ms-* classes inside the "mc-tile-freedom" tile. Dark values
+   of the --ms-* tokens are in components/theme_toggle.py ("Freedom milestones").
+   Status is never colour alone: every item also has an icon and words.
+   ========================================================================== */
+:root {
+    --ms-reached-bg: rgba(13, 148, 136, 0.10);
+    --ms-reached-border: rgba(13, 148, 136, 0.32);
+    --ms-reached-ink: #0f766e;
+    --ms-dot-fill: #0d9488;
+    --ms-dot-ink: #ffffff;
+    --ms-next-ring: rgba(13, 148, 136, 0.18);
+    --ms-track: rgba(120, 96, 52, 0.14);
+    --ms-fill: #0d9488;
+    --ms-surface: rgba(120, 96, 52, 0.05);
+    --ms-warn-ink: #b45309;
+}
+
+.st-key-mc-tile-freedom .ms-summary {
+    display: flex; align-items: center; gap: 16px;
+    padding: var(--mc-card-pad); margin: 4px 0 8px;
+    border: 1px solid var(--ms-reached-border); border-radius: var(--mc-card-r);
+    background: var(--ms-reached-bg);
+}
+.st-key-mc-tile-freedom .ms-count { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto; min-width: 72px; line-height: 1.1; }
+.st-key-mc-tile-freedom .ms-count b { font-size: 32px; font-weight: 700; color: var(--ms-reached-ink); }
+.st-key-mc-tile-freedom .ms-count span { font-size: 13px; color: var(--mc-muted); }
+.st-key-mc-tile-freedom .ms-summary-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.st-key-mc-tile-freedom .ms-next { font-size: var(--mc-sub-fs); overflow-wrap: anywhere; }
+
+.st-key-mc-tile-freedom .ms-groups {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 8px 0 4px;
+}
+.st-key-mc-tile-freedom .ms-ladder {
+    min-width: 0; padding: var(--mc-card-pad);
+    border: 1px solid var(--mc-card-border); border-radius: var(--mc-card-r);
+}
+.st-key-mc-tile-freedom .ms-ladder-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 10px; }
+.st-key-mc-tile-freedom .ms-ladder-head b { font-size: var(--mc-sub-fs); font-weight: var(--mc-sub-fw); }
+.st-key-mc-tile-freedom .ms-ladder-head span,
+.st-key-mc-tile-freedom .ms-earlier { font-size: var(--mc-eyebrow-fs); color: var(--mc-muted); }
+.st-key-mc-tile-freedom .ms-earlier { margin: -4px 0 8px; }
+.st-key-mc-tile-freedom .ms-ladder-wide { margin-bottom: 12px; }
+.st-key-mc-tile-freedom .ms-subhead {
+    margin: 22px 0 8px; font-size: var(--mc-sub-fs); font-weight: var(--mc-sub-fw);
+}
+
+html:root .st-key-mc-tile-freedom ul.ms-list {
+    list-style: none; margin: 0 !important; padding: 0 !important; width: 100%; max-width: none;
+    box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;
+}
+html:root .st-key-mc-tile-freedom ul.ms-list.ms-list-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+html:root .st-key-mc-tile-freedom ul.ms-list > li { margin: 0 !important; list-style: none; }
+.st-key-mc-tile-freedom .ms-item {
+    display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start;
+    margin: 0; padding: 10px 12px; border: 1px solid var(--mc-card-border); border-radius: 12px;
+    background: var(--ms-surface);
+}
+.st-key-mc-tile-freedom .ms-dot {
+    width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center;
+    justify-content: center; font-size: 13px; line-height: 1;
+    border: 2px solid var(--ms-dot-fill); color: var(--ms-reached-ink); background: transparent;
+}
+.st-key-mc-tile-freedom .ms-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.st-key-mc-tile-freedom .ms-label { font-size: var(--mc-label-fs); font-weight: var(--mc-label-fw); overflow-wrap: anywhere; }
+.st-key-mc-tile-freedom .ms-when { font-size: var(--mc-cap-fs); color: var(--mc-muted); }
+.st-key-mc-tile-freedom .ms-detail { font-size: var(--mc-eyebrow-fs); color: var(--mc-muted); }
+.st-key-mc-tile-freedom .ms-tag {
+    align-self: flex-start; margin: 2px 0; padding: 1px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; color: var(--ms-reached-ink); background: var(--ms-reached-bg);
+    border: 1px solid var(--ms-reached-border);
+}
+.st-key-mc-tile-freedom .ms-bar { height: 8px; margin-top: 6px; border-radius: 999px; background: var(--ms-track); overflow: hidden; }
+.st-key-mc-tile-freedom .ms-bar i { display: block; height: 100%; border-radius: 999px; background: var(--ms-fill); }
+
+/* Earned: a reached item is filled, with a solid check. */
+.st-key-mc-tile-freedom .ms-item.is-reached { background: var(--ms-reached-bg); border-color: var(--ms-reached-border); }
+.st-key-mc-tile-freedom .ms-item.is-reached .ms-dot { background: var(--ms-dot-fill); color: var(--ms-dot-ink); }
+.st-key-mc-tile-freedom .ms-item.is-reached .ms-when { color: var(--ms-reached-ink); font-weight: 600; }
+.st-key-mc-tile-freedom .ms-item.is-reached .ms-bar { display: none; }
+/* Next up: ringed. */
+.st-key-mc-tile-freedom .ms-item.is-next { border-color: var(--ms-dot-fill); box-shadow: 0 0 0 3px var(--ms-next-ring); background: var(--mc-tile); }
+/* Out of reach: quiet, dashed. */
+.st-key-mc-tile-freedom .ms-item.is-beyond { border-style: dashed; background: transparent; }
+.st-key-mc-tile-freedom .ms-item.is-beyond .ms-dot { border-color: var(--mc-muted); color: var(--mc-muted); }
+.st-key-mc-tile-freedom .ms-item.is-beyond .ms-bar i { background: var(--mc-muted); }
+
+/* Place cards: Streamlit draws the card (a bordered container); this fits it. */
+.st-key-mc-tile-freedom [class*="st-key-ms-place-"] { border-radius: var(--mc-card-r); }
+.st-key-mc-tile-freedom .ms-place-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 4px; }
+.st-key-mc-tile-freedom .ms-place-head b { flex: 0 0 100%; font-size: var(--mc-sub-fs); font-weight: var(--mc-sub-fw); overflow-wrap: anywhere; }
+.st-key-mc-tile-freedom .ms-chip {
+    padding: 1px 10px; border-radius: 999px; font-size: 12px; color: var(--mc-muted);
+    border: 1px solid var(--mc-card-border); white-space: nowrap;
+}
+.st-key-mc-tile-freedom .ms-place-sub { font-size: var(--mc-eyebrow-fs); color: var(--mc-muted); margin-bottom: 10px; }
+.st-key-mc-tile-freedom .ms-list-place .ms-item { padding: 8px 10px; }
+.st-key-mc-tile-freedom .ms-note { margin-top: 8px; font-size: var(--mc-eyebrow-fs); color: var(--mc-muted); }
+.st-key-mc-tile-freedom .ms-result {
+    margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: var(--mc-cap-fs);
+    background: var(--ms-reached-bg); border: 1px solid var(--ms-reached-border);
+}
+.st-key-mc-tile-freedom .ms-result-head { font-weight: 600; color: var(--ms-reached-ink); margin-bottom: 2px; }
+.st-key-mc-tile-freedom .ms-stale { margin-top: 4px; color: var(--ms-warn-ink); font-weight: 600; }
+.st-key-mc-tile-freedom [class*="st-key-ms_confirm_"] { width: 100%; margin-top: auto; }
+.st-key-mc-tile-freedom [class*="st-key-ms_confirm_"] button { width: 100%; }
+/* Cards of one row share a height. */
+.st-key-mc-tile-freedom [data-testid="stHorizontalBlock"]:has([class*="st-key-ms-place-"]) { align-items: stretch; }
+.st-key-mc-tile-freedom [data-testid="stColumn"]:has([class*="st-key-ms-place-"]) { display: flex; flex-direction: column; }
+.st-key-mc-tile-freedom [data-testid="stColumn"]:has([class*="st-key-ms-place-"]) > [data-testid="stVerticalBlock"],
+.st-key-mc-tile-freedom [data-testid="stColumn"]:has([class*="st-key-ms-place-"]) > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"],
+.st-key-mc-tile-freedom [class*="st-key-ms-place-"] { flex: 1 1 auto; }
+
+@media (max-width: 760px) {
+    .st-key-mc-tile-freedom .ms-groups { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+    .st-key-mc-tile-freedom .ms-summary { gap: 12px; padding: 12px; }
+    .st-key-mc-tile-freedom .ms-count { min-width: 56px; }
+    .st-key-mc-tile-freedom .ms-count b { font-size: 28px; }
+    .st-key-mc-tile-freedom .ms-ladder { padding: 12px; }
+}
+/* -- end Freedom milestones -- */
+
+/* ==========================================================================
    Top card layout. The card (.st-key-mc-topbar) holds two keyed rows built by
    app._topbar_head, each a wrapping flex row:
      mc-topbar-head: the title (left), then Run / simulations / Settings (right);

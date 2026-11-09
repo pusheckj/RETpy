@@ -446,7 +446,7 @@ _bc_poll = st.fragment(run_every=3)(_config_locked(_bc_poll_body)) if hasattr(st
 
 
 # Sections the phone bar can jump to: (tile key suffix, chip label).
-_JUMP_SECTIONS = [("retirement", "Retirement"), ("fi", "Net worth"), ("swr", "Withdrawal"),
+_JUMP_SECTIONS = [("retirement", "Retirement"), ("freedom", "Milestones"), ("fi", "Net worth"), ("swr", "Withdrawal"),
                   ("bridge", "Bridge to 59½"), ("spending", "Spending"), ("savings", "Savings"),
                   ("income", "Income"), ("tax", "Tax"), ("lifespan", "Lifespan")]
 
@@ -1074,6 +1074,12 @@ def main() -> None:
             _sec_ret_more()
         else:
             _run_hint("your earliest retirement age, chance of success and portfolio projection")
+
+    # ==================== 1a. FREEDOM MILESTONES ====================
+    # Net worth rungs, Coast FIRE / FIRE by place, and other freedom markers. The
+    # quick rule needs no simulation; each place has its own Confirm button.
+    with st.container(border=True, key="mc-tile-freedom"):
+        _safe_render("components.freedom_milestones", results=results)
 
     # ==================== 1b. NET WORTH TO RETIRE (FI number) ====================
     # "How much do we need?" (net-worth trigger) as a complement to "when?".

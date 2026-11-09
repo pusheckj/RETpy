@@ -313,6 +313,13 @@ YOUR_MARGINAL_TAX_RATE = 0.05
 # Unknown values fall back to "CA" (the historical default).
 STATE_CHOICE = "CA"
 
+# State whose income tax applies to RETIREMENT-phase withdrawals, Roth conversions
+# and RMDs (the portfolio's tax model). None = the same as STATE_CHOICE, so every
+# existing plan is unchanged. Working-year tax always uses STATE_CHOICE. The UI's
+# "Freedom milestones" check sets it to test retiring in another place while the
+# working years stay where you live now. Same value forms as STATE_CHOICE.
+RETIREMENT_STATE_CHOICE = None
+
 # -----------------------------------------------------------------------------
 # COMPLETE SAVINGS CALCULATION
 # -----------------------------------------------------------------------------

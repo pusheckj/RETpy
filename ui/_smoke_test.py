@@ -72,6 +72,8 @@ def test_imports():
         "components.sec_investments",
         "components.sec_retirement_goals",
         "components.sec_assumptions",
+        "components.freedom_milestones",
+        "utils.milestones", "utils.places",
         "utils.derived",
         "utils.formatting", "utils.sim_runner", "utils.config_builder",
     ]

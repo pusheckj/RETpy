@@ -554,6 +554,21 @@ label[data-baseweb="radio"]:has(input:checked) > div:first-child > div { backgro
 }
 /* -- end QA round A R3 -- */
 
+/* ---- Freedom milestones (dark values of the --ms-* tokens in theme.css) ---- */
+:root {
+    --ms-reached-bg: rgba(45, 212, 191, 0.12);
+    --ms-reached-border: rgba(45, 212, 191, 0.40);
+    --ms-reached-ink: #5eead4;
+    --ms-dot-fill: #2dd4bf;
+    --ms-dot-ink: #0f172a;
+    --ms-next-ring: rgba(45, 212, 191, 0.28);
+    --ms-track: rgba(255, 255, 255, 0.14);
+    --ms-fill: #2dd4bf;
+    --ms-surface: rgba(255, 255, 255, 0.04);
+    --ms-warn-ink: #fbbf24;
+}
+/* -- end Freedom milestones -- */
+
 /* ---- QA round A R2 (dark) ---- */
 /* Slider end labels and gray caption text kept the light theme's dark-grey (1.1-1.2:1). */
 [data-testid="stSliderTickBar"], [data-testid="stSliderTickBar"] * { color: var(--mc-muted) !important; }

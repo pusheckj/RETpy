@@ -17,6 +17,9 @@ _UI_ONLY_KEYS = {
     # they must not be pushed onto cfg themselves. (NEW_MORTGAGE_RATE is a real
     # cfg key: the engine amortizes the new loan at it.)
     "NEW_HOME_DOWN_PCT", "NEW_HOME_ESCROW_PCT",
+    # Freedom milestones: edited and custom places (utils/places.py). Saved with the
+    # profile, never read by the engine, and left out of the cache keys (_hashable).
+    "MS_PLACES",
 }
 
 # Derived on every run: birth years from age (sim_runner._recompute_derived),

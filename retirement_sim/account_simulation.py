@@ -415,8 +415,12 @@ def _select_state_tax_brackets(status=None, people=None) -> StateIncomeTax:
     status = cfg.normalize_filing_status(status)
     if people is None:
         people = 2 if (status == cfg._FILING_MFJ and cfg.has_partner()) else 1
-    return StateIncomeTax(cfg.state_tax_rules(getattr(cfg, "STATE_CHOICE", "CA"),
-                                              status, people=people))
+    # The portfolio's model is the retirement-phase one: RETIREMENT_STATE_CHOICE
+    # (None = same as STATE_CHOICE) lets a plan retire in another state.
+    choice = getattr(cfg, "RETIREMENT_STATE_CHOICE", None)
+    if choice is None:
+        choice = getattr(cfg, "STATE_CHOICE", "CA")
+    return StateIncomeTax(cfg.state_tax_rules(choice, status, people=people))
 
 
 # Federal LTCG brackets, married filing jointly (kept for callers that read the
