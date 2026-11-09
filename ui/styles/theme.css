@@ -3358,6 +3358,7 @@ html:root :is(.simple-group, .simple-plan-name, .simple-step-title) {
 .st-key-mc-tile-freedom .ms-ladder-head span,
 .st-key-mc-tile-freedom .ms-earlier { font-size: var(--mc-eyebrow-fs); color: var(--mc-muted); }
 .st-key-mc-tile-freedom .ms-earlier { margin: -4px 0 8px; }
+.st-key-mc-tile-freedom .ms-ladder-wide { margin-bottom: 12px; }
 .st-key-mc-tile-freedom .ms-subhead {
     margin: 22px 0 8px; font-size: var(--mc-sub-fs); font-weight: var(--mc-sub-fw);
 }
