@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file. Format: [Ke
 ## [Unreleased]
 
 ### Added
+- Planner sidebar: the **Target retirement age** and **Partner's retirement age** sliders moved from About you to the top of **Retirement goals** (under "When you retire"). Same settings and saved values; the target age still applies before the sections above it are drawn.
 - Planner: the *Money check-up | Retirement planner* switch moved to the top of the side panel, above About you, matching the section cards' width. Phones and a closed panel keep the switch at the top of the page
 - Planner sidebar: new **Family** section (children and college) and **House** section (rent or mortgage, home moves, extra mortgage payments), each with a short summary line. The controls moved out of Expenses and Big purchases & goals; keys and saved profiles are unchanged
 - Interactive Streamlit UI in `ui/` — financial-advisor-style dashboard with Monte Carlo fan chart, success-by-age visualization, allocation glide path, income-source breakdown, tax analysis, withdrawal strategy, and sensitivity analysis tabs

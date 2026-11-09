@@ -102,7 +102,78 @@ def _lifestyle(st, overrides: dict) -> None:
                "and the drop waits until 10 years after you retire.")
 
 
+def render_retirement_ages(st) -> None:
+    """Your target retirement age and, when there is a partner, theirs (moved here
+    from About you). Same widget keys as before, so saved profiles load unchanged."""
+    your_age = safe_int(get_override(st, "YOUR_AGE", 30), 30)
+    has_partner = safe_int(get_override(st, "PARTNER_AGE", 0), 0) > 0
+    ensure_default(st, "ay_target_age",
+                   safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60))
+    target = st.slider("Target retirement age", min_value=25, max_value=75,
+                       step=1, key="ay_target_age",
+                       help="When you plan to stop working.")
+    set_override(st, "TARGET_RETIREMENT_AGE", safe_int(target))
+    if target < your_age:
+        st.warning(
+            f"Your target retirement age ({target}) is below your current age ({your_age}). "
+            "Raise it to at least your age to run the plan."
+        )
+
+    # Partner's own retirement age (only when a partner exists). Independent of
+    # yours: the partner can keep working after you retire, or stop earlier. The
+    # default is the partner's age in the year YOU retire (i.e. "retire together"),
+    # which the engine treats identically to the single-switch default -- so this
+    # is a no-op until the user actually moves it apart.
+    partner_age = safe_int(get_override(st, "PARTNER_AGE", 0), 0)
+    if has_partner:
+        age_gap = your_age - partner_age  # your_age - partner_age
+        # "Retire together" = the partner's age in the year YOU retire. When that
+        # lands outside the slider's 25-75 range (a large age gap), it can't be
+        # represented on the slider, so we KEEP the byte-identical None default
+        # (retire together) until the user deliberately moves the slider -- rather
+        # than storing the clamped value, which would wrongly retire the partner
+        # early/late and diverge from the "retire together" intent.
+        together_raw = target - age_gap
+        together_in_range = 25 <= together_raw <= 75
+        slider_default = max(25, min(75, together_raw))
+        ensure_default(st, "ay_partner_target_age",
+                       safe_int(get_override(st, "PARTNER_RETIREMENT_AGE", None) or slider_default,
+                                slider_default))
+        p_target = st.slider("Partner's retirement age", min_value=25, max_value=75,
+                             step=1, key="ay_partner_target_age",
+                             help="Your partner's age when they stop working. Set it apart "
+                                  "from yours if one of you retires first. The other keeps "
+                                  "earning and saving, and their take-home pay offsets "
+                                  "withdrawals.")
+        if not together_in_range and p_target == slider_default:
+            # "Retire together" isn't representable on the slider and the user
+            # hasn't moved it -> keep None so results match the retire-together default.
+            set_override(st, "PARTNER_RETIREMENT_AGE", None)
+            st.caption("Partner retires the same year you do.")
+        else:
+            set_override(st, "PARTNER_RETIREMENT_AGE", safe_int(p_target))
+            # Translate the partner's retirement age into "N years before/after you"
+            # by comparing the years each retires (partner reaches p_target when
+            # your age is p_target + age_gap).
+            your_year_partner_retires = p_target + age_gap
+            gap_vs_you = your_year_partner_retires - target
+            if gap_vs_you == 0:
+                st.caption(f"Partner retires at {p_target}, the same year you do.")
+            else:
+                when = "after you" if gap_vs_you > 0 else "before you"
+                n = abs(gap_vs_you)
+                st.caption(f"Partner retires at {p_target}, {n} year{'' if n == 1 else 's'} {when}.")
+            if p_target < partner_age:
+                st.warning(
+                    f"Partner's retirement age ({p_target}) is below their current age "
+                    f"({partner_age}), so they count as already retired."
+                )
+
+
 def render_body(st) -> None:
+    # ----- When you retire -----
+    _section_label(st, "When you retire")
+    render_retirement_ages(st)
     overrides = st.session_state.get("user_overrides", {}) or {}
 
     # ----- Retirement spending -----
