@@ -42,15 +42,12 @@ def test_phone_frame_uses_narrow_gutters():
     assert "padding: 56px 12px 48px" in body
 
 
-def test_toolbar_column_rules_outrank_the_tablet_stacking_rule():
+def test_top_card_is_not_caught_by_the_tablet_column_stacking_rule():
+    """The generic rule stacks every main-pane column row; the top card has none
+    now (two keyed flex rows), so nothing in it needs an exception."""
     stack = _media("(max-width: 1100px)")
-    # the generic stacking rule has a type selector (section[...]) ...
     assert 'section[data-testid="stMain"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]' in stack
-    # ... so the top card's exceptions must carry it too, or they lose
-    assert re.search(r'section\[data-testid="stMain"\] \.st-key-mc-topbar .*:not\(:first-child\)', stack)
-    phone = _media("(max-width: 640px)")
-    for n in (2, 3, 4):
-        assert re.search(r'section\[data-testid="stMain"\] \.st-key-mc-topbar .*:nth-child\(%d\)' % n, phone)
+    assert not re.search(r"st-key-mc-topbar[^{]*stColumn", CSS)        # no per-column rules left
 
 
 def test_compact_charts_show_only_on_phones():

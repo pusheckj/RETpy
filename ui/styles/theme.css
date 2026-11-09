@@ -3372,14 +3372,14 @@ html:root :is(.simple-group, .simple-plan-name, .simple-step-title) {
 }
 
 /* Row 2. The metrics keep their natural width; the switch takes the area to
-   their right (equal segments, never wider than 340px) and ends at the same
-   right edge as Settings above it. Bottoms aligned: the switch's bottom edge is
-   level with the metric values. */
+   their right (equal segments, never wider than 312px, so it is the same size
+   in both views) and ends at the same right edge as Settings above it. Bottoms
+   aligned: the switch's bottom edge is level with the metric values. */
 .st-key-mc-topbar .st-key-mc-topbar-foot > [data-testid="stElementContainer"]:has(.mc-topbar) {
     flex: 0 1 auto; width: auto; min-width: 0;
 }
 .st-key-mc-topbar .st-key-mc-topbar-foot > .st-key-main_view {
-    flex: 1 1 300px; width: auto; min-width: 0; max-width: 340px; margin-left: auto;
+    flex: 1 1 300px; width: auto; min-width: 0; max-width: 312px; margin-left: auto;
 }
 .st-key-mc-topbar-foot .st-key-main_view [data-testid="stButtonGroup"],
 .st-key-mc-topbar-foot .st-key-main_view [data-baseweb="button-group"] { display: flex; width: 100%; max-width: none; }
@@ -3393,20 +3393,20 @@ html:root :is(.simple-group, .simple-plan-name, .simple-step-title) {
 @media (min-width: 641px) {
     .st-key-mc-topbar-foot .st-key-main_view { --mc-seg-item-h: 46px; --mc-seg-fs: 17px; }
 }
-/* A narrower row (the side panel open next to a laptop-size page, ~720-940px)
+/* A narrower row (the side panel open next to a laptop-size page, ~735-940px)
    keeps the switch at the bottom right: the metrics fold into a 3 + 2 grid to
    its left, so the card is no taller than it was. */
 @media (min-width: 1101px) {
-    @container mc-tb-foot (min-width: 722px) and (max-width: 942px) {
+    @container mc-tb-foot (min-width: 734px) and (max-width: 942px) {
         .st-key-mc-topbar .mc-topbar { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; align-items: end; gap: 6px 20px; }
         .st-key-mc-topbar .st-key-mc-topbar-foot > [data-testid="stElementContainer"]:has(.mc-topbar) { flex: 1 1 0; }
-        .st-key-mc-topbar .st-key-mc-topbar-foot > .st-key-main_view { flex: 0 0 300px; }
+        .st-key-mc-topbar .st-key-mc-topbar-foot > .st-key-main_view { flex: 0 0 312px; }
     }
 }
 /* No room beside the metrics: the switch gets a full-width line of its own.
    (From 1101px the Name(s) metric is shown, so the metrics are wider.) */
 @media (min-width: 1101px) {
-    @container mc-tb-foot (max-width: 721px) {
+    @container mc-tb-foot (max-width: 733px) {
         .st-key-mc-topbar .st-key-mc-topbar-foot > [data-testid="stElementContainer"]:has(.mc-topbar) { flex-basis: 100%; }
         .st-key-mc-topbar .st-key-mc-topbar-foot > .st-key-main_view { flex-basis: 100%; max-width: none; }
     }
