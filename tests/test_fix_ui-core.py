@@ -208,7 +208,7 @@ def test_json_load_then_rerun_keeps_early_access_strategies_off():
                  "RULE_OF_55_ENABLED": False, "SEPP_72T_ENABLED": False,
                  "ROTH_LADDER_ENABLED": False, "COAST_FIRE_ENABLED": False}
     _apply_restored(st, profile_b, "profileB.json")
-    sec_early_access.render(st)          # the very next rerun
+    sec_early_access.render_body(st)     # the very next rerun
 
     ov = st.session_state["user_overrides"]
     for key in ("RULE_OF_55_ENABLED", "SEPP_72T_ENABLED",

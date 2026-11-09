@@ -24,8 +24,7 @@ from utils.derived import KEEP_AMOUNTS_MODE, MANUAL_MODE, SAVINGS_MODES  # noqa:
 from utils.widget_sync import DIRECT_MAPPINGS  # noqa: E402
 
 SECTION_ORDER = ["About you", "Family", "Income", "Taxes", "House", "Expenses",
-                 "Big purchases & goals", "Accounts", "Investments", "Retirement",
-                 "Early retirement access", "Assumptions (advanced)"]
+                 "Accounts", "Investments", "Retirement", "Assumptions (advanced)"]
 
 RETURNS_AND_MIX_KEYS = {"sa_scenario", "sa_stock_alloc", "sa_fee_bps", "sa_vol_drag",
                         "sa_inflation", "sa_glide_enable", "sa_glide_start", "sa_glide_end",
@@ -100,8 +99,8 @@ def test_app_renders_the_sections_in_the_new_order():
     body = body[:body.index('_safe_render("components.faq")')]
     order = re.findall(r'_safe_render\("components\.(\w+)"\)', body)
     assert order == ["sec_about_you", "sec_family", "sec_income", "sec_taxes", "sec_house",
-                     "sec_expenses", "sec_big_purchases", "account_inputs", "sec_investments",
-                     "sec_retirement_goals", "sec_early_access", "sec_assumptions"]
+                     "sec_expenses", "account_inputs", "sec_investments",
+                     "sec_retirement_goals", "sec_assumptions"]
     # Savings and the investing assumptions are drawn inside Investments, never twice
     assert "sec_savings" not in order
     # Investments draws after Taxes (which reads its widgets) and before Retirement

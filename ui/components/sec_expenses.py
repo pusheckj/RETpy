@@ -1,7 +1,9 @@
-"""Section: Expenses — monthly spending categories and the lifecycle pattern.
+"""Section: Expenses — monthly spending categories, the lifecycle pattern, and
+big purchases & goals (car, retirement vacation) at the end.
 
 Housing is in the House section and children in Family; both render first, so
-the live total below reads their finished inputs."""
+the live total below reads their finished inputs. The big-purchase inputs are
+drawn after the total and nothing above them reads their values."""
 from __future__ import annotations
 
 try:
@@ -174,6 +176,16 @@ def render_body(st) -> None:
                + ". This is what the plan spends today. It changes with "
                + (", ".join(changes[:-1]) + " and " if len(changes) > 1 else "")
                + changes[-1] + ".")
+
+    # ----- Big purchases & goals (car, retirement vacation) -----
+    # Drawn last: the total above does not include them (they are one-off or
+    # early-retirement extras the engine adds separately).
+    try:
+        from components import sec_big_purchases
+    except ImportError:  # pragma: no cover
+        from ui.components import sec_big_purchases  # type: ignore
+    st.divider()
+    sec_big_purchases.render_body(st)
 
 
 def render(st) -> None:

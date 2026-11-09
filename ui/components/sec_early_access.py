@@ -1,4 +1,4 @@
-"""Section: Early-retirement access strategies.
+"""Early-retirement access strategies (drawn at the end of Retirement).
 
 Ways to reach retirement money before the normal 59.5 penalty age. Each is OFF
 by default so the baseline plan is unchanged and each can be A/B tested on its
@@ -8,13 +8,12 @@ Strategy 1 of the five — using a taxable brokerage as the bridge — needs no
 toggle: the engine already draws taxable first (after cash) before 59.5, taxed at
 long-term capital-gains rates with no penalty. It is surfaced here as a read-only
 status line so the set of five reads as a complete menu rather than four.
+
+``sec_retirement_goals.render_body`` calls ``render_body`` at the end of
+Retirement; this module no longer has a section of its own. Widget and override
+keys are unchanged.
 """
 from __future__ import annotations
-
-try:
-    from utils.section_icon import section_expander
-except ImportError:  # pragma: no cover
-    from ui.utils.section_icon import section_expander  # type: ignore
 
 try:
     from utils.coerce import safe_int, safe_float, ensure_default
@@ -49,7 +48,7 @@ def _section_label(st, txt):
                 unsafe_allow_html=True)
 
 
-def _render_body(st) -> None:
+def render_body(st) -> None:
     overrides = st.session_state.get("user_overrides", {}) or {}
     retire_age = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60)
 
@@ -214,7 +213,3 @@ def _render_body(st) -> None:
                        f"{retire_age}, so your portfolio grows by compounding alone "
                        f"for {retire_age - coast_age} years.")
 
-
-def render(st) -> None:
-    with section_expander(st, "Early retirement access", "lock_open"):
-        _render_body(st)

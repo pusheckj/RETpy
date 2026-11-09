@@ -1,4 +1,4 @@
-"""Section: Big purchases & goals — car and retirement vacation.
+"""Big purchases & goals — car and retirement vacation (drawn inside Expenses).
 
 Optional lifecycle events, each OFF by default so the baseline simulation is
 unaffected until a user explicitly opts in:
@@ -7,13 +7,11 @@ unaffected until a user explicitly opts in:
   - Retirement vacation: extra early-retirement spending from retirement
     until a chosen slow-down age.
 Home moves and extra mortgage payments are in the House section.
+
+``sec_expenses.render_body`` calls ``render_body`` at the end of Expenses; this
+module no longer has a section of its own. Widget and override keys are unchanged.
 """
 from __future__ import annotations
-
-try:
-    from utils.section_icon import section_expander
-except ImportError:  # pragma: no cover
-    from ui.utils.section_icon import section_expander  # type: ignore
 
 try:
     from utils.coerce import safe_int, ensure_default
@@ -117,7 +115,3 @@ def render_body(st) -> None:
         st.caption("Extra spending on top of normal expenses, from retirement age "
                    "until the slow-down age.")
 
-
-def render(st) -> None:
-    with section_expander(st, "Big purchases & goals", "shopping_bag"):
-        render_body(st)
