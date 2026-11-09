@@ -333,6 +333,7 @@ All tables are 2024 figures held flat in today's dollars (statutory thresholds t
 | `SS_WAGE_BASE` | `$168,600` | Social Security wage base, per earner. With `SOCIAL_SECURITY_TAX_RATE` 6.2%, `MEDICARE_TAX_RATE` 1.45%, `ADDITIONAL_MEDICARE_TAX_RATE` 0.9% above `ADDITIONAL_MEDICARE_THRESHOLD_BY_STATUS` ($250k joint / $200k otherwise, per return). |
 | `ROTH_IRA_PHASEOUT_BY_STATUS` | $230k–$240k joint, $146k–$161k others | Direct Roth IRA phase-out (partner's Roth). |
 | `YOUR_MARGINAL_TAX_RATE` | `0.05` | Flat **state** rate for `STATE_CHOICE = "Other"` (the app's *Another state (flat rate)*), applied above the federal standard deduction, Social Security exempt. |
+| `RETIREMENT_STATE_CHOICE` | `None` | State whose income tax applies to retirement-year withdrawals, Roth conversions and RMDs. `None` means the same as `STATE_CHOICE`, so plans are unchanged. Working years always use `STATE_CHOICE`. Same value forms as `STATE_CHOICE`. The UI's Freedom milestones check sets it to test retiring in another place. |
 
 **Unmarried couples.** With a partner in the plan (`PARTNER_AGE > 0`) and a status other than MFJ, the household files **two returns**: you on `FILING_STATUS` (Single or Head of household), your partner as Single. Wages, withdrawals, RMDs, Roth conversions, capital gains and Social Security are each taxed on their owner's return (`files_two_returns()`, `return_status()`).
 

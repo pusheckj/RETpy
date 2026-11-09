@@ -402,7 +402,11 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age")
 #             which is stale the moment the inputs change).
 #   le_       life-expectancy card inputs (age / sex / conditions).
 #   se_kid    the Family section's children rows (one set per child).
-_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid")
+#   ms_       Freedom milestones: the rate / part-time inputs, the place editor and the
+#             stored "Confirm with simulation" checks (ms_res_*), all of which belong to
+#             the profile that was just replaced. The places themselves live in
+#             user_overrides["MS_PLACES"] and load with the profile.
+_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_")
 
 
 def reset_input_widget_state(st) -> None:

@@ -390,9 +390,15 @@ def _freeze(value: Any) -> Any:
     return value
 
 
+# Saved UI state that never reaches the engine (Freedom milestones' places): leaving it
+# out of the cache keys keeps editing a place from marking the plan's results stale.
+_HASH_IGNORED_KEYS = frozenset({"MS_PLACES"})
+
+
 def _hashable(overrides: dict) -> tuple:
     """Flatten a (possibly deeply-nested) dict into a hashable tuple for cache keys."""
-    return tuple(sorted((k, _freeze(v)) for k, v in overrides.items()))
+    return tuple(sorted((k, _freeze(v)) for k, v in overrides.items()
+                        if k not in _HASH_IGNORED_KEYS))
 
 
 # ---------------------------------------------------------------------------
@@ -523,6 +529,9 @@ _NW_CACHE: Dict[tuple, Any] = {}
 # Separate small cache for the safe-withdrawal-rate sweep.
 _SWR_CACHE: Dict[tuple, Any] = {}
 
+# Small cache for the Freedom milestones "Confirm with simulation" check.
+_PLACE_CACHE: Dict[tuple, Any] = {}
+
 
 def clear_cache(include_disk: bool = True) -> None:
     """Clear the cached simulation results (call after editing the underlying model).
@@ -535,6 +544,7 @@ def clear_cache(include_disk: bool = True) -> None:
     _CACHE.clear()
     _NW_CACHE.clear()
     _SWR_CACHE.clear()
+    _PLACE_CACHE.clear()
     if include_disk:
         d = _disk()
         if d is not None:
@@ -781,6 +791,94 @@ def run_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
     """
     return execute_plan(plan_swr_analysis(user_overrides, n_simulations, target_retirement_age),
                         progress_callback)
+
+
+# =============================================================================
+# Freedom milestones (utils/milestones.py, components/freedom_milestones.py)
+# =============================================================================
+
+def retirement_spending_basis(user_overrides: dict, retirement_age: int) -> dict:
+    """What the plan spends a year in retirement, in today's dollars, WITHOUT
+    simulating: the config's own expense helpers under the user's inputs.
+
+    ``core`` is everyday spending, housing and children at the retirement age
+    (``calculate_annual_expenses``, retirement mode and lifecycle preset included).
+    ``health`` is health insurance and care for the household
+    (``healthcare_cost_per_adult`` per adult). ``living`` is the part of ``core``
+    the retirement-spending knob replaces (``retirement_living_base``), and
+    ``today`` is what the household spends now. Taxes and one-off items are left
+    out; the simulation adds them.
+    """
+    original = _apply_overrides(build_config_overrides(user_overrides))
+    try:
+        age = max(int(retirement_age), int(getattr(cfg, "YOUR_AGE", 25)))
+        adults = 2 if cfg.has_partner() else 1
+        return {
+            "core": float(cfg.calculate_annual_expenses(age, 1.0, 1.0, retirement=True,
+                                                        retirement_age=age)),
+            "health": float(adults * cfg.healthcare_cost_per_adult(age)),
+            "living": float(cfg.retirement_living_base()),
+            "today": float(getattr(cfg, "CURRENT_ANNUAL_EXPENSES", 0.0) or 0.0),
+            "discretionary_ratio": float(getattr(cfg, "DISCRETIONARY_EXPENSE_RATIO", 0.30)),
+            "retirement_age": age,
+        }
+    finally:
+        _restore_overrides(original)
+
+
+def plan_place_check(user_overrides: dict, place_overrides: dict, n_simulations: int = 1000,
+                     target_retirement_age: int = 55) -> Plan:
+    """The success-by-age scan plus the target-age run for ONE place, as plain
+    "scan" and "batch" calls (so the visitor's browser can run them).
+
+    ``place_overrides`` are engine keys on top of the user's inputs (see
+    milestones.place_overrides). The scan uses the same seeds and run counts as
+    ``plan_full_analysis``, so a place that changes nothing reproduces the plan's
+    own earliest age."""
+    merged = {**user_overrides, **place_overrides}
+    n = max(1, int(n_simulations))
+    key = (_hashable(merged), n, int(target_retirement_age))
+    hit = _small_cache_lookup(_PLACE_CACHE, "place", key)
+    if hit is not None:
+        return Plan("place", key, merged, result=hit)
+    original = _apply_overrides(build_config_overrides(merged))
+    try:
+        your_age = int(getattr(cfg, "YOUR_AGE", 25))
+        target_age = max(int(target_retirement_age), your_age)
+        target_success = float(getattr(cfg, "TARGET_SUCCESS_RATE", 0.80))
+        scan_sims = max(200, n // 4)
+        ages = list(range(max(25, your_age), max(76, your_age + 5)))
+        calls = [["scan", -1, [age, scan_sims, 1000 + i, target_success]]
+                 for i, age in enumerate(ages)]
+        # The target age runs as the main analysis does (same chunks and seeds, no
+        # per-path detail), so a place that changes nothing gives the plan's own numbers.
+        chunk_sizes = _split_count(min(n, 5000), _PRIMARY_CHUNKS)
+        calls += [["batch", -1, [target_age, size, 0, 2000 + j]] for j, size in enumerate(chunk_sizes)]
+        job = {"base": mc_jobs.snapshot(), "patches": [], "calls": calls}
+    finally:
+        _restore_overrides(original)
+    n_scans = len(ages)
+
+    def finish(results: List[Any]) -> Dict[str, Any]:
+        scans, chunks = results[:n_scans], results[n_scans:]
+        by_age = {int(r["age"]): (r["successes"] / r["n"]) if r["n"] else 0.0 for r in scans}
+        runs = sum(int(c["n"]) for c in chunks)
+        at_target = (sum(int(c["successes"]) for c in chunks) / runs) if runs else 0.0
+        by_age[target_age] = at_target
+        earliest = next((a for a in sorted(by_age) if by_age[a] >= target_success), None)
+        return {"earliest_retirement_age": earliest, "success_at_target": at_target,
+                "target_age": target_age, "target_success": target_success,
+                "success_rate_by_age": by_age}
+
+    return Plan("place", key, merged, job, finish,
+                store=_small_cache_writer(_PLACE_CACHE, "place", key))
+
+
+def run_place_check(user_overrides: dict, place_overrides: dict, n_simulations: int = 1000,
+                    target_retirement_age: int = 55, progress_callback=None) -> Dict[str, Any]:
+    """Run ``plan_place_check`` here (the server)."""
+    return execute_plan(plan_place_check(user_overrides, place_overrides, n_simulations,
+                                         target_retirement_age), progress_callback)
 
 
 #: Lifecycle toggle flags that gate one-off/recurring life events in the engine.

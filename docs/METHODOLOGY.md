@@ -346,6 +346,18 @@ When `USE_HOME_AS_BACKUP = True`, accessible home equity (`HOME_EQUITY_ACCESSIBL
 
 ---
 
+## 15.2 Freedom milestones (UI)
+
+The planner's **Freedom milestones** section (`ui/utils/milestones.py`, `ui/utils/places.py`) is a quick-rule layer on top of the engine, in today's dollars:
+
+- **Timeline:** the median invested balance by age from the last run (or, before a run, the deterministic projection the net-worth chart uses). Net worth adds projected home equity.
+- **FIRE in a place:** invested balance ≥ yearly spending there ÷ withdrawal rate (default 4%). Spending there = `calculate_annual_expenses` at the retirement age (retirement mode and lifecycle preset applied) × the place's cost factor, plus health costs (`healthcare_cost_per_adult` × adults, not scaled). The factor cannot take spending below housing and children's costs, because the engine moves only the retirement living base.
+- **Coast FIRE:** balance × (1 + r)^(retirement age − age) ≥ the FIRE number, with r the expected real return of the return scenario (as in the net-worth projection chart).
+- **Confirm with simulation:** the place becomes engine settings: `RETIREMENT_SPENDING_MODE = "Absolute amount ($/yr)"` with `RETIREMENT_SPENDING_ABSOLUTE = living base + (factor − 1) × everyday spending`, and `RETIREMENT_STATE_CHOICE` for the place's state tax. `RETIREMENT_STATE_CHOICE` (default `None`, meaning `STATE_CHOICE`) applies only to retirement-phase tax (withdrawals, conversions, RMDs); working years keep `STATE_CHOICE`. The check reuses the main analysis's seeds and run counts, so a place that changes nothing reproduces the plan's own earliest age.
+- **Places abroad** use "no state income tax" as a placeholder. US federal tax still applies; foreign tax, treaties, visas, healthcare differences and currency are not modeled. The built-in cost factors are illustrative guesses.
+
+---
+
 ## 16. Known limitations
 
 - **Normal-distribution returns** under-sample fat tails and skew relative to real markets. Crisis-level drawdowns are reached only via clamping rather than emerging organically from the distribution.
@@ -354,6 +366,6 @@ When `USE_HOME_AS_BACKUP = True`, accessible home equity (`HOME_EQUITY_ACCESSIBL
 - **Geography:** federal + any state or DC (2024 tables, `state_tax_data.py`). City/county income taxes, state credits and itemized deductions are not modeled; some states' figures are labelled approximate. No federal tax credits (e.g. the child tax credit) either.
 - **Not modeled:** inherited IRAs (no 10-year rule accounting), pension income, rental real estate, a second home held at the same time as the main one, annuities, cash-value life insurance, business equity, deferred comp.
 - **Medicare/Medicaid** are modeled as flat age-banded costs; no long-term-care Medicaid spend-down logic, no separate Part A/B/D bracket interaction beyond IRMAA.
-- **State residency is assumed constant.** Changing residency mid-retirement (e.g. moving from CA to a no-tax state) is not modeled.
+- **State residency is assumed constant.** Changing residency mid-retirement (e.g. moving from CA to a no-tax state) is not modeled, except through `RETIREMENT_STATE_CHOICE`, which applies a different state to the whole retirement phase (used by the Freedom milestones check).
 - **Sequence-of-returns risk** is captured by Monte Carlo but not separately reported. Users concerned about SORR should inspect the distribution of failures by retirement-year cohort.
 - **Fixed-horizon / no-mortality model:** both spouses are assumed alive for every year through the plan's end. There is no stochastic mortality, no survivor Social Security benefit (the higher of the two benefits continuing alone after a spouse's death), no filing-status change at first death, and no widowhood expense reduction (single-person household costs are typically lower than a couple's). `PLAN_UNTIL_AGE` sets the simulation length only, not a mortality assumption.

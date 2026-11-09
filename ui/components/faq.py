@@ -88,6 +88,17 @@ QUESTIONS: list[tuple[str, str]] = [
         "\"Me and my partner (not married)\".",
     ),
     (
+        "What are the Freedom milestones?",
+        "Markers of freedom you pass on the way: net worth rungs, **Coast FIRE** "
+        "(stop saving and growth alone gets you to FIRE by your retirement age), "
+        "**FIRE** (your investments pay for life at a withdrawal rate), and "
+        "others such as the emergency fund. FIRE and Coast FIRE are shown for "
+        "places you can edit, like the Midwest or Portugal. The quick rule is an "
+        "estimate. Press *Confirm with simulation* on a place to test it with the "
+        "full model. The cost factors and abroad tax settings are rough "
+        "placeholders, so set your own.",
+    ),
+    (
         "How do I save my inputs?",
         "Open Settings (top right) and choose Save / Load profile. Download "
         "your inputs as a JSON file, then upload it later to restore them. The "
