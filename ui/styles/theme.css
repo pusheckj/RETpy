@@ -3330,7 +3330,7 @@ html:root :is(.simple-group, .simple-plan-name, .simple-step-title) {
 .st-key-mc-topbar .st-key-mc-topbar-foot {
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 10px 16px;
+    gap: 12px 16px;
     width: 100%;
 }
 .st-key-mc-topbar .st-key-mc-topbar-head { align-items: center; container: mc-tb-head / inline-size; }
