@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import plotly.graph_objects as go
 
-from utils.formatting import money
+from utils.formatting import money, money_precise
 
 # #7: shared pastel palette for consistent, softer chart series colors.
 try:
@@ -269,10 +269,10 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
 
     # Phone: cards go two per row; a pair shares its label height (see theme.css).
     l2 = [True, True, False, False]   # "Net worth" | "Retirement accounts" wrap; "Non-retirement" | "Home equity" do not
-    with cols[0]: st.markdown(_stat_card("Net worth", money(net_worth, shorten=True), "total assets minus debt", "#0d9488", tooltip=net_worth_tip, cls="mc-teal", delta_html=d_nw, idx=0, two_line=l2[0]), unsafe_allow_html=True)
-    with cols[1]: st.markdown(_stat_card("Retirement accounts", money(retirement_sum, shorten=True), "401(k), Roth IRA, Traditional IRA, HSA", tooltip=retirement_tip, delta_html=d_ret, idx=1, two_line=l2[1]), unsafe_allow_html=True)
-    with cols[2]: st.markdown(_stat_card("Non&#8209;retirement", money(taxable_sum + cash_sum, shorten=True), "taxable brokerage + cash", tooltip=non_retirement_tip, delta_html=d_nonret, idx=2, two_line=l2[2]), unsafe_allow_html=True)
-    with cols[3]: st.markdown(_stat_card("Home equity", money(home_equity, shorten=True), ("projected equity" if projected else f"value {money(home_value, shorten=True)}"), tooltip=home_equity_tip, delta_html=d_home, idx=3, two_line=l2[3]), unsafe_allow_html=True)
+    with cols[0]: st.markdown(_stat_card("Net worth", money_precise(net_worth), "total assets minus debt", "#0d9488", tooltip=net_worth_tip, cls="mc-teal", delta_html=d_nw, idx=0, two_line=l2[0]), unsafe_allow_html=True)
+    with cols[1]: st.markdown(_stat_card("Retirement accounts", money_precise(retirement_sum), "401(k), Roth IRA, Traditional IRA, HSA", tooltip=retirement_tip, delta_html=d_ret, idx=1, two_line=l2[1]), unsafe_allow_html=True)
+    with cols[2]: st.markdown(_stat_card("Non&#8209;retirement", money_precise(taxable_sum + cash_sum), "taxable brokerage + cash", tooltip=non_retirement_tip, delta_html=d_nonret, idx=2, two_line=l2[2]), unsafe_allow_html=True)
+    with cols[3]: st.markdown(_stat_card("Home equity", money_precise(home_equity), ("projected equity" if projected else f"value {money(home_value, shorten=True)}"), tooltip=home_equity_tip, delta_html=d_home, idx=3, two_line=l2[3]), unsafe_allow_html=True)
 
     st.markdown('<div style="height: 24px;"></div>', unsafe_allow_html=True)
 
@@ -300,7 +300,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
             margin=dict(l=10, r=10, t=56, b=18),
             # $ total centered in the donut hole. xanchor=center so x is the text
             # CENTER; x/y = the donut's center (domain x 0-1, y 0.26-1).
-            annotations=[dict(text=money(net_worth, shorten=True), x=0.5, xanchor="center", y=0.63, yanchor="middle", font=dict(size=18, family="Inter"), showarrow=False)],
+            annotations=[dict(text=money_precise(net_worth), x=0.5, xanchor="center", y=0.63, yanchor="middle", font=dict(size=18, family="Inter"), showarrow=False)],
             # Legend vertically centered on the RIGHT.
             legend=dict(orientation="h", yanchor="top", y=0.22, xanchor="center", x=0.5,
                         font=dict(size=12.5), itemsizing="constant"),

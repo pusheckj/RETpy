@@ -21,16 +21,18 @@ from typing import Any, Dict, Optional
 # Dual-import shim so the module works whether imported as `components.top_bar`
 # (ui/ on sys.path) or `ui.components.top_bar`.
 try:
-    from utils.formatting import money
+    from utils.formatting import money, money_precise
 except Exception:  # pragma: no cover
     try:
-        from ui.utils.formatting import money  # type: ignore
+        from ui.utils.formatting import money, money_precise  # type: ignore
     except Exception:  # pragma: no cover
         def money(value, precision: int = 0, shorten: bool = False) -> str:
             try:
                 return f"${float(value):,.0f}"
             except Exception:
                 return "—"
+
+        money_precise = money
 
 try:
     from utils.derived import compute_total_income as _compute_total_income
@@ -196,7 +198,7 @@ def render(st, results: Optional[dict] = None,
     names = _resolve_names(profile)
 
     net_worth = _resolve_net_worth(results, overrides)
-    net_worth_str = money(net_worth, shorten=True) if net_worth is not None else "—"
+    net_worth_str = money_precise(net_worth) if net_worth is not None else "—"
 
     income = _resolve_income(overrides)
     income_str = money(income, shorten=True) if income is not None else "—"

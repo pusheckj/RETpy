@@ -26,14 +26,14 @@ try:
                                mortgage_payment, housing_timeline,
                                extra_mortgage_for_age as _extra_for_age,
                                savings_budget, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
-    from utils.formatting import money
+    from utils.formatting import money, money_precise
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float  # type: ignore
     from ui.utils.derived import (advance_mortgage_with_extra,  # type: ignore
                                   current_mortgage_terms, mortgage_payment, housing_timeline,
                                   extra_mortgage_for_age as _extra_for_age,
                                   savings_budget, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
-    from ui.utils.formatting import money  # type: ignore
+    from ui.utils.formatting import money, money_precise  # type: ignore
 
 
 try:
@@ -422,10 +422,10 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
     # KPI row above chart
     cols = st.columns(3)
     with cols[0]:
-        st.metric("Today", money(totals[0] if totals else 0, shorten=True))
+        st.metric("Today", money_precise(totals[0] if totals else 0))
     with cols[1]:
         st.metric(f"At retirement (age {retirement_age})",
-                  money(final_total, shorten=True))
+                  money_precise(final_total))
     with cols[2]:
         scenario = str(overrides.get("ACTIVE_RETURN_SCENARIO", "historical")).title()
         st.metric("Return scenario", scenario)

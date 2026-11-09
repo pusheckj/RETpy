@@ -57,6 +57,14 @@ def money(value: Union[int, float, None], precision: int = 0, shorten: bool = Fa
     return f"-${body}" if negative else f"${body}"
 
 
+def money_precise(value: Union[int, float, None]) -> str:
+    """Shortened dollars with a second decimal from a million up, for balances:
+    money_precise(1_957_300) -> "$1.96M"; under a million it matches
+    ``money(value, shorten=True)`` ("$34.0K")."""
+    precision = 1 if not _is_bad(value) and abs(value) >= 1e6 else 0
+    return money(value, precision=precision, shorten=True)
+
+
 def money_md(value: Union[int, float, None], precision: int = 0, shorten: bool = False) -> str:
     """``money()`` with the ``$`` escaped for Streamlit markdown/captions.
 
