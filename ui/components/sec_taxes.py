@@ -55,8 +55,8 @@ def render_body(st) -> None:
         set_override(st, "YOUR_MARGINAL_TAX_RATE", r / 100)
 
     # This year's tax on your pay -- the same function the simulation uses, on
-    # the 401(k)/HSA amounts the Savings section puts in (so the Savings
-    # section's "Taxes" is this same figure).
+    # the 401(k)/HSA amounts the Investments section puts in (so the "Taxes"
+    # figure under its "Saving each year" is this same one).
     overrides = st.session_state.get("user_overrides", {}) or {}
     budget = sidebar_savings_budget(st.session_state)
     income = budget["income"]

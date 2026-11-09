@@ -226,7 +226,7 @@ The engine opens one 529 per child (`child1_529`, `child2_529`, …).
 | `LATE_RETIREMENT_START_AGE` | `75` | The reduction starts at this age... |
 | `LATE_RETIREMENT_MIN_YEARS` | `10` | ...or this many years after retiring, whichever is later. |
 
-All six are inputs in the app's *Retirement goals* section. Retiring at 65 or
+All six are inputs in the app's *Retirement* section. Retiring at 65 or
 earlier gives the old fixed ages (extra until 70, reduction from 75).
 
 `SPEND_LIFECYCLE_PRESET` moves food/discretionary spending by age: the travel

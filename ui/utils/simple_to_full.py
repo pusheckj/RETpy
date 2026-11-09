@@ -111,7 +111,7 @@ def from_planner(overrides: Any) -> Dict[str, Any]:
     ``carried``), so the check-up opens on the owner's own numbers.
 
     Cash flow is the household's (take-home pay, needs, wants, cash), the same
-    figures the planner's Savings section uses. Pay, 401(k), match, HSA and IRA
+    figures the planner's Investments section (Saving each year) uses. Pay, 401(k), match, HSA and IRA
     are yours. Wants are discretionary spending plus the partner's own spending;
     needs are everything else the planner spends. The planner has no consumer
     debts, so the check-up starts with none (a mortgage is not a debt here).

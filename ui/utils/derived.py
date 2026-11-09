@@ -375,7 +375,7 @@ AUTO_ALLOCATE_LABEL = "Fill tax-advantaged accounts first (recommended)"
 KEEP_AMOUNTS_LABEL = "Keep my amounts, invest the rest"
 SAVINGS_MODE_LABELS = {AUTO_ALLOCATE_MODE: AUTO_ALLOCATE_LABEL, KEEP_AMOUNTS_MODE: KEEP_AMOUNTS_LABEL}
 
-# Contribution keys in the Savings section's order, and the Savings widgets
+# Contribution keys in the Investments section's saving order, and its savings widgets
 # that hold them a rerun before user_overrides does.
 CONTRIBUTION_KEYS = (
     "YOUR_401K_CONTRIBUTION", "PARTNER_401K_CONTRIBUTION", "YOUR_HSA_CONTRIBUTION",
@@ -427,9 +427,9 @@ def sidebar_savings_budget(state) -> Dict[str, object]:
 
     ``state`` is st.session_state: user_overrides plus the Savings widgets
     (mode, Custom % sliders, kept/manual amounts, match and after-tax 401(k)
-    percents), which hold this rerun's values before the Savings section
+    percents), which hold this rerun's values before the Investments section
     writes them to user_overrides.
-    The Taxes section and the Savings section both call this, so they show
+    The Taxes section and the Investments section both call this, so they show
     one tax figure even when the Taxes section draws first.
     """
     overrides = dict(state.get("user_overrides", {}) or {})

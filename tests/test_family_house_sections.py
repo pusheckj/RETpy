@@ -163,9 +163,10 @@ def test_planner_renders_the_sections_in_the_new_order():
     body = src[src.index("        # Linear walkthrough"):]
     body = body[:body.index('_safe_render("components.faq")')]
     order = re.findall(r'_safe_render\("components\.(\w+)"\)', body)
-    assert order == ["sec_about_you", "sec_family", "account_inputs", "sec_income", "sec_taxes",
-                     "sec_house", "sec_expenses", "sec_big_purchases", "sec_savings",
-                     "sec_retirement_goals", "sec_early_access", "sec_assumptions"]
+    assert order == ["sec_about_you", "sec_family", "sec_income", "sec_taxes",
+                     "sec_house", "sec_expenses", "sec_big_purchases", "account_inputs",
+                     "sec_investments", "sec_retirement_goals", "sec_early_access",
+                     "sec_assumptions"]
     # Expenses reads House's rent-or-own radio, so House must come first.
     assert order.index("sec_house") < order.index("sec_expenses")
 

@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ### Added
 - Planner top card: the title moved up beside the Run / simulations / Settings controls, and the *Retirement plan | Spending* switch moved to the bottom right, next to the metrics, in a larger size (56px tall, 17px text). Where it does not fit beside the metrics it takes a full-width line of its own. The card is shorter. Same widgets and keys
+- Planner sidebar: new **Investments** section holds everything about growing the money: *Saving each year* (what goes into each account, the four savings modes, Max out buttons, summary figures; this was the Savings section) and *Returns and mix* (return scenario, stock allocation, fees, volatility drag, inflation, glide path, Roth conversion; these came from Assumptions). **Retirement goals** is now just **Retirement**, and **Accounts** moves to just before Investments. Assumptions (advanced) keeps dynamic spending and pre-Medicare healthcare. No setting, widget key or saved-profile value changed.
 - Planner sidebar: the **Target retirement age** and **Partner's retirement age** sliders moved from About you to the top of **Retirement goals** (under "When you retire"). Same settings and saved values; the target age still applies before the sections above it are drawn.
 - Planner: the *Money check-up | Retirement planner* switch moved to the top of the side panel, above About you, matching the section cards' width. Phones and a closed panel keep the switch at the top of the page
 - Planner sidebar: new **Family** section (children and college) and **House** section (rent or mortgage, home moves, extra mortgage payments), each with a short summary line. The controls moved out of Expenses and Big purchases & goals; keys and saved profiles are unchanged
@@ -20,6 +21,7 @@ All notable changes to this project will be documented in this file. Format: [Ke
 Initial public release.
 
 ### Added
+- Planner sidebar: new **Investments** section holds everything about growing the money: *Saving each year* (what goes into each account, the four savings modes, Max out buttons, summary figures; this was the Savings section) and *Returns and mix* (return scenario, stock allocation, fees, volatility drag, inflation, glide path, Roth conversion; these came from Assumptions). **Retirement goals** is now just **Retirement**, and **Accounts** moves to just before Investments. Assumptions (advanced) keeps dynamic spending and pre-Medicare healthcare. No setting, widget key or saved-profile value changed.
 
 - Monte Carlo simulation engine with per-account tracking
 - 2024 US federal + California state income tax brackets

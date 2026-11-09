@@ -178,7 +178,7 @@ def _render_body(st) -> None:
     if v and not conversions_on:
         st.warning(
             "The ladder needs conversions, and **Roth conversion** is off under "
-            "Assumptions → Roth conversion. Turn it on to build the ladder."
+            "Investments → Roth conversion. Turn it on to build the ladder."
         )
     elif v:
         st.caption("Each year's conversion is available 5 years later, so "

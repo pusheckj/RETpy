@@ -109,11 +109,11 @@ def render_body(st) -> None:
     preset = st.selectbox("How does spending evolve?", presets, key="se_lifecycle",
         format_func=lambda p: _preset_short.get(p, p),
         help="Flat: no change (the extra early in retirement and the later drop "
-             "in Retirement goals still apply). Travel boom: discretionary +50% early "
+             "in Retirement still apply). Travel boom: discretionary +50% early "
              "in retirement, -20% later. Conservative senior: discretionary -30% later. "
              "Empty-nest: food and discretionary +30% while any child is at home, "
              "-25% once all have left. Early and later years are set in "
-             "Retirement goals.")
+             "Retirement.")
     set_override(st, "SPEND_LIFECYCLE_PRESET", preset)
 
     # ----- Live total -----

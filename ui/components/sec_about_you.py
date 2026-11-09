@@ -65,9 +65,9 @@ def render_body(st) -> None:
                                "the cost of a home for a child or another dependent.")
         set_override(st, "FILING_STATUS", filing)
 
-    # The retirement-age sliders live in Retirement goals (drawn later this run).
+    # The retirement-age sliders live in Retirement (drawn later this run).
     # Their widget values are already current, so apply the target age now:
-    # sections drawn before Retirement goals then see this run's value, not last run's.
+    # sections drawn before Retirement then see this run's value, not last run's.
     if "ay_target_age" in st.session_state:
         set_override(st, "TARGET_RETIREMENT_AGE", safe_int(st.session_state["ay_target_age"]))
 

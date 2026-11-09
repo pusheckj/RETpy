@@ -61,7 +61,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
         (your RMD age is {_rmd_age}).
 
         Conversions usually run from retirement through the Social Security claim age (often 67),
-        when your earned income is lowest. They are **capped** at \\${_cap:,.0f}/year (change it in Assumptions).
+        when your earned income is lowest. They are **capped** at \\${_cap:,.0f}/year (change it in Investments).
         """
     )
 

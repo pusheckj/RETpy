@@ -826,7 +826,7 @@ HEALTHCARE_INCREASE_PRE_MEDICARE = 15_000
 
 # Retirement lifestyle: extra travel/hobby spending in the first years of
 # retirement ("go-go years"), then lower day-to-day spending in later years.
-# The app's Retirement goals section sets all of these.
+# The app's Retirement section sets all of these.
 #
 # Extra $/yr (today's dollars). None = by household size: $10,000 for two
 # adults, two-thirds of that for one (shared costs like lodging don't halve).
