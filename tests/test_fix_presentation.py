@@ -724,31 +724,26 @@ def test_spending_chart_vline_annotations_do_not_collide():
 # ==========================================================================
 # 18 / 20 / 21 / 22 / 24 / 26. Narrow-width top bar + sidebar
 # ==========================================================================
-def test_topbar_toolbar_wraps_instead_of_overlapping(theme_css):
-    """A squeezed column let nowrap content paint over the Run button / Settings
-    popover. Every toolbar column keeps its intrinsic width and the row wraps."""
-    row = re.search(
-        r'\.st-key-mc-topbar \[data-testid="stHorizontalBlock"\]\s*\{([^}]*)\}', theme_css)
-    assert row and re.search(r"flex-wrap:\s*wrap", row.group(1))
-    first = re.search(
-        r'\.st-key-mc-topbar \[data-testid="stColumn"\]:first-child\s*\{([^}]*)\}', theme_css)
-    assert first and "min-width: fit-content" in first.group(1)
+def test_topbar_rows_wrap_instead_of_overlapping(theme_css):
+    """A squeezed row let nowrap content paint over the Run button / Settings
+    popover. Both top-card rows are wrapping flex rows, and the controls keep a
+    fixed width (so "Run simulation" never changes the row)."""
+    rows = re.search(
+        r'\.st-key-mc-topbar \.st-key-mc-topbar-head,\s*\.st-key-mc-topbar \.st-key-mc-topbar-foot\s*\{([^}]*)\}',
+        theme_css)
+    assert rows and re.search(r"flex-wrap:\s*wrap", rows.group(1))
+    run = re.search(r'\.st-key-mc-topbar-head > \.st-key-topbar_run_button\s*\{([^}]*)\}', theme_css)
+    assert run and "flex: 0 0 200px" in run.group(1)
 
 
-def test_topbar_row_wraps_at_narrow_widths(theme_css):
-    """nowrap forced the row past stMain (dead h-scrollbar, off-screen Settings)."""
-    mq = re.search(
-        r"@media\s*\(max-width:\s*1240px\)\s*\{(.*?)\n\}", theme_css, re.S
-    )
-    assert mq, "no narrow-width top-bar media query"
-    block = mq.group(1)
-    assert re.search(r"flex-wrap:\s*wrap\s*!important", block), (
-        "the toolbar row must wrap: the switch on its own line, the three "
-        "controls sharing the line beneath"
-    )
-    assert re.search(
-        r'\[data-testid="stColumn"\]:first-child\s*\{[^}]*flex:\s*1 1 100%', block
-    )
+def test_topbar_rows_wrap_at_narrow_widths(theme_css):
+    """nowrap forced the row past stMain (dead h-scrollbar, off-screen Settings).
+    Each row wraps by its own width: the title takes a line above the controls,
+    and the switch a full-width line of its own."""
+    head = re.search(r"@container mc-tb-head \(max-width:\s*\d+px\)\s*\{(.*?)\n\}", theme_css, re.S)
+    assert head and re.search(r"has\(\.mc-topbar-title\)\s*\{\s*flex-basis:\s*100%", head.group(1))
+    own_row = re.findall(r"@container mc-tb-foot \(max-width:\s*\d+px\)\s*\{(.*?)\n    \}", theme_css, re.S)
+    assert own_row and all("st-key-main_view { flex-basis: 100%" in b for b in own_row)
 
 
 def test_topbar_sheds_low_priority_metrics_on_phones(theme_css):

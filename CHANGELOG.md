@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file. Format: [Ke
 ## [Unreleased]
 
 ### Added
+- Planner top card: the title moved up beside the Run / simulations / Settings controls, and the *Retirement plan | Spending* switch moved to the bottom right, next to the metrics, in a larger size (56px tall, 17px text). Where it does not fit beside the metrics it takes a full-width line of its own. The card is shorter. Same widgets and keys
 - Planner sidebar: the **Target retirement age** and **Partner's retirement age** sliders moved from About you to the top of **Retirement goals** (under "When you retire"). Same settings and saved values; the target age still applies before the sections above it are drawn.
 - Planner: the *Money check-up | Retirement planner* switch moved to the top of the side panel, above About you, matching the section cards' width. Phones and a closed panel keep the switch at the top of the page
 - Planner sidebar: new **Family** section (children and college) and **House** section (rent or mortgage, home moves, extra mortgage payments), each with a short summary line. The controls moved out of Expenses and Big purchases & goals; keys and saved profiles are unchanged
