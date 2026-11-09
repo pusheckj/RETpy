@@ -67,6 +67,7 @@ def test_imports():
         "components.sec_house",
         "components.sec_expenses",
         "components.sec_big_purchases",
+        "components.sec_early_access",
         "components.sec_savings",
         "components.sec_investments",
         "components.sec_retirement_goals",

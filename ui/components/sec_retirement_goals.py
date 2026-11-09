@@ -1,4 +1,5 @@
-"""Retirement — when you retire, spending, Social Security, long-term care, success target."""
+"""Retirement — when you retire, spending, Social Security, long-term care, success target,
+and early retirement access (Rule of 55, 72(t), Roth ladder, Coast FIRE) at the end."""
 from __future__ import annotations
 
 try:
@@ -346,6 +347,17 @@ def render_body(st) -> None:
                        "share of simulated futures. 80% is a common default; "
                        "early retirees often aim for 90-95%.")
     set_override(st, "TARGET_SUCCESS_RATE", v / 100)
+
+    # ----- Early retirement access -----
+    # Last on purpose: it reads the retirement age and the balances and savings
+    # drawn above it this run.
+    try:
+        from components import sec_early_access
+    except ImportError:  # pragma: no cover
+        from ui.components import sec_early_access  # type: ignore
+    st.divider()
+    _section_label(st, "Early retirement access")
+    sec_early_access.render_body(st)
 
 
 def render(st) -> None:

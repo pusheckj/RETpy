@@ -1,7 +1,7 @@
 """The Family and House sidebar sections.
 
 Family holds the children rows (moved out of Expenses); House holds housing,
-home moves and extra mortgage payments (moved out of Expenses and Big purchases
+home moves and extra mortgage payments (moved out of Expenses and the old Big purchases
 & goals). The widget keys did not change, so saved profiles load as before.
 """
 import ast
@@ -35,7 +35,7 @@ def _script():
     from components import (sec_big_purchases, sec_expenses, sec_family, sec_house)
     which = os.environ["FH_TEST_WHAT"]
     if which == "all":                      # the planner's order: House before Expenses
-        for mod in (sec_family, sec_house, sec_expenses, sec_big_purchases):
+        for mod in (sec_family, sec_house, sec_expenses):
             mod.render(st)
     else:
         {"family": sec_family, "house": sec_house, "expenses": sec_expenses,
@@ -79,7 +79,7 @@ SINGLE = {"YOUR_AGE": 35, "PARTNER_AGE": 0, "CHILDREN": [], "SPEND_RENT_MONTHLY"
 
 def test_sections_render_for_a_single_household(draw):
     at = draw("all", SINGLE)
-    assert [e.label for e in at.get("status")]  # icon expanders == ["Family", "House", "Expenses", "Big purchases & goals"]
+    assert [e.label for e in at.get("status")] == ["Family", "House", "Expenses"]
     assert "No children in the plan." in _text(at)
     keys = _keys(at)
     assert {"se_kids_n", "se_rent_own", "se_rent_monthly"} <= keys
@@ -164,9 +164,8 @@ def test_planner_renders_the_sections_in_the_new_order():
     body = body[:body.index('_safe_render("components.faq")')]
     order = re.findall(r'_safe_render\("components\.(\w+)"\)', body)
     assert order == ["sec_about_you", "sec_family", "sec_income", "sec_taxes",
-                     "sec_house", "sec_expenses", "sec_big_purchases", "account_inputs",
-                     "sec_investments", "sec_retirement_goals", "sec_early_access",
-                     "sec_assumptions"]
+                     "sec_house", "sec_expenses", "account_inputs",
+                     "sec_investments", "sec_retirement_goals", "sec_assumptions"]
     # Expenses reads House's rent-or-own radio, so House must come first.
     assert order.index("sec_house") < order.index("sec_expenses")
 

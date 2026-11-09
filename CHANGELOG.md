@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed
+- Planner sidebar: **Big purchases & goals** (car, retirement vacation) is now the last part of **Expenses**, and **Early retirement access** (Rule of 55, 72(t) payments, Roth ladder, stop saving early) is now the last part of **Retirement**. The two separate sections are gone, so the sidebar reads About you, Family, Income, Taxes, House, Expenses, Accounts, Investments, Retirement, Assumptions (advanced). No setting, widget key or saved-profile value changed.
+
 ### Added
 - Planner top card: the title moved up beside the Run / simulations / Settings controls, and the *Retirement plan | Spending* switch moved to the bottom right, next to the metrics, in a larger size (56px tall, 17px text). Where it does not fit beside the metrics it takes a full-width line of its own. The card is shorter. Same widgets and keys
 - Planner sidebar: new **Investments** section holds everything about growing the money: *Saving each year* (what goes into each account, the four savings modes, Max out buttons, summary figures; this was the Savings section) and *Returns and mix* (return scenario, stock allocation, fees, volatility drag, inflation, glide path, Roth conversion; these came from Assumptions). **Retirement goals** is now just **Retirement**, and **Accounts** moves to just before Investments. Assumptions (advanced) keeps dynamic spending and pre-Medicare healthcare. No setting, widget key or saved-profile value changed.

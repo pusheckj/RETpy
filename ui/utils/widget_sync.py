@@ -208,7 +208,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sv_manual_partner_roth":("PARTNER_ROTH_CONTRIBUTION", _as_int(0, 0, 10_000)),
     "sv_manual_partner_brk": ("PARTNER_BROKERAGE_CONTRIBUTION", _as_int(0, 0, 500_000)),
 
-    # sec_big_purchases.py (car, retirement vacation) and sec_house.py (home moves,
+    # sec_big_purchases.py (car, retirement vacation; drawn inside Expenses) and sec_house.py (home moves,
     # extra mortgage principal): all keep their "bp_" names. These MUST
     # be listed so a profile switch or JSON load clears them (else a big-purchase
     # plan opted into on one profile bleeds into the next).
@@ -391,10 +391,10 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age")
 # instead of silently becoming sticky across a profile / JSON switch.
 #
 #   sv_pct_   sec_savings' per-account percentage sliders (dynamic count).
-#   ea_       sec_early_access (Rule of 55 / 72(t) / Roth ladder / Coast FIRE).
+#   ea_       sec_early_access (drawn at the end of Retirement: Rule of 55 / 72(t) / Roth ladder / Coast FIRE).
 #             Every one of these is pushed to cfg via set_override each rerun,
 #             so a stale toggle re-enables a strategy the loaded plan disabled.
-#   bp_       sec_big_purchases and sec_house. The home-moves list (bp_ev<i>_*, one set per
+#   bp_       sec_big_purchases (inside Expenses) and sec_house. The home-moves list (bp_ev<i>_*, one set per
 #             move) and the escrow % are not in DIRECT_MAPPINGS and are written
 #             back into HOME_EVENTS / NEW_HOME_ESCROW_PCT every rerun, so stale
 #             ones would silently rewrite the loaded profile's moves.

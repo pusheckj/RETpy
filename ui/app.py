@@ -966,7 +966,7 @@ def main() -> None:
         # The version switch, above the first section (the page's own copy is
         # shown instead on phones and while this panel is closed).
         _mode_switch("full", place="sidebar")
-        # Linear walkthrough, in advisor order (12 sections + FAQ). House comes
+        # Linear walkthrough, in advisor order (10 sections + FAQ). House comes
         # before Expenses: Expenses reads its rent-or-own choice for the total.
         _safe_render("components.sec_about_you")
         _safe_render("components.sec_family")
@@ -974,11 +974,9 @@ def main() -> None:
         _safe_render("components.sec_taxes")
         _safe_render("components.sec_house")
         _safe_render("components.sec_expenses")
-        _safe_render("components.sec_big_purchases")
         _safe_render("components.account_inputs")     # Accounts (starting balances)
         _safe_render("components.sec_investments")    # saving each year + returns and mix
         _safe_render("components.sec_retirement_goals")  # titled "Retirement"
-        _safe_render("components.sec_early_access")
         _safe_render("components.sec_assumptions")
 
         _safe_render("components.faq")
