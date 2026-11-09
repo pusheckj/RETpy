@@ -1,4 +1,9 @@
-"""Section 7: Assumptions (advanced) — returns, inflation, strategies, healthcare."""
+"""Section 7: Assumptions (advanced) — spending rules and pre-Medicare healthcare.
+
+The investing assumptions (returns, inflation, glide path, Roth conversion) are
+drawn by ``render_investing_body`` inside the Investments section
+(components/sec_investments.py); this section keeps the rest.
+"""
 from __future__ import annotations
 
 try:
@@ -28,9 +33,8 @@ def _section_label(st, txt):
                 unsafe_allow_html=True)
 
 
-def render_body(st) -> None:
-    overrides = st.session_state.get("user_overrides", {}) or {}
-
+def render_investing_body(st) -> None:
+    """Returns, inflation, glide path and Roth conversion (shown in Investments)."""
     # ===== Returns =====
     _section_label(st, "Returns")
     scen_options = ["Conservative", "Historical", "Pessimistic"]
@@ -169,7 +173,9 @@ def render_body(st) -> None:
                       step=1, key="sa_roth_stop")
         set_override(st, "ROTH_CONVERSION_STOP_AGE", safe_int(v))
 
-    st.divider()
+
+def render_body(st) -> None:
+    overrides = st.session_state.get("user_overrides", {}) or {}
 
     # ===== Dynamic spending =====
     _section_label(st, "Dynamic spending")
@@ -221,10 +227,10 @@ def render_body(st) -> None:
                             step=25, key="sa_aca_child")
         set_override(st, "ACA_CHILD_MONTHLY", safe_int(v))
 
-    # Long-term care lives in the "Retirement goals" section (single source of
+    # Long-term care lives in the "Retirement" section (single source of
     # truth — enable + start age + annual cost + per-year probability). It was
     # previously duplicated here, and because this section renders AFTER
-    # Retirement goals its checkbox silently overrode that one. Removed to avoid
+    # Retirement its checkbox silently overrode that one. Removed to avoid
     # the conflict.
 
 

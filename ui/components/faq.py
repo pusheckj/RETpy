@@ -27,7 +27,8 @@ QUESTIONS: list[tuple[str, str]] = [
         "**Historical** is the 1926-2024 US average (about 8.7% stocks, 3.1% "
         "bonds). **Conservative** is lower (about 7% and 2%). **Pessimistic** "
         "is a stress test (about 5% and 1%). Many planners use Conservative. "
-        "Treat a Historical result as the optimistic end of the range.",
+        "Treat a Historical result as the optimistic end of the range. "
+        "Choose one under Investments.",
     ),
     (
         "What is the \"glide path\"?",
@@ -35,7 +36,8 @@ QUESTIONS: list[tuple[str, str]] = [
         "faster but swings more. More bonds is steadier but grows slower. A "
         "glide path starts out stock-heavy and shifts toward bonds as you "
         "near retirement, reaching a more conservative mix by 75 or so. "
-        "Target-date funds from Fidelity and Vanguard do this for you.",
+        "Target-date funds from Fidelity and Vanguard do this for you. "
+        "You can set yours under Investments.",
     ),
     (
         "What are Roth conversions, and should I turn them on?",
@@ -44,7 +46,7 @@ QUESTIONS: list[tuple[str, str]] = [
         "tax-free and have no required minimum distributions (RMDs). It works "
         "best in early retirement, when your income is low and Social Security "
         "hasn't started. Turn it on if you'll have large traditional balances "
-        "at retirement.",
+        "at retirement. The setting is under Investments.",
     ),
     (
         "What are \"spending guardrails\"?",

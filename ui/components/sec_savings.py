@@ -1,12 +1,12 @@
-"""Section 5: Savings — derived total + auto/custom%/manual allocation modes."""
+"""How much goes into each account — derived total + the four savings modes.
+
+Not a section of its own any more: ``render_body`` is drawn under "Saving each
+year" inside the Investments section (components/sec_investments.py). The widget
+keys (sv_*) and overrides are unchanged.
+"""
 from __future__ import annotations
 
 import html
-
-try:
-    from utils.section_icon import section_expander
-except ImportError:  # pragma: no cover
-    from ui.utils.section_icon import section_expander  # type: ignore
 
 try:
     from utils.coerce import safe_int, safe_float, ensure_default
@@ -379,7 +379,7 @@ def _manual_amount(st, widget_key: str, cfg_key: str, label: str,
     limit of \\$30,500), and ``ensure_default`` does not clamp. Seeding an
     out-of-range value made ``st.number_input`` raise
     ``StreamlitValueAboveMaxError``, which ``app.py::_safe_render`` swallowed —
-    replacing the WHOLE Savings section (mode radio included) with a
+    replacing the WHOLE Investments section (mode radio included) with a
     placeholder, so the user could not even switch back to Auto.
 
     ``max_out``: add the Max out button (or note) under the input; for the
@@ -480,7 +480,3 @@ def _render_manual(st, disposable: int, overrides: dict) -> None:
         st.caption(f"**Manual total**: {money_md(manual_total, shorten=True)} of "
                    f"{money_md(disposable, shorten=True)} left to save")
 
-
-def render(st) -> None:
-    with section_expander(st, "Savings", "savings"):
-        render_body(st)

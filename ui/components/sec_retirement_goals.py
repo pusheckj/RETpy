@@ -1,4 +1,4 @@
-"""Section 6: Retirement goals — spending, SS, success threshold."""
+"""Retirement — when you retire, spending, Social Security, long-term care, success target."""
 from __future__ import annotations
 
 try:
@@ -349,5 +349,5 @@ def render_body(st) -> None:
 
 
 def render(st) -> None:
-    with section_expander(st, "Retirement goals", "flag"):
+    with section_expander(st, "Retirement", "flag"):
         render_body(st)

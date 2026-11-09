@@ -123,7 +123,7 @@ _LIFESTYLE_CFG_KEYS = (
 
 def _go_go_extra(overrides: dict, age: int, retirement_age: int) -> float:
     """The engine's extra early-retirement spending at ``age`` (travel and
-    hobbies, Retirement goals), from cfg's own helpers."""
+    hobbies, Retirement), from cfg's own helpers."""
     if cfg is None or age < int(retirement_age):  # pragma: no cover
         return 0.0
     with _cfg_patched(overrides, _LIFESTYLE_CFG_KEYS + ("EARLY_RETIREMENT_LEISURE_INCREASE",

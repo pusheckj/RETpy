@@ -1,7 +1,8 @@
 """Max out for the planner's Savings inputs: what each account can take.
 
 Pure functions (no Streamlit), so the limits and the when-to-show rules can be
-tested on their own. The Savings section (components/sec_savings.py) draws the
+tested on their own. The Investments section (components/sec_savings.py, drawn under
+"Saving each year") draws the
 buttons and writes the amounts; this module only decides them.
 
 How each limit is worked out (the same as the simulation and Auto-allocate):

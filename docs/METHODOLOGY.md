@@ -181,7 +181,7 @@ Spending is higher in the first years of retirement and lower later:
 - **Later years:** living spending 15% lower from 75, or from 10 years after
   retiring when that is later. Housing is not reduced.
 
-All of these are inputs (Retirement goals). The lifecycle presets use the same
+All of these are inputs (Retirement). The lifecycle presets use the same
 phases: the travel boom's +50% discretionary covers the go-go years, its −20%
 and the conservative preset's −30% start with the later years, and empty-nest
 spending (−25%) starts once the last child has left home.

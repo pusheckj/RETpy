@@ -219,7 +219,7 @@ def project_net_worth(user_overrides: dict) -> dict:
 
     # Contributions: the stored amounts, except in the two auto modes, where
     # the simulation invests everything left in the brokerage (no stored
-    # brokerage figure): use this year's amounts as the Savings section shows them.
+    # brokerage figure): use this year's amounts as the Investments section shows them.
     contributions = dict(user_overrides)
     if user_overrides.get("SAVINGS_MODE") in (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE):
         contributions.update(savings_budget(user_overrides)["amounts"])

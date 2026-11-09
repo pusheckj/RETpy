@@ -1,4 +1,4 @@
-"""Max out buttons in the planner's Savings section and guided setup.
+"""Max out buttons in the planner's Investments section ("Saving each year") and guided setup.
 
 The limit and show-or-hide rules live in ``ui/utils/planner_max.py`` (no
 Streamlit), so most of this tests them directly. Households here are made up.
@@ -189,15 +189,15 @@ def test_tooltips_say_where_the_figure_comes_from():
     assert "direct Roth" in pm.max_out_help(PROTH, o, 3_000)
 
 
-# ---------------------------------------------------------------- the Savings section
+# ---------------------------------------------------------------- the Investments section
 
 def _savings_script():
     import os
     import sys
     sys.path[:0] = [os.environ["GS_TEST_UI"], os.path.dirname(os.environ["GS_TEST_UI"])]
     import streamlit as st
-    from components import sec_savings
-    sec_savings.render_body(st)
+    from components import sec_investments
+    sec_investments.render_body(st)
 
 
 def _savings(monkeypatch, mode=KEEP_AMOUNTS_MODE, **overrides):

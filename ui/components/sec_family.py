@@ -136,7 +136,7 @@ def render_body(st) -> None:
     overrides = st.session_state.get("user_overrides", {}) or {}
     st.caption(_summary_line(family_summary(overrides)))
     if any(c["college_funding_pct"] > 0 for c in cfg.children_in(overrides)):
-        st.caption("The yearly 529 saving comes out of your budget in Savings.")
+        st.caption("The yearly 529 saving comes out of your budget in Investments.")
 
 
 def render(st) -> None:

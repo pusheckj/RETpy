@@ -98,7 +98,7 @@ def render_body(st) -> None:
                               key="bp_vacation_enable",
                               help="Extra yearly spending from retirement until the age "
                                    "you slow down. It comes on top of \"Extra for "
-                                   "travel and hobbies\" in Retirement goals.")
+                                   "travel and hobbies\" in Retirement.")
     set_override(st, "RETIREMENT_VACATION_ENABLED", bool(vacation_on))
     if vacation_on:
         c8, c9 = st.columns(2, vertical_alignment="bottom")
