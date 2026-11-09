@@ -1,12 +1,13 @@
 """Sticky top bar for the main pane.
 
-Renders a full-width bar that stays pinned to the top of the main content
-area as the user scrolls (position: sticky, styled via the `.mc-topbar`
-class in theme.css, with dark-mode overrides in theme_toggle.py).
+Renders a full-width card that stays pinned to the top of the main content
+area as the user scrolls (position: sticky, styled via the `.st-key-mc-topbar`
+and `.mc-topbar` classes in theme.css, with dark-mode overrides in
+theme_toggle.py).
 
-Content left -> right: a compact "Retirement Monte Carlo" title, then the
-household metrics: NAME(S), NET WORTH, INCOME, TARGET RETIREMENT AGE, and
-SUCCESS @ TARGET.
+Row 1: the title, then the Run button, simulation count and Settings. Row 2:
+the household metrics (NAME(S), NET WORTH, INCOME, TARGET RETIREMENT AGE,
+SUCCESS RATE) with the Retirement plan | Spending switch at the bottom right.
 
 IMPORTANT: the HTML is built with left-aligned string concatenation (NOT
 4-space-indented multiline blocks). Streamlit's markdown renderer treats a
@@ -15,7 +16,6 @@ a literal code block (this bit us in what_if_pane).
 """
 from __future__ import annotations
 
-from html import escape
 from typing import Any, Dict, Optional
 
 # Dual-import shim so the module works whether imported as `components.top_bar`
@@ -174,26 +174,20 @@ def render(st, results: Optional[dict] = None,
            run_render=None,
            sims_render=None,
            settings_render=None,
-           view_render=None,
-           in_card: bool = False,
            control_slots=None,
-           title: str = "Retirement planner",
            stats: Optional[list] = None) -> None:
-    """Render the sticky top bar.
+    """Fill the sticky top card (built by ``app._topbar_head``).
 
-    Layout is a keyed ``st.container`` (the sticky element — it lives in the
-    tall main block so it has room to pin) holding one row of columns: the
-    metrics (title + Name(s)/Net worth/Income/Target retirement age/Success) on the left,
-    then the Run-simulation button, the simulation-count selector, and a
-    Settings popover on the right. ``run_render``/``sims_render``/
-    ``settings_render`` are callbacks invoked inside their columns so the caller
-    owns the widgets (and keeps each component's own error handling).
-    ``view_render`` (optional) draws the Retirement plan | Spending switch as
-    the card's first row. ``in_card=True`` means the caller already opened the
-    keyed card container (so the switch could be drawn before the autorun);
-    only the metrics/controls row is rendered then. ``control_slots`` (three
-    placeholders, from the card's toolbar row) puts the controls there and the
-    metrics on their own full-width row.
+    The card has two rows (theme.css, "Top card layout"): the title with the
+    Run button, simulation-count selector and Settings popover on the right, then
+    the household metrics (Name(s), Net worth, Gross income, Target retirement age,
+    Success rate) with the Retirement plan | Spending switch at the bottom right.
+    The caller opens the card and draws the title (``.mc-topbar-title``) and the switch early, so the view
+    can change during a cold-cache autorun. This draws the metrics at the current
+    position and puts the three controls into ``control_slots`` (placeholders in the
+    card's first row); ``run_render``/``sims_render``/``settings_render`` are
+    callbacks, so the caller owns the widgets (and each keeps its own error
+    handling). ``stats`` swaps the metrics for the Spending view's figures.
     """
     names = _resolve_names(profile)
 
@@ -209,7 +203,6 @@ def render(st, results: Optional[dict] = None,
     html_parts = []
     html_parts.append('<div class="mc-topbar mc-topbar-stats">' if stats is not None
                       else '<div class="mc-topbar">')
-    html_parts.append(f'<span class="mc-topbar-title">{escape(title)}</span>')
     html_parts.append(_metric_html("Name(s)", names))
     if stats is not None:       # Spending view: figures from the statements instead
         html_parts.extend(_metric_html(st_[0], st_[1], short=st_[2] if len(st_) > 2 else "")
@@ -223,36 +216,21 @@ def render(st, results: Optional[dict] = None,
         html_parts.append(_metric_html("Target retirement age", str(target_age), short="Target age"))
         html_parts.append(_metric_html("Success rate", success_str, success_hint))
     html_parts.append('</div>')
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
 
-    from contextlib import nullcontext
-    with (nullcontext() if in_card else st.container(key="mc-topbar")):
-        if view_render is not None:
-            view_render(st)
-        # Control columns must be wide enough for their contents: at the previous
-        # [0.65, 0.13, 0.11, 0.11] the sims selectbox collapsed to ~0.1px (its
-        # value was in the DOM but invisible) and the Run button clipped to
-        # "Run sim". The metrics column absorbs the difference — it wraps
-        # gracefully, the controls don't.
-        if control_slots is not None:
-            run_col, sims_col, settings_col = control_slots
-            st.markdown("".join(html_parts), unsafe_allow_html=True)
-        else:
-            metrics_col, run_col, sims_col, settings_col = st.columns(
-                [0.50, 0.18, 0.15, 0.17], vertical_alignment="center")
-            with metrics_col:
-                st.markdown("".join(html_parts), unsafe_allow_html=True)
-        with run_col:
-            if run_render is not None:
-                run_render(st)
-        with sims_col:
-            if sims_render is not None:
-                sims_render(st)
-        with settings_col:
-            try:
-                pop = st.popover("Settings", icon=":material/settings:",
-                                 use_container_width=True)
-            except TypeError:  # pragma: no cover - older Streamlit without icon=
-                pop = st.popover("⚙ Settings", use_container_width=True)
-            with pop:
-                if settings_render is not None:
-                    settings_render(st)
+    run_col, sims_col, settings_col = control_slots
+    with run_col:
+        if run_render is not None:
+            run_render(st)
+    with sims_col:
+        if sims_render is not None:
+            sims_render(st)
+    with settings_col:
+        try:
+            pop = st.popover("Settings", icon=":material/settings:",
+                             use_container_width=True)
+        except TypeError:  # pragma: no cover - older Streamlit without icon=
+            pop = st.popover("⚙ Settings", use_container_width=True)
+        with pop:
+            if settings_render is not None:
+                settings_render(st)

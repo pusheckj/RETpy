@@ -557,17 +557,24 @@ def _topbar_sims(_st) -> None:
 
 
 def _topbar_head(_st):
-    """The top card's toolbar row: the Retirement plan | Spending switch on the
-    left, and empty slots on the right that top_bar.render fills with the Run
-    button, simulation count and Settings once the sidebar has synced. Returns
-    (view, (run_slot, sims_slot, settings_slot)); a deselected switch returns
-    None, which main() treats as the plan."""
-    nav_col, run_col, sims_col, settings_col = _st.columns(
-        [0.50, 0.18, 0.15, 0.17], vertical_alignment="center")
-    with nav_col:
+    """The top card's two rows (theme.css, "Top card layout"). Row 1: the title,
+    then empty slots that top_bar.render fills with the Run button, simulation
+    count and Settings once the sidebar has synced. Row 2: an empty slot for the
+    metrics, then the Retirement plan | Spending switch at the bottom right. The
+    title and the switch are drawn now, so the switch stays usable during a
+    cold-cache autorun. Returns (view, (run_slot, sims_slot, settings_slot),
+    metrics_slot); a deselected switch returns None, which main() treats as the
+    plan."""
+    with _st.container(key="mc-topbar-head"):
+        title_slot = _st.empty()
+        control_slots = (_st.empty(), _st.empty(), _st.empty())
+    with _st.container(key="mc-topbar-foot"):
+        metrics_slot = _st.empty()
         view = _st.segmented_control("View", ["Retirement plan", "Spending"], default="Retirement plan",
                                      key="main_view", label_visibility="collapsed")
-    return view, (run_col.empty(), sims_col.empty(), settings_col.empty())
+    title = "Spending" if view == "Spending" else "Retirement planner"
+    title_slot.markdown(f'<span class="mc-topbar-title">{title}</span>', unsafe_allow_html=True)
+    return view, control_slots, metrics_slot
 
 
 def _resolve_mode():
@@ -941,18 +948,18 @@ def main() -> None:
     # them made every metric read the PREVIOUS rerun's overrides, so the top bar
     # sat one edit behind the sidebar (drag the age slider 40->43 and the bar
     # showed 42). Deferring the fill makes it read post-sidebar state.
-    # The top card is built NOW: its toolbar row (Retirement plan | Spending
-    # switch, plus empty slots for the controls) and an empty slot for the
-    # metrics row; the slots are filled after the sidebar + autorun (below). Drawing the switch here keeps it usable during a
+    # The top card is built NOW: its title row (title, plus empty slots for the
+    # controls) and its bottom row (an empty slot for the metrics, then the
+    # Retirement plan | Spending switch); the slots are filled after the sidebar +
+    # autorun (below). Drawing the switch here keeps it usable during a
     # cold-cache autorun, and deciding the view before the autorun means opening
     # Spending never waits on a Monte Carlo (it shares nothing with the
     # simulation). The autorun's once-per-session guard is untouched, so it fires
     # the first time the plan view is shown.
     topbar_slot = st.empty()
     with topbar_slot.container(key="mc-topbar"):
-        view, control_slots = _topbar_head(st)
+        view, control_slots, topbar_body = _topbar_head(st)
         spending_view = view == "Spending"
-        topbar_body = st.empty()
 
     # -------- Sidebar (inputs) --------
     with st.sidebar:
@@ -998,8 +1005,7 @@ def main() -> None:
                      run_render=functools.partial(_topbar_run, progress_container=progress_slot),
                      sims_render=_topbar_sims,
                      settings_render=_topbar_settings,
-                     in_card=True, control_slots=control_slots,
-                     title="Spending" if spending_view else "Retirement planner",
+                     control_slots=control_slots,
                      stats=spending_stats)
 
 
