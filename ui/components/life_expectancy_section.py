@@ -23,8 +23,9 @@ except ImportError:  # pragma: no cover
     from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
 
 
-def render(st) -> None:
-    st.markdown('<div class="mc-section">Your life expectancy</div>', unsafe_allow_html=True)
+def render(st, show_header: bool = True) -> None:
+    if show_header:
+        st.markdown('<div class="mc-section">Your life expectancy</div>', unsafe_allow_html=True)
     overrides = st.session_state.get("user_overrides", {}) or {}
     st.caption(
         "A range of likely lifespans, adjusted for your own risk factors (not your "
