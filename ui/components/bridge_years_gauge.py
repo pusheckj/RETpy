@@ -97,6 +97,7 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
     roth = [float(r["roth"]) for r in access]
     rule55 = [float(r.get("rule55", 0.0)) for r in access]
     sepp = [float(r.get("sepp", 0.0)) for r in access]
+    partner_open = [float(r.get("partner_open", 0.0)) for r in access]
     burn = [float(r.get("burn", 0.0)) for r in access]
 
     verdict = compute_verdict(results, retire_age)
@@ -121,6 +122,7 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
         st.metric("Penalty-free money at retirement", money(accessible_at_retire, shorten=True),
                   help="Median cash + taxable brokerage + Roth balance in your first retirement year"
                        + (", plus the 401(k) your Rule of 55 frees" if any(rule55) else "")
+                       + (", plus your partner's 401(k) once they pass 59½" if any(partner_open) else "")
                        + (" and a year of 72(t) payments" if any(sepp) else "")
                        + ".")
 
@@ -139,6 +141,7 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
         ("Taxable brokerage", taxable, concept_color("Taxable brokerage", st)),
         ("Roth (basis, approx.)", roth, concept_color("Roth IRA", st)),
         *([("401(k) via Rule of 55", rule55, concept_color("401(k)", st))] if any(rule55) else []),
+        *([("Partner's 401(k) (past 59½)", partner_open, concept_color("Partner 401(k)", st))] if any(partner_open) else []),
         *([("72(t) payment (one year)", sepp, concept_color("Traditional IRA", st))] if any(sepp) else []),
     ]:
         fig.add_trace(go.Scatter(
@@ -182,6 +185,8 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
         "If it doesn't, save more in taxable or Roth accounts before you retire. "
         + ("The Rule of 55 band is your 401(k), open penalty-free because you leave work at 55 or later "
            "(IRAs don't qualify). " if any(rule55) else "")
+        + ("The partner band is your partner's 401(k), penalty-free because they are past 59½ "
+           "even though you are not. " if any(partner_open) else "")
         + ("The 72(t) band is one year of your fixed penalty-free payment while the schedule runs. "
            if any(sepp) else "")
         + "Roth counts at its full balance, which stands in for what you've put in, so accessible "

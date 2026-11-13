@@ -310,6 +310,16 @@ def render_body(st) -> None:
             + f"your Social Security ≈ {money_md(annual_ss, shorten=True)}/yr "
             f"({money_md(annual_ss / 12, shorten=True)}/mo{' combined' if has_partner else ''})."
         )
+    if include:
+        st.caption(
+            "Full retirement age is 67 for everyone, which is right if you were born in 1960 or later. "
+            "The model does not pay a survivor benefit. It assumes both of you live to the end of the plan. "
+            "If you are a widow or widower, enter the benefit you get now as your own full-age amount."
+            if has_partner else
+            "Full retirement age is 67, which is right if you were born in 1960 or later. "
+            "If you are a widow or widower, enter the benefit you get now as your full-age amount. "
+            "The model does not change it."
+        )
 
     # ----- Long-term care -----
     _section_label(st, "Long-term care")
