@@ -85,6 +85,14 @@ def render(st, results: dict = None, chart_key: str = "first_decade_stress") -> 
     ages = [int(r["age"]) for r in ret_rows]
     p50 = [float(r["p50"]) for r in ret_rows]
     p10 = [float(r["p10"]) for r in ret_rows]
+    if max(p50 + p10) <= 1.0:
+        # Nothing is left to compare: a $0 to $1 axis with no lines is not a chart.
+        st.info(
+            f"The portfolio is already gone when you retire at {retire_age}, in a typical market "
+            "and in an unlucky one, so there is no first-decade gap to show. "
+            "Retire later, spend less or save more."
+        )
+        return
 
     dark = is_dark(st)
     med_color = "#14b8a6" if dark else "#0d9488"

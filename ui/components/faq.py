@@ -122,7 +122,8 @@ QUESTIONS: list[tuple[str, str]] = [
         "What isn't modeled?",
         "Pensions, rental real estate, qualified charitable distributions, "
         "inherited IRAs, tax-loss harvesting, SEP-IRAs, solo 401(k)s, city and "
-        "county income taxes, and the child tax credit. All 50 states and DC "
+        "county income taxes, and tax credits other than the child tax credit "
+        "(which is modeled in working years). All 50 states and DC "
         "have tax tables (some are approximate). If yours looks wrong, choose "
         "\"Another state (flat rate)\" under Taxes and enter a rate.",
     ),

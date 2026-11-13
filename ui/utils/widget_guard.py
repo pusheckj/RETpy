@@ -12,6 +12,12 @@ whole section with "couldn't be displayed".
 widget's own key in ``st.session_state`` and, only when the value does not fit,
 moves it to the nearest value that does (numbers) or to the widget's default
 choice (options). A value that fits is never touched. Nothing else changes.
+
+A number box that had to move a saved value says so in a short caption under it
+("Your saved value 400,000 is outside 0 to 250,000, so 250,000 is used."), as the
+slider helper does (``utils/slider_input.py``), never silently. The caption stays
+while the box still holds the value that was used. Values ``utils.widget_sync`` had
+to clamp at load (it records them in ``_sync_notes``) get the same caption.
 """
 from __future__ import annotations
 
@@ -19,6 +25,7 @@ import functools
 import math
 
 _MARK = "_widget_guard_installed"
+NOTES = "_guard_notes"          # widget key -> (value it held, value now, lo, hi)
 
 
 def _is_number(v) -> bool:
@@ -84,9 +91,39 @@ def _fit_numeric(st, args, kwargs, ranged=False) -> None:
         if fixed is not None and not ranged:                     # no bound given: Streamlit's own
             fixed = max(-_JS_MAX, min(_JS_MAX, fixed))
     if fixed is not None and fixed != current:
+        if not ranged and _is_number(current) and math.isfinite(current):
+            notes = ss.get(NOTES)
+            if not isinstance(notes, dict):
+                notes = ss[NOTES] = {}
+            notes[key] = (current, fixed, lo, hi)
         ss[key] = fixed
     elif fixed is None:
         del ss[key]
+
+
+def _num(v) -> str:
+    return f"{v:,.0f}" if float(v) == int(v) else f"{v:,.4g}"
+
+
+def note_text(st, key, lo, hi):
+    """The sentence for a number box whose saved value was moved into range, else None.
+    Two sources: this guard (a value that did not fit the box) and ``widget_sync``
+    (a value it clamped when a profile loaded). Only while the box still holds the value used."""
+    ss = st.session_state
+    if key is None or key not in ss or str(key).endswith("__box"):
+        return None
+    pair = None
+    guard = (ss.get(NOTES) or {}).get(key)
+    if guard and ss[key] == guard[1]:
+        pair, lo, hi = (guard[0], guard[1]), guard[2], guard[3]
+    else:
+        sync = (ss.get("_sync_notes") or {}).get(key)
+        if sync and ss[key] == sync[1]:
+            pair = sync
+    if pair is None or not _is_number(pair[0]) or not math.isfinite(pair[0]):
+        return None
+    where = f" is outside {_num(lo)} to {_num(hi)}," if lo is not None and hi is not None else " did not fit,"
+    return f"Your saved value {_num(pair[0])}{where} so {_num(pair[1])} is used."
 
 
 def _options(args, kwargs):
@@ -141,8 +178,21 @@ _FITTERS = {
 }
 
 
-def _wrap(st, original, fit, method=False):
-    """``original`` with ``fit`` run first. ``method``: a DeltaGenerator method (it gets ``self``)."""
+def _say(st, say, args, kwargs, out):
+    """Caption under a number box that moved a saved value (never raises)."""
+    try:
+        text = note_text(st, kwargs.get("key"), _arg(args, kwargs, 1, "min_value"),
+                         _arg(args, kwargs, 2, "max_value"))
+        if text:
+            say.caption(text)
+    except Exception:
+        pass
+    return out
+
+
+def _wrap(st, original, fit, method=False, notes=False):
+    """``original`` with ``fit`` run first. ``method``: a DeltaGenerator method (it gets ``self``).
+    ``notes``: caption a value the fit had to move (number boxes)."""
     if method:
         @functools.wraps(original)
         def guarded(self, *args, **kwargs):
@@ -150,7 +200,8 @@ def _wrap(st, original, fit, method=False):
                 fit(st, args, kwargs)
             except Exception:                                    # a guard must never be the crash
                 pass
-            return original(self, *args, **kwargs)
+            out = original(self, *args, **kwargs)
+            return _say(st, self, args, kwargs, out) if notes else out
     else:
         @functools.wraps(original)
         def guarded(*args, **kwargs):
@@ -158,7 +209,8 @@ def _wrap(st, original, fit, method=False):
                 fit(st, args, kwargs)
             except Exception:
                 pass
-            return original(*args, **kwargs)
+            out = original(*args, **kwargs)
+            return _say(st, st, args, kwargs, out) if notes else out
     setattr(guarded, _MARK, True)
     return guarded
 
@@ -170,7 +222,7 @@ def install(st) -> None:
     for name, fit in _FITTERS.items():
         original = getattr(st, name, None)
         if original is not None and not getattr(original, _MARK, False):
-            setattr(st, name, _wrap(st, original, fit))
+            setattr(st, name, _wrap(st, original, fit, notes=name == "number_input"))
         method = getattr(DeltaGenerator, name, None)
         if method is not None and not getattr(method, _MARK, False):
-            setattr(DeltaGenerator, name, _wrap(st, method, fit, method=True))
+            setattr(DeltaGenerator, name, _wrap(st, method, fit, method=True, notes=name == "number_input"))

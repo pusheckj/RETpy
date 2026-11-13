@@ -3739,6 +3739,24 @@ html:root [class*="st-key-mc-debt-name-"] > [class*="st-key-debt_rm_"] button { 
 /* -- end Chart and number polish -- */
 
 /* ==========================================================================
+   Round 2 text and visual fixes (F3). Only fixer F3 edits this block.
+   ========================================================================== */
+
+/* On a phone the 2-up stat tiles are narrow, and Streamlit clips a long metric value
+   with an ellipsis ("At most $1.4...", "Already reti..."). Let it wrap at its spaces
+   instead; a number with no space ("$1.4M") stays whole. */
+@media (max-width: 640px) {
+    html:root [data-testid="stMetricValue"],
+    html:root [data-testid="stMetricValue"] > div {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: break-word;
+    }
+}
+/* -- end Round 2 text and visual fixes -- */
+
+/* ==========================================================================
    Top card layout. The card (.st-key-mc-topbar) holds two keyed rows built by
    app._topbar_head, each a wrapping flex row:
      mc-topbar-head: the title (left), then Run / simulations / Settings (right);

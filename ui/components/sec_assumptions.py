@@ -64,9 +64,9 @@ def render_investing_body(st) -> None:
                "(100 minus stocks)")
 
     # Interpret INVESTMENT_FEE_RATE as fraction. bps = fee_rate * 10_000.
-    cur_fee_bps = max(0, min(100, int(round(safe_float(get_override(st, "INVESTMENT_FEE_RATE", 0.0), 0.0) * 10_000))))
+    cur_fee_bps = max(0, min(200, int(round(safe_float(get_override(st, "INVESTMENT_FEE_RATE", 0.0), 0.0) * 10_000))))
     ensure_default(st, "sa_fee_bps", cur_fee_bps)
-    v = slider_with_box(st, "Investment fee (bps)", 0, 100,
+    v = slider_with_box(st, "Investment fee (bps)", 0, 200,
                   5, key="sa_fee_bps", unit=" bps",
                   help="What your funds charge each year. 100 basis points (bps) = 1%. "
                        "Index ETFs run about 3-15 bps, active funds 50-100.")
@@ -151,7 +151,7 @@ def render_investing_body(st) -> None:
                 if safe_int(st.session_state.get("sa_roth_target"), _auto) in _defaults:
                     st.session_state["sa_roth_target"] = _auto
             ensure_default(st, "sa_roth_target", _auto if _stored is None else safe_int(_stored, _auto))
-            v = st.number_input("Fill up to income of ($)", min_value=0, max_value=250_000,
+            v = st.number_input("Fill up to income of ($)", min_value=0, max_value=750_000,
                                 step=5_000, key="sa_roth_target",
                                 help=f"Each year, convert until your income reaches this amount. "
                                      f"The default, ${_auto:,}, is the top of the 12% "
@@ -166,7 +166,7 @@ def render_investing_body(st) -> None:
             set_override(st, "ROTH_CONVERSION_MAX_ANNUAL", safe_int(v))
         ensure_default(st, "sa_roth_stop",
                        safe_int(get_override(st, "ROTH_CONVERSION_STOP_AGE", 67), 67))
-        v = slider_with_box(st, "Stop conversions at age", 62, 75, 1, key="sa_roth_stop",
+        v = slider_with_box(st, "Stop conversions at age", 50, 80, 1, key="sa_roth_stop",
                             help="No Roth conversions after this age.")
         set_override(st, "ROTH_CONVERSION_STOP_AGE", safe_int(v))
 

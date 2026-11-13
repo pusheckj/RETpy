@@ -55,6 +55,10 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
     with col2:
         st.metric("Ran out of money (in this sample)", f"{n_out} of {n_shown}")
 
+    if n_out == n_shown:
+        st.info("Every sample path ran out of money before the plan ends. "
+                "The red lines show when each one reached $0.")
+
     fig = go.Figure()
     for path, ran_out in outcomes:
         ages, values = (list(v) for v in zip(*path))

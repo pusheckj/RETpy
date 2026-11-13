@@ -73,7 +73,9 @@ def render_body(st) -> None:
     # rate" (they overlapped and spilled past the sidebar's right edge).
     row1 = st.columns(2)
     with row1[0]:
-        st.metric("Federal", money(taxes["federal"], shorten=True))
+        st.metric("Federal", money(taxes["federal"], shorten=True),
+                  help="Federal income tax after credits. Below zero means a refund: "
+                       "the refundable child tax credit pays out more than the tax owed.")
     with row1[1]:
         st.metric("State", money(taxes["state"], shorten=True))
     row2 = st.columns(2)
@@ -83,6 +85,11 @@ def render_body(st) -> None:
     with row2[1]:
         st.metric("Effective rate", pct(taxes["effective_rate"]))
 
+    if taxes["federal"] < 0:
+        st.caption(
+            f"Federal is {money_md(taxes['federal'], shorten=True)} because the child tax credit "
+            "is bigger than your federal income tax. The refundable part is paid out as a refund."
+        )
     if income > 0:
         st.caption(
             f"**Total tax: {money_md(taxes['total'], shorten=True)}** on "
@@ -98,8 +105,10 @@ def render_body(st) -> None:
     # What's modeled
     with st.expander("What's modeled", expanded=False):
         st.markdown(
-            "- **Federal**: 2024 brackets and standard deduction for your filing "
+            "- **Federal**: 2024 tax tables (brackets and standard deduction, held flat "
+            "in today's dollars) for your filing "
             "status (\\$29,200 married / \\$14,600 single / \\$21,900 head of household). "
+            "Contribution limits use 2026 values. "
             "An unmarried couple files two returns.\n"
             "- **State**: your state's 2024 brackets, deductions and exemptions, "
             "including whether it taxes Social Security and retirement income. "
@@ -109,7 +118,10 @@ def render_body(st) -> None:
             "(\\$250,000 married).\n"
             "- **Pre-tax savings**: 401(k) and HSA contributions lower your income "
             "tax (not FICA, for the 401(k)).\n"
-            "- **Not modeled**: tax credits (such as the child tax credit), "
+            "- **Child tax credit**: \\$2,200 per child under 17, in working years only. "
+            "If it is more than your tax, the refundable part is paid out, so federal "
+            "tax can show below zero.\n"
+            "- **Not modeled**: other tax credits (such as the earned income credit), "
             "itemized deductions, AMT, self-employment tax."
         )
 

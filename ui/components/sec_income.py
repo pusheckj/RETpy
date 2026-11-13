@@ -33,7 +33,7 @@ _OTHER_INCOME_HELP = ("Taxable income that isn't pay, like rent, interest or sid
 
 
 def _income_input(st, label: str, widget_key: str, override_key: str,
-                  default: int, max_value: int = 2_000_000, step: int = 1_000,
+                  default: int, max_value: int = 10_000_000, step: int = 1_000,
                   help_text: str = "") -> int:
     ensure_default(st, widget_key, safe_int(get_override(st, override_key, default), default))
     v = st.number_input(
@@ -70,12 +70,12 @@ def render_body(st) -> None:
         you_base = _income_input(st, "Base salary", "si_your_base",
                                  "YOUR_BASE_SALARY", 70_000)
         you_bonus = _income_input(st, "Bonus", "si_your_bonus",
-                                  "YOUR_BONUS_AMOUNT", 0, max_value=1_000_000, step=500)
+                                  "YOUR_BONUS_AMOUNT", 0, max_value=5_000_000, step=500)
     with c2:
         you_rsu = _income_input(st, "RSU (gross, annual)", "si_your_rsu",
-                                "YOUR_RSU_AMOUNT", 0, max_value=5_000_000)
+                                "YOUR_RSU_AMOUNT", 0, max_value=20_000_000)
         you_other = _income_input(st, "Other income", "si_your_other",
-                                  "YOUR_OTHER_INCOME", 0, max_value=1_000_000, step=500,
+                                  "YOUR_OTHER_INCOME", 0, max_value=5_000_000, step=500,
                                   help_text=_OTHER_INCOME_HELP)
 
     ensure_default(st, "si_your_growth",
@@ -97,12 +97,12 @@ def render_body(st) -> None:
             p_base = _income_input(st, "Partner base salary", "si_partner_base",
                                    "PARTNER_BASE_SALARY", 42_000)
             p_bonus = _income_input(st, "Partner bonus", "si_partner_bonus",
-                                    "PARTNER_BONUS_AMOUNT", 0, max_value=1_000_000, step=500)
+                                    "PARTNER_BONUS_AMOUNT", 0, max_value=5_000_000, step=500)
         with c4:
             p_rsu = _income_input(st, "Partner RSU (gross)", "si_partner_rsu",
-                                  "PARTNER_RSU_AMOUNT", 0, max_value=5_000_000)
+                                  "PARTNER_RSU_AMOUNT", 0, max_value=20_000_000)
             p_other = _income_input(st, "Partner other income", "si_partner_other",
-                                    "PARTNER_OTHER_INCOME", 0, max_value=1_000_000, step=500,
+                                    "PARTNER_OTHER_INCOME", 0, max_value=5_000_000, step=500,
                                     help_text=_OTHER_INCOME_HELP)
 
         ensure_default(st, "si_partner_growth",

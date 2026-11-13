@@ -91,6 +91,31 @@ def test_typing_in_the_box_moves_the_slider_on_the_same_run(lone):
     assert lone.slider(key="infl").value == pytest.approx(3.1)
 
 
+class _FakeSt:
+    def __init__(self, **state):
+        self.session_state = dict(state)
+
+
+@pytest.mark.parametrize("box_first", [False, True])
+def test_a_stale_box_in_the_same_request_does_not_undo_the_slider(box_first):
+    """A held arrow key sends the next request before the browser has the box value the
+    last pass pushed, so the request has the NEW slider value beside the box's OLD one.
+    Streamlit then calls both callbacks, in either order. The box must not count as a
+    typed edit (it used to reset the slider: most key presses were lost)."""
+    st = _FakeSt(s=61, s__box=55, s__seen=60)                      # slider moved 60 -> 61, box is stale
+    if box_first:
+        si._on_box(st, "s", 0, 100, 1, True)
+        si._on_slider(st, "s", True, 0)
+    else:
+        si._on_slider(st, "s", True, 0)
+        si._on_box(st, "s", 0, 100, 1, True)
+    assert st.session_state["s"] == 61 and st.session_state["s__box"] == 61
+    st.session_state.pop("s__moved", None)                         # the next draw clears the flag
+    st.session_state["s__box"] = 30                                # a real typed value still works
+    si._on_box(st, "s", 0, 100, 1, True)
+    assert st.session_state["s"] == 30
+
+
 def test_typing_outside_the_range_clamps_with_a_short_note(lone):
     lone.number_input(key="stock__box").set_value(250).run()
     assert lone.slider(key="stock").value == 100

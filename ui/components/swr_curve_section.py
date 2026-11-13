@@ -191,6 +191,11 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
         f = go.Figure(fig)
         if compact:  # the full axis title is clipped on a 360px phone
             f.update_xaxes(title_text="Initial withdrawal rate")
+            # The two line labels overprint when the rates are close: shorter text, and the
+            # plan's label one line lower.
+            for note in f.layout.annotations:
+                if str(note.text).startswith("your plan"):
+                    note.update(text=str(note.text).replace("your plan", "you"), yshift=-16)
         return f
 
     show_chart(st, _build, f"swr_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)

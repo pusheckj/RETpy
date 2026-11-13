@@ -197,15 +197,15 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "ay_partner_plan_until": ("PARTNER_PLAN_UNTIL_AGE", _as_int(95, PLAN_UNTIL_MIN, PLAN_UNTIL_MAX)),
 
     # sec_income.py
-    "si_your_base":       ("YOUR_BASE_SALARY", _as_int(70_000, 0, 2_000_000)),
-    "si_your_bonus":      ("YOUR_BONUS_AMOUNT", _as_int(0, 0, 1_000_000)),
-    "si_your_rsu":        ("YOUR_RSU_AMOUNT", _as_int(0, 0, 5_000_000)),
-    "si_your_other":      ("YOUR_OTHER_INCOME", _as_int(0, 0, 1_000_000)),
+    "si_your_base":       ("YOUR_BASE_SALARY", _as_int(70_000, 0, 10_000_000)),
+    "si_your_bonus":      ("YOUR_BONUS_AMOUNT", _as_int(0, 0, 5_000_000)),
+    "si_your_rsu":        ("YOUR_RSU_AMOUNT", _as_int(0, 0, 20_000_000)),
+    "si_your_other":      ("YOUR_OTHER_INCOME", _as_int(0, 0, 5_000_000)),
     "si_your_growth":     ("YOUR_SALARY_GROWTH_RATE", _as_pct(2.0, 0.0, 10.0)),
-    "si_partner_base":    ("PARTNER_BASE_SALARY", _as_int(42_000, 0, 2_000_000)),
-    "si_partner_bonus":   ("PARTNER_BONUS_AMOUNT", _as_int(0, 0, 1_000_000)),
-    "si_partner_rsu":     ("PARTNER_RSU_AMOUNT", _as_int(0, 0, 5_000_000)),
-    "si_partner_other":   ("PARTNER_OTHER_INCOME", _as_int(0, 0, 1_000_000)),
+    "si_partner_base":    ("PARTNER_BASE_SALARY", _as_int(42_000, 0, 10_000_000)),
+    "si_partner_bonus":   ("PARTNER_BONUS_AMOUNT", _as_int(0, 0, 5_000_000)),
+    "si_partner_rsu":     ("PARTNER_RSU_AMOUNT", _as_int(0, 0, 20_000_000)),
+    "si_partner_other":   ("PARTNER_OTHER_INCOME", _as_int(0, 0, 5_000_000)),
     "si_partner_growth":  ("PARTNER_SALARY_GROWTH_RATE", _as_pct(2.0, 0.0, 10.0)),
 
     # sec_taxes.py
@@ -234,8 +234,8 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sv_inflation_adjust":   ("SAVINGS_INFLATION_ADJUST", lambda v: bool(v)),
     "sv_primary_housing":    ("PRIMARY_PAYS_HOUSING", lambda v: bool(v)),
     "sv_after_tax_401k":     ("YOUR_AFTER_TAX_401K_PCT", _as_pct(0.0, 0.0, 20.0)),
-    "sv_match_pct":          ("YOUR_401K_MATCH_PCT", _as_pct(0.0, 0.0, 25.0)),
-    "sv_partner_match_pct":  ("PARTNER_401K_MATCH_PCT", _as_pct(0.0, 0.0, 25.0)),
+    "sv_match_pct":          ("YOUR_401K_MATCH_PCT", _as_pct(0.0, 0.0, 50.0)),
+    "sv_partner_match_pct":  ("PARTNER_401K_MATCH_PCT", _as_pct(0.0, 0.0, 50.0)),
     "sv_manual_your_401k":   ("YOUR_401K_CONTRIBUTION", _as_int(2_700, 0, 30_000)),
     "sv_manual_your_hsa":    ("YOUR_HSA_CONTRIBUTION", _as_int(0, 0, 10_000)),
     "sv_manual_your_roth":   ("YOUR_BACKDOOR_ROTH", _as_int(0, 0, 10_000)),
@@ -272,29 +272,29 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "rg_ss_include":      ("INCLUDE_SOCIAL_SECURITY", lambda v: bool(v)),
     "rg_ss_claim":        ("SS_CLAIM_AGE", _as_int(67, 62, 70)),
     "rg_partner_ss_claim": ("PARTNER_SS_CLAIM_AGE", _as_int(67, 62, 70)),
-    "rg_your_fra":        ("YOUR_SS_MONTHLY_FRA", _as_int(2_000, 0, 5_000)),
-    "rg_partner_fra":     ("PARTNER_SS_MONTHLY_FRA", _as_int(1_800, 0, 5_000)),
+    "rg_your_fra":        ("YOUR_SS_MONTHLY_FRA", _as_int(2_000, 0, 10_000)),
+    "rg_partner_fra":     ("PARTNER_SS_MONTHLY_FRA", _as_int(1_800, 0, 10_000)),
     "rg_target_success":  ("TARGET_SUCCESS_RATE", _as_pct_int(80, 70, 95)),
     # Retirement lifestyle (go-go extra and later-years drop). An unset extra
     # (None) is skipped here and the widget follows household size.
     "rg_leisure_amount":  ("EARLY_RETIREMENT_LEISURE_INCREASE", _as_int(10_000, 0, 200_000)),
-    "rg_leisure_until":   ("EARLY_RETIREMENT_LEISURE_UNTIL_AGE", _as_int(70, 50, 100)),
+    "rg_leisure_until":   ("EARLY_RETIREMENT_LEISURE_UNTIL_AGE", _as_int(70, 40, 100)),
     "rg_late_pct":        ("LATE_RETIREMENT_LEISURE_DECREASE", _as_pct_int(15, 0, 50)),
-    "rg_late_from":       ("LATE_RETIREMENT_START_AGE", _as_int(75, 55, 100)),
+    "rg_late_from":       ("LATE_RETIREMENT_START_AGE", _as_int(75, 50, 100)),
 
     # sec_assumptions.py
     "sa_scenario":        ("ACTIVE_RETURN_SCENARIO", _scenario_cast),
     "sa_stock_alloc":     ("STOCK_ALLOCATION", _as_pct(80.0, 0.0, 100.0)),
     "sa_inflation":       ("EXPECTED_INFLATION", _as_pct(2.75, 0.0, 10.0)),
-    "sa_fee_bps":         ("INVESTMENT_FEE_RATE", _as_bps(15, 0, 100)),
+    "sa_fee_bps":         ("INVESTMENT_FEE_RATE", _as_bps(15, 0, 200)),
     "sa_vol_drag":        ("APPLY_VOLATILITY_DRAG", lambda v: bool(v)),
     "sa_glide_enable":    ("GLIDE_PATH_ENABLED", lambda v: bool(v)),
     "sa_glide_start":     ("GLIDE_PATH_START_STOCK_PCT", _as_pct(90.0, 50.0, 100.0)),
     "sa_glide_end":       ("GLIDE_PATH_END_STOCK_PCT", _as_pct(60.0, 20.0, 80.0)),
     "sa_roth_enable":     ("ENABLE_ROTH_CONVERSION", lambda v: bool(v)),
-    "sa_roth_target":     ("ROTH_CONVERSION_TARGET_BRACKET", _as_int(94_300, 0, 250_000)),
+    "sa_roth_target":     ("ROTH_CONVERSION_TARGET_BRACKET", _as_int(94_300, 0, 750_000)),
     "sa_roth_max":        ("ROTH_CONVERSION_MAX_ANNUAL", _as_int(100_000, 0, 500_000)),
-    "sa_roth_stop":       ("ROTH_CONVERSION_STOP_AGE", _as_int(67, 62, 75)),
+    "sa_roth_stop":       ("ROTH_CONVERSION_STOP_AGE", _as_int(67, 50, 80)),
     "sa_dyn_enable":      ("DYNAMIC_SPENDING_ENABLED", lambda v: bool(v)),
     "sa_ret_spend":       ("RETURN_BASED_SPENDING_ENABLED", lambda v: bool(v)),
     "sa_aca":             ("ACA_ENABLED", lambda v: bool(v)),
@@ -432,7 +432,8 @@ DERIVED_MAPPINGS: Dict[str, Any] = {
 #                       treated as hand-customized and never re-derives from
 #                       that profile's own base/bonus/RSU inputs.
 #   le_age              life-expectancy card's age (seeded from YOUR_AGE).
-_EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "ay_partner_later", "_sync_notes")
+_EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "ay_partner_later", "_sync_notes",
+                     "_guard_notes")
 
 # Prefixes for widget families that are NOT (fully) enumerated above: either
 # dynamically keyed (count varies at runtime) or whole sections whose widgets

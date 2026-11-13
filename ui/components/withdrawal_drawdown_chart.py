@@ -15,7 +15,11 @@ def render(st, results: dict, chart_key: str = "withdrawal_drawdown_main") -> No
     pr = results.get("primary_result", {}) or {}
     rows = pr.get("withdrawals_by_year", []) or []
     if not rows:
-        st.info("Per-year withdrawal breakdown not available.")
+        if (pr.get("success_rate") or 1) < 0.005:
+            st.info("No withdrawals to chart: in this plan the money is gone before "
+                    "the first year of withdrawals.")
+        else:
+            st.info("Per-year withdrawal breakdown not available.")
         return
 
     ages = [r["age"] for r in rows]

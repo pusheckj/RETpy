@@ -202,4 +202,5 @@ def test_percentile_charts_run_to_the_plan_end_even_when_all_runs_fail_early():
 def test_account_balances_take_more_than_10m():
     src = open(os.path.join(_UI, "components", "account_inputs.py"), encoding="utf-8").read()
     assert "max_value=100_000_000" in src and "10_000_000" not in src
-    assert "10_000_000" not in open(os.path.join(_UI, "utils", "widget_sync.py"), encoding="utf-8").read()
+    sync = open(os.path.join(_UI, "utils", "widget_sync.py"), encoding="utf-8").read()
+    assert not [ln for ln in sync.splitlines() if '"ai_' in ln and "10_000_000" in ln]   # the account boxes

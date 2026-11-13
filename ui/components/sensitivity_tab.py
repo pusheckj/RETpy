@@ -104,11 +104,11 @@ def render(st, results: dict) -> None:
 _BREAK_EVEN_PARAMS = {
     "Your 401(k) contribution ($/yr)": (
         "YOUR_401K_CONTRIBUTION",
-        [10_000, 15_000, 18_500, 23_000, 27_500, 32_000],
+        [10_000, 15_000, 20_000, 24_500, 28_000, 32_500],
     ),
     "Your HSA contribution ($/yr)": (
         "YOUR_HSA_CONTRIBUTION",
-        [1_000, 2_000, 3_000, 4_150, 5_500, 7_000],
+        [1_000, 2_000, 3_000, 4_400, 6_000, 8_750],
     ),
     "Retirement age": (
         "TARGET_RETIREMENT_AGE_SWEEP",  # handled specially below

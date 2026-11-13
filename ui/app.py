@@ -458,13 +458,15 @@ _JUMP_SECTIONS = [("retirement", "Retirement"), ("freedom", "Milestones"), ("fi"
                   ("whatif", "What if"), ("deepdives", "Deep dives")]
 
 
-def _phone_bar(results) -> None:
+def _phone_bar(results, stale: bool = False) -> None:
     """Phone-only sticky bar (theme.css shows it under 640px wide): chips that
     jump to each section, plus the headline result once the top card has
     scrolled away. The page script (components.animations) does the jumping,
     highlights the section in view, and hides chips for sections not shown."""
     from components.top_bar import _resolve_success, _resolve_target_age
     success, _hint = _resolve_success(results)
+    if stale:
+        success += " (old inputs)"
     age = _resolve_target_age(st.session_state.user_overrides)
     chips = "".join(f'<a role="button" data-mc-jump="{k}">{label}</a>' for k, label in _JUMP_SECTIONS)
     with st.container(key="mc-phonebar"):
@@ -1042,7 +1044,8 @@ def main() -> None:
                      sims_render=_topbar_sims,
                      settings_render=_topbar_settings,
                      control_slots=control_slots,
-                     stats=spending_stats)
+                     stats=spending_stats,
+                     stale=_results_are_stale())
 
 
     # Spending view: statements only, no simulation.
@@ -1076,7 +1079,7 @@ def main() -> None:
     # `_run_simulation` already tracks exactly this (it's what disables the Run
     # button) — surface it, the way the FI-number and SWR sections do for their
     # own cached results.
-    _phone_bar(results)
+    _phone_bar(results, stale=_results_are_stale())
 
     if _results_are_stale():
         st.warning("Your inputs changed since this simulation ran. The results "

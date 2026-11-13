@@ -176,7 +176,8 @@ def render(st, results: Optional[dict] = None,
            sims_render=None,
            settings_render=None,
            control_slots=None,
-           stats: Optional[list] = None) -> None:
+           stats: Optional[list] = None,
+           stale: bool = False) -> None:
     """Fill the sticky top card (built by ``app._topbar_head``).
 
     The card has two rows (theme.css, "Top card layout"): the title with the
@@ -189,10 +190,13 @@ def render(st, results: Optional[dict] = None,
     card's first row); ``run_render``/``sims_render``/``settings_render`` are
     callbacks, so the caller owns the widgets (and each keeps its own error
     handling). ``stats`` swaps the metrics for the Spending view's figures.
+    ``stale``: inputs changed since the last run. Every figure but the success rate is
+    live from the inputs (net worth too, not the run's snapshot), and the success rate,
+    which only a new run can update, is marked as from the old inputs.
     """
     names = _resolve_names(profile)
 
-    net_worth = _resolve_net_worth(results, overrides)
+    net_worth = _resolve_net_worth(None if stale else results, overrides)
     net_worth_str = money_precise(net_worth) if net_worth is not None else "—"
 
     income = _resolve_income(overrides)
@@ -200,6 +204,8 @@ def render(st, results: Optional[dict] = None,
 
     target_age = _resolve_target_age(overrides)
     success_str, success_hint = _resolve_success(results)
+    if stale and success_hint == "":
+        success_hint = "old inputs"
 
     html_parts = []
     html_parts.append('<div class="mc-topbar mc-topbar-stats">' if stats is not None
