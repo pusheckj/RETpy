@@ -976,8 +976,9 @@ def render(st, **_kwargs) -> None:
               help=(f"Includes {money_md(est_month)}/month of fixed estimates (not from statements). "
                     if est_month else "Your accounts only. ")
                    + f"The plan's spending input is {money_md(plan)}/yr.")
-    line = [f"{len(good)} complete month{'' if len(good) == 1 else 's'}, {span}",
-            f"current housing payment {money_md(housing_now)}/mo"]
+    line = [f"{len(good)} complete month{'' if len(good) == 1 else 's'}, {span}"]
+    line.append(f"current housing payment {money_md(housing_now)}/mo" if housing_now > 0
+                else "no housing payment in these statements")
     if est_month:
         names = ", ".join(sorted(set(est["description"])))
         line.append(f"{names} {money_md(est_month)}/mo is a fixed estimate (hatched)")

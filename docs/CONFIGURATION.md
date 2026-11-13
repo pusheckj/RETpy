@@ -213,6 +213,23 @@ The engine opens one 529 per child (`child1_529`, `child2_529`, …).
 
 **Older profiles** described at most two children with `YEARS_UNTIL_FIRST_CHILD`, `YEARS_BETWEEN_CHILDREN`, `FIRST_CHILD_MONTHLY_COST`, `BOTH_CHILDREN_MONTHLY_COST`, `CHILD_LEAVES_HOME_AGE` and `COLLEGE_*`. They still load: `migrate_legacy_overrides()` turns them into the equivalent `CHILDREN` list (the second child costs what "both children" added over the first; `YEARS_UNTIL_FIRST_CHILD` ≥ 99 means none), so they give the same results. It runs when a profile is loaded and wherever overrides reach the config.
 
+### Debts
+
+The app's *Debts* section sets these (the mortgage is not one of them: it stays under *Home*).
+
+| Parameter | Default | Description |
+|---|---|---|
+| `DEBTS` | `[]` | One entry per debt; `[]` = no debts (the simulation is exactly as without the feature). Fields below. Plain data, so it reaches browser workers. |
+| `name` | — | A label, up to 40 characters. |
+| `kind` | guessed from the name | `credit_card`, `student_loan`, `car`, `personal`, `medical` or `other`. Display only. |
+| `balance` | — | What you owe now, in dollars of the day (as on the statement). |
+| `apr` | — | Yearly rate as a fraction (`0.24` = 24%), charged monthly at `apr / 12` on the nominal balance. |
+| `min_payment` | — | The minimum due each month, in dollars of the day. Held fixed. |
+| `DEBT_EXTRA_MONTHLY` | `0` | Paid every month on top of the minimums, until the debts are gone. |
+| `DEBT_STRATEGY` | `"avalanche"` | Where the extra (and each paid-off debt's freed minimum) goes: `"avalanche"` = highest APR first, `"snowball"` = smallest balance first. |
+
+Each month the plan pays every minimum plus the extra; the total stays the same until the last debt is paid off, then stops. `debt_payment_for_age(age)` gives a plan year's payments in today's dollars (see METHODOLOGY.md §6.3). Payments are spending: in working years they reduce what is saved (in the *Auto* savings modes; *Manual amounts* invests fixed amounts, so as with any spending they only matter when spending passes take-home), and in retirement they are withdrawn. The math is in `retirement_sim/debts.py`.
+
 ---
 
 ## 6. Retirement expenses

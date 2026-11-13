@@ -101,6 +101,18 @@ QUESTIONS: list[tuple[str, str]] = [
         "are rough estimates, so set your own.",
     ),
     (
+        "How are debts handled?",
+        "Add credit cards, student loans, car loans and other debts under Debts "
+        "(your mortgage stays in House). The plan pays every minimum plus any extra "
+        "each month. The extra goes to one debt at a time: highest rate first, or "
+        "smallest balance first. When a debt is paid off, its payment moves to the "
+        "next one, and once all are gone the money is saved instead. While you work, "
+        "the payments come out of what you'd otherwise save; in retirement they're "
+        "withdrawn like other spending. Payments are fixed in dollars, so inflation "
+        "makes later ones a little cheaper in today's dollars. The Debt payoff "
+        "section shows the dates, the interest, and what paying more saves.",
+    ),
+    (
         "How do I save my inputs?",
         "Open Settings (top right) and choose Save / Load profile. Download "
         "your inputs as a JSON file, then upload it later to restore them. The "

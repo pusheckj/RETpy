@@ -423,3 +423,14 @@ def test_married_spouse_gets_the_spousal_top_up(monkeypatch):
     assert cfg.calculate_social_security(67, 67) == pytest.approx((3_000 + 350) * 12)
     assert cfg.ss_spousal_factor(62) == pytest.approx(0.65)
     assert cfg.ss_spousal_factor(70) == 1.0
+
+
+def test_single_parent_filing_single_is_pointed_to_head_of_household(panel):
+    kid = {"years_until_birth": -3, "monthly_cost": 1_500, "leaves_home_age": 18,
+           "college_annual_cost": 40_000, "college_years": 4, "college_funding_pct": 0.0}
+    at = panel({"YOUR_AGE": 30, "PARTNER_AGE": 0, "FILING_STATUS": "Single", "CHILDREN": [kid]})
+    assert any("Head of household" in c.value for c in at.caption)
+    hoh = panel({"YOUR_AGE": 30, "PARTNER_AGE": 0, "FILING_STATUS": "Head of household", "CHILDREN": [kid]})
+    assert not any("usually means a lower tax bill" in c.value for c in hoh.caption)
+    childless = panel({"YOUR_AGE": 30, "PARTNER_AGE": 0, "FILING_STATUS": "Single", "CHILDREN": []})
+    assert not any("usually means a lower tax bill" in c.value for c in childless.caption)

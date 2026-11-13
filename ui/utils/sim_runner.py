@@ -355,7 +355,10 @@ def _recompute_derived(original: dict) -> None:
     if hasattr(cfg, "TOTAL_RETIREMENT_ACCOUNTS") and hasattr(cfg, "TOTAL_TAXABLE") and hasattr(cfg, "TOTAL_CASH"):
         cfg.TOTAL_INVESTMENTS = cfg.TOTAL_RETIREMENT_ACCOUNTS + cfg.TOTAL_TAXABLE + cfg.TOTAL_CASH
     if hasattr(cfg, "TOTAL_INVESTMENTS") and hasattr(cfg, "HOME_EQUITY"):
-        cfg.TOTAL_NET_WORTH = cfg.TOTAL_INVESTMENTS + cfg.HOME_EQUITY
+        # config.py: net of the consumer debts (DEBTS).
+        from retirement_sim import debts as _debts
+        cfg.TOTAL_NET_WORTH = (cfg.TOTAL_INVESTMENTS + cfg.HOME_EQUITY
+                               - _debts.total_owed(getattr(cfg, "DEBTS", [])))
 
     # An EXPECTED_INFLATION override (the slider) must propagate into the already-built
     # INFLATION_RATES dict so general CPI stays the single source of truth. Snapshot the

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import html
+import re
 from datetime import date
 from typing import Any, Dict, List
 
@@ -56,6 +57,11 @@ _TEAL, _SLATE = "#0d9488", "#7a8db3"
 def _h(text: Any) -> str:
     """HTML-escape, and keep ``$`` away from Streamlit's markdown math."""
     return html.escape(str(text)).replace("$", "&#36;")
+
+
+def _md(text: Any) -> str:
+    """Escape ``text`` for Streamlit markdown (a debt name with ``$``, ``*`` or ``_`` in it)."""
+    return re.sub(r"([\\`*_{}\[\]()#+\-.!|~$<>])", r"\\\1", str(text))
 
 
 def _m(value: float) -> str:
@@ -400,9 +406,14 @@ def _plan_card(res: sf.PayoffResult, name: str, sub: str, best: bool, badge: str
                        for i, r in enumerate(res.order))
     else:
         big = "Won't pay off at these payments"
-        meta = (f"After {sf.MAX_PAYOFF_MONTHS // 12} years you'd still owe "
-                f"{_m(res.remaining_balance)}. Pay extra each month or raise "
-                f"the payments.")
+        if res.balances and res.remaining_balance > res.balances[0] + 0.5:
+            # Compounded over 50 years the balance is a meaningless figure: say what is wrong.
+            meta = ("The balance keeps growing: these payments don't cover the interest. "
+                    "Pay extra each month or raise the payments.")
+        else:
+            meta = (f"After {sf.MAX_PAYOFF_MONTHS // 12} years you'd still owe "
+                    f"{_m(res.remaining_balance)}. Pay extra each month or raise "
+                    f"the payments.")
         rows = "".join(f'<li><span>{_h(r["name"])}</span><span>'
                        f'{"paid off " + _h(r["payoff_date"]) if r["payoff_date"] else "not paid off"}'
                        f'</span></li>' for r in res.order)
@@ -460,7 +471,7 @@ def _render_payoff(st, payoff: Dict[str, Any], inputs: Dict[str, Any], start: da
             f'{_m(av.monthly_payment - extra)} in minimums + {_m(extra)} extra.</div>',
             unsafe_allow_html=True)
         if av.underwater:
-            names = ", ".join(av.underwater)
+            names = _md(", ".join(av.underwater))
             st.warning(f"The minimum on **{names}** doesn't cover its monthly interest, so on "
                        "its own that balance never shrinks. Paying extra fixes this.")
         saved = payoff["interest_saved"]

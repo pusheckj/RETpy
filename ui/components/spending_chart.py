@@ -190,6 +190,20 @@ def _ltc_expected(overrides: dict, age: int) -> float:
     return full * prob
 
 
+def _debt_payments(overrides: dict, ages, nominal: bool = False) -> list:
+    """Each age's debt payments (DEBTS), in today's dollars or, with
+    ``nominal``, in dollars of the day."""
+    from retirement_sim import debts as dm
+    if not overrides.get("DEBTS"):
+        return [0.0 for _ in ages]
+    infl = safe_float(overrides.get("EXPECTED_INFLATION", _cfg_default("EXPECTED_INFLATION", 0.0275)), 0.0275)
+    s = dm.real_schedule(overrides.get("DEBTS"), overrides.get("DEBT_EXTRA_MONTHLY", 0),
+                         overrides.get("DEBT_STRATEGY"), infl)
+    by_year = s.nominal if nominal else s.payments
+    start = safe_int(overrides.get("YOUR_AGE", _cfg_default("YOUR_AGE", 25)), 25)
+    return [by_year[a - start] if 0 <= a - start < len(by_year) else 0.0 for a in ages]
+
+
 def _any_category_set(overrides: dict) -> bool:
     """True if the user has set at least one spending category explicitly,
     OR set a mortgage / rent."""
@@ -292,6 +306,13 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
     child_series = _apply([_child_expense(overrides, a) for a in ages])
     if any(v > 0 for v in child_series):
         series.append(("Children", series_color(len(_CATEGORY_KEYS), st), child_series))
+
+    # Debt payments: fixed nominal payments (like a mortgage), so the
+    # future-dollars view shows them as paid, and today's dollars deflate them
+    # (the simulation's own schedule, cfg.debt_payment_for_age).
+    debt_series = _debt_payments(overrides, ages, nominal=inflation_factors is not None)
+    if any(v > 0 for v in debt_series):
+        series.append(("Debt payments", series_color(len(_CATEGORY_KEYS) + 5, st), debt_series))
 
     vac_series = _apply([_vacation_outlay(overrides, a, retirement_age) for a in ages])
     if any(v > 0 for v in vac_series):
