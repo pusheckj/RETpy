@@ -29,7 +29,7 @@ try:
     from utils import places as pl
     from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money
-    from utils.household import has_partner
+    from utils.household import has_partner, plan_end_ages
     from utils.sim_runner import _hashable
 except ImportError:  # pragma: no cover
     from ui.utils import milestones as ms  # type: ignore
@@ -37,7 +37,7 @@ except ImportError:  # pragma: no cover
     from ui.utils import places as pl  # type: ignore
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money  # type: ignore
-    from ui.utils.household import has_partner  # type: ignore
+    from ui.utils.household import has_partner, plan_end_ages  # type: ignore
     from ui.utils.sim_runner import _hashable  # type: ignore
 
 DEFAULT_RETURN = 0.075       # used only if the net-worth chart's table can't be read
@@ -57,6 +57,8 @@ def _when(m: "ms.Milestone", end_age=None) -> str:
     if m.status == ms.PROGRESS:
         if m.age is None:
             return "Not yet"
+        if m.after_retire:
+            return f"Only after you retire: projected at {m.age} ({m.year})"
         return f"Projected at {m.age} ({m.year})"
     return "Not in this plan" + (f" (through {end_age})" if end_age else "")
 
@@ -75,7 +77,7 @@ def _bar(m: "ms.Milestone") -> str:
 
 def _item(m: "ms.Milestone", end_age, is_next: bool, with_detail: bool = True, label=None) -> str:
     cls = f"ms-item is-{m.status}" + (" is-next" if is_next else "")
-    pct = f' · {int(round(100 * m.progress))}%' if (m.progress is not None and m.status != ms.REACHED) else ""
+    pct = f' · {int(round(100 * m.progress))}% there' if (m.progress is not None and m.status != ms.REACHED) else ""
     detail = f'<span class="ms-detail">{_e(m.detail)}</span>' if (with_detail and m.detail) else ""
     nxt = '<span class="ms-tag">Next up</span>' if is_next else ""
     return (f'<li class="{cls}"><span class="ms-dot" aria-hidden="true">{_icon(m)}</span>'
@@ -132,7 +134,7 @@ def _facts(pr: "ms.PlaceResult", ret_age) -> str:
     return f'<dl class="ms-facts">{body}</dl>'
 
 
-def place_html(pr: "ms.PlaceResult", end_age, next_keys, ret_age=None) -> str:
+def place_html(pr: "ms.PlaceResult", end_age, next_keys, ret_age=None, owns_home: bool = True) -> str:
     p = pr.place
     tax = pl.tax_label(p.tax, p.abroad)
     rows = "".join(_item(m, end_age, m.key in next_keys, with_detail=False, label=lab)
@@ -140,8 +142,9 @@ def place_html(pr: "ms.PlaceResult", end_age, next_keys, ret_age=None) -> str:
     note = f'<div class="ms-note">{_e(p.note)}</div>' if p.note else ""
     ratio = (pr.cost.ratio if pr.cost is not None else 1.0) * p.adjust
     housing = "keep" if p.here else p.housing
+    chip = _HOUSING_CHIP.get(housing, "") if (owns_home or housing != "keep") else "Your plan's housing"
     return (f'<div class="ms-place-head"><b>{_e(p.name)}</b>'
-            f'<span class="ms-chip">{_e(_HOUSING_CHIP.get(housing, ""))}</span>'
+            f'<span class="ms-chip">{_e(chip)}</span>'
             f'<span class="ms-chip">Everyday {ratio:.2f}&times;</span>'
             f'<span class="ms-chip">{_e(tax)}</span></div>'
             f'<div class="ms-place-sub">At age {_e(ret_age if ret_age is not None else "")}, in today\'s dollars.</div>'
@@ -233,7 +236,9 @@ def series(clean: dict, results):
         det_invested = [sum(float(v[i]) for k, v in by.items() if k != "Home equity")
                         for i in range(len(det_ages))]
     traj = ((results or {}).get("primary_result") or {}).get("median_trajectory") or []
-    if traj:
+    # A plan that runs out of money at once leaves one point (no median path to
+    # follow). The simple projection is the better timeline then.
+    if len(traj) >= 2 or (traj and not det_ages):
         ages = [int(a) for a, _ in traj]
         inv = [float(v) for _, v in traj]
         # A path that is held flat at the last known home equity (the projection stops at retirement).
@@ -460,6 +465,7 @@ def _place_cards(st, rep, inp, basis, sale, state, clean, results, n_sims, targe
     except ImportError:  # pragma: no cover
         from ui.utils import browser_compute as bc  # type: ignore
     home = inp.cost.home
+    owns_home = safe_float(clean.get("HOME_VALUE", 0), 0.0) > 0
     here_place = pl.default_place(pl.HERE_ID)
     here_cost = ms.place_cost(inp, here_place, inp.retire_age)
     per_row = 3
@@ -470,7 +476,8 @@ def _place_cards(st, rep, inp, basis, sale, state, clean, results, n_sims, targe
             res_key = f"ms_res_{p.id}"
             with col:
                 with st.container(border=True, key=f"ms-place-{p.id}"):
-                    st.markdown(place_html(pr, end_age, next_keys, inp.retire_age), unsafe_allow_html=True)
+                    st.markdown(place_html(pr, end_age, next_keys, inp.retire_age, owns_home=owns_home),
+                                unsafe_allow_html=True)
                     h = _check_hash(clean, n_sims, target_age, p, home)
                     res = st.session_state.get(res_key)
                     fresh = bool(res) and res.get("_inputs_hash") == h
@@ -621,7 +628,8 @@ def render(st, results: dict = None) -> None:
     ensure_default(st, "ms_rate", round(pl.setting(state, "rate") * 100, 2))
     ensure_default(st, "ms_barista", int(pl.setting(state, "barista")))
     swr = st.session_state.get("swr_result") or {}
-    swr_rate = swr.get("swr_rate") if isinstance(swr, dict) else None
+    # A rate at the top of the sweep is only "at least" that, not a rate to plan on.
+    swr_rate = (swr.get("swr_rate") if isinstance(swr, dict) and not swr.get("swr_is_lower_bound") else None)
 
     c1, c2 = st.columns(2)
     with c1:
@@ -646,7 +654,7 @@ def render(st, results: dict = None) -> None:
         return
     inp, basis, sale = built
     rep = ms.build(inp)
-    end_age = inp.ages[-1] if len(inp.ages) else None
+    end_age = plan_end_ages(overrides)[0]  # "through" the end of the plan, not the end of the timeline
     overall = rep.next_up.key if rep.next_up else None
     next_keys = {k for k in (overall, first_in_progress(rep.networth), first_in_progress(rep.invested)) if k}
     clean = {k: v for k, v in overrides.items() if k != pl.KEY}
@@ -656,7 +664,14 @@ def render(st, results: dict = None) -> None:
     st.markdown(summary_html(rep, end_age), unsafe_allow_html=True)
     st.caption("Timeline: the median path of your last simulation."
                if source == "median" else
-               "Timeline: a simple projection. Run the simulation for the median path.")
+               ("Timeline: a simple projection. Your last simulation has no median path to follow, "
+                "because the plan runs out of money at once."
+                if results else
+                "Timeline: a simple projection. Run the simulation for the median path."))
+    st.caption("The percent on each marker is how far along you are (your balance divided by the target). "
+               "It is not a chance of success. An age after your retirement age means the median path only "
+               "gets there while you spend it down. This quick rule leaves out Social Security, tax and market swings, "
+               "so your simulated chance of success can look better than these markers.")
 
     # ---- net worth ladders ----
     st.markdown(
