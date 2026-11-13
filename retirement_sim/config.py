@@ -53,8 +53,8 @@ TAX YEAR
 --------
 Federal contribution limits, standard deduction, IRMAA brackets, SS taxation
 thresholds, NIIT threshold, and state bracket values use **tax year 2024** as
-the reference. The simulator inflates limits forward from 2024 using the
-``CONTRIBUTION_LIMIT_INFLATION_RATE`` rate.
+the reference; contribution limits use 2026. The simulator inflates limits
+forward from 2026 using the ``CONTRIBUTION_LIMIT_INFLATION_RATE`` rate.
 
 NAMING CONVENTION
 -----------------
@@ -216,67 +216,79 @@ YOUR_ESPP_DISCOUNT = 0.00
 # -----------------------------------------------------------------------------
 # INFLATION-ADJUSTED CONTRIBUTION LIMITS
 # -----------------------------------------------------------------------------
-# Base year limits (2024) - these get adjusted for inflation over time.
-CONTRIBUTION_LIMITS_2024 = {
-    '401k': 23_000,
-    '401k_total': 69_000,   # 415(c) total additions limit: employee + employer + after-tax
-    '401k_catchup': 7_500,  # Additional for age 50+
-    'ira': 7_000,
-    'ira_catchup': 1_000,   # Additional for age 50+
-    'hsa_family': 8_300,
-    'hsa_individual': 4_150,
-    'hsa_catchup': 1_000,   # Additional for age 55+
+# Base year limits (2026, IRS Notice 2025-67 and Rev. Proc. 2025-19). In the
+# model's all-real frame they are held flat at these values (see below).
+LIMITS_BASE_YEAR = 2026
+CONTRIBUTION_LIMITS_2026 = {
+    '401k': 24_500,
+    '401k_total': 72_000,   # 415(c) total additions limit: employee + employer + after-tax
+    '401k_catchup': 8_000,  # Additional for age 50+
+    '401k_supercatchup': 11_250,  # Replaces the 50+ catch-up at ages 60-63 (SECURE 2.0)
+    'ira': 7_500,
+    'ira_catchup': 1_100,   # Additional for age 50+
+    'hsa_family': 8_750,
+    'hsa_individual': 4_400,
+    'hsa_catchup': 1_000,   # Additional for age 55+ (not indexed)
 }
 
 # IRS typically adjusts limits in ~$500 increments for inflation. In the model's
 # ALL-REAL (today's-dollars) frame, general inflation does not grow any nominal
 # quantity, and IRS limits are indexed to CPI -- so in real terms they are held
-# constant at their 2024 values (real-excess growth of contribution limits is ~0).
+# constant at their base-year values (real-excess growth of contribution limits is ~0).
 CONTRIBUTION_LIMIT_INFLATION_RATE = 0.0
 
-def get_inflation_adjusted_limit(limit_type: str, years_from_2024: int) -> float:
+def get_inflation_adjusted_limit(limit_type: str, years_from_base: int) -> float:
     """
     Calculate inflation-adjusted contribution limit.
 
     Args:
         limit_type: Type of limit ('401k', 'ira', 'hsa_family', etc.)
-        years_from_2024: Number of years from 2024
+        years_from_base: Number of years from LIMITS_BASE_YEAR
 
     Returns:
         Inflation-adjusted limit rounded to nearest $500 (like IRS does)
 
     """
-    if limit_type not in CONTRIBUTION_LIMITS_2024:
+    if limit_type not in CONTRIBUTION_LIMITS_2026:
         return 0
 
-    base_limit = CONTRIBUTION_LIMITS_2024[limit_type]
+    base_limit = CONTRIBUTION_LIMITS_2026[limit_type]
 
     # No adjustment to make -> return the statutory base UNROUNDED. Rounding an
-    # unadjusted limit corrupts the two that aren't $500 multiples (hsa_family
-    # 8,300 -> 8,500, letting a family HSA be funded $200/yr over the legal max;
-    # hsa_individual 4,150 -> 4,000, truncating a legal contribution).
-    if years_from_2024 == 0 or CONTRIBUTION_LIMIT_INFLATION_RATE == 0:
+    # unadjusted limit corrupts the limits that aren't $500 multiples (hsa_family
+    # 8,750 -> 9,000, letting a family HSA be funded $250/yr over the legal max;
+    # ira_catchup 1,100 -> 1,000, truncating a legal contribution).
+    if years_from_base == 0 or CONTRIBUTION_LIMIT_INFLATION_RATE == 0:
         return base_limit
 
-    adjusted = base_limit * ((1 + CONTRIBUTION_LIMIT_INFLATION_RATE) ** years_from_2024)
+    adjusted = base_limit * ((1 + CONTRIBUTION_LIMIT_INFLATION_RATE) ** years_from_base)
 
     # Round to nearest $500 (IRS convention)
     return round(adjusted / 500) * 500
 
+
+def _catchup_401k(your_age: int, years_from_base: int) -> float:
+    """401(k) catch-up for ``your_age``: the regular one from 50, the larger
+    "super" one instead of it at 60-63."""
+    if your_age < 50:
+        return 0
+    if 60 <= your_age <= 63:
+        return get_inflation_adjusted_limit('401k_supercatchup', years_from_base)
+    return get_inflation_adjusted_limit('401k_catchup', years_from_base)
+
+
 def get_401k_limit(your_age: int, year: int) -> float:
     """Get 401k contribution limit for a given year and age."""
-    years_from_2024 = year - 2024
-    base_limit = get_inflation_adjusted_limit('401k', years_from_2024)
-    if your_age >= 50:
-        base_limit += get_inflation_adjusted_limit('401k_catchup', years_from_2024)
-    return base_limit
+    years_from_base = year - LIMITS_BASE_YEAR
+    return (get_inflation_adjusted_limit('401k', years_from_base)
+            + _catchup_401k(your_age, years_from_base))
 
 def get_ira_limit(your_age: int, year: int) -> float:
     """Get IRA contribution limit for a given year and age."""
-    years_from_2024 = year - 2024
-    base_limit = get_inflation_adjusted_limit('ira', years_from_2024)
+    years_from_base = year - LIMITS_BASE_YEAR
+    base_limit = get_inflation_adjusted_limit('ira', years_from_base)
     if your_age >= 50:
-        base_limit += get_inflation_adjusted_limit('ira_catchup', years_from_2024)
+        base_limit += get_inflation_adjusted_limit('ira_catchup', years_from_base)
     return base_limit
 
 
@@ -284,20 +296,27 @@ def get_401k_total_limit(your_age: int, year: int) -> float:
     """415(c) total 401(k) additions limit (employee deferral + employer match +
     after-tax) for a given year/age. The 'mega backdoor Roth' after-tax room is
     this limit minus the employee deferral and the employer match."""
-    years_from_2024 = year - 2024
-    base_limit = get_inflation_adjusted_limit('401k_total', years_from_2024)
-    if your_age >= 50:
-        base_limit += get_inflation_adjusted_limit('401k_catchup', years_from_2024)
-    return base_limit
+    years_from_base = year - LIMITS_BASE_YEAR
+    return (get_inflation_adjusted_limit('401k_total', years_from_base)
+            + _catchup_401k(your_age, years_from_base))
 
 def get_hsa_limit(your_age: int, year: int, is_family: bool = True) -> float:
     """Get HSA contribution limit for a given year and age."""
-    years_from_2024 = year - 2024
+    years_from_base = year - LIMITS_BASE_YEAR
     limit_type = 'hsa_family' if is_family else 'hsa_individual'
-    base_limit = get_inflation_adjusted_limit(limit_type, years_from_2024)
+    base_limit = get_inflation_adjusted_limit(limit_type, years_from_base)
     if your_age >= 55:
-        base_limit += get_inflation_adjusted_limit('hsa_catchup', years_from_2024)
+        base_limit += get_inflation_adjusted_limit('hsa_catchup', years_from_base)
     return base_limit
+
+
+def hsa_is_family() -> bool:
+    """Family HSA coverage: a partner or at least one child in the plan.
+
+    A single filer with no children is self-only (half the family limit). This
+    is the one rule the engine, Auto-allocate and the Max out buttons share
+    (ui/utils/planner_max.hsa_family applies it to an overrides dict)."""
+    return has_partner() or bool(normalize_children(CHILDREN))
 
 # Flat STATE income tax rate for STATE_CHOICE "Other" (a state you'd rather
 # describe by one rate): applied to income above the federal standard
