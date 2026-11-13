@@ -123,6 +123,10 @@ def test_presets_give_the_same_results_as_their_old_two_child_form():
         preset = PROFILES[name]
         old = {k: v for k, v in preset.items() if k != "CHILDREN"}
         old["YEARS_UNTIL_FIRST_CHILD"] = years
+        kids = preset["CHILDREN"]                 # the preset's own costs, in the two-child keys
+        if kids:
+            old["FIRST_CHILD_MONTHLY_COST"] = kids[0]["monthly_cost"]
+            old["BOTH_CHILDREN_MONTHLY_COST"] = sum(k["monthly_cost"] for k in kids)
         age = preset["TARGET_RETIREMENT_AGE"]
         assert _run(old, age) == _run(dict(preset), age), name
 

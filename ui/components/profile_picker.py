@@ -58,7 +58,14 @@ def _kid(years_until_birth: int, monthly_cost: int) -> dict:
 PROFILES = {
     "Median US 25-year-old household": {
         'YOUR_AGE': 25, 'PARTNER_AGE': 25,
-        'CHILDREN': [_kid(3, 2_100), _kid(6, 1_400)],
+        # Median household spending (about $67k a year with the children) against about
+        # $87k of pay: the sample's own boxes (family-sized, $2,100 + $1,400 a month for
+        # the children) overspent that pay and ran the savings to zero by 31.
+        'CHILDREN': [_kid(3, 1_000), _kid(6, 700)],
+        'SPEND_RENT_MONTHLY': 1_300, 'SPEND_UTILITIES_MONTHLY': 175, 'UTILITIES_MONTHLY': 175,
+        'SPEND_FOOD_MONTHLY': 750, 'SPEND_TRANSPORT_MONTHLY': 450, 'SPEND_HEALTH_MONTHLY': 250,
+        'SPEND_DISCRETIONARY_MONTHLY': 300, 'SPEND_OTHER_MONTHLY': 250,
+        'PARTNER_OTHER_MONTHLY': 400, 'PARTNER_MONTHLY_SPENDING': 400,
         'YOUR_401K': 10_000, 'YOUR_ROTH_IRA': 3_500, 'YOUR_TRADITIONAL_IRA': 0,
         'YOUR_HSA': 500, 'YOUR_BROKERAGE': 2_500, 'YOUR_CASH': 4_000,
         'PARTNER_401K': 7_000, 'PARTNER_ROTH_IRA': 2_500, 'PARTNER_BROKERAGE': 1_000, 'PARTNER_CASH': 3_000,
