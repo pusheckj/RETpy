@@ -215,7 +215,7 @@ def test_checkup_answers_prefill_and_housing_comes_out_of_other(wizard):
     assert at.session_state["setup"]["checkup"]["needs"] == 2_600
     _walk_to(at, "Your income")
     assert at.number_input(key="gs_salary").value == 80_000
-    assert at.caption[0].value.startswith("✓ From your check-up.")
+    assert any(c.value.startswith("✓ From your check-up.") for c in at.caption)
     _walk_to(at, "Saving each year")
     assert at.number_input(key="gs_401k_pct").value == 5.0
     assert at.radio(key="gs_invest").value == gs.KEEP
@@ -357,6 +357,79 @@ def test_retirement_age_slider_has_a_typed_box(wizard):
     assert at.slider(key="gs_target").value == 75
     _next(at)
     assert at.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] == 75
+
+
+# ---------------------------------------------------------------- QA round: setup fixes
+
+def _kid_ov(years_until_birth=-3, cost=2_100):
+    return {"years_until_birth": years_until_birth, "monthly_cost": cost, "leaves_home_age": 18,
+            "college_annual_cost": 40_000, "college_years": 4, "college_funding_pct": 0.0}
+
+
+def test_review_total_includes_the_children_at_home():
+    ov = {"YOUR_AGE": 30, "PARTNER_AGE": 0, "SPEND_OTHER_MONTHLY": 1_000, "SPEND_RENT_MONTHLY": 1_500,
+          "CHILDREN": [_kid_ov(-3, 2_100), _kid_ov(2, 1_400)]}
+    line = next(l for l in gs.review_lines(ov) if l.startswith("**Spending:**"))
+    assert "$4,600 a month" in line.replace("\\", "")                      # 1,000 + 1,500 + 2,100
+    assert "$2,100 for children at home" in line.replace("\\", "")
+    assert "Planned children add their costs" in line                       # the 2nd is not born yet
+
+
+def test_review_warns_when_spending_beats_pay_after_tax():
+    ov = {"YOUR_AGE": 25, "PARTNER_AGE": 0, "YOUR_BASE_SALARY": 40_000, "FILING_STATUS": "Single",
+          "STATE_CHOICE": "TX", "SPEND_RENT_MONTHLY": 2_200, "SPEND_OTHER_MONTHLY": 3_300,
+          "PARTNER_OTHER_MONTHLY": 0}
+    assert gs.yearly_shortfall(ov) > 20_000
+    assert gs.yearly_shortfall({**ov, "SPEND_RENT_MONTHLY": 800, "SPEND_OTHER_MONTHLY": 1_000}) == 0
+
+
+def test_the_last_step_shows_the_shortfall_warning(wizard):
+    at = wizard(YOUR_BASE_SALARY=40_000, PARTNER_AGE=0, FILING_STATUS="Single", STATE_CHOICE="TX",
+                SPEND_RENT_MONTHLY=2_200, SPEND_OTHER_MONTHLY=3_300, PARTNER_OTHER_MONTHLY=0)
+    at.session_state["setup"] = {**at.session_state["setup"], "step": len(gs.STEPS) - 1}
+    at.run()
+    assert any("more than your pay after taxes" in w.value for w in at.warning)
+
+
+def test_partner_retirement_age_is_asked_and_defaults_to_together(wizard):
+    at = wizard(YOUR_AGE=40, PARTNER_AGE=37, FILING_STATUS="Married filing jointly",
+                TARGET_RETIREMENT_AGE=55)
+    at.session_state["setup"] = {**at.session_state["setup"], "step": 8}
+    at.run()
+    assert at.session_state["setup"]["step"] == 8 and at.slider(key="gs_target").value == 55
+    assert at.number_input(key="gs_partner_later").value == 0
+    assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] is None      # retire together
+    at.number_input(key="gs_partner_later").set_value(3).run()
+    # you retire at 55 (partner is 52 then); three years later is the partner's 55
+    assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] == 55
+    assert any("they're 55" in c.value for c in at.caption)
+    at.number_input(key="gs_partner_later").set_value(-2).run()
+    assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] == 50
+    at.number_input(key="gs_partner_later").set_value(0).run()
+    assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] is None
+
+
+def test_a_single_person_is_not_asked_when_their_partner_retires(wizard):
+    at = wizard(PARTNER_AGE=0)
+    at.session_state["setup"] = {**at.session_state["setup"], "step": 8}
+    at.run()
+    assert "gs_partner_later" not in [n.key for n in at.number_input]
+
+
+def test_checkup_marriage_and_partner_pay_open_the_setup_questions(wizard):
+    at = wizard(simple={**CHECKUP, "married": True, "partner_salary_annual": 70_000.0}, PARTNER_AGE=0)
+    assert at.session_state["setup"]["checkup"]["married"] is True
+    assert at.radio(key="gs_household").value == gs.SPOUSE            # offered, still needs their age
+    at.number_input(key="gs_age").set_value(34)
+    at.number_input(key="gs_partner_age").set_value(33)
+    _next(at)
+    _walk_to(at, "Your income")
+    assert at.number_input(key="gs_partner_salary").value == 70_000
+
+
+def test_single_checkup_does_not_prefill_a_spouse(wizard):
+    at = wizard(simple=CHECKUP)
+    assert at.radio(key="gs_household").value is None
 
 
 def test_checkup_debts_carry_into_the_planner_and_the_review(wizard):

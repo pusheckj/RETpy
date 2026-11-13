@@ -858,3 +858,102 @@ class TestHiddenInputsKeepTheirValues:
         ss[sm._W + "partner_salary_annual"] = 0.0           # reads back as the default
         got = sm._collect(ss, base)
         assert got["partner_salary_annual"] == 41_000 and got["married"] is False
+
+
+# ---------------------------------------------------------------------------
+# QA round: age catch-ups, thousands echo, save/load, payoff wording
+# ---------------------------------------------------------------------------
+class TestAgeCatchUps:
+    D = date(2026, 6, 1)
+
+    def test_no_age_means_no_catch_up(self):
+        assert sf.contribution_limits(False, self.D) == sf.contribution_limits(False, self.D, 0)
+        assert sf.contribution_limits(False, self.D, 49) == {"401k": 24_500, "ira": 7_500, "hsa": 4_400}
+
+    def test_catch_ups_start_at_50_and_55(self):
+        assert sf.contribution_limits(False, self.D, 50) == {"401k": 32_500, "ira": 8_600, "hsa": 4_400}
+        assert sf.contribution_limits(False, self.D, 55)["hsa"] == 5_400
+        assert sf.contribution_limits(True, self.D, 55)["hsa"] == 9_750
+
+    def test_super_catch_up_for_60_to_63_only(self):
+        assert sf.contribution_limits(False, self.D, 59)["401k"] == 32_500
+        assert [sf.contribution_limits(False, self.D, a)["401k"] for a in (60, 63)] == [35_750, 35_750]
+        assert sf.contribution_limits(False, self.D, 64)["401k"] == 32_500
+
+    def test_years_before_the_table_use_the_engine_catch_ups(self):
+        base = sf.contribution_limits(False, date(2024, 1, 1))
+        old = sf.contribution_limits(False, date(2024, 1, 1), 52)
+        assert old["401k"] == base["401k"] + cfg.get_inflation_adjusted_limit("401k_catchup", 0)
+
+    def test_age_moves_the_ladder_and_max_out(self):
+        young = _steps(_inputs(gross_salary_annual=300_000, retirement_contrib_pct=100 * 24_500 / 300_000))
+        older = _steps(_inputs(gross_salary_annual=300_000, retirement_contrib_pct=100 * 24_500 / 300_000, age=52))
+        assert young["max_401k"].status == "done" and older["max_401k"].status != "done"
+        assert older["max_401k"].target == 32_500
+        assert sf.max_401k_pct(100_000, TODAY, 52) == 32.5
+
+    def test_age_is_repaired_like_every_other_input(self):
+        assert sf.normalize_inputs({"age": "52"})["age"] == 52
+        assert sf.normalize_inputs({"age": -4})["age"] == 0
+        assert sf.normalize_inputs({"age": 900})["age"] == 100
+        assert sf.normalize_inputs({"age": "x"})["age"] == 0
+
+
+class TestCheckupPage:
+    def test_age_input_changes_the_limits_shown(self, page):
+        page.run()
+        _by_key(page.number_input, "simple_w_age").set_value(52).run()
+        assert not page.exception, page.exception
+        assert page.session_state["simple_inputs"]["age"] == 52
+        assert any("32,500" in (b.help or "") for b in page.button if b.key == "simple_max_retirement_contrib_pct")
+
+    def test_large_money_gets_a_separator_echo(self, page):
+        page.session_state["simple_inputs"] = {"gross_salary_annual": 320_000, "cash_savings": 800}
+        page.run()
+        captions = [c.value for c in page.caption]
+        assert "\\$320,000" in captions and "\\$800" not in captions
+
+    def test_wont_pay_off_does_not_print_a_compounded_balance(self, page):
+        page.session_state["simple_inputs"] = {"debts": [_debt("Huge", 50_000, 24.0, 100)],
+                                               "extra_debt_payment_monthly": 0}
+        page.run()
+        text = " ".join(m.value for m in page.markdown)
+        assert "The balance keeps growing" in text and "still owe" not in text
+
+    def test_a_name_with_markdown_and_dollars_is_escaped_in_the_warning(self, page):
+        page.session_state["simple_inputs"] = {"debts": [_debt("Loan $5k or $9k", 10_000, 24.0, 100)],
+                                               "extra_debt_payment_monthly": 0}
+        page.run()
+        assert any("\\$5k or \\$9k" in w.value for w in page.warning)
+
+
+class TestCheckupSaveLoad:
+    def test_round_trip(self):
+        from utils.profile_io import serialize_checkup, deserialize_checkup
+        i = sf.normalize_inputs({**sf.DEFAULT_INPUTS, "gross_salary_annual": 91_000, "age": 53,
+                                 "debts": [_debt("Card", 1_200, 21.0, 40)]})
+        assert sf.normalize_inputs(deserialize_checkup(serialize_checkup(i))) == i
+
+    def test_other_files_are_refused_with_a_reason(self):
+        from utils.profile_io import deserialize_checkup, serialize_overrides
+        for bad in ("not json", "[1, 2]", serialize_overrides({"YOUR_AGE": 30}), b"\xff\xfe"):
+            with pytest.raises(ValueError):
+                deserialize_checkup(bad)
+
+    def test_page_offers_a_download(self, page):
+        page.run()
+        assert not page.exception, page.exception
+        assert any(b.label == "Download my answers" for b in page.get("download_button"))
+
+    def test_loading_replaces_every_answer(self, page):
+        """The Load button's callback (AppTest can't upload a file): it normalizes the
+        answers and forces every widget to reseed from them."""
+        from components import simple_mode
+        ss = {}
+        simple_mode._load_checkup(ss, {"gross_salary_annual": "91,000", "age": 53, "junk": 1})
+        assert ss["simple_inputs"]["gross_salary_annual"] == 91_000.0 and ss["simple_inputs"]["age"] == 53
+        assert "junk" not in ss["simple_inputs"] and ss["_simple_inputs_synced"] is None
+        page.session_state["simple_inputs"] = ss["simple_inputs"]
+        page.run()
+        assert not page.exception, page.exception
+        assert _by_key(page.number_input, "simple_w_age").value == 53

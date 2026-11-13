@@ -363,24 +363,26 @@ def actual_plan(tx: pd.DataFrame, complete: List[pd.Period], owns: bool = True,
     category is its average over ALL complete months, after paybacks, one-offs
     included. Housing is today's payment plus separately paid housing costs
     (``current_housing``): the mortgage input for an owner, rent for a renter.
-    Partner spending only when the statements carry an estimate for it and
-    there is a partner; otherwise there is nothing to copy and the plan's own
-    figure stands. Whole dollars, within each input's range.
+    A category the statements have no rows for at all (a card-only export has no
+    rent) is left out, so the plan keeps its own figure instead of being zeroed.
+    Partner spending also needs a partner. Whole dollars, within each input's range.
     """
     avg = group_averages(tx, complete)
-    housing_key = HOUSING_KEYS[0] if owns else HOUSING_KEYS[1]
-    out = {housing_key: current_housing(tx, complete)}
+    s = counted(tx)
+    has_rows = set(s.loc[s["month"].isin(complete), "category"].map(expense_group))
+    out = {}
+    if HOUSING in has_rows:
+        out[HOUSING_KEYS[0] if owns else HOUSING_KEYS[1]] = current_housing(tx, complete)
     for c in CATEGORIES:
-        if c.partner_only and not (partner and avg[c.label] > 0):
-            continue
-        out[c.key] = avg[c.label]
+        if c.label in has_rows and not (c.partner_only and not partner):
+            out[c.key] = avg[c.label]
     return {k: int(min(max(round(v), 0), INPUTS[k][1])) for k, v in out.items()}
 
 
 def plan_vs_actual(overrides: Dict, actual: Dict[str, int],
                    groups: Optional[List[str]] = None) -> pd.DataFrame:
     """Plan input vs ``actual_plan`` per expense category, $/month. Actual is
-    NaN for a category the statements don't have (partner, without an estimate)."""
+    NaN for a category the statements have no rows for."""
     rows = []
     for g, keys, _ in EXPENSE_GROUPS:
         if groups is not None and g not in groups:
@@ -607,8 +609,8 @@ def sync_control(st, data: Dict, key: str) -> None:
     st.button("Use my actual spending", key=key, on_click=use_actual, args=(st, actual),
               disabled=not off, icon=":material/sync:",
               help="Sets each monthly amount to its average over all complete months, and "
-                   "housing to your current payment. Partner spending changes only if your "
-                   "statements include an estimate for it.")
+                   "housing to your current payment. A category with nothing in your statements "
+                   "(for example housing, from a card-only export) keeps the plan's figure.")
 
 
 # ---------------------------------------------------------------------------
@@ -955,16 +957,19 @@ def render(st, **_kwargs) -> None:
     tiny = tuple(x["source"] for x in data["sources"] if x["paid_unitemized"] > 0)
     k = kpis(view, start, end, complete, tiny)
     good = [m for m in complete if start <= m <= end]
+    # The period is a window; the months it holds can start later (6 months of files in "Last 12 months").
+    m_lo, m_hi = (good[0], good[-1]) if good else (start, end)
+    span = _mon(m_lo) if m_lo == m_hi else f"{_mon(m_lo)} – {_mon(m_hi)}"
     plan = compute_expenses_today(overrides)
     housing_now = current_housing(tx, complete)
     housing = k["per_month"] - k["per_month_ex_housing"]
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Housing", money(housing) if "Housing" in sel else "—",
-              help=f"Average per complete month, {_mon(start)} – {_mon(end)}. Your current "
+              help=f"Average per complete month, {span}. Your current "
                    f"payment is {money_md(housing_now)}/month; Plan vs. actual uses that.")
     m2.metric("Everything else", money(k["per_month_ex_housing"]),
-              help=f"Average per complete month, {_mon(start)} – {_mon(end)}, after paybacks.")
+              help=f"Average per complete month, {span}, after paybacks.")
     m3.metric("Total per month", money(k["per_month"]))
     est = view[(view["source"] == ESTIMATE_SOURCE) & view["month"].isin(good)]
     est_month = est["spend"].sum() / max(len(good), 1)
@@ -972,8 +977,9 @@ def render(st, **_kwargs) -> None:
               help=(f"Includes {money_md(est_month)}/month of fixed estimates (not from statements). "
                     if est_month else "Your accounts only. ")
                    + f"The plan's spending input is {money_md(plan)}/yr.")
-    line = [f"{len(good)} complete months, {_mon(start)} – {_mon(end)}",
-            f"current housing payment {money_md(housing_now)}/mo"]
+    line = [f"{len(good)} complete month{'' if len(good) == 1 else 's'}, {span}"]
+    line.append(f"current housing payment {money_md(housing_now)}/mo" if housing_now > 0
+                else "no housing payment in these statements")
     if est_month:
         names = ", ".join(sorted(set(est["description"])))
         line.append(f"{names} {money_md(est_month)}/mo is a fixed estimate (hatched)")
@@ -986,7 +992,7 @@ def render(st, **_kwargs) -> None:
         line.append(f"up to {money_md(k['unitemized_per_month'])}/mo to {', '.join(tiny)} not itemized")
     notes = gap_notes(data)
     if notes:
-        line.append(f"⚠ {len(notes)} data gap{'s' if len(notes) > 1 else ''}, see Data")
+        line.append(f"⚠ {len(notes)} data gap{'s' if len(notes) > 1 else ''}, see the Data tab")
     st.caption(" · ".join(line))
 
     sig_last = [x["last"] for x in data["sources"] if x["rows"] >= 20]
@@ -1030,13 +1036,12 @@ def render(st, **_kwargs) -> None:
                                      "Your plan": st.column_config.Column(width=72),
                                      "Actual": st.column_config.Column(width=72),
                                      "Difference": st.column_config.Column(width=84)})
-            no_partner = ((g["Expense category"] == "Partner spending") & g["Actual"].isna()
-                          & (g["Your plan"] > 0)).any()
+            absent = g.loc[g["Actual"].isna() & (g["Your plan"] > 0), "Expense category"].tolist()
             st.caption("Plan is your monthly inputs in Expenses, plus rent or mortgage in House. Actual is your accounts averaged "
                        "over every complete month (not just the period above), after paybacks. "
                        "Housing is your current payment."
-                       + (" Partner spending isn't in your statements, so the plan keeps its own "
-                          "figure." if no_partner else ""))
+                       + (f" Nothing in your statements for {_and(absent)}, so the plan keeps "
+                          "its own figure." if absent else ""))
             sync_control(st, data, "sp_use_actual")
         st.markdown("**Spending by month**")
         first = min(complete[0], start) if complete else start
