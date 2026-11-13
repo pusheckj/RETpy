@@ -46,9 +46,11 @@ from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Uni
 
 try:
     from utils import place_costs as pc
+    from utils.formatting import months_text
     from utils.places import Place, engine_state, HOUSING_BUY, HOUSING_RENT, HOUSING_KEEP
 except ImportError:  # pragma: no cover
     from ui.utils import place_costs as pc  # type: ignore
+    from ui.utils.formatting import months_text  # type: ignore
     from ui.utils.places import Place, engine_state, HOUSING_BUY, HOUSING_RENT, HOUSING_KEEP  # type: ignore
 
 REACHED, PROGRESS, BEYOND = "reached", "progress", "beyond"
@@ -173,9 +175,12 @@ def short_money(value: float) -> str:
     """$250K, $1M, $1.5M, $12.5K, $850."""
     v = abs(float(value))
     sign = "-" if value < 0 else ""
-    for size, suffix in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+    units = ((1e9, "B"), (1e6, "M"), (1e3, "K"))
+    for i, (size, suffix) in enumerate(units):
         if v >= size:
             n = v / size
+            if i and round(n) >= 1000:   # $999.6K rounds up to $1M, not "$1000K"
+                n, suffix = v / units[i - 1][0], units[i - 1][1]
             text = f"{n:.1f}".rstrip("0").rstrip(".") if n < 100 else f"{n:.0f}"
             return f"{sign}${text}{suffix}"
     return f"{sign}${v:,.0f}"
@@ -446,7 +451,7 @@ def _markers(inp: Inputs, spending_known: bool) -> List[Milestone]:
                              f"{months}-month emergency fund", status, inp.cash, need,
                              inp.your_age if status == REACHED else None,
                              min(1.0, max(0.0, inp.cash / need)),
-                             f"Cash covers {have:.1f} of {months} months.", unit="months"))
+                             f"Cash covers {months_text(have)} (goal: {months}).", unit="months"))
 
     if spending_known:
         total = inp.spend_core + inp.health

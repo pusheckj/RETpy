@@ -40,7 +40,7 @@ def _rows(st, rows) -> None:
                 st.columns(2, vertical_alignment="bottom"), row):
             with col:
                 ensure_default(st, key, safe_int(get_override(st, ov, default), default))
-                v = st.number_input(label, min_value=0, max_value=10_000_000, step=step, key=key)
+                v = st.number_input(label, min_value=0, max_value=100_000_000, step=step, key=key)
                 set_override(st, ov, safe_int(v))
 
 

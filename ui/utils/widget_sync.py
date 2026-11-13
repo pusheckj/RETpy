@@ -125,16 +125,16 @@ def _scenario_cast(v):
 # Values pulled from ui/components/*.py "key=..." declarations.
 DIRECT_MAPPINGS: Dict[str, tuple] = {
     # account_inputs
-    "ai_your_401k":       ("YOUR_401K", _as_int(10_000, 0, 10_000_000)),
-    "ai_your_roth":       ("YOUR_ROTH_IRA", _as_int(3_500, 0, 10_000_000)),
-    "ai_your_trad":       ("YOUR_TRADITIONAL_IRA", _as_int(0, 0, 10_000_000)),
-    "ai_your_hsa":        ("YOUR_HSA", _as_int(500, 0, 10_000_000)),
-    "ai_your_brk":        ("YOUR_BROKERAGE", _as_int(2_500, 0, 10_000_000)),
-    "ai_your_cash":       ("YOUR_CASH", _as_int(4_000, 0, 10_000_000)),
-    "ai_partner_401k":    ("PARTNER_401K", _as_int(7_000, 0, 10_000_000)),
-    "ai_partner_roth":    ("PARTNER_ROTH_IRA", _as_int(2_500, 0, 10_000_000)),
-    "ai_partner_brk":     ("PARTNER_BROKERAGE", _as_int(1_000, 0, 10_000_000)),
-    "ai_partner_cash":    ("PARTNER_CASH", _as_int(3_000, 0, 10_000_000)),
+    "ai_your_401k":       ("YOUR_401K", _as_int(10_000, 0, 100_000_000)),
+    "ai_your_roth":       ("YOUR_ROTH_IRA", _as_int(3_500, 0, 100_000_000)),
+    "ai_your_trad":       ("YOUR_TRADITIONAL_IRA", _as_int(0, 0, 100_000_000)),
+    "ai_your_hsa":        ("YOUR_HSA", _as_int(500, 0, 100_000_000)),
+    "ai_your_brk":        ("YOUR_BROKERAGE", _as_int(2_500, 0, 100_000_000)),
+    "ai_your_cash":       ("YOUR_CASH", _as_int(4_000, 0, 100_000_000)),
+    "ai_partner_401k":    ("PARTNER_401K", _as_int(7_000, 0, 100_000_000)),
+    "ai_partner_roth":    ("PARTNER_ROTH_IRA", _as_int(2_500, 0, 100_000_000)),
+    "ai_partner_brk":     ("PARTNER_BROKERAGE", _as_int(1_000, 0, 100_000_000)),
+    "ai_partner_cash":    ("PARTNER_CASH", _as_int(3_000, 0, 100_000_000)),
 
     # spending_inputs — category breakdown + lifecycle preset
     # (Housing is now auto-derived from mortgage/rent — no sp_housing here.)
@@ -184,7 +184,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "st_marginal":        ("YOUR_MARGINAL_TAX_RATE", _as_pct(5.0, 0.0, 15.0)),
 
     # sec_house.py (rent or own, today's home) -- keys keep their old "se_" names
-    "se_home_value":      ("HOME_VALUE", _as_int(0, 0, 10_000_000)),
+    "se_home_value":      ("HOME_VALUE", _as_int(0, 0, 100_000_000)),
     "se_mortgage_balance":("MORTGAGE_BALANCE", _as_int(0, 0, 5_000_000)),
     "se_mortgage_monthly":("MORTGAGE_MONTHLY", _as_int(0, 0, 20_000)),
     "se_mortgage_years":  ("MORTGAGE_YEARS_REMAINING", _as_int(0, 0, 40)),

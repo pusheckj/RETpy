@@ -20,16 +20,19 @@ def test_networth_percentiles_monotone_full_axis_and_depletion():
         [(40, 100.0), (41, 150.0), (42, 90.0)],
     ]
     out = sr._networth_percentiles(paths)
-    # Full, contiguous age axis (union), sorted.
-    assert [r["age"] for r in out] == [40, 41, 42]
+    # Full, contiguous age axis (union), sorted, running on to the plan's last
+    # year (every path is $0 after its data ends).
+    ages = [r["age"] for r in out]
+    assert ages[:3] == [40, 41, 42] and ages == list(range(40, ages[-1] + 1)) and ages[-1] >= 90
+    assert out[-1]["p90"] == 0.0
     # Percentiles are monotone within each age.
     for r in out:
         assert r["p10"] <= r["p25"] <= r["p50"] <= r["p75"] <= r["p90"]
     # Age 40: all paths identical -> zero spread. Age 42: spread exists, and the
     # depleted path drags the low end down (below the min surviving balance 90).
     assert out[0]["p90"] - out[0]["p10"] == 0.0
-    assert out[-1]["p90"] - out[-1]["p10"] > 0.0
-    assert out[-1]["p10"] < 90.0
+    assert out[2]["p90"] - out[2]["p10"] > 0.0
+    assert out[2]["p10"] < 90.0
     assert sr._networth_percentiles([]) == []
 
 

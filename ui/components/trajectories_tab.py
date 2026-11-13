@@ -79,6 +79,8 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
     clipped = sum(1 for m in maxima if m > cap)
     note = (f" · {clipped} higher path{'s' if clipped != 1 else ''} go off the top"
             if clipped else "")
+    if n_out == n_shown:
+        note += f" · every sample runs out of money by age {max(p[-1][0] + 1 for p, _ in outcomes)}"
     fig.update_layout(
         title=dict(
             text="<b>Individual simulation paths</b><br><span style='font-size:13px;color:#94a3b8;'>"

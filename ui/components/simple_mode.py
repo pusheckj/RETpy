@@ -25,12 +25,12 @@ import plotly.graph_objects as go
 try:
     from utils import simple_finance as sf
     from utils import simple_to_full
-    from utils.formatting import money, money_md
+    from utils.formatting import money, money_md, months_text
     from utils.plot_theme import is_dark, style_fig
 except ImportError:  # pragma: no cover
     from ui.utils import simple_finance as sf  # type: ignore
     from ui.utils import simple_to_full  # type: ignore
-    from ui.utils.formatting import money, money_md  # type: ignore
+    from ui.utils.formatting import money, money_md, months_text  # type: ignore
     from ui.utils.plot_theme import is_dark, style_fig  # type: ignore
 
 STATE_KEY = "simple_inputs"
@@ -330,7 +330,7 @@ def _render_headline(st, rate: sf.SavingsRate, fund: sf.EmergencyFund) -> None:
             f'{kept}<div class="simple-note">{_h(rate.message)}</div>',
             unsafe_allow_html=True)
     with c2, st.container(border=True, key="mc-tile-simple-fund"):
-        value = "—" if fund.months is None else f"{fund.months:.1f} months"
+        value = "—" if fund.months is None else months_text(fund.months)
         label, tone = _FUND_CHIP[fund.status]
         fill = 0 if fund.months is None else min(fund.months / sf.EMERGENCY_MAX_MONTHS, 1.0) * 100
         gaps = ""

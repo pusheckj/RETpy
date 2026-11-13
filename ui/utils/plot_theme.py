@@ -8,6 +8,8 @@ consistent in both light and dark mode.
 """
 from __future__ import annotations
 
+import re
+
 _FONT_FAMILY = "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
 
 # Shared Plotly config for st.plotly_chart calls: keep the mode bar but drop lasso/select tools.
@@ -353,6 +355,51 @@ def _fit_age_axis(fig) -> None:
         fig.update_xaxes(range=[lo, hi])
 
 
+def _axis_extent(fig, key: str) -> float:
+    """Largest absolute value drawn on the axis ``key`` ("xaxis", "yaxis2"): its
+    explicit range, else the data (stacked traces add up). 0.0 if none."""
+    which, ident = key[0], key[0] + key[5:]          # "yaxis2" -> "y", "y2"
+    rng = fig.layout[key].range
+    if rng is not None and len(rng) == 2:
+        try:
+            return max(abs(float(rng[0])), abs(float(rng[1])))
+        except (TypeError, ValueError):
+            pass
+    stacked = fig.layout.barmode in ("stack", "relative")
+    peak, running = 0.0, None
+    for t in fig.data or []:
+        if (getattr(t, f"{which}axis", None) or which) != ident:
+            continue
+        vals = getattr(t, which, None)
+        if vals is None:
+            continue
+        try:
+            nums = [abs(float(v)) if v is not None else 0.0 for v in vals]
+        except (TypeError, ValueError):
+            return 0.0
+        if not nums:
+            continue
+        if stacked or getattr(t, "stackgroup", None):
+            running = nums if running is None else [a + b for a, b in zip(running, nums)]
+            nums = running
+        peak = max(peak, max(nums))
+    return peak
+
+
+def _billions_as_b(fig) -> None:
+    """d3's SI tick format ("$,.3~s") labels a billion "G" ("$1G") and a
+    fraction of a dollar "m" ("$800m"). On an axis that reaches either, switch to
+    Plotly's own "B" exponent format ("$0.2B", "$1B"), keeping the "$". Axes in
+    the thousands and millions keep the SI format ("$200k", "$5M")."""
+    for key in [k for k in fig.layout if re.fullmatch(r"[xy]axis\d*", k)]:
+        ax = fig.layout[key]
+        fmt = ax.tickformat
+        if not fmt or "~s" not in fmt or 1.0 <= _axis_extent(fig, key) < 1e9:
+            continue
+        ax.update(tickformat=None, exponentformat="B", showexponent="all",
+                  **({"tickprefix": "$"} if "$" in fmt and not ax.tickprefix else {}))
+
+
 def style_fig(fig, st, compact: bool = False):
     """Mutate `fig` with theme-aware colors and return it. ``compact`` is the
     phone variant (single-column legend, one-line title, no subtitle)."""
@@ -471,6 +518,7 @@ def style_fig(fig, st, compact: bool = False):
             pass
     _wrap_title(fig, compact)
     _fit_age_axis(fig)
+    _billions_as_b(fig)
     _lift_vline_labels(fig, compact)
 
     # Theme the title font ONLY when a title actually exists. Setting title_font
