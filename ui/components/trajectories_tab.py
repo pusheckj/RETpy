@@ -80,7 +80,7 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
     note = (f" · {clipped} higher path{'s' if clipped != 1 else ''} go off the top"
             if clipped else "")
     if n_out == n_shown:
-        note += f" · every sample runs out of money by age {max(p[-1][0] + 1 for p, _ in outcomes)}"
+        note += f" · all run out by age {max(p[-1][0] + 1 for p, _ in outcomes)}"
     fig.update_layout(
         title=dict(
             text="<b>Individual simulation paths</b><br><span style='font-size:13px;color:#94a3b8;'>"
@@ -89,8 +89,11 @@ def render(st, results: dict, chart_key: str = "trajectories_tab_main") -> None:
         ),
         height=440,
         margin=dict(l=50, r=30, t=80, b=50),
-        xaxis=dict(title="Age", zeroline=False,
-                   range=[min(p[0][0] for p, _ in outcomes), max(p[-1][0] for p, _ in outcomes)]),
+        xaxis=dict(title="Age", zeroline=False, range=[
+            min(p[0][0] for p, _ in outcomes),
+            # The plan's whole horizon: runs that fail at once would otherwise
+            # chart one or two years ("24, 24.5, 25 ...").
+            max([p[-1][0] for p, _ in outcomes] + [a for a, _ in (pr.get("median_trajectory") or [])[-1:]])]),
         yaxis=dict(title="Portfolio value (today's $)", zeroline=False, tickformat="$,.3~s",
                    **({"range": [0, cap]} if clipped else {})),
         hovermode="closest",

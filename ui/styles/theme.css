@@ -3725,10 +3725,11 @@ html:root [class*="st-key-mc-debt-name-"] > [class*="st-key-debt_rm_"] button { 
 /* On a phone the 2-up stat card is ~130px wide inside. The shared eyebrow rule
    (QA round A R3, same specificity, !important) beat the older phone rule that
    shrinks the label, so "NON-RETIREMENT" broke mid-word ("NON-RETIREMEN / T").
-   Same selector weight as that rule, later in the file, so it wins; the label
-   keeps its non-breaking hyphen and never wraps inside a word. */
+   That rule's :is() takes its heaviest member's weight, so the doubled :root
+   here outweighs it; the label keeps its non-breaking hyphen and never wraps
+   inside a word. */
 @media (max-width: 460px) {
-    html:root .mc-stat-card .mc-stat-label {
+    html:root:root .mc-stat-card .mc-stat-label {
         font-size: 11px !important;
         letter-spacing: 0.02em !important;
         overflow-wrap: normal;

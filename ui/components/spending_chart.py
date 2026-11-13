@@ -465,7 +465,7 @@ def _build_figure(
             fig.add_annotation(
                 xref="paper", yref="paper", x=1, y=1, xanchor="right", yanchor="top",
                 showarrow=False, align="right", font=dict(size=10, color="#64748b"),
-                text=f"4% rule line runs off the top, to {money(line_max, shorten=True)}/yr (hover to read it)")
+                text=f"4% rule line runs off the top (up to {money(line_max, shorten=True)}/yr)")
     if current_age <= retirement_age <= plan_until:
         fig.add_vline(
             x=retirement_age,
