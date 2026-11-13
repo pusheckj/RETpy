@@ -16,16 +16,23 @@ try:
     from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money, money_md, pct
     from utils.household import plan_end_ages
+    from utils.derived import RETIREMENT_SPENDING_MODES
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md, pct  # type: ignore
     from ui.utils.household import plan_end_ages  # type: ignore
+    from ui.utils.derived import RETIREMENT_SPENDING_MODES  # type: ignore
 
 try:
     from utils.overrides import get_override, set_override
 except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
 
+try:
+    from utils.age_limits import AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX, PLAN_UNTIL_MIN, PLAN_UNTIL_MAX
+except ImportError:  # pragma: no cover
+    from ui.utils.age_limits import (AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX,  # type: ignore
+                                     PLAN_UNTIL_MIN, PLAN_UNTIL_MAX)
 
 try:
     from utils.slider_input import slider_with_box
@@ -112,7 +119,7 @@ def render_retirement_ages(st) -> None:
     has_partner = safe_int(get_override(st, "PARTNER_AGE", 0), 0) > 0
     ensure_default(st, "ay_target_age",
                    safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60))
-    target = slider_with_box(st, "Target retirement age", 25, 75,
+    target = slider_with_box(st, "Target retirement age", TARGET_MIN, TARGET_MAX,
                        1, key="ay_target_age",
                        help="When you plan to stop working.")
     set_override(st, "TARGET_RETIREMENT_AGE", safe_int(target))
@@ -131,18 +138,18 @@ def render_retirement_ages(st) -> None:
     if has_partner:
         age_gap = your_age - partner_age  # your_age - partner_age
         # "Retire together" = the partner's age in the year YOU retire. When that
-        # lands outside the slider's 25-75 range (a large age gap), it can't be
+        # lands outside the slider's range (a large age gap), it can't be
         # represented on the slider, so we KEEP the byte-identical None default
         # (retire together) until the user deliberately moves the slider -- rather
         # than storing the clamped value, which would wrongly retire the partner
         # early/late and diverge from the "retire together" intent.
         together_raw = target - age_gap
-        together_in_range = 25 <= together_raw <= 75
-        slider_default = max(25, min(75, together_raw))
+        together_in_range = TARGET_MIN <= together_raw <= TARGET_MAX
+        slider_default = max(TARGET_MIN, min(TARGET_MAX, together_raw))
         ensure_default(st, "ay_partner_target_age",
                        safe_int(get_override(st, "PARTNER_RETIREMENT_AGE", None) or slider_default,
                                 slider_default))
-        p_target = slider_with_box(st, "Partner's retirement age", 25, 75,
+        p_target = slider_with_box(st, "Partner's retirement age", TARGET_MIN, TARGET_MAX,
                              1, key="ay_partner_target_age",
                              help="Your partner's age when they stop working. Set it apart "
                                   "from yours if one of you retires first. The other keeps "
@@ -181,7 +188,7 @@ def render_body(st) -> None:
 
     # ----- Retirement spending -----
     _section_label(st, "Retirement spending")
-    modes = ["Same as today's expenses", "% of today's expenses", "Absolute amount ($/yr)"]
+    modes = RETIREMENT_SPENDING_MODES
     current_mode = str(get_override(st, "RETIREMENT_SPENDING_MODE", modes[0]))
     if current_mode not in modes:
         current_mode = modes[0]

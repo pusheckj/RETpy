@@ -126,7 +126,7 @@ def render(st, results: dict = None) -> None:
     with c2:
         slider_with_box(st, "Investment fees (bps)", 0, 150, 5, key="wifc_fee", unit=" bps",
                         help="Yearly fund fees. 100 bps is 1% of your balance.")
-        slider_with_box(st, "Expected inflation (%)", 0.0, 6.0, 0.25, key="wifc_infl", unit="%",
+        slider_with_box(st, "Expected inflation (%)", 0.0, 10.0, 0.25, key="wifc_infl", unit="%",
                         help="Long-run inflation used in the alternate scenario.")
         st.toggle("Include Social Security", key="wifc_ss",
                   help="Count Social Security income in the alternate scenario.")

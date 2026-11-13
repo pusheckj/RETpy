@@ -369,6 +369,12 @@ KEEP_AMOUNTS_MODE = "Auto-invest what's left (keep my amounts)"
 CUSTOM_PCT_MODE = "Custom %"
 MANUAL_MODE = "Manual amounts"
 SAVINGS_MODES = [AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, CUSTOM_PCT_MODE, MANUAL_MODE]
+# The other two "pick one of these stored strings" settings. widget_sync checks a loaded
+# value against them, so an unknown (renamed or hand-edited) string falls back to the first.
+RETIREMENT_SPENDING_MODES = ["Same as today's expenses", "% of today's expenses",
+                             "Absolute amount ($/yr)"]
+LIFECYCLE_PRESETS = ["Flat (no change)", "Early-retirement travel boom, quieter later",
+                     "Conservative senior years", "Children then empty-nest"]
 # DISPLAY names for the two auto modes (the stored values above must not change:
 # saved profiles hold them). Use these wherever a mode is shown to the user.
 AUTO_ALLOCATE_LABEL = "Fill tax-advantaged accounts first (recommended)"

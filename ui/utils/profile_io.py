@@ -17,6 +17,7 @@ results and saves back in the new form.
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import datetime
 from typing import Any
@@ -24,6 +25,7 @@ from typing import Any
 from retirement_sim import config as cfg
 
 SCHEMA_VERSION = "1.0"
+_MISSING = object()
 APP_TAG = "retirement-monte-carlo"
 
 # Your own "My situation" profile lives OUTSIDE the repository so personal
@@ -67,6 +69,145 @@ def _restore_int_keys(obj: Any) -> Any:
     return obj
 
 
+# ---------------------------------------------------------------------------
+# Loading must never crash on a hand-edited or damaged file. Every value is
+# checked against the type of the config constant it overrides: one that does not
+# fit is dropped (so the default applies), never passed on. Keys the config does
+# not know are left alone (the engine ignores them).
+# ---------------------------------------------------------------------------
+
+# Keys the UI itself stores, which are not config constants (so there is no default to read).
+_UI_KEY_DEFAULTS = {"TARGET_RETIREMENT_AGE": 60, "HOUSEHOLD_INCOME_QUICK": 0,
+                    "TOTAL_SAVINGS_QUICK": 0, "NEW_HOME_ESCROW_PCT": 0.0135}
+_TRUE, _FALSE = {"true", "yes", "on", "1"}, {"false", "no", "off", "0"}
+# A home move's fields (utils.derived.housing_timeline): text for "action", numbers for the rest.
+_MOVE_FIELDS = {"action": "", "age": 0, "price": 0, "down_pct": 0, "rate": 0, "years": 0, "costs": 0,
+                "selling_cost_pct": 0, "rent": 0, "loan": 0, "monthly": 0}
+
+
+def _number(v):
+    """``v`` as a finite number (numeric text is accepted), else None."""
+    if isinstance(v, str):
+        try:
+            v = float(v.strip())
+        except ValueError:
+            return None
+        v = int(v) if v.is_integer() and abs(v) < 1e15 else v
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return v if math.isfinite(v) else None
+
+
+def _fit(value, default):
+    """(ok, value): ``value`` as the type of ``default``, or (False, None) when it does not fit."""
+    if isinstance(default, bool):
+        text = value.strip().lower() if isinstance(value, str) else None
+        if isinstance(value, bool):
+            return True, value
+        if _number(value) in (0, 1) and not isinstance(value, str):
+            return True, bool(value)
+        if text in _TRUE | _FALSE:
+            return True, text in _TRUE
+        return False, None
+    if isinstance(default, (int, float)):
+        n = _number(value)
+        return (n is not None), n
+    if default is None:                                  # numeric when set (an age, a $ amount)
+        n = _number(value)
+        return (True, None) if value is None else ((n is not None), n)
+    if isinstance(default, str):
+        return isinstance(value, str), value
+    if isinstance(default, dict):
+        return _fit_dict(value, default)
+    if isinstance(default, (list, tuple)):
+        return isinstance(value, (list, tuple)), list(value) if isinstance(value, (list, tuple)) else None
+    return True, value
+
+
+def _fit_dict(value, default):
+    if not isinstance(value, dict):
+        return False, None
+    flat = default and all(isinstance(k, str) for k in default) and not any(
+        isinstance(v, (dict, list, tuple)) for v in default.values())
+    if not flat:
+        return True, value
+    out = dict(default)                                  # a missing or bad entry keeps its default
+    for k in default:
+        if k in value:
+            ok, fixed = _fit(value[k], default[k])
+            if ok:
+                out[k] = fixed
+    return True, out
+
+
+def _fit_comp_table(table, default):
+    """YOUR_COMPENSATION_BY_AGE: {age: {base, bonus, ...}}. A row that is incomplete is dropped."""
+    if not isinstance(table, dict):
+        return None
+    row0 = next(iter(default.values()))
+    rows = {}
+    for age, row in table.items():
+        if isinstance(age, int) and isinstance(row, dict):
+            fixed = {}
+            for k, d in row0.items():
+                ok, v = _fit(row.get(k), d)
+                if not ok:
+                    break
+                fixed[k] = v
+            else:
+                rows[age] = {**row, **fixed}
+    return rows or None
+
+
+def _fit_rows(rows, defaults, keep):
+    """A list of dicts (children, home moves): non-dicts go, a bad number is dropped
+    from its row (the default fills in), and ``keep(row)`` can reject a row."""
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        fixed = {}
+        for k, v in row.items():
+            ok, v = _fit(v, defaults[k]) if k in defaults else (True, v)
+            if ok:
+                fixed[k] = v
+        if keep(fixed):
+            out.append(fixed)
+    return out
+
+
+def sanitize_overrides(overrides: dict) -> dict:
+    """``overrides`` with every value that cannot be what its key stands for dropped,
+    so a hand-edited or damaged profile loads (on the defaults) instead of crashing."""
+    out = {}
+    for key, value in overrides.items():
+        if not isinstance(key, str):
+            continue
+        default = (_UI_KEY_DEFAULTS[key] if key in _UI_KEY_DEFAULTS
+                   else cfg.LEGACY_CHILD_KEYS[key] if key in cfg.LEGACY_CHILD_KEYS
+                   else getattr(cfg, key, _MISSING))
+        if default is _MISSING:
+            out[key] = value
+        elif key == "YOUR_COMPENSATION_BY_AGE":
+            table = _fit_comp_table(value, default)
+            if table is not None:
+                out[key] = table
+        elif key == "CHILDREN":
+            ok, rows = _fit(value, [])
+            if ok:
+                out[key] = _fit_rows(rows, cfg.CHILD_DEFAULTS, lambda r: True)
+        elif key == "HOME_EVENTS":
+            ok, rows = _fit(value, [])
+            if ok:
+                out[key] = _fit_rows(rows, _MOVE_FIELDS, lambda r: r.get("action") in cfg._HOME_ACTIONS
+                                     and _number(r.get("age")) is not None)
+        else:
+            ok, fixed = _fit(value, default)
+            if ok:
+                out[key] = fixed
+    return out
+
+
 def serialize_overrides(user_overrides: dict) -> str:
     """Serialize user_overrides dict to a JSON string with metadata envelope."""
     if not isinstance(user_overrides, dict):
@@ -87,7 +228,10 @@ def deserialize_overrides(json_str: str) -> dict:
     overrides dict.
 
     Accepts both the versioned envelope and a raw dict of overrides (tolerant
-    for hand-edited files or legacy saves).
+    for hand-edited files or legacy saves). An envelope with no version is read
+    as the current one. Values that do not fit what their key stands for are
+    dropped (see :func:`sanitize_overrides`), so a damaged file loads on the
+    defaults. Anything that cannot be read at all raises ``ValueError``.
     """
     if not isinstance(json_str, (str, bytes, bytearray)):
         raise ValueError(
@@ -97,25 +241,33 @@ def deserialize_overrides(json_str: str) -> dict:
         data = json.loads(json_str)
     except json.JSONDecodeError as exc:
         raise ValueError(f"Malformed JSON: {exc.msg} (line {exc.lineno}, col {exc.colno})") from exc
+    except RecursionError as exc:
+        raise ValueError("Malformed JSON: nested too deeply") from exc
 
     if not isinstance(data, dict):
         raise ValueError("Top-level JSON value must be an object/dict.")
 
-    # Versioned envelope: any of these keys marks the file as our envelope.
-    if any(k in data for k in ("version", "app", "overrides")):
+    # Versioned envelope: any of these keys marks the file as our envelope. A
+    # hand-edited file may wrap the envelope in another one: open each layer.
+    for _ in range(3):
+        if not any(k in data for k in ("version", "app", "overrides")):
+            break
         overrides = data.get("overrides")
         if not isinstance(overrides, dict):
             raise ValueError("Envelope 'overrides' must be an object/dict.")
-        file_version = str(data.get("version", ""))
+        file_version = "" if data.get("version") is None else str(data["version"])
         file_major = file_version.split(".", 1)[0]
         expected_major = SCHEMA_VERSION.split(".", 1)[0]
-        if file_major != expected_major:
+        if file_version and file_major != expected_major:
             raise ValueError(
                 f"Incompatible profile schema version {file_version!r} "
                 f"(expected major {expected_major}.x)."
             )
-    else:
-        # Bare dict (legacy, no envelope keys) — treat the whole thing as overrides.
-        overrides = data
+        data = overrides
+    # else: a bare dict (legacy, no envelope keys) is the overrides themselves.
 
-    return cfg.migrate_legacy_overrides(_restore_int_keys(overrides))
+    try:
+        values = sanitize_overrides(_restore_int_keys(data))
+        return cfg.migrate_legacy_overrides(values)
+    except RecursionError as exc:
+        raise ValueError("Malformed JSON: nested too deeply") from exc

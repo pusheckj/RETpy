@@ -36,6 +36,11 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
+# A value that no longer fits a widget (an old profile, a hand-edited file, a default taken from
+# another widget with other bounds) is moved to the nearest value that fits, not a crashed section.
+from utils.widget_guard import install as _install_widget_guard
+_install_widget_guard(st)
+
 
 def _inject_css() -> None:
     css_path = UI_DIR / "styles" / "theme.css"

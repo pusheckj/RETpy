@@ -12,16 +12,24 @@ conversion where needed).
 """
 from __future__ import annotations
 
+import threading
 from typing import Any, Dict
 
 try:
     from utils.expense_categories import CATEGORIES
     from utils.household import household_of
     from utils.slider_input import SUFFIXES as _BOX_SUFFIXES, forget_box
+    from utils.age_limits import (AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX,
+                                  PLAN_UNTIL_MIN, PLAN_UNTIL_MAX)
+    from utils.derived import LIFECYCLE_PRESETS, RETIREMENT_SPENDING_MODES, SAVINGS_MODES
 except ImportError:  # pragma: no cover
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
     from ui.utils.household import household_of  # type: ignore
     from ui.utils.slider_input import SUFFIXES as _BOX_SUFFIXES, forget_box  # type: ignore
+    from ui.utils.age_limits import (AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX,  # type: ignore
+                                     PLAN_UNTIL_MIN, PLAN_UNTIL_MAX)
+    from ui.utils.derived import (LIFECYCLE_PRESETS, RETIREMENT_SPENDING_MODES,  # type: ignore
+                                  SAVINGS_MODES)
 
 from retirement_sim import config as cfg
 
@@ -37,13 +45,34 @@ from retirement_sim import config as cfg
 # cast multiplies by 100.
 
 
+# While sync_widgets_from_overrides runs, ``_clamp`` records each value it had to move,
+# so the slider can say so ("your saved 68 is below 75, so 75 is used") instead of
+# changing the number without a word. Thread-local: Streamlit runs sessions on threads.
+_clamped = threading.local()
+
+
 def _clamp(v, lo, hi):
     """Clamp v into [lo, hi], tolerating either bound being None (unbounded)."""
-    if lo is not None and v < lo:
-        v = lo
-    if hi is not None and v > hi:
-        v = hi
-    return v
+    out = v
+    if lo is not None and out < lo:
+        out = lo
+    if hi is not None and out > hi:
+        out = hi
+    log = getattr(_clamped, "log", None)
+    if log is not None and out != v:
+        log.append((v, out))
+    return out
+
+
+def _one_of(options):
+    """Cast for a choice widget: the stored string when it is one of ``options``.
+    Anything else raises, so sync leaves the widget on its own default (a profile
+    from an older version, or a hand-edited file, can hold a string that no longer exists)."""
+    def cast(v):
+        if v not in options:
+            raise ValueError(f"{v!r} is not one of the options")
+        return v
+    return cast
 
 
 def _as_int(default: int, lo: int = None, hi: int = None):
@@ -144,7 +173,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sp_health":          ("SPEND_HEALTH_MONTHLY", _as_int(400, 0, 50_000)),
     "sp_discretionary":   ("SPEND_DISCRETIONARY_MONTHLY", _as_int(600, 0, 50_000)),
     "sp_other":           ("SPEND_OTHER_MONTHLY", _as_int(300, 0, 50_000)),
-    "sp_lifecycle":       ("SPEND_LIFECYCLE_PRESET", lambda v: str(v)),
+    "sp_lifecycle":       ("SPEND_LIFECYCLE_PRESET", _one_of(LIFECYCLE_PRESETS)),
 
     # savings — direct annual contribution amounts per account (both partners)
     "sr_inflation_adjust":("SAVINGS_INFLATION_ADJUST", lambda v: bool(v)),
@@ -159,13 +188,13 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     # ===== New sidebar sections (sec_*.py) =====
 
     # sec_about_you.py
-    "ay_your_age":        ("YOUR_AGE", _as_int(25, 18, 100)),
-    "ay_partner_age":     ("PARTNER_AGE", _as_int(25, 0, 100)),
+    "ay_your_age":        ("YOUR_AGE", _as_int(25, AGE_MIN, AGE_MAX)),
+    "ay_partner_age":     ("PARTNER_AGE", _as_int(25, 0, AGE_MAX)),
     "ay_filing":          ("FILING_STATUS", lambda v: str(v)),
-    "ay_target_age":      ("TARGET_RETIREMENT_AGE", _as_int(60, 25, 75)),
-    "ay_partner_target_age": ("PARTNER_RETIREMENT_AGE", _as_int(60, 25, 75)),
-    "ay_plan_until":      ("PLAN_UNTIL_AGE", _as_int(90, 75, 100)),
-    "ay_partner_plan_until": ("PARTNER_PLAN_UNTIL_AGE", _as_int(95, 75, 100)),
+    "ay_target_age":      ("TARGET_RETIREMENT_AGE", _as_int(60, TARGET_MIN, TARGET_MAX)),
+    "ay_partner_target_age": ("PARTNER_RETIREMENT_AGE", _as_int(60, TARGET_MIN, TARGET_MAX)),
+    "ay_plan_until":      ("PLAN_UNTIL_AGE", _as_int(90, PLAN_UNTIL_MIN, PLAN_UNTIL_MAX)),
+    "ay_partner_plan_until": ("PARTNER_PLAN_UNTIL_AGE", _as_int(95, PLAN_UNTIL_MIN, PLAN_UNTIL_MAX)),
 
     # sec_income.py
     "si_your_base":       ("YOUR_BASE_SALARY", _as_int(70_000, 0, 2_000_000)),
@@ -193,10 +222,10 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     # sec_expenses.py: the monthly spending inputs, one per expense category (incl. se_partner)
     **{c.widget: (c.key, _as_int(c.default, 0, c.max_value)) for c in CATEGORIES},
     # (the children rows, in sec_family.py, are synced by _sync_children below)
-    "se_lifecycle":       ("SPEND_LIFECYCLE_PRESET", lambda v: str(v)),
+    "se_lifecycle":       ("SPEND_LIFECYCLE_PRESET", _one_of(LIFECYCLE_PRESETS)),
 
     # sec_savings.py
-    "sv_mode":               ("SAVINGS_MODE", lambda v: str(v)),
+    "sv_mode":               ("SAVINGS_MODE", _one_of(SAVINGS_MODES)),
     "sv_inflation_adjust":   ("SAVINGS_INFLATION_ADJUST", lambda v: bool(v)),
     "sv_primary_housing":    ("PRIMARY_PAYS_HOUSING", lambda v: bool(v)),
     "sv_after_tax_401k":     ("YOUR_AFTER_TAX_401K_PCT", _as_pct(0.0, 0.0, 20.0)),
@@ -232,7 +261,8 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "bp_vacation_until":       ("RETIREMENT_VACATION_UNTIL_AGE", _as_int(75, 50, 100)),
 
     # sec_retirement_goals.py
-    "rg_spend_mode":      ("RETIREMENT_SPENDING_MODE", lambda v: str(v)),    "rg_spend_pct":       ("RETIREMENT_SPENDING_PCT", _as_pct(80.0, 50.0, 150.0)),
+    "rg_spend_mode":      ("RETIREMENT_SPENDING_MODE", _one_of(RETIREMENT_SPENDING_MODES)),
+    "rg_spend_pct":       ("RETIREMENT_SPENDING_PCT", _as_pct(80.0, 50.0, 150.0)),
     "rg_spend_abs":       ("RETIREMENT_SPENDING_ABSOLUTE", _as_int(0, 0, 1_000_000)),
     "rg_ss_include":      ("INCLUDE_SOCIAL_SECURITY", lambda v: bool(v)),
     "rg_ss_claim":        ("SS_CLAIM_AGE", _as_int(67, 62, 70)),
@@ -294,11 +324,11 @@ def _sync_children(st, overrides: dict) -> None:
 
 
 def _derive_rent_own(overrides: dict) -> str:
-    hv = overrides.get("HOME_VALUE", 0)
     try:
-        return "Own home" if int(hv) > 0 else "Renting"
+        owns = int(overrides.get("HOME_VALUE", 0)) > 0 or int(overrides.get("MORTGAGE_MONTHLY", 0)) > 0
     except (TypeError, ValueError):
-        return "Renting"
+        owns = False
+    return "Own home" if owns else "Renting"
 
 
 def _derive_scenario(overrides: dict) -> str:
@@ -384,7 +414,7 @@ DERIVED_MAPPINGS: Dict[str, Any] = {
 #                       treated as hand-customized and never re-derives from
 #                       that profile's own base/bonus/RSU inputs.
 #   le_age              life-expectancy card's age (seeded from YOUR_AGE).
-_EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age")
+_EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "_sync_notes")
 
 # Prefixes for widget families that are NOT (fully) enumerated above: either
 # dynamically keyed (count varies at runtime) or whole sections whose widgets
@@ -444,14 +474,23 @@ def sync_widgets_from_overrides(st) -> None:
     session_state value persists.
     """
     overrides = st.session_state.get("user_overrides", {}) or {}
+    notes: Dict[str, tuple] = {}       # widget key -> (loaded value, value used) when clamped
 
     for widget_key, (override_key, cast) in DIRECT_MAPPINGS.items():
         if override_key in overrides and overrides[override_key] is not None:
+            _clamped.log = []
             try:
                 st.session_state[widget_key] = cast(overrides[override_key])
                 forget_box(st, widget_key)     # the typed box beside a slider re-seeds from it
+                if _clamped.log:
+                    notes[widget_key] = _clamped.log[0]
             except Exception:
-                pass
+                # A value the widget cannot hold: drop what the widget held, so the
+                # component seeds it afresh instead of showing the previous plan's.
+                st.session_state.pop(widget_key, None)
+            finally:
+                _clamped.log = None
+    st.session_state["_sync_notes"] = notes
 
     for widget_key, derive_fn in DERIVED_MAPPINGS.items():
         try:
