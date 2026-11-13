@@ -75,6 +75,17 @@ def money_md(value: Union[int, float, None], precision: int = 0, shorten: bool =
     return money(value, precision=precision, shorten=shorten).replace("$", "\\$")
 
 
+def money_echo(st, value, at_least: float = 10_000) -> None:
+    """A small "$320,000" under a money box, which can't show thousands separators
+    itself (Streamlit's number_input takes a plain printf format). Large amounts only."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return
+    if abs(v) >= at_least:
+        st.caption(money_md(v))
+
+
 def pct(value: Union[float, None], precision: int = 1) -> str:
     """Format as percentage (expects 0.82 -> '82.0%')."""
     if _is_bad(value):
