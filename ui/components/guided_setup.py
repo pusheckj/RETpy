@@ -27,8 +27,10 @@ from retirement_sim import config as cfg
 
 try:
     from utils.expense_categories import CATEGORIES
-    from utils.formatting import money, money_md
-    from utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL, KEEP_AMOUNTS_LABEL, get_limit
+    from utils.formatting import money, money_md, money_echo
+    from utils.derived import (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL, KEEP_AMOUNTS_LABEL,
+                               get_limit, children_at_home_now, compute_total_income, compute_taxes,
+                               compute_expenses_today)
     from utils import simple_to_full as s2f
     from utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH, household_of,
                                  clear_partner)
@@ -36,8 +38,10 @@ try:
     from utils import planner_max as pm
 except ImportError:  # pragma: no cover
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
-    from ui.utils.formatting import money, money_md  # type: ignore
-    from ui.utils.derived import AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL, KEEP_AMOUNTS_LABEL, get_limit  # type: ignore
+    from ui.utils.formatting import money, money_md, money_echo  # type: ignore
+    from ui.utils.derived import (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL,  # type: ignore
+                                  KEEP_AMOUNTS_LABEL, get_limit, children_at_home_now,
+                                  compute_total_income, compute_taxes, compute_expenses_today)
     from ui.utils import simple_to_full as s2f  # type: ignore
     from ui.utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH,  # type: ignore
                                     household_of, clear_partner)
@@ -115,7 +119,7 @@ def begin(st, simple: Any = None) -> None:
     if s2f.used(simple):
         carried = s2f.carried(simple)
         st.session_state.setdefault("user_overrides", {}).update(carried)
-        s["checkup"] = {**s2f.summary(simple), "keys": sorted(carried)}
+        s["checkup"] = {**s2f.summary(simple), **s2f.partner_answers(simple), "keys": sorted(carried)}
     st.session_state[STATE] = s
 
 
@@ -180,6 +184,7 @@ def _money(st, key: str, label: str, saved: Any, first: Any, hi: int = s2f.BALAN
           None if first is None else int(_num(first)))
     st.number_input(label, min_value=0, max_value=hi, step=step, key=key, icon=_DOLLAR,
                     placeholder=_REQUIRED if first is None else None)
+    money_echo(st, _val(st, key))
 
 
 def _pct(st, key: str, label: str, saved: Any, first: Any) -> None:
@@ -221,8 +226,11 @@ def draw_you(st) -> None:
     ov = _ov(st)
     _whole(st, "gs_age", "How old are you?", ov.get("YOUR_AGE"), None, 18, 100)
     _cue(st, "Your age today, in years.")
+    c = state(st).get("checkup") or {}
     hh = _choice(st, "gs_household", "Who is this plan for?", [JUST_ME, SPOUSE, PARTNER],
-                 household_of(ov), None)
+                 household_of(ov), SPOUSE if c.get("married") else None)
+    if c.get("married") and hh == SPOUSE:
+        _cue(st, "You said you're married in the check-up.", True)
     _cue(st, "Pick spouse or partner if you share bills and savings. Their income and "
              "accounts come on later steps.")
     if hh in (SPOUSE, PARTNER):
@@ -388,8 +396,10 @@ def draw_income(st) -> None:
     _cue(st, "Before taxes. Enter 0 if you don't get one.")
     if _partner(st):
         _money(st, "gs_partner_salary", "Your partner's yearly pay before taxes",
-               ov.get("PARTNER_BASE_SALARY"), None, hi=s2f.SALARY_MAX, step=1_000)
-        _cue(st, "Also before taxes. Enter 0 if they don't work for pay.")
+               ov.get("PARTNER_BASE_SALARY"), c.get("partner_salary") or None,
+               hi=s2f.SALARY_MAX, step=1_000)
+        _cue(st, "Also before taxes. Enter 0 if they don't work for pay.",
+             bool(c.get("partner_salary")))
 
 
 def commit_income(st) -> None:
@@ -696,6 +706,29 @@ def commit_spending(st) -> None:
                 ov[cat.mirror] = int(v)
 
 
+MAX_PARTNER_YEARS = 30
+
+
+def _partner_gap(ov) -> int:
+    """Your age minus your partner's."""
+    return int(_num(ov.get("YOUR_AGE"), 30)) - int(_num(ov.get("PARTNER_AGE")))
+
+
+def _partner_retire_age(ov, target: int, later: int) -> int:
+    """The partner's own age when they retire ``later`` years after you (you retire
+    at ``target``), within the planner's 25-75 range."""
+    return max(25, min(75, target - _partner_gap(ov) + later))
+
+
+def _partner_later_saved(ov) -> int:
+    """Years after you that the plan has the partner retiring (0 = together)."""
+    pra = ov.get("PARTNER_RETIREMENT_AGE")
+    if pra is None:
+        return 0
+    target = int(_num(ov.get("TARGET_RETIREMENT_AGE"), 60))
+    return max(-MAX_PARTNER_YEARS, min(MAX_PARTNER_YEARS, int(_num(pra)) + _partner_gap(ov) - target))
+
+
 def draw_retire(st) -> None:
     ov = _ov(st)
     age = int(_num(ov.get("YOUR_AGE"), 30))
@@ -707,6 +740,14 @@ def draw_retire(st) -> None:
     slider_with_box(st, "At what age would you like to retire?", lo, 75, 1, key="gs_target")
     _cue(st, "A guess is fine. Your results show the earliest age that works, and you can "
              "adjust from there.")
+    if _partner(st):
+        gap = _partner_gap(ov)
+        _whole(st, "gs_partner_later", "Your partner retires how many years after you?",
+               _partner_later_saved(ov), 0, -MAX_PARTNER_YEARS, MAX_PARTNER_YEARS)
+        later = int(_num(_val(st, "gs_partner_later")))
+        _cue(st, "0 means the same year as you. Enter a negative number if they stop first."
+             + ("" if later == 0 else
+                f" That's when they're {_partner_retire_age(ov, int(_num(_val(st, 'gs_target'))), later)}."))
     ss = _choice(st, "gs_ss", "Count on Social Security?", [SS_YES, SS_NO],
                  SS_YES if ov.get("INCLUDE_SOCIAL_SECURITY", True) else SS_NO, SS_YES,
                  horizontal=True)
@@ -726,6 +767,10 @@ def commit_retire(st) -> None:
     ov = _ov(st)
     if _val(st, "gs_target") is not None:
         ov["TARGET_RETIREMENT_AGE"] = int(_val(st, "gs_target"))
+    if _partner(st) and _val(st, "gs_partner_later") is not None:
+        later = int(_val(st, "gs_partner_later"))
+        ov["PARTNER_RETIREMENT_AGE"] = (_partner_retire_age(ov, int(_num(ov.get("TARGET_RETIREMENT_AGE"), 60)), later)
+                                        if later else None)
     if _val(st, "gs_ss") is not None:
         ov["INCLUDE_SOCIAL_SECURITY"] = _val(st, "gs_ss") == SS_YES
     if _val(st, "gs_ss_amt") is not None:
@@ -751,6 +796,7 @@ def review_lines(ov: Dict[str, Any]) -> List[str]:
                 + (_PARTNER_ACCOUNTS if partner else []))
     housing = _num(ov.get("MORTGAGE_MONTHLY")) or _num(ov.get("SPEND_RENT_MONTHLY"))
     spend = sum(_num(ov.get(c.key)) for c in CATEGORIES if partner or not c.partner_only)
+    kids_now = sum(_num(k["monthly_cost"]) for k in children_at_home_now(ov))
     yearly = sum(_num(ov.get(k)) for k in ("YOUR_401K_CONTRIBUTION", "YOUR_HSA_CONTRIBUTION",
                                            "YOUR_BACKDOOR_ROTH"))
     ss = (f"Social Security {money_md(_num(ov.get('YOUR_SS_MONTHLY_FRA')))}/month"
@@ -762,11 +808,23 @@ def review_lines(ov: Dict[str, Any]) -> List[str]:
         f"**Saving:** {money_md(yearly)} a year into your 401(k), HSA and IRA"
         + (", plus your employer's match" if _num(ov.get("YOUR_401K_MATCH_PCT")) > 0 else "")
         + "; the rest of what you don't spend is invested.",
-        f"**Spending:** {money_md(spend + housing)} a month, including "
-        f"{money_md(housing)} for housing.",
+        f"**Spending:** {money_md(spend + housing + kids_now)} a month, including "
+        f"{money_md(housing)} for housing"
+        + (f" and {money_md(kids_now)} for children at home" if kids_now else "")
+        + "." + (" Planned children add their costs when they arrive." if n_planned else ""),
         *_debts_line(ov),
         f"**Retirement:** at {int(_num(ov.get('TARGET_RETIREMENT_AGE'), 60))}, {ss}.",
     ]
+
+
+def yearly_shortfall(ov: Dict[str, Any]) -> int:
+    """How much more a year the plan spends today (children and housing included)
+    than the household has left after tax; 0 when pay covers it."""
+    try:
+        gap = compute_expenses_today(ov) - (compute_total_income(ov) - compute_taxes(ov)["total"])
+    except Exception:       # a summary line must never stop the walkthrough
+        return 0
+    return int(max(0.0, gap))
 
 
 def _debts_line(ov: Dict[str, Any]) -> List[str]:
@@ -785,7 +843,14 @@ def _debts_line(ov: Dict[str, Any]) -> List[str]:
 
 
 def draw_review(st) -> None:
-    st.markdown("\n".join(f"- {line}" for line in review_lines(_ov(st))))
+    ov = _ov(st)
+    st.markdown("\n".join(f"- {line}" for line in review_lines(ov)))
+    short = yearly_shortfall(ov)
+    if short > 0:
+        st.warning(f"Your spending is about {money_md(short)} a year more than your pay after "
+                   "taxes. The plan can't save anything at that rate, so it may not work at any "
+                   "retirement age. Use Back to lower your spending or raise your pay.",
+                   icon=":material/info:")
     _cue(st, "Use Back to change an answer. Later, everything is in the sidebar "
              "(on a phone, tap the arrow at the top left to open it).")
 

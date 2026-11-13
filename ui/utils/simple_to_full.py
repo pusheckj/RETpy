@@ -139,7 +139,8 @@ def carried(simple: Any) -> Dict[str, Any]:
 
     Saving keeps the visitor's own 401(k) / HSA / IRA amounts and invests the
     rest (KEEP_AMOUNTS_MODE). ``married`` and ``partner_salary_annual`` are
-    check-up only (they set the Roth IRA income limit), so they are left out.
+    check-up only (they set the Roth IRA income limit), so they are left out here
+    (``partner_answers`` hands them to the setup's questions).
     The debts become the planner's DEBTS (``planner_debts``), so their minimums
     leave the needs. Housing starts at 0, with the rest of the check-up's needs
     (rent included) in Other, so total spending plus the debt payments equals
@@ -174,6 +175,15 @@ def summary(simple: Any) -> Dict[str, float]:
             "debt_min": debt_minimums(s), "ira_so_far": s["ira_contrib_annual"],
             "salary": s["gross_salary_annual"],
             "pct_401k": s["retirement_contrib_pct"], "hsa_eligible": bool(s["hsa_eligible"])}
+
+
+def partner_answers(simple: Any) -> Dict[str, Any]:
+    """What the check-up said about a spouse. Not carried into the plan (the
+    setup asks about the partner itself), but the setup opens its "who is this
+    plan for" and partner-pay questions on it."""
+    s = normalize_inputs(simple)
+    return {"married": bool(s["married"]),
+            "partner_salary": s["partner_salary_annual"] if s["married"] else 0.0}
 
 
 def from_planner(overrides: Any) -> Dict[str, Any]:

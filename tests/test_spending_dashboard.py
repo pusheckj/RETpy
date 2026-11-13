@@ -939,3 +939,61 @@ def test_estimate_is_drawn_hatched():
     bars = {t.name: t for t in sd.monthly_figure(sd.monthly_table(tx, jul, jul), [], False).data if t.type == "bar"}
     assert bars["Partner spending"].marker.pattern.shape == "/"
     assert bars["Housing"].marker.pattern.shape in ("", None)
+
+
+def _card_only_tx():
+    """Groceries and cafes on a card in two complete months: no rent, no Other."""
+    rows = [{"date": "2026-06-05", "source": "Card", "description": "CAFE ONE", "mcc": "05814", "amount": -100},
+            {"date": "2026-07-05", "source": "Card", "description": "CAFE ONE", "mcc": "05814", "amount": -300}]
+    tx = sr.classify(_frame(rows), sr.load_rules(None))
+    tx["month"] = tx["eff_date"].dt.to_period("M")
+    tx["merchant"] = tx["description"]
+    return tx, [pd.Period("2026-06", "M"), pd.Period("2026-07", "M")]
+
+
+def test_categories_the_statements_lack_keep_the_plan():
+    """A card-only export has no rent and no "Other" rows: "Use my actual spending"
+    must leave those inputs alone, not zero them (they read as "—", never "differs")."""
+    tx, complete = _card_only_tx()
+    a = sd.actual_plan(tx, complete, owns=False)
+    assert a == {"SPEND_FOOD_MONTHLY": 200}
+    ov = {"SPEND_RENT_MONTHLY": 1_500, "SPEND_OTHER_MONTHLY": 300, "SPEND_FOOD_MONTHLY": 900}
+    g = sd.plan_vs_actual(ov, a).set_index("Expense category")
+    assert pd.isna(g.loc["Housing", "Actual"]) and pd.isna(g.loc["Other", "Actual"])
+    assert sd.differing(ov, a) == ["Food & groceries"]
+
+    class _St:
+        session_state = {"user_overrides": dict(ov)}
+    sd.use_actual(_St, a)
+    kept = _St.session_state["user_overrides"]
+    assert (kept["SPEND_RENT_MONTHLY"], kept["SPEND_OTHER_MONTHLY"], kept["SPEND_FOOD_MONTHLY"]) == (1_500, 300, 200)
+    assert sd.differing(kept, a) == []
+
+
+def test_a_category_with_rows_that_net_to_zero_is_still_actual():
+    """Paybacks can cancel a bill: that is a real $0 and still sets the input."""
+    tx = _dash_tx()
+    a = sd.actual_plan(tx, [pd.Period("2026-07", "M")])
+    assert a["SPEND_UTILITIES_MONTHLY"] == 0 and a["MORTGAGE_MONTHLY"] == 2000
+
+
+def test_header_range_is_the_months_loaded_not_the_period_window(tmp_path, monkeypatch):
+    """One month of statements under "Last 12 months" says that month, not a 12-month span."""
+    from streamlit.testing.v1 import AppTest
+    (tmp_path / "fid.csv").write_text(FIDELITY_CSV, encoding="utf-8")
+    monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "0")
+    monkeypatch.setenv("SPENDING_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("SPENDING_TEST_UI_DIR", os.path.abspath(UI))
+
+    def _script():
+        import os
+        import sys
+        sys.path.insert(0, os.environ["SPENDING_TEST_UI_DIR"])
+        import streamlit as st
+        from components import spending_dashboard
+        spending_dashboard.render(st)
+
+    at = AppTest.from_function(_script, default_timeout=60).run()
+    assert not at.exception, at.exception
+    head = next(c.value for c in at.caption if "complete month" in c.value)
+    assert head.startswith("1 complete month, Jul 2026 ·"), head

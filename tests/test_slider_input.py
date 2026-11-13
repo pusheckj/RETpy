@@ -232,3 +232,20 @@ def test_the_box_css_sits_before_the_top_card_block():
     start = css.index("Sliders with a typed box (utils/slider_input.py)")
     assert start < css.index("Top card layout. The card")
     assert "-- end Sliders with a typed box --" in css
+
+
+def test_partner_retirement_can_be_typed_as_years_after_you(planner_bits):
+    """The slider is in the partner's own age, so "3 years after me" needs arithmetic:
+    a number box beside it says it directly and moves the slider."""
+    at = planner_bits
+    assert at.number_input(key="ay_partner_later").value == 0            # together by default
+    at.number_input(key="ay_partner_later").set_value(3).run()
+    assert not at.exception, at.exception
+    assert at.slider(key="ay_partner_target_age").value == 56            # you retire at 55: partner is 53
+    assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] == 56
+    assert any("3 years after you" in c.value for c in at.caption)
+    assert at.number_input(key="ay_partner_later").value == 3
+    at.slider(key="ay_partner_target_age").set_value(50).run()           # drag instead: the box follows
+    assert at.number_input(key="ay_partner_later").value == -3
+    at.number_input(key="ay_partner_later").set_value(-2).run()
+    assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] == 51

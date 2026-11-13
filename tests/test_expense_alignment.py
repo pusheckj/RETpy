@@ -99,12 +99,13 @@ def test_one_click_makes_both_screens_match(app):
     assert at.button(key="se_use_actual").disabled and at.button(key="sp_use_actual").disabled
     ov = at.session_state["user_overrides"]
     assert at.number_input(key="se_food").value == ov["SPEND_FOOD_MONTHLY"] != 5
-    assert at.number_input(key="se_mortgage_monthly").value == ov["MORTGAGE_MONTHLY"] != 1_000
+    # These statements have no housing rows (the rent is Venmo income): the mortgage stays.
+    assert at.number_input(key="se_mortgage_monthly").value == ov["MORTGAGE_MONTHLY"] == 1_000
     assert ov["UTILITIES_MONTHLY"] == ov["SPEND_UTILITIES_MONTHLY"]
     assert ov["PARTNER_OTHER_MONTHLY"] == 1800               # no estimate in these statements
     table = at.session_state["_table"].set_index("Expense category")
-    assert table.loc["Partner spending"].isna()["Actual"]
-    assert (table.drop(index="Partner spending")["Difference"] == 0).all()
+    assert table.loc[["Partner spending", "Housing"], "Actual"].isna().all()
+    assert (table["Difference"].dropna() == 0).all() and table["Difference"].notna().sum() >= 3
 
 
 def test_full_tab_shows_the_control(app):

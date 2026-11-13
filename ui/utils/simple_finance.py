@@ -74,6 +74,7 @@ DEFAULT_INPUTS: Dict[str, Any] = {
     "hsa_family": False,              # family coverage has the higher HSA limit
     "hsa_contrib_annual": 0.0,
     "ira_contrib_annual": 0.0,
+    "age": 0,                         # 0 = not given: no age 50+ catch-up amounts in the limits
     "married": False,                 # married filing jointly (sets the Roth IRA income limit)
     "partner_salary_annual": 0.0,     # partner's yearly pay; only counts when married
     "emergency_target_months": DEFAULT_EMERGENCY_MONTHS,
@@ -101,6 +102,7 @@ _FIELD_SPECS: Dict[str, tuple] = {
     "hsa_family": ("bool", None, None),
     "hsa_contrib_annual": ("money", 0.0, BALANCE_MAX),
     "ira_contrib_annual": ("money", 0.0, BALANCE_MAX),
+    "age": ("int", 0, 100),
     "married": ("bool", None, None),
     "partner_salary_annual": ("money", 0.0, BALANCE_MAX),
     "emergency_target_months": ("int", EMERGENCY_MIN_MONTHS, EMERGENCY_MAX_MONTHS),
@@ -215,25 +217,43 @@ def normalize_inputs(d: Any) -> Dict[str, Any]:
 # 2026: IRS Notice 2025-67 (401(k) $24,500, IRA $7,500); Rev. Proc. 2025-19
 # (HSA $4,400 self-only / $8,750 family). Later years use the latest known year.
 IRS_LIMITS = {
-    2026: {"401k": 24_500, "ira": 7_500, "hsa_individual": 4_400, "hsa_family": 8_750},
+    2026: {"401k": 24_500, "ira": 7_500, "hsa_individual": 4_400, "hsa_family": 8_750,
+           # Age catch-ups, added on top (same notices): 401(k) at 50+, replaced by the
+           # larger "super" amount at ages 60-63; IRA at 50+; HSA at 55+.
+           "401k_catchup": 8_000, "401k_super_catchup": 11_250, "ira_catchup": 1_100,
+           "hsa_catchup": 1_000},
 }
+SUPER_CATCHUP_AGES = (60, 63)       # inclusive
 
 
-def contribution_limits(hsa_family: bool = False, today: Optional[date] = None) -> Dict[str, float]:
-    """This year's employee limits for 401(k), IRA and HSA (no age catch-ups).
+def contribution_limits(hsa_family: bool = False, today: Optional[date] = None,
+                        age: int = 0) -> Dict[str, float]:
+    """This year's employee limits for 401(k), IRA and HSA.
 
-    Years before the table fall back to ``retirement_sim.config``'s 2024 base."""
+    ``age`` (0 = unknown) adds the catch-ups: 401(k) and IRA from 50, HSA from 55,
+    and the larger 401(k) amount at 60-63. Years before the table fall back to
+    ``retirement_sim.config``'s 2024 base (and its catch-ups)."""
     year = (today or date.today()).year
     known = [y for y in IRS_LIMITS if y <= year]
     hsa_key = "hsa_family" if hsa_family else "hsa_individual"
+    age = int(age or 0)
     if known:
         t = IRS_LIMITS[max(known)]
-        return {"401k": float(t["401k"]), "ira": float(t["ira"]), "hsa": float(t[hsa_key])}
-    return {
-        "401k": float(cfg.get_inflation_adjusted_limit("401k", 0)),
-        "ira": float(cfg.get_inflation_adjusted_limit("ira", 0)),
-        "hsa": float(cfg.get_inflation_adjusted_limit(hsa_key, 0)),
-    }
+        out = {"401k": float(t["401k"]), "ira": float(t["ira"]), "hsa": float(t[hsa_key])}
+        c401 = t["401k_super_catchup"] if SUPER_CATCHUP_AGES[0] <= age <= SUPER_CATCHUP_AGES[1] \
+            else t["401k_catchup"]
+        extra = {"401k": c401, "ira": t["ira_catchup"], "hsa": t["hsa_catchup"]}
+    else:
+        out = {
+            "401k": float(cfg.get_inflation_adjusted_limit("401k", 0)),
+            "ira": float(cfg.get_inflation_adjusted_limit("ira", 0)),
+            "hsa": float(cfg.get_inflation_adjusted_limit(hsa_key, 0)),
+        }
+        extra = {k: cfg.get_inflation_adjusted_limit(f"{k}_catchup", 0) for k in ("401k", "ira", "hsa")}
+    for k, from_age in (("401k", 50), ("ira", 50), ("hsa", 55)):
+        if age >= from_age:
+            out[k] += float(extra[k])
+    return out
 
 
 # Roth IRA income phase-out (modified AGI), IRS Notice 2025-67, same notice as
@@ -258,11 +278,12 @@ def roth_phaseout(married: bool = False, today: Optional[date] = None) -> tuple:
     return float(lo), float(hi)
 
 
-def roth_direct_limit(magi: float, married: bool = False, today: Optional[date] = None) -> float:
+def roth_direct_limit(magi: float, married: bool = False, today: Optional[date] = None,
+                      age: int = 0) -> float:
     """What you can put into a Roth IRA directly at ``magi``, in whole dollars:
     the full IRA limit at or below the range, zero at or above it, and a straight
     line between (same shape as the engine's ``roth_ira_allowed``)."""
-    limit = contribution_limits(False, today)["ira"]
+    limit = contribution_limits(False, today, age)["ira"]
     lo, hi = roth_phaseout(married, today)
     if magi <= lo:
         return limit
@@ -287,7 +308,7 @@ def roth_magi(inputs: Dict[str, Any], today: Optional[date] = None) -> float:
     married, less your 401(k) deferral and your HSA contribution. An estimate:
     the partner's own deferrals and other adjustments aren't known."""
     i = normalize_inputs(inputs)
-    limits = contribution_limits(i["hsa_family"], today)
+    limits = contribution_limits(i["hsa_family"], today, i["age"])
     deferral = min(i["gross_salary_annual"] * i["retirement_contrib_pct"] / 100.0, limits["401k"])
     hsa = i["hsa_contrib_annual"] if i["hsa_eligible"] else 0.0
     partner = i["partner_salary_annual"] if i["married"] else 0.0
@@ -298,8 +319,8 @@ def roth_check(inputs: Dict[str, Any], today: Optional[date] = None) -> RothChec
     i = normalize_inputs(inputs)
     magi = roth_magi(i, today)
     lo, hi = roth_phaseout(i["married"], today)
-    ira = contribution_limits(False, today)["ira"]
-    direct = roth_direct_limit(magi, i["married"], today)
+    ira = contribution_limits(False, today, i["age"])["ira"]
+    direct = roth_direct_limit(magi, i["married"], today, i["age"])
     if magi <= lo:
         case = "direct"
         note = f"Your income is under the Roth limit, so you can put in the full {money(ira)} directly."
@@ -313,13 +334,13 @@ def roth_check(inputs: Dict[str, Any], today: Optional[date] = None) -> RothChec
     return RothCheck(case, magi, lo, hi, direct, ira, note)
 
 
-def max_401k_pct(salary: float, today: Optional[date] = None) -> Optional[float]:
+def max_401k_pct(salary: float, today: Optional[date] = None, age: int = 0) -> Optional[float]:
     """The ``retirement_contrib_pct`` that puts in this year's 401(k) limit, capped
     at 100 and rounded up to 2 decimals so the contribution is never a few dollars
     short of the limit. ``None`` when there is no salary."""
     if salary <= 0:
         return None
-    limit = contribution_limits(False, today)["401k"]
+    limit = contribution_limits(False, today, age)["401k"]
     return min(PCT_MAX, math.ceil(round(limit / salary * 10_000, 6)) / 100.0)
 
 
@@ -438,7 +459,7 @@ def priority_ladder(inputs: Dict[str, Any], today: Optional[date] = None) -> Lis
     salary = i["gross_salary_annual"]
     contrib_pct = i["retirement_contrib_pct"]
     match_pct = i["employer_match_pct"]
-    limits = contribution_limits(i["hsa_family"], today)
+    limits = contribution_limits(i["hsa_family"], today, i["age"])
     steps: List[LadderStep] = []
 
     # 1. Starter emergency fund
@@ -740,6 +761,6 @@ def analyze(inputs: Any, today: Optional[date] = None) -> Dict[str, Any]:
         "ladder": priority_ladder(i, today),
         "payoff": compare_payoff(i["debts"], i["extra_debt_payment_monthly"], today),
         "budget": budget_503020(i["take_home_monthly"], i["needs_monthly"], i["wants_monthly"]),
-        "limits": contribution_limits(i["hsa_family"], today),
+        "limits": contribution_limits(i["hsa_family"], today, i["age"]),
         "warnings": warnings,
     }
