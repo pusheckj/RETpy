@@ -448,7 +448,7 @@ def calculate_partner_total_savings(salary: float, years_from_now: int, married:
 
     status = _FILING_MFJ if married else _FILING_SINGLE
     taxes = working_year_taxes(partner_wages=salary, partner_401k=savings_401k,
-                               status=status, partner=True)
+                               status=status, partner=True, children_under_17=0)
     after_tax = taxes["partner"]["take_home"]
 
     roth = max(0.0, min(float(PARTNER_ROTH_CONTRIBUTION), salary - savings_401k))
@@ -2013,13 +2013,69 @@ def state_retirement_exclusion(rules: dict, age) -> float:
 # WORKING-YEAR TAKE-HOME (one function for the engine and the UI)
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# CHILD TAX CREDIT (working years)
+# -----------------------------------------------------------------------------
+# Federal credit per qualifying child under 17 (One Big Beautiful Bill Act: $2,200
+# from tax year 2025, indexed after that; the $1,700 refundable part is the
+# "additional" credit, limited to 15% of earned income over $2,500). It phases out
+# by $50 per $1,000 of MAGI over $200,000 (single / head of household) or $400,000
+# (joint) -- thresholds that are NOT indexed, so they decay in this real frame like
+# the other frozen-nominal thresholds. The credit amounts are indexed, hence flat
+# in real terms. Applied on the return you file (an unmarried couple's children
+# go on yours). Modeled in working years only: retirement-year taxes are computed
+# on withdrawals without credits. Set MODEL_CHILD_TAX_CREDIT False to leave it out.
+MODEL_CHILD_TAX_CREDIT = True
+CHILD_TAX_CREDIT_PER_CHILD = 2_200
+CHILD_TAX_CREDIT_REFUNDABLE_MAX = 1_700
+CHILD_TAX_CREDIT_AGE_LIMIT = 17          # a child must be younger than this
+CHILD_TAX_CREDIT_EARNED_INCOME_FLOOR = 2_500
+CHILD_TAX_CREDIT_REFUNDABLE_RATE = 0.15
+CHILD_TAX_CREDIT_PHASEOUT_PER_1000 = 50
+CHILD_TAX_CREDIT_PHASEOUT_START = {_FILING_MFJ: 400_000, _FILING_SINGLE: 200_000,
+                                   _FILING_HOH: 200_000}
+
+
+def children_under_17(years_from_start: float = 0.0, children=None) -> int:
+    """Children who count for the child tax credit ``years_from_start`` years from
+    now: born by then and still under 17. ``children`` is a CHILDREN-shaped list
+    (None = this config's)."""
+    kids = normalize_children(CHILDREN if children is None else children)
+    return sum(1 for c in kids
+               if 0 <= years_from_start - c["years_until_birth"] < CHILD_TAX_CREDIT_AGE_LIMIT)
+
+
+_count_children_under_17 = children_under_17      # working_year_taxes has a parameter of that name
+
+
+def child_tax_credit(n_children: int, income_tax: float, magi: float, earned_income: float,
+                     status=None, years_from_start: float = 0.0) -> float:
+    """Dollars the child tax credit takes off the federal income tax of a return:
+    the credit (phased out above the income threshold) first reduces the tax to
+    zero, then the refundable part pays out the rest, up to $1,700 a child and 15%
+    of earned income over $2,500. Can exceed ``income_tax`` (a refund)."""
+    if not MODEL_CHILD_TAX_CREDIT or n_children <= 0:
+        return 0.0
+    start = real_frozen_threshold(
+        CHILD_TAX_CREDIT_PHASEOUT_START[normalize_filing_status(status)], years_from_start)
+    over = max(0.0, magi - start)
+    # No module imports here: config's module globals are snapshotted as plain data.
+    reduction = CHILD_TAX_CREDIT_PHASEOUT_PER_1000 * int(-(-round(over, 6) // 1_000))
+    credit = max(0.0, n_children * CHILD_TAX_CREDIT_PER_CHILD - reduction)
+    used = min(credit, max(0.0, income_tax))
+    refundable = min(credit - used, n_children * CHILD_TAX_CREDIT_REFUNDABLE_MAX,
+                     CHILD_TAX_CREDIT_REFUNDABLE_RATE
+                     * max(0.0, earned_income - CHILD_TAX_CREDIT_EARNED_INCOME_FLOOR))
+    return used + max(0.0, refundable)
+
+
 def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
                        your_other: float = 0.0, partner_other: float = 0.0,
                        your_401k: float = 0.0, partner_401k: float = 0.0,
                        your_hsa: float = 0.0, partner_hsa: float = 0.0,
                        your_age=None, partner_age=None, status=None,
                        partner=None, state=None, flat_rate=None,
-                       years_from_start: float = 0.0) -> dict:
+                       years_from_start: float = 0.0, children_under_17=None) -> dict:
     """Income and payroll taxes on a working year's pay, and the take-home.
 
     The single source of the working-year tax: simulate_accumulation_year (via
@@ -2031,6 +2087,11 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
     income without FICA. 401(k) and HSA amounts are pre-tax payroll deferrals:
     they lower federal and (unless the state says otherwise) state taxable
     income; 401(k) deferrals still pay FICA, HSA payroll contributions don't.
+
+    ``children_under_17`` is the number of children the child tax credit counts
+    (None = this config's CHILDREN at ``years_from_start``); the credit lowers the
+    federal tax of the first return (yours), and may push it below zero (the
+    refundable part is paid out).
 
     Returns a married couple's joint return (or a single person's return) as
     one return; an unmarried couple (files_two_returns) as two, you on
@@ -2070,11 +2131,17 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
         ages = [your_age, partner_age] if (status == _FILING_MFJ and partner) else [your_age]
         returns = [(status, [you, them], ages)]
 
-    for ret_status, people, ages in returns:
+    kids = (_count_children_under_17(years_from_start) if children_under_17 is None
+            else int(children_under_17))
+    for ret_index, (ret_status, people, ages) in enumerate(returns):
         # Federal income tax
         agi = sum(p["agi"] for p in people)
         fed_taxable = max(0.0, agi - standard_deduction_for_return(ret_status, ages))
         federal = progressive_tax(get_federal_brackets(ret_status), fed_taxable)
+        if ret_index == 0:      # the children are on your return
+            federal -= child_tax_credit(kids, federal, agi,
+                                        sum(p["wages"] for p in people),
+                                        ret_status, years_from_start)
         # State income tax
         rules = state_tax_rules(state, ret_status, people=len(ages), flat_rate=flat_rate)
         state_income = {id(p): (p["wages"] + p["other"]

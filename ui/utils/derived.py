@@ -78,6 +78,8 @@ def _working_tax_inputs(overrides: dict, pretax_savings: bool = True) -> dict:
         your_age=your_age, partner_age=partner_age, status=status, partner=partner,
         state=overrides.get("STATE_CHOICE", "CA"),
         flat_rate=as_fraction(overrides.get("YOUR_MARGINAL_TAX_RATE", 0.05), 0.05),
+        # The child tax credit counts the children under 17 THIS plan has today.
+        children_under_17=cfg.children_under_17(0, cfg.children_in(overrides)),
     )
 
 

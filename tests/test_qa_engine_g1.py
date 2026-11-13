@@ -38,6 +38,12 @@ class applied:
         sr._restore_overrides(self.original)
 
 
+def comp_table(base, start_age, years=45):
+    """The year-by-year pay table the planner writes (flat pay, no bonus or RSU)."""
+    return {a: {"base": base, "bonus": 0, "rsu_gross": 0, "total_comp": base, "saved": 0}
+            for a in range(start_age, start_age + years)}
+
+
 def renter(**kw):
     ov = load_sample_household()
     ov.update(HOME_VALUE=0, MORTGAGE_BALANCE=0, MORTGAGE_MONTHLY=0, MORTGAGE_YEARS_REMAINING=0,
@@ -92,7 +98,7 @@ class TestHsaLimitFollowsHousehold:
 
     def single(self, **kw):
         ov = load_sample_household()
-        ov.update(PARTNER_AGE=0, PARTNER_BASE_SALARY=0, CHILDREN=[], YOUR_AGE=40)
+        ov.update(PARTNER_AGE=0, PARTNER_BASE_SALARY=0, PARTNER_SALARY=0, CHILDREN=[], YOUR_AGE=40)
         ov.update(kw)
         return ov
 
@@ -126,8 +132,9 @@ class TestPartnerBackdoorRoth:
     def rich_couple(self):
         ov = load_sample_household()
         ov.update(YOUR_BASE_SALARY=300_000, YOUR_BONUS_AMOUNT=0, YOUR_RSU_AMOUNT=0,
-                  PARTNER_BASE_SALARY=300_000, PARTNER_BONUS_AMOUNT=0, PARTNER_RSU_AMOUNT=0,
-                  YOUR_COMPENSATION_BY_AGE={},
+                  PARTNER_BASE_SALARY=300_000, PARTNER_SALARY=300_000, PARTNER_BONUS_AMOUNT=0,
+                  PARTNER_RSU_AMOUNT=0,
+                  YOUR_COMPENSATION_BY_AGE=comp_table(300_000, 34),
                   PARTNER_ROTH_CONTRIBUTION=7_500, YOUR_BACKDOOR_ROTH=7_500, STATE_CHOICE="TX",
                   FILING_STATUS="MFJ")
         return ov
@@ -146,7 +153,7 @@ class TestPartnerBackdoorRoth:
 
     def test_still_limited_by_earned_income(self):
         ov = self.rich_couple()
-        ov.update(PARTNER_BASE_SALARY=0, PARTNER_BONUS_AMOUNT=0, PARTNER_RSU_AMOUNT=0,
+        ov.update(PARTNER_BASE_SALARY=0, PARTNER_SALARY=0, PARTNER_BONUS_AMOUNT=0, PARTNER_RSU_AMOUNT=0,
                   YOUR_BASE_SALARY=0, HOUSEHOLD_INCOME_QUICK=0)
         assert derived.partner_roth_allowed(ov, {}) == 0
 
@@ -155,9 +162,10 @@ class TestPartnerBackdoorRoth:
 class TestSocialSecurityStartsAtClaimAge:
     def ov(self, claim):
         ov = load_sample_household()
-        ov.update(YOUR_AGE=60, PARTNER_AGE=0, PARTNER_BASE_SALARY=0, SS_CLAIM_AGE=claim,
+        ov.update(YOUR_AGE=60, PARTNER_AGE=0, PARTNER_BASE_SALARY=0, PARTNER_SALARY=0, SS_CLAIM_AGE=claim,
                   INCLUDE_SOCIAL_SECURITY=True, YOUR_SS_MONTHLY_FRA=2_800,
-                  YOUR_COMPENSATION_BY_AGE={}, YOUR_BASE_SALARY=95_000, YOUR_BONUS_AMOUNT=0,
+                  YOUR_COMPENSATION_BY_AGE=comp_table(95_000, 60), YOUR_BASE_SALARY=95_000,
+                  YOUR_BONUS_AMOUNT=0,
                   YOUR_RSU_AMOUNT=0, CHILDREN=[], STATE_CHOICE="TX", FILING_STATUS="Single",
                   HOME_VALUE=0, MORTGAGE_MONTHLY=0, MORTGAGE_BALANCE=0, HOME_EVENTS=[],
                   HOUSE_MOVE_ENABLED=False)
@@ -356,9 +364,10 @@ class TestAllocationIncludesThe529:
     def household(self, salary=120_000, kids=True):
         ov = load_sample_household()
         ov.update(SAVINGS_MODE=derived.AUTO_ALLOCATE_MODE, YOUR_BASE_SALARY=salary,
-                  YOUR_BONUS_AMOUNT=0, YOUR_RSU_AMOUNT=0, YOUR_COMPENSATION_BY_AGE={},
-                  PARTNER_BASE_SALARY=0, PARTNER_BONUS_AMOUNT=0, PARTNER_RSU_AMOUNT=0,
-                  PARTNER_AGE=0, STATE_CHOICE="TX", YOUR_AFTER_TAX_401K_PCT=0.0,
+                  YOUR_BONUS_AMOUNT=0, YOUR_RSU_AMOUNT=0,
+                  YOUR_COMPENSATION_BY_AGE=comp_table(salary, 34),
+                  PARTNER_BASE_SALARY=0, PARTNER_SALARY=0, PARTNER_BONUS_AMOUNT=0,
+                  PARTNER_RSU_AMOUNT=0, PARTNER_AGE=0, STATE_CHOICE="TX", YOUR_AFTER_TAX_401K_PCT=0.0,
                   HOME_VALUE=0, MORTGAGE_MONTHLY=0, MORTGAGE_BALANCE=0, SPEND_RENT_MONTHLY=1_000,
                   HOME_EVENTS=[], HOUSE_MOVE_ENABLED=False,
                   CHILDREN=([{"years_until_birth": -1, "monthly_cost": 0,
@@ -422,3 +431,73 @@ class TestLimits2026:
     def test_the_ui_reads_the_engine(self):
         assert derived.get_limit("401k", 61) == cfg.get_401k_limit(61, cfg.CURRENT_YEAR)
         assert derived.get_limit("ira", 30) == 7_500
+
+
+# ---------------------------------------------------------------- child tax credit
+class TestChildTaxCredit:
+    def test_credit_is_capped_by_the_tax_then_the_refundable_part_pays_the_rest(self):
+        # Enough tax: the whole $2,200 a child.
+        assert cfg.child_tax_credit(2, 9_000, 80_000, 80_000, "MFJ") == 4_400
+        # Little tax: it takes the tax, the refundable part (<= $1,700 a child) the rest.
+        assert cfg.child_tax_credit(2, 1_000, 60_000, 60_000, "Single") == 4_400
+        # No tax and low pay: refundable only, 15% of earned income over $2,500.
+        assert cfg.child_tax_credit(2, 0, 20_000, 20_000, "Single") == pytest.approx(
+            0.15 * 17_500)
+        assert cfg.child_tax_credit(2, 0, 60_000, 60_000, "Single") == 3_400   # $1,700 cap
+
+    def test_phase_out_starts_at_200k_single_and_400k_joint(self):
+        assert cfg.child_tax_credit(2, 50_000, 200_000, 200_000, "Single") == 4_400
+        # $50 for each $1,000 (or part of $1,000) over the start.
+        assert cfg.child_tax_credit(2, 50_000, 201_000, 201_000, "Single") == 4_350
+        assert cfg.child_tax_credit(2, 50_000, 400_000, 400_000, "MFJ") == 4_400
+        assert cfg.child_tax_credit(2, 90_000, 410_000, 410_000, "MFJ") == 3_900
+        assert cfg.child_tax_credit(2, 99_000, 500_000, 500_000, "MFJ") == 0.0
+
+    def test_only_children_born_and_under_17_count(self):
+        kids = [{"years_until_birth": -5}, {"years_until_birth": 2}, {"years_until_birth": -17}]
+        assert cfg.children_under_17(0, kids) == 1          # the 5-year-old; 17 is too old
+        assert cfg.children_under_17(2, kids) == 2          # the second child is born
+        assert cfg.children_under_17(12, kids) == 1         # the 5-year-old is 17 at year 12
+        assert cfg.children_under_17(0, []) == 0
+
+    def test_working_year_federal_tax_falls_by_the_credit(self):
+        base = cfg.working_year_taxes(150_000, 0, partner=False, status="Single",
+                                      children_under_17=0)
+        two = cfg.working_year_taxes(150_000, 0, partner=False, status="Single",
+                                     children_under_17=2)
+        assert base["federal"] - two["federal"] == pytest.approx(4_400)
+        assert two["take_home"] - base["take_home"] == pytest.approx(4_400)
+        assert two["fica"] == base["fica"] and two["state"] == base["state"]
+
+    def test_a_single_parent_on_a_low_income_gets_a_refund(self):
+        t = cfg.working_year_taxes(35_000, 0, partner=False, status="HOH", children_under_17=2,
+                                   state="TX")
+        assert t["federal"] < 0              # the refundable part is paid out
+
+    def test_children_go_on_your_return_for_an_unmarried_couple(self):
+        t = cfg.working_year_taxes(90_000, 90_000, partner=True, status="Single",
+                                   children_under_17=2, state="TX")
+        none = cfg.working_year_taxes(90_000, 90_000, partner=True, status="Single",
+                                      children_under_17=0, state="TX")
+        assert none["you"]["federal"] - t["you"]["federal"] == pytest.approx(4_400)
+        assert t["partner"]["federal"] == none["partner"]["federal"]
+
+    def test_the_switch_turns_it_off(self, monkeypatch):
+        monkeypatch.setattr(cfg, "MODEL_CHILD_TAX_CREDIT", False)
+        assert cfg.child_tax_credit(2, 9_000, 80_000, 80_000, "MFJ") == 0.0
+
+    def test_ui_taxes_and_engine_take_home_agree_with_children(self):
+        ov = load_sample_household()
+        ov.update(PARTNER_AGE=0, PARTNER_BASE_SALARY=0, PARTNER_SALARY=0, YOUR_BASE_SALARY=70_000,
+                  YOUR_BONUS_AMOUNT=0, YOUR_RSU_AMOUNT=0,
+                  YOUR_COMPENSATION_BY_AGE=comp_table(70_000, 34),
+                  FILING_STATUS="Head of household", STATE_CHOICE="TX",
+                  YOUR_401K_CONTRIBUTION=0, YOUR_HSA_CONTRIBUTION=0, YOUR_BACKDOOR_ROTH=0,
+                  YOUR_AFTER_TAX_401K_PCT=0.0,
+                  CHILDREN=[{"years_until_birth": -3, "monthly_cost": 1_000}])
+        no_kid = {**ov, "CHILDREN": []}
+        ui_with, ui_without = derived.compute_taxes(ov), derived.compute_taxes(no_kid)
+        assert ui_without["federal"] - ui_with["federal"] == pytest.approx(2_200)
+        with applied(ov):
+            engine = sim.working_year_cashflow(cfg.YOUR_AGE)
+        assert engine["federal"] == pytest.approx(ui_with["federal"], abs=1.0)

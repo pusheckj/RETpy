@@ -266,6 +266,10 @@ The backdoor Roth pathway uses the IRA limit; no separate cap is enforced for th
 
 ---
 
+### Child tax credit (working years)
+
+$2,200 per child under 17 (One Big Beautiful Bill Act, 2025; indexed later, so flat in the real frame), off the federal tax of the return you file. It phases out by $50 per $1,000 of MAGI over $200,000 (single / head of household) or $400,000 (joint); those thresholds are not indexed and decay in real terms. If the credit is more than the tax, the refundable part pays out the rest, up to $1,700 a child and 15% of earned income over $2,500, so federal tax can be negative. An unmarried couple's children go on your return. Retirement-year taxes carry no credits. Switch: `MODEL_CHILD_TAX_CREDIT`. The 2026 indexed amounts ($2,200 / $1,700) are from memory of the IRS 2026 figures; check them against the next Revenue Procedure.
+
 ## 12. Source references
 
 - **IRS Publication 590-A** — Contributions to IRAs

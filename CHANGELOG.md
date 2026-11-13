@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (engine, from the persona QA)
+- Renters: `CURRENT_ANNUAL_EXPENSES` (today's spending) now includes rent. It sizes the "Portfolio needed to retire" grid and the emergency-fund months, which were too small for renters. One function, `config.current_annual_expenses()`, replaces two hand-kept copies; debt payments are not part of it (the engine adds them once)
+- HSA: a single person with no children is funded at the self-only limit, not the family limit (engine, Auto-allocate and Max out now share `config.hsa_is_family`)
+- The partner's Roth IRA has no income phase-out, like yours: above the direct-Roth range it is a backdoor Roth
+- Social Security starts at the claim age even while you still work (before, an early claim paid the reduced amount only from the retirement age). The earnings test is not modeled
+- A mortgage payment with a home value of 0 is a housing cost, not rent: the House section keeps it ("Own home")
+- The Expected inflation slider no longer makes a plan look better. Healthcare and childcare grow at a fixed premium over CPI (1.75% and 1.25%) instead of "4.5% and 4% minus the slider", which turned them into real deflation at high inflation (success on the sample plan was 0.50 / 0.82 / 0.99 at 0% / 2.5% / 10%; now flat)
+- The last plan year has complete data: per-year tax rows stop at the last simulated year, the income chart no longer draws an empty bar for the plan-end age, and non-finite spending values are dropped before the percentiles
+- Retirement-year tax: the engine logs the state share (`state_tax`), so the Tax tile shows state tax separately instead of folding it into Federal
+- Auto-allocate takes the 529 (and after-tax 401(k)) off the budget first, so "Left to save" equals "Total allocated" and the 529 is no longer paid out of cash
+- Contribution limits are the 2026 IRS values ($24,500 401(k), $8,000 catch-up, $11,250 at 60-63, $7,500 IRA, $4,400 / $8,750 HSA, $72,000 415(c)); the model's table is `CONTRIBUTION_LIMITS_2026` and the planner reads it
+- Child tax credit ($2,200 a child under 17, phased out above $200k single / $400k joint, with the refundable part) is applied to working-year federal tax
+
 ### Changed
 - Spending: **Use my actual spending** no longer sets a category to $0 when your statements have no rows for it (a card-only export has no rent): the plan keeps its own figure, the table shows a dash, and the caption names the categories left alone. The header's month range is now the months loaded, not the 12-month window
 - Presets: the median US household now has plausible spending ($1,300 rent, lean boxes, children at $1,000 and $700 a month) instead of the family-sized defaults that spent more than its pay and failed at every age. The last step of the guided setup now includes children's costs in "Spending" and warns when spending exceeds pay after tax
