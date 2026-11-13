@@ -204,6 +204,21 @@ except Exception:  # pragma: no cover
         return fn
 
 
+def _debt_relief(user_overrides: dict) -> list:
+    """Per plan year, how much less goes to debt payments than this year (in
+    today's dollars, the simulation's schedule): 0 now, the whole payment once
+    they're gone. Empty with no debts."""
+    if not user_overrides.get("DEBTS"):
+        return []
+    from retirement_sim import debts as dm
+    infl = safe_float(user_overrides.get("EXPECTED_INFLATION", 0.0275), 0.0275)
+    pay = dm.real_schedule(user_overrides.get("DEBTS"), user_overrides.get("DEBT_EXTRA_MONTHLY", 0),
+                           user_overrides.get("DEBT_STRATEGY"), infl).payments
+    if not pay:
+        return []
+    return [pay[0] - p for p in pay] + [pay[0]]
+
+
 @_proj_cache
 def project_net_worth(user_overrides: dict) -> dict:
     """Deterministic forward projection of each account.
@@ -221,8 +236,12 @@ def project_net_worth(user_overrides: dict) -> dict:
     # the simulation invests everything left in the brokerage (no stored
     # brokerage figure): use this year's amounts as the Investments section shows them.
     contributions = dict(user_overrides)
-    if user_overrides.get("SAVINGS_MODE") in (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE):
+    auto_mode = user_overrides.get("SAVINGS_MODE") in (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
+    if auto_mode:
         contributions.update(savings_budget(user_overrides)["amounts"])
+    # This year's amounts already leave out this year's debt payments; as the
+    # debts are paid off, the simulation's sweep invests what they freed.
+    debt_relief = _debt_relief(user_overrides) if auto_mode else []
 
     scenario = str(user_overrides.get("ACTIVE_RETURN_SCENARIO", "historical")).lower()
     if scenario not in _SCENARIO_RETURNS:
@@ -372,6 +391,8 @@ def project_net_worth(user_overrides: dict) -> dict:
                 # Add employer match to Your 401(k)
                 if contrib_key == "YOUR_401K_CONTRIBUTION":
                     contribution += _employer_match(user_overrides, offset, contribution)
+                if contrib_key == "YOUR_BROKERAGE_CONTRIBUTION" and debt_relief:
+                    contribution += debt_relief[min(offset, len(debt_relief) - 1)]
             balances[label] = balances[label] * (1 + r) + contribution
 
     return {"ages": ages, "by_account": by_account}

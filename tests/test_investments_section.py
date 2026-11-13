@@ -23,7 +23,7 @@ from tests.conftest import load_sample_household  # noqa: E402
 from utils.derived import KEEP_AMOUNTS_MODE, MANUAL_MODE, SAVINGS_MODES  # noqa: E402
 from utils.widget_sync import DIRECT_MAPPINGS  # noqa: E402
 
-SECTION_ORDER = ["About you", "Family", "Income", "Taxes", "House", "Expenses",
+SECTION_ORDER = ["About you", "Family", "Income", "Taxes", "House", "Expenses", "Debts",
                  "Accounts", "Investments", "Retirement", "Assumptions (advanced)"]
 
 RETURNS_AND_MIX_KEYS = {"sa_scenario", "sa_stock_alloc", "sa_fee_bps", "sa_vol_drag",
@@ -99,7 +99,7 @@ def test_app_renders_the_sections_in_the_new_order():
     body = body[:body.index('_safe_render("components.faq")')]
     order = re.findall(r'_safe_render\("components\.(\w+)"\)', body)
     assert order == ["sec_about_you", "sec_family", "sec_income", "sec_taxes", "sec_house",
-                     "sec_expenses", "account_inputs", "sec_investments",
+                     "sec_expenses", "sec_debts", "account_inputs", "sec_investments",
                      "sec_retirement_goals", "sec_assumptions"]
     # Savings and the investing assumptions are drawn inside Investments, never twice
     assert "sec_savings" not in order

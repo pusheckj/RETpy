@@ -128,12 +128,27 @@ def children_at_home_now(overrides: dict) -> list:
             if 0 <= -kid["years_until_birth"] < kid["leaves_home_age"]]
 
 
+def debt_payments_this_year(overrides: dict) -> float:
+    """What the debts (DEBTS, Debts section) cost this plan year: the minimums
+    plus the extra each month, less any month after the last debt is gone.
+    The simulation's first-year figure (cfg.debt_payment_for_age), which needs
+    no inflation adjustment in year one."""
+    from retirement_sim import debts as dm
+
+    debts = overrides.get("DEBTS")
+    if not debts:
+        return 0.0
+    plan = dm.amortize(debts, overrides.get("DEBT_EXTRA_MONTHLY", 0), overrides.get("DEBT_STRATEGY"))
+    return float(sum(plan.payments[:12]))
+
+
 def compute_expenses_today(overrides: dict) -> int:
     """Sum of all monthly spending categories × 12 + housing (mortgage or rent) × 12.
 
     Categories from spending_inputs: utilities, food, transport, health, discretionary, other.
     Housing auto-derived from MORTGAGE_MONTHLY (if active mortgage years remaining > 0)
-    or SPEND_RENT_MONTHLY (if renting).
+    or SPEND_RENT_MONTHLY (if renting). Plus this year's debt payments
+    (``debt_payments_this_year``).
     """
     cats = [
         "SPEND_UTILITIES_MONTHLY", "SPEND_FOOD_MONTHLY",
@@ -193,6 +208,11 @@ def compute_expenses_today(overrides: dict) -> int:
     if extra_mortgage_for_age(overrides, safe_int(overrides.get("YOUR_AGE", 25), 25)) > 0:
         today = safe_int(overrides.get("YOUR_AGE", 25), 25)
         annual += mortgage_schedule(overrides, [today])["by_age"][today]["extra"]
+
+    # Debt payments (minimums + extra) are spending in the simulation's year
+    # too, so they count here: the Investments section's "Left to save" then
+    # leaves them out, as the simulation's savings do. 0 with no debts.
+    annual += round(debt_payments_this_year(overrides))
 
     return int(annual)
 
@@ -430,7 +450,8 @@ def sidebar_savings_budget(state) -> Dict[str, object]:
     percents), which hold this rerun's values before the Investments section
     writes them to user_overrides.
     The Taxes section and the Investments section both call this, so they show
-    one tax figure even when the Taxes section draws first.
+    one tax figure even when the Taxes section draws first. Debts too: their
+    payments are this year's expenses (``debt_view.live``).
     """
     overrides = dict(state.get("user_overrides", {}) or {})
     mode = state.get("sv_mode")
@@ -445,6 +466,12 @@ def sidebar_savings_budget(state) -> Dict[str, object]:
         for key, widget in _MANUAL_WIDGETS.items():
             if widget in state:
                 overrides[key] = state[widget]
+    # The Debts section's rows, extra and order (drawn after Taxes).
+    try:
+        from utils.debt_view import live
+    except ImportError:  # pragma: no cover
+        from ui.utils.debt_view import live  # type: ignore
+    overrides = live(state, overrides)
     # Percent widgets stored as fractions.
     for key, widget in (("YOUR_AFTER_TAX_401K_PCT", "sv_after_tax_401k"),
                         ("YOUR_401K_MATCH_PCT", "sv_match_pct")):
