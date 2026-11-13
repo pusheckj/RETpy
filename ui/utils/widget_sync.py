@@ -224,6 +224,11 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     # (the children rows, in sec_family.py, are synced by _sync_children below)
     "se_lifecycle":       ("SPEND_LIFECYCLE_PRESET", _one_of(LIFECYCLE_PRESETS)),
 
+    # sec_debts.py: the extra payment and the payoff order (the rows: _sync_debts below)
+    "debt_extra":            ("DEBT_EXTRA_MONTHLY", _as_int(0, 0, 100_000)),
+    "debt_strategy":         ("DEBT_STRATEGY", lambda v: "snowball" if str(v).lower() == "snowball"
+                                               else "avalanche"),
+
     # sec_savings.py
     "sv_mode":               ("SAVINGS_MODE", _one_of(SAVINGS_MODES)),
     "sv_inflation_adjust":   ("SAVINGS_INFLATION_ADJUST", lambda v: bool(v)),
@@ -321,6 +326,16 @@ def _sync_children(st, overrides: dict) -> None:
     if funded:
         ss["se_kid_college_cost"] = _as_int(40_000, 0, 200_000)(funded[0]["college_annual_cost"])
         ss["se_kid_college_years"] = _as_int(4, 1, 8)(funded[0]["college_years"])
+
+
+def _sync_debts(st, overrides: dict) -> None:
+    """The Debts section's rows (components/sec_debts.py): rewritten from
+    DEBTS, and the keys of rows past the end dropped. No DEBTS: no rows."""
+    try:
+        from utils.debt_view import seed_rows
+    except ImportError:  # pragma: no cover
+        from ui.utils.debt_view import seed_rows  # type: ignore
+    seed_rows(st.session_state, overrides.get("DEBTS") or [], force=True)
 
 
 def _derive_rent_own(overrides: dict) -> str:
@@ -438,7 +453,9 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "_sync_no
 #             stored "Confirm with simulation" checks (ms_res_*), all of which belong to
 #             the profile that was just replaced. The places themselves live in
 #             user_overrides["MS_PLACES"] and load with the profile.
-_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_")
+#   debt_     the Debts section (one set of row widgets per debt, plus the extra payment
+#             and payoff order) and the Debt payoff tile's "pay more" amount.
+_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_")
 
 
 def reset_input_widget_state(st) -> None:
@@ -501,5 +518,10 @@ def sync_widgets_from_overrides(st) -> None:
 
     try:
         _sync_children(st, overrides)
+    except Exception:
+        pass
+
+    try:
+        _sync_debts(st, overrides)
     except Exception:
         pass

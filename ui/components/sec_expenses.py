@@ -129,6 +129,12 @@ def render_body(st) -> None:
     except ImportError:  # pragma: no cover
         from ui.utils.derived import compute_expenses_today  # type: ignore
 
+    try:
+        from utils.debt_view import live
+    except ImportError:  # pragma: no cover
+        from ui.utils.debt_view import live  # type: ignore
+    # Debts render after this section: read this run's values from their widgets.
+    overrides = live(st.session_state, overrides)
     total_annual = int(compute_expenses_today(overrides))
     total_monthly = total_annual / 12.0
 
@@ -144,8 +150,13 @@ def render_body(st) -> None:
     monthly_partner = safe_int(
         overrides.get("PARTNER_OTHER_MONTHLY",
                       overrides.get("PARTNER_MONTHLY_SPENDING", 1_500)), 1_500)
+    try:
+        from utils.derived import debt_payments_this_year
+    except ImportError:  # pragma: no cover
+        from ui.utils.derived import debt_payments_this_year  # type: ignore
+    annual_debts = round(debt_payments_this_year(overrides))
     monthly_kids = max(0.0, total_monthly - monthly_categories
-                       - monthly_housing - monthly_partner)
+                       - monthly_housing - monthly_partner - annual_debts / 12.0)
 
     st.markdown(
         '<hr style="margin: 14px 0 8px 0; border: 0; border-top: 1px solid #e5e7eb;">',
@@ -166,6 +177,8 @@ def render_body(st) -> None:
         parts.append(f"partner {money_md(monthly_partner * 12)}")
     if monthly_kids > 1:
         parts.append(f"children {money_md(monthly_kids * 12)}")
+    if annual_debts > 0:
+        parts.append(f"debt payments {money_md(annual_debts)} (Debts)")
     changes = (["children"] if cfg.children_in(overrides) else []) + (
         ["your planned moves"] if (overrides.get("HOME_EVENTS") or overrides.get("HOUSE_MOVE_ENABLED"))
         else []) + ["healthcare in retirement"]

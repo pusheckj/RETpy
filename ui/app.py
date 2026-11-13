@@ -452,7 +452,8 @@ _bc_poll = st.fragment(run_every=3)(_config_locked(_bc_poll_body)) if hasattr(st
 
 # Sections the phone bar can jump to: (tile key suffix, chip label).
 _JUMP_SECTIONS = [("retirement", "Retirement"), ("freedom", "Milestones"), ("fi", "Net worth"), ("swr", "Withdrawal"),
-                  ("bridge", "Bridge to 59½"), ("spending", "Spending"), ("savings", "Savings"),
+                  ("bridge", "Bridge to 59½"), ("spending", "Spending"), ("debts", "Debts"),
+                  ("savings", "Savings"),
                   ("income", "Income"), ("tax", "Tax"), ("lifespan", "Lifespan"),
                   ("whatif", "What if"), ("deepdives", "Deep dives")]
 
@@ -696,7 +697,35 @@ MODES = {"simple": "Money check-up", "full": "Retirement planner"}
 
 def _on_mode_switch(key: str) -> None:
     picked = st.session_state.get(key)
-    st.session_state.app_mode = next(m for m, label in MODES.items() if label == picked)
+    mode = next(m for m, label in MODES.items() if label == picked)
+    if mode != st.session_state.get("app_mode"):
+        _share_debts(mode)
+    st.session_state.app_mode = mode
+
+
+def _share_debts(to_mode: str) -> None:
+    """Debts are the one thing both versions share: switching copies them to
+    the version you open (utils/simple_to_full). A callback, so it runs before
+    the widgets are drawn and may reseed them."""
+    try:
+        from utils import simple_to_full as s2f
+        from components import guided_setup
+        ss = st.session_state
+        if to_mode == "simple":
+            new = s2f.debts_to_checkup(ss.get("simple_inputs"), ss.get("user_overrides"))
+            if new is not None:
+                ss.simple_inputs = new
+                ss._simple_inputs_synced = None          # the check-up reseeds its widgets
+        elif guided_setup.started(st):                   # (a new setup copies them itself)
+            new = s2f.debts_to_planner(ss.get("simple_inputs"), ss.get("user_overrides"))
+            if new is not None:
+                ss.setdefault("user_overrides", {}).update(new)
+                from utils.debt_view import seed_rows
+                seed_rows(ss, new["DEBTS"], force=True)
+                ss.pop("debt_extra", None)
+    except Exception:            # never block the switch itself
+        import logging
+        logging.getLogger("retirement_ui").exception("Couldn't share debts across versions")
 
 
 def _mode_switch(current: str, place: str = "top") -> None:
@@ -972,14 +1001,17 @@ def main() -> None:
         # The version switch, above the first section (the page's own copy is
         # shown instead on phones and while this panel is closed).
         _mode_switch("full", place="sidebar")
-        # Linear walkthrough, in advisor order (10 sections + FAQ). House comes
+        # Linear walkthrough, in advisor order (11 sections + FAQ). House comes
         # before Expenses: Expenses reads its rent-or-own choice for the total.
+        # Debts follow Expenses (their payments are a monthly outflow too) and
+        # come before Investments, whose "Left to save" leaves them out.
         _safe_render("components.sec_about_you")
         _safe_render("components.sec_family")
         _safe_render("components.sec_income")
         _safe_render("components.sec_taxes")
         _safe_render("components.sec_house")
         _safe_render("components.sec_expenses")
+        _safe_render("components.sec_debts")
         _safe_render("components.account_inputs")     # Accounts (starting balances)
         _safe_render("components.sec_investments")    # saving each year + returns and mix
         _safe_render("components.sec_retirement_goals")  # titled "Retirement"
@@ -1123,6 +1155,20 @@ def main() -> None:
             else:
                 _lazy_ph("spending", 1450)
     _tile_spending()
+
+    # ============================ 2a. DEBT PAYOFF ============================
+    # Always shown (with a one-line prompt when there are no debts) so the
+    # payoff tools and "Things to know" are easy to find. Instant: no
+    # simulation, only the payoff math; lazy like its neighbours.
+    @_as_fragment
+    def _tile_debts():
+        with st.container(border=True, key="mc-tile-debts"):
+            st.markdown('<div class="mc-section">Debt payoff</div>', unsafe_allow_html=True)
+            if st.session_state.get("_lz_debts"):
+                _safe_render("components.debt_payoff", results=results)
+            else:
+                _lazy_ph("debts", 420)
+    _tile_debts()
 
     # ============================ 3. SAVINGS ============================
     @_as_fragment

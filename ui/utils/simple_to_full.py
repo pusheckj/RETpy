@@ -6,6 +6,14 @@ terms. ``carried`` maps the check-up's answers onto planner keys; the guided
 setup (components/guided_setup.py) applies it once, when someone who used the
 check-up starts the planner. ``spending_split`` re-splits the check-up's
 spending once the setup knows the housing payment. Pure: no Streamlit.
+
+Debts are the one thing the two versions share all along: the check-up's
+debts are the planner's DEBTS (``planner_debts`` / ``checkup_debts``), and
+switching versions copies them across (``debts_to_checkup`` /
+``debts_to_planner``, called by app.py's version switch). The check-up counts
+the minimum payments in its needs; the planner keeps them out of its spending
+categories (the Debts section pays them), so moving debts across moves the
+minimums out of, or into, the needs.
 """
 from __future__ import annotations
 
@@ -13,14 +21,16 @@ from typing import Any, Dict, Optional
 
 from retirement_sim import config as cfg
 
+from retirement_sim import debts as dm
+
 try:
-    from utils.simple_finance import DEFAULT_INPUTS, normalize_inputs
-    from utils.derived import KEEP_AMOUNTS_MODE, PRETAX_KEYS, savings_budget
+    from utils.simple_finance import DEFAULT_INPUTS, normalize_inputs, to_engine_debts
+    from utils.derived import KEEP_AMOUNTS_MODE, PRETAX_KEYS, debt_payments_this_year, savings_budget
     from utils.expense_categories import CATEGORIES, INPUTS
 except ImportError:  # pragma: no cover
-    from ui.utils.simple_finance import DEFAULT_INPUTS, normalize_inputs  # type: ignore
+    from ui.utils.simple_finance import DEFAULT_INPUTS, normalize_inputs, to_engine_debts  # type: ignore
     from ui.utils.derived import (  # type: ignore
-        KEEP_AMOUNTS_MODE, PRETAX_KEYS, savings_budget)
+        KEEP_AMOUNTS_MODE, PRETAX_KEYS, debt_payments_this_year, savings_budget)
     from ui.utils.expense_categories import CATEGORIES, INPUTS  # type: ignore
 
 # The planner inputs' upper bounds (a number_input errors on a larger value).
@@ -49,23 +59,79 @@ def contribution_401k(salary: float, pct: float, limit: Optional[int] = None) ->
     return _cap(salary * pct / 100.0, min(limit or CONTRIB_401K_MAX, CONTRIB_401K_MAX))
 
 
-def spending_split(simple: Any, housing_monthly: float = 0.0) -> Dict[str, int]:
+def spending_split(simple: Any, housing_monthly: float = 0.0,
+                   debt_monthly: Optional[float] = None) -> Dict[str, int]:
     """The check-up's monthly spending as the planner's categories.
 
     Wants -> Entertainment / discretionary. Needs include rent or mortgage and
     the minimum debt payments; less ``housing_monthly`` (the planner's own
-    housing input), the rest goes to Other / miscellaneous, debt payments
-    included: the planner doesn't model these debts, so their payments stay as
-    spending. The check-up doesn't split needs further, so the other categories
-    start at 0 for the visitor to fill in.
+    housing input) and ``debt_monthly`` (the minimums, which the planner's
+    Debts section pays; default: the check-up's own debts' minimums), the rest
+    goes to Other / miscellaneous. The check-up doesn't split needs further, so
+    the other categories start at 0 for the visitor to fill in.
     """
     s = normalize_inputs(simple)
+    debt = debt_minimums(s) if debt_monthly is None else max(0.0, float(debt_monthly))
     out = {c.key: 0 for c in CATEGORIES if not c.partner_only}
     out["SPEND_DISCRETIONARY_MONTHLY"] = _cap(s["wants_monthly"], INPUTS["SPEND_DISCRETIONARY_MONTHLY"][1])
-    out["SPEND_OTHER_MONTHLY"] = _cap(s["needs_monthly"] - housing_monthly,
+    out["SPEND_OTHER_MONTHLY"] = _cap(s["needs_monthly"] - housing_monthly - debt,
                                       INPUTS["SPEND_OTHER_MONTHLY"][1])
     out["UTILITIES_MONTHLY"] = 0          # SPEND_UTILITIES_MONTHLY's mirror
     return out
+
+
+def planner_debts(simple: Any) -> Dict[str, Any]:
+    """The check-up's debts as the planner's DEBTS and DEBT_EXTRA_MONTHLY."""
+    s = normalize_inputs(simple)
+    rows = [{**d, "apr": round(d["apr"], 8)} for d in to_engine_debts(s["debts"])]
+    return {"DEBTS": rows, "DEBT_EXTRA_MONTHLY": round(s["extra_debt_payment_monthly"], 2)}
+
+
+def checkup_debts(overrides: Any) -> Dict[str, Any]:
+    """The planner's DEBTS and extra payment as the check-up's ``debts`` and
+    ``extra_debt_payment_monthly`` (APR as a percent)."""
+    ov = dict(overrides or {})
+    rows = [{"name": d["name"], "balance": d["balance"], "apr_pct": round(d["apr"] * 100.0, 6),
+             "min_payment": d["min_payment"], "kind": d["kind"]}
+            for d in dm.normalize_debts(ov.get("DEBTS"))]
+    extra = dm.clean_amount(ov.get("DEBT_EXTRA_MONTHLY"), dm.PAYMENT_MAX)
+    return {"debts": rows, "extra_debt_payment_monthly": extra}
+
+
+def debts_to_checkup(simple: Any, overrides: Any) -> Optional[Dict[str, Any]]:
+    """Check-up answers with the planner's debts, or None when nothing changes.
+
+    Only once the planner has debts or the check-up has been used: the example
+    numbers keep their example debts. Needs move by the change in minimums, so
+    they keep including the minimum payments."""
+    ov = dict(overrides or {})
+    if "DEBTS" not in ov or not (dm.normalize_debts(ov.get("DEBTS")) or used(simple)):
+        return None
+    s = normalize_inputs(simple)
+    new = normalize_inputs({**s, **checkup_debts(ov)})
+    if (new["debts"], new["extra_debt_payment_monthly"]) == (s["debts"], s["extra_debt_payment_monthly"]):
+        return None
+    new["needs_monthly"] = max(0.0, s["needs_monthly"] + debt_minimums(new) - debt_minimums(s))
+    return normalize_inputs(new)
+
+
+def debts_to_planner(simple: Any, overrides: Any) -> Optional[Dict[str, Any]]:
+    """The planner overrides to change so its debts are the check-up's, or None
+    when nothing changes (or the check-up was never used)."""
+    if not used(simple):
+        return None
+    ov = dict(overrides or {})
+    new = planner_debts(simple)
+    old = {"DEBTS": dm.normalize_debts(ov.get("DEBTS")),
+           "DEBT_EXTRA_MONTHLY": dm.clean_amount(ov.get("DEBT_EXTRA_MONTHLY"), dm.PAYMENT_MAX)}
+    same = (len(new["DEBTS"]) == len(old["DEBTS"])
+            and abs(new["DEBT_EXTRA_MONTHLY"] - old["DEBT_EXTRA_MONTHLY"]) < 0.005
+            and all(a["name"] == b["name"] and a["kind"] == b["kind"]
+                    and abs(a["balance"] - b["balance"]) < 0.005
+                    and abs(a["apr"] - b["apr"]) < 1e-7
+                    and abs(a["min_payment"] - b["min_payment"]) < 0.005
+                    for a, b in zip(new["DEBTS"], old["DEBTS"])))
+    return None if same else new
 
 
 def carried(simple: Any) -> Dict[str, Any]:
@@ -73,9 +139,12 @@ def carried(simple: Any) -> Dict[str, Any]:
 
     Saving keeps the visitor's own 401(k) / HSA / IRA amounts and invests the
     rest (KEEP_AMOUNTS_MODE). ``married`` and ``partner_salary_annual`` are
-    check-up only (they set the Roth IRA income limit), so they are left out. Housing starts at 0, with all of the check-up's
-    needs (rent included) in Other, so total spending equals the check-up's
-    until the setup asks about housing and calls ``spending_split`` again.
+    check-up only (they set the Roth IRA income limit), so they are left out.
+    The debts become the planner's DEBTS (``planner_debts``), so their minimums
+    leave the needs. Housing starts at 0, with the rest of the check-up's needs
+    (rent included) in Other, so total spending plus the debt payments equals
+    the check-up's until the setup asks about housing and calls
+    ``spending_split`` again.
     """
     s = normalize_inputs(simple)
     salary = s["gross_salary_annual"]
@@ -91,6 +160,7 @@ def carried(simple: Any) -> Dict[str, Any]:
         "HOME_VALUE": 0, "MORTGAGE_BALANCE": 0, "MORTGAGE_MONTHLY": 0,
         "MORTGAGE_YEARS_REMAINING": 0, "SPEND_RENT_MONTHLY": 0,
         **spending_split(s, 0.0),
+        **planner_debts(s),
     }
     if salary > 0:
         out["YOUR_BASE_SALARY"] = _cap(salary, SALARY_MAX)
@@ -133,7 +203,11 @@ def from_planner(overrides: Any) -> Dict[str, Any]:
         return float(amounts.get(key, ov.get(key) or 0) or 0)
 
     take_home = (budget["income"] - budget["taxes"]["total"] - sum(saved(k) for k in PRETAX_KEYS)) / 12.0
-    spend = budget["expenses"] / 12.0
+    debts = checkup_debts(ov)
+    minimums = sum(d["min_payment"] for d in debts["debts"] if d["balance"] > 0)
+    # The planner's expenses include this year's debt payments; the check-up
+    # splits them into needs (minimums) and savings (the extra).
+    spend = (budget["expenses"] - debt_payments_this_year(ov)) / 12.0
     partner = num("PARTNER_OTHER_MONTHLY") if num("PARTNER_AGE") > 0 else 0.0
     wants = min(num("SPEND_DISCRETIONARY_MONTHLY") + partner, spend)
     salary = num("YOUR_BASE_SALARY") + num("YOUR_BONUS_AMOUNT")
@@ -141,7 +215,7 @@ def from_planner(overrides: Any) -> Dict[str, Any]:
     hsa = saved("YOUR_HSA_CONTRIBUTION")
     out: Dict[str, Any] = {
         "take_home_monthly": max(take_home, 0.0),
-        "needs_monthly": max(spend - wants, 0.0),
+        "needs_monthly": max(spend - wants, 0.0) + minimums,
         "wants_monthly": wants,
         "cash_savings": num("YOUR_CASH") + num("PARTNER_CASH"),
         "gross_salary_annual": salary,
@@ -153,6 +227,6 @@ def from_planner(overrides: Any) -> Dict[str, Any]:
         "ira_contrib_annual": saved("YOUR_BACKDOOR_ROTH"),
         "married": married,
         "partner_salary_annual": num("PARTNER_BASE_SALARY") + num("PARTNER_BONUS_AMOUNT"),
-        "debts": [],
+        **debts,
     }
     return normalize_inputs({**DEFAULT_INPUTS, **out})

@@ -189,7 +189,10 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         accounts["Your taxable brokerage"] + accounts["Partner taxable brokerage"]
         + accounts["Your cash"] + accounts["Partner cash"]
     )
-    _today_net_worth = sum(accounts.values()) + _today_home_equity
+    # Consumer debts (Debts section): net worth is assets minus all debt.
+    from retirement_sim import debts as _debts
+    other_debt = float(_debts.total_owed(user_overrides.get("DEBTS")))
+    _today_net_worth = sum(accounts.values()) + _today_home_equity - other_debt
 
     # Project every balance forward to the retirement date if requested. The
     # net-worth projection uses the SAME account labels as ``accounts`` above, so
@@ -214,6 +217,15 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
             # worth and the tooltips stay internally consistent.
             home_value = _last("Home equity")
             mortgage_balance = 0.0
+            # Debt still owed when you retire, in today's dollars (the
+            # simulation's payoff schedule).
+            if other_debt > 0:
+                infl = float(user_overrides.get("EXPECTED_INFLATION", 0.0275) or 0.0)
+                left = _debts.real_schedule(user_overrides.get("DEBTS"),
+                                            user_overrides.get("DEBT_EXTRA_MONTHLY", 0),
+                                            user_overrides.get("DEBT_STRATEGY"), infl).balances
+                years = max(0, ret_age - your_age)
+                other_debt = left[years] if years < len(left) else 0.0
         except Exception:
             projected = False  # any failure -> fall back to today's values
 
@@ -225,7 +237,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
     ])
     taxable_sum = accounts["Your taxable brokerage"] + accounts["Partner taxable brokerage"]
     cash_sum = accounts["Your cash"] + accounts["Partner cash"]
-    net_worth = sum(accounts.values()) + home_equity
+    net_worth = sum(accounts.values()) + home_equity - other_debt
 
     # #5/#14: emit the hover-popup CSS once before the cards (theme-aware).
     dark = is_dark(st)
@@ -238,6 +250,7 @@ def render(st, user_overrides: dict = None, chart_key: str = "portfolio_breakdow
         f"Net worth = assets - debt\n"
         f"Assets {money(sum(accounts.values()) + home_value, shorten=True)} "
         f"minus mortgage {money(mortgage_balance, shorten=True)}"
+        + (f" and other debts {money(other_debt, shorten=True)}" if other_debt > 0 else "")
     )
     retirement_tip = (
         "Retirement = 401(k) + Roth + Traditional IRA + HSA\n"
