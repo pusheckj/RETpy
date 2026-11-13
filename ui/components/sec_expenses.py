@@ -147,7 +147,8 @@ def render_body(st) -> None:
     # Rent or own is the House section's radio, drawn earlier this run.
     rent_own = st.session_state.get("se_rent_own")
     owns = (rent_own == "Own home" if rent_own
-            else safe_int(overrides.get("HOME_VALUE", 0), 0) > 0)
+            else (safe_int(overrides.get("HOME_VALUE", 0), 0) > 0
+                  or safe_int(overrides.get("MORTGAGE_MONTHLY", 0), 0) > 0))
     monthly_housing = (safe_int(overrides.get("MORTGAGE_MONTHLY", 0), 0)
                        if owns else safe_int(overrides.get("SPEND_RENT_MONTHLY", 0), 0))
     monthly_partner = safe_int(

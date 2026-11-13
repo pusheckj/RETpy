@@ -571,7 +571,8 @@ def session_actual(st, data: Dict) -> Dict[str, int]:
     """``actual_plan`` for this session's household (owner or renter, partner or not)."""
     ov = st.session_state.get("user_overrides", {}) or {}
     rent_own = st.session_state.get("se_rent_own")
-    owns = rent_own == "Own home" if rent_own else float(ov.get("HOME_VALUE", 0) or 0) > 0
+    owns = (rent_own == "Own home" if rent_own else
+            float(ov.get("HOME_VALUE", 0) or 0) > 0 or float(ov.get("MORTGAGE_MONTHLY", 0) or 0) > 0)
     partner = float(ov.get("PARTNER_AGE", 0) or 0) > 0
     return actual_plan(data["tx"], data["complete"], owns, partner)
 

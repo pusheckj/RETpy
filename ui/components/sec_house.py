@@ -53,7 +53,10 @@ def _section_label(st, txt):
 def _housing(st) -> None:
     """Rent or own today, and the loan on the home you own."""
     _section_label(st, "Housing")
-    owns_default = safe_int(get_override(st, "HOME_VALUE", 0), 0) > 0
+    # Own when there is a home value or a payment (cfg.is_renter's rule): a mortgage
+    # with no home value is still a housing cost, and "Renting" would erase it.
+    owns_default = (safe_int(get_override(st, "HOME_VALUE", 0), 0) > 0
+                    or safe_int(get_override(st, "MORTGAGE_MONTHLY", 0), 0) > 0)
     ensure_default(st, "se_rent_own", "Own home" if owns_default else "Renting")
     status = st.radio("Rent or own?", ["Renting", "Own home"], horizontal=True, key="se_rent_own")
     owns = status == "Own home"

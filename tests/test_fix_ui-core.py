@@ -288,25 +288,25 @@ class TestOtherStateTax:
 # ===========================================================================
 class TestHsaCatchup:
     def test_catchup_applies_from_55(self):
-        base = derived.LIMITS_2024["hsa_family"]
+        base = cfg.CONTRIBUTION_LIMITS_2026["hsa_family"]
         assert derived.get_limit("hsa", 54) == base
-        assert derived.get_limit("hsa", 55) == base + derived.LIMITS_2024["hsa_catchup_55"]
-        assert derived.get_limit("hsa", 70) == base + derived.LIMITS_2024["hsa_catchup_55"]
+        assert derived.get_limit("hsa", 55) == base + cfg.CONTRIBUTION_LIMITS_2026["hsa_catchup"]
+        assert derived.get_limit("hsa", 70) == base + cfg.CONTRIBUTION_LIMITS_2026["hsa_catchup"]
 
     def test_catchup_is_55_not_50(self):
         """HSA's catch-up age differs from 401k/IRA — don't copy the 50 rule."""
-        assert derived.get_limit("hsa", 50) == derived.LIMITS_2024["hsa_family"]
+        assert derived.get_limit("hsa", 50) == cfg.CONTRIBUTION_LIMITS_2026["hsa_family"]
 
     def test_individual_coverage_also_gets_it(self):
         assert (derived.get_limit("hsa", 60, family=False)
-                == derived.LIMITS_2024["hsa_individual"]
-                + derived.LIMITS_2024["hsa_catchup_55"])
+                == cfg.CONTRIBUTION_LIMITS_2026["hsa_individual"]
+                + cfg.CONTRIBUTION_LIMITS_2026["hsa_catchup"])
 
     def test_matches_the_engine_catchup_amount(self):
         """The $1,000 catch-up must be the engine's, not an invented number."""
-        engine_catchup = (cfg.get_hsa_limit(55, 2024, True)
-                          - cfg.get_hsa_limit(54, 2024, True))
-        assert derived.LIMITS_2024["hsa_catchup_55"] == engine_catchup
+        engine_catchup = (cfg.get_hsa_limit(55, 2026, True)
+                          - cfg.get_hsa_limit(54, 2026, True))
+        assert cfg.CONTRIBUTION_LIMITS_2026["hsa_catchup"] == engine_catchup
 
     def test_auto_allocation_fills_the_bigger_hsa_cap(self):
         alloc = derived.auto_allocate_savings(

@@ -7,7 +7,7 @@ This document describes every tax rule encoded in the simulator, with bracket ta
 ## 1. Scope
 
 - **Jurisdictions modeled:** US federal income tax, federal long-term capital gains tax, the Net Investment Income Tax (NIIT), Medicare IRMAA surcharges, payroll taxes on wages (FICA, plus California SDI), and **state income tax for all 50 states + DC** (`retirement_sim/state_tax_data.py`).
-- **Tax year baseline:** **2024** statutory brackets, thresholds, and contribution limits (IRMAA uses the 2025 CMS tiers). The engine runs in an **all-real (today's-dollars) frame**: statutory items that are CPI-indexed in reality (federal ordinary/LTCG brackets, standard deduction, contribution limits, the Social Security wage base, IRMAA tiers, state tables) are held **flat at their real values**. Thresholds that are *not* indexed in reality — **NIIT** ($250k/$200k), the **Additional Medicare Tax** ($250k/$200k) and the **Social Security taxation** thresholds — decay in real terms over the horizon (a conservative, realistic bias). See `METHODOLOGY.md` §4.
+- **Tax year baseline:** **2024** statutory brackets and thresholds; contribution limits are the **2026** IRS values (IRMAA uses the 2025 CMS tiers). The engine runs in an **all-real (today's-dollars) frame**: statutory items that are CPI-indexed in reality (federal ordinary/LTCG brackets, standard deduction, contribution limits, the Social Security wage base, IRMAA tiers, state tables) are held **flat at their real values**. Thresholds that are *not* indexed in reality — **NIIT** ($250k/$200k), the **Additional Medicare Tax** ($250k/$200k) and the **Social Security taxation** thresholds — decay in real terms over the horizon (a conservative, realistic bias). See `METHODOLOGY.md` §4.
 - **Granularity:** working-year pay is taxed once per year by `working_year_taxes` (§2.4); retirement-year taxes are computed incrementally as income is recognized (withdrawals, RMDs, conversions, Social Security), each stacked on the income already on the return.
 - **Filing status:** `FILING_STATUS` — **Married filing jointly**, **Single** or **Head of household** — selects every status-dependent table below, for the whole plan. An **unmarried couple** (a partner in the plan with a status other than MFJ) files **two returns**: you on `FILING_STATUS`, your partner as Single, each person's wages, withdrawals, RMDs, conversions, gains and Social Security on their own return (`files_two_returns()`, `return_status()`). Married filing separately and qualifying widow(er) are not modeled.
 - **Out of scope by design:** AMT, self-employment tax, tax credits (child tax credit, earned-income credit, state credits), itemized deductions, city/county income taxes, estate and gift tax, foreign-tax credits.
@@ -62,7 +62,7 @@ take-home = wages + other − 401(k) − HSA − federal − state − FICA
 
 401(k) deferrals remain FICA wages; HSA contributions made through payroll do not. On a joint return each spouse's share of the income tax is pro-rata to their taxable income (used to attribute savings to each person's accounts). A comp-table row that sets `after_tax` overrides the primary's computed take-home.
 
-The employer 401(k) match is `min(deferral, match % × base)`, per person. The partner's direct Roth IRA contribution is reduced across the 2024 phase-out (MAGI $230k–$240k joint, $146k–$161k otherwise) of the return it's on.
+The employer 401(k) match is `min(deferral, match % × base)`, per person. The partner's Roth IRA contribution is limited by the IRA limit and earned income, with no income phase-out: above the direct-Roth range it is a backdoor Roth, as the primary's `YOUR_BACKDOOR_ROTH` is.
 
 ---
 
@@ -247,18 +247,20 @@ See `METHODOLOGY.md` §14 for the conversion policy (fill ordinary income up to 
 
 ---
 
-## 11. Contribution limits (2024 base)
+## 11. Contribution limits (2026 base)
 
-IRS limits are CPI-indexed in reality, so in the all-real frame they are **held flat at their 2024 values** (`CONTRIBUTION_LIMIT_INFLATION_RATE = 0.0`) — no per-year growth is applied.
+IRS limits are CPI-indexed in reality, so in the all-real frame they are **held flat at their 2026 values** (`LIMITS_BASE_YEAR`, `CONTRIBUTION_LIMIT_INFLATION_RATE = 0.0`) — no per-year growth is applied.
 
-| Account              | Base limit (2024) | Catch-up (age threshold)         |
+| Account              | Base limit (2026) | Catch-up (age threshold)         |
 |----------------------|-------------------|-----------------------------------|
-| 401(k) elective      | $23,000           | +$7,500 at 50+                    |
-| 401(k) total (EE+ER) | $69,000           | +$7,500 at 50+                    |
-| IRA                  | $7,000            | +$1,000 at 50+                    |
-| HSA — self-only      | $4,150            | +$1,000 at 55+                    |
-| HSA — family         | $8,300            | +$1,000 at 55+ (per eligible spouse) |
-| SS wage base         | $168,600          | N/A                               |
+| 401(k) elective      | $24,500           | +$8,000 at 50+; +$11,250 instead at 60-63 |
+| 401(k) total (EE+ER) | $72,000           | same catch-up as above            |
+| IRA                  | $7,500            | +$1,100 at 50+                    |
+| HSA — self-only      | $4,400            | +$1,000 at 55+                    |
+| HSA — family         | $8,750            | +$1,000 at 55+ (per eligible spouse) |
+| SS wage base         | $168,600 (2024)   | N/A                               |
+
+Sources: IRS Notice 2025-67 (401(k), IRA, 415(c)) and Rev. Proc. 2025-19 (HSA). Not modeled: the 2026 rule that high earners' catch-up must be Roth. The HSA uses the **family** limit when the plan has a partner or any child, else the self-only limit (`cfg.hsa_is_family`).
 
 The backdoor Roth pathway uses the IRA limit; no separate cap is enforced for the conversion step itself.
 

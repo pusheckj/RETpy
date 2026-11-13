@@ -93,6 +93,12 @@ def update_inflation_factors(inflation_factors: Dict[str, float]) -> None:
     whose nominal rate equals general has a 0% real-excess rate and stays flat in real
     terms, correctly (such categories are simply left out of INFLATION_RATES).
 
+    The real-excess is a FIXED premium over CPI (cfg.INFLATION_REAL_EXCESS), not
+    "nominal literal minus the current general rate": otherwise raising the
+    Expected inflation slider would shrink healthcare/childcare growth and, above
+    ~4.5%, turn them into real deflation, so more assumed inflation made plans
+    look better.
+
     Args:
         inflation_factors: Dictionary of inflation factors by category (modified in-place)
     """
@@ -103,8 +109,9 @@ def update_inflation_factors(inflation_factors: Dict[str, float]) -> None:
         if category == 'general':
             # General CPI never grows a real liability: real dollars are the frame.
             continue
-        # Real-excess = how much faster this category runs than general CPI.
-        real_excess_rate = base_rate - general_rate
+        # Real-excess = how much faster this category runs than general CPI: a fixed
+        # premium (categories added to INFLATION_RATES later fall back to their gap).
+        real_excess_rate = cfg.INFLATION_REAL_EXCESS.get(category, base_rate - general_rate)
         # Preserve category-specific volatility, but center on the real-excess mean.
         actual_rate = np.random.normal(real_excess_rate, cfg.INFLATION_VOLATILITY)
         # Real-excess growth is small; clamp to a sane band around it.
@@ -593,6 +600,9 @@ class AccountPortfolio:
         self.total_taxes_paid = 0.0
         self.total_early_withdrawal_penalties = 0.0
         self.total_niit_paid = 0.0
+        # The state-income-tax part of total_taxes_paid (booked wherever a tax is),
+        # so the per-year log can report state and federal separately.
+        self.total_state_taxes_paid = 0.0
         self.total_ss_taxes_paid = 0.0
         self.yearly_history: List[Dict] = []
         self.home_equity = cfg.HOME_EQUITY * cfg.HOME_EQUITY_ACCESSIBLE_PCT
@@ -875,8 +885,13 @@ class AccountPortfolio:
         401(k)/IRA distribution, eligible for the state's retirement-income
         exclusion. ``owner`` picks the return on an unmarried couple's two.
         """
+        return sum(self._marginal_tax_parts(income, is_state_taxable, owner, retirement))
+
+    def _marginal_tax_parts(self, income: float, is_state_taxable: bool = True,
+                            owner: str = "you", retirement: bool = False) -> Tuple[float, float]:
+        """``(federal, state)`` marginal tax behind ``quote_marginal_tax_on_income``."""
         if income <= 0:
-            return 0
+            return 0.0, 0.0
 
         ret = self._return_of(owner)
         base = self._return_income(ret)
@@ -898,7 +913,7 @@ class AccountPortfolio:
         state_taxable_after = max(0, state_base + taxable_part - state_deduction)
         state_tax = state.calculate_tax(state_taxable_after) - state.calculate_tax(state_taxable_before)
 
-        return federal_tax + state_tax
+        return federal_tax, state_tax
 
     def calculate_marginal_tax_on_income(self, income: float, is_state_taxable: bool = True,
                                          owner: str = "you", retirement: bool = False) -> float:
@@ -919,8 +934,10 @@ class AccountPortfolio:
             return 0
 
         exempt = self._state_exempt_portion(income, owner, not is_state_taxable, retirement)
-        tax = self.quote_marginal_tax_on_income(income, is_state_taxable=is_state_taxable,
-                                                owner=owner, retirement=retirement)
+        federal_tax, state_tax = self._marginal_tax_parts(
+            income, is_state_taxable=is_state_taxable, owner=owner, retirement=retirement)
+        tax = federal_tax + state_tax
+        self.total_state_taxes_paid += state_tax
         ret = self._return_of(owner)
         self.year_ordinary_income += income
         if ret == "partner":
@@ -1105,6 +1122,7 @@ class AccountPortfolio:
                                 status=ret_status,
                             )
                             self.total_niit_paid += niit
+                            self.total_state_taxes_paid += state_ltcg
 
                             tax = federal_ltcg + state_ltcg + niit
 
@@ -1768,6 +1786,7 @@ class AccountPortfolio:
                 status=status,
             )
             self.total_niit_paid += niit
+            self.total_state_taxes_paid += state
             total += federal + state + niit
         self.total_taxes_paid += total
         return total
@@ -1912,8 +1931,9 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
       % of base pay -- contributing less than the match % earns less match.
     * Taxes: cfg.working_year_taxes (federal by filing status, the state's
       table, FICA per earner; two returns for an unmarried couple).
-    * The partner's direct Roth is limited by the Roth income phase-out of the
-      return it's on (and by earned income), not by being married.
+    * The partner's Roth IRA is limited by earned income and the IRA limit, with
+      no income phase-out: above the direct-Roth range it is a backdoor Roth, as
+      for you (YOUR_BACKDOOR_ROTH).
     * A comp row that sets ``after_tax`` overrides your computed take-home
       (older profiles); the tax totals reported for that year are scaled to it.
 
@@ -1943,7 +1963,7 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
             room = max(0.0, cfg.get_401k_total_limit(your_age, current_year)
                        - your_401k - your_match)
             your_after_tax_401k = min(after_tax_pct * base_salary, room)
-        hsa_limit = cfg.get_hsa_limit(your_age, current_year, is_family=True)
+        hsa_limit = cfg.get_hsa_limit(your_age, current_year, is_family=cfg.hsa_is_family())
         desired = float(getattr(cfg, "YOUR_HSA_CONTRIBUTION", hsa_limit))
         your_hsa = max(0.0, min(desired, hsa_limit, your_wages - your_401k))
         ira_limit = cfg.get_ira_limit(your_age, current_year)
@@ -1965,9 +1985,31 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
         partner_match = min(partner_401k, partner_base
                             * float(getattr(cfg, "PARTNER_401K_MATCH_PCT", 0.0) or 0.0))
 
+    # Social Security claimed while you still work. Benefits start at the claim
+    # age whether or not you have retired (the retirement path only adds them in
+    # retirement years, so an early claim used to pay the reduced amount from
+    # retirement on, never before). The taxable part (provisional-income rule) is
+    # taxed as ordinary income without FICA; the rest is tax-free cash. LIMITATION:
+    # the earnings test (benefits withheld above ~$24k of wages before full
+    # retirement age, repaid later) is not modeled, so an early claimant who keeps
+    # working is shown the full reduced benefit.
+    ss_total = ss_taxable = 0.0
+    if you_working and getattr(cfg, "INCLUDE_SOCIAL_SECURITY", False):
+        ss_total = float(cfg.calculate_social_security(your_age, cfg.SS_CLAIM_AGE))
+        if ss_total > 0:
+            if cfg.files_two_returns():     # unmarried couple: on your own return
+                other_agi = your_wages - your_401k - your_hsa + your_other
+                ss_status = cfg.return_status("you")
+            else:
+                other_agi = (your_wages + partner_wages + your_other + partner_other
+                             - your_401k - partner_401k - your_hsa)
+                ss_status = cfg.normalize_filing_status()
+            ss_taxable = cfg.calculate_taxable_social_security(
+                ss_total, other_agi, years_from_start=years_from_start, status=ss_status)
+
     taxes = cfg.working_year_taxes(
         your_wages, partner_wages,
-        your_other=your_other, partner_other=partner_other,
+        your_other=your_other + ss_taxable, partner_other=partner_other,
         your_401k=your_401k, partner_401k=partner_401k, your_hsa=your_hsa,
         your_age=your_age, partner_age=partner_age, years_from_start=years_from_start,
     )
@@ -1978,11 +2020,12 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
         ira_limit = cfg.get_ira_limit(partner_age, current_year)
         desired = max(0.0, min(float(getattr(cfg, "PARTNER_ROTH_CONTRIBUTION", ira_limit)), ira_limit))
         joint = (not two) and cfg.normalize_filing_status() == cfg._FILING_MFJ
-        magi = taxes["partner"]["agi"] + (0.0 if two else taxes["you"]["agi"])
         # An IRA contribution needs earned income (a spouse's counts on a joint return).
+        # No income phase-out: above the direct-Roth range it goes in as a backdoor
+        # Roth, exactly as YOUR_BACKDOOR_ROTH does for you (cfg.roth_ira_allowed
+        # would zero it and the money would drift into taxable brokerage).
         earned = partner_wages + (max(0.0, your_wages - your_roth) if joint else 0.0)
-        partner_roth = min(cfg.roth_ira_allowed(desired, magi, cfg.return_status("partner")),
-                           earned)
+        partner_roth = min(desired, earned)
 
     your_take_home = taxes["you"]["take_home"]
     federal, state, fica = taxes["federal"], taxes["state"], taxes["fica"]
@@ -2000,9 +2043,12 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
         else:
             federal += implied
 
+    your_take_home += ss_total - ss_taxable     # the untaxed part arrives as cash
+
     return {
         "years_from_start": years_from_start, "current_year": current_year,
         "partner_age": partner_age, "two_returns": two,
+        "social_security": ss_total,
         "base_salary": base_salary, "your_wages": your_wages, "your_other": your_other,
         "saved": comp["saved"],
         "your_401k": your_401k, "your_match": your_match,
@@ -2016,7 +2062,7 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
         "partner_take_home": taxes["partner"]["take_home"],
         "federal": federal, "state": state, "fica": fica,
         "total_tax": federal + state + fica,
-        "gross_income": your_wages + your_other + partner_wages + partner_other,
+        "gross_income": your_wages + your_other + partner_wages + partner_other + ss_total,
         "taxes": taxes,
     }
 
@@ -3004,7 +3050,7 @@ def _flush_withdrawal_log(
     pre_withdrawal_total: float, taxes_start: float, niit_start: float,
     ss_tax_start: float, penalties_start: float,
     roth_conversion_start: float = 0.0, roth_conversion_tax_start: float = 0.0,
-    reinvested_surplus: float = 0.0,
+    reinvested_surplus: float = 0.0, state_tax_start: float = 0.0,
 ) -> None:
     """
     Append this retirement year's consolidated withdrawal + tax-attribution row
@@ -3033,6 +3079,7 @@ def _flush_withdrawal_log(
     year_penalties = portfolio.total_early_withdrawal_penalties - penalties_start
     year_ss_tax = portfolio.total_ss_taxes_paid - ss_tax_start
     year_niit = portfolio.total_niit_paid - niit_start
+    year_state_tax = portfolio.total_state_taxes_paid - state_tax_start
     year_total_taxes = (portfolio.total_taxes_paid - taxes_start) - year_penalties
     # finding #14 — Roth-conversion delta for THIS year (traditional -> Roth
     # transfer, not a withdrawal/spend). Reported as its own field so chart
@@ -3071,6 +3118,8 @@ def _flush_withdrawal_log(
         'total_taxes': float(max(0.0, year_total_taxes)),
         'ss_tax': float(max(0.0, year_ss_tax)),
         'niit': float(max(0.0, year_niit)),
+        # The state-income-tax part of total_taxes (federal = total_taxes - niit - state_tax).
+        'state_tax': float(max(0.0, year_state_tax)),
         'penalties': float(max(0.0, year_penalties)),
         # Transfer, NOT spending/withdrawal — deliberately excluded from `total`.
         'roth_conversion': float(max(0.0, year_roth_conversion)),
@@ -3136,6 +3185,7 @@ def simulate_retirement_year(
     # which code path recorded them.
     _taxes_start = portfolio.total_taxes_paid
     _niit_start = portfolio.total_niit_paid
+    _state_tax_start = portfolio.total_state_taxes_paid
     _ss_tax_start = portfolio.total_ss_taxes_paid
     _penalties_start = portfolio.total_early_withdrawal_penalties
     _roth_conversion_start = portfolio.total_roth_conversions
@@ -3216,7 +3266,7 @@ def simulate_retirement_year(
         portfolio, your_age, rmd_total, pre_withdrawal_total,
         _taxes_start, _niit_start, _ss_tax_start, _penalties_start,
         _roth_conversion_start, _roth_conversion_tax_start,
-        reinvested_surplus=reinvested_surplus,
+        reinvested_surplus=reinvested_surplus, state_tax_start=_state_tax_start,
     )
 
     # Apply the return the CALLER passed in. ``_run_retirement_phase`` builds it

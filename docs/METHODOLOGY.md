@@ -95,6 +95,10 @@ The only categories that *grow* are those that historically **outpace** general 
 | Housing     | 2.75%        | **0.00%** (flat in real terms) | Property tax, utilities, maintenance      |
 | Childcare   | 4.00%        | **1.25%**                    | Daycare, camps, activities                 |
 
+The real-excess is a **fixed premium over CPI** (`INFLATION_REAL_EXCESS`: healthcare 1.75%, childcare 1.25%). It does not move with the *Expected inflation* slider.
+
+> **What the Expected inflation slider does.** In an all-real model it changes only (a) the decay of the frozen-nominal tax thresholds below (more inflation, more tax drag) and (b) the deflation of a historical-return stress path. It does not rescale spending, savings, mortgage payments or Social Security. Fixed-rate mortgage and consumer-debt payments are treated as constant in real terms, which is conservative: with higher inflation a real fixed payment would shrink. Healthcare and childcare used to be nominal literals measured against the slider, so 10% inflation made them fall 5% a year in real terms and success on the sample plan rose from 0.49 (0%) to 0.97 (10%). With a fixed premium the same sweep is flat (0.83 / 0.83 / 0.84).
+
 Each real-excess category follows an **independent random walk**: each year's draw is normal with the real-excess mean above and volatility ~1.5%. The general factor is pinned at **1.0** for the whole horizon.
 
 > **Limitation — frozen-nominal statutory thresholds.** A handful of tax thresholds are specified in *nominal* dollars by statute and are **not** inflation-indexed in reality (or are indexed on a lag we do not model). In an all-real frame these are held at their nominal 2024 values, so over a multi-decade horizon they effectively *tighten* in real terms and bite harder each year — a conservative, realistic bias. This applies to: the **NIIT** $250k MFJ MAGI threshold, the **IRMAA** Medicare surcharge brackets, and the **Social Security taxation** provisional-income thresholds ($32k–$44k MFJ). Statutory items that *are* CPI-indexed in reality (federal ordinary/LTCG brackets, the standard deduction, contribution limits) are correctly held flat in real terms.
@@ -126,11 +130,11 @@ Contributions are directed by a prioritized waterfall tied to the user's gross c
 4. **ESPP** up to the configured participation rate.
 5. **Brokerage** (taxable) for any remaining savings capacity.
 
-Partner accounts mirror this structure (partner 401(k) with its own match, partner Roth IRA). The partner's direct Roth contribution is reduced by the Roth income phase-out of the return it's on (joint MAGI on a joint return, their own otherwise); whatever it can't take stays in take-home and is swept into the brokerage. A partner who keeps working after you retire is taxed the same way, and their pay is the first income on the year's return, so your withdrawals and conversions stack on top of it.
+Partner accounts mirror this structure (partner 401(k) with its own match, partner Roth IRA). The partner's Roth IRA is limited by the IRA limit and earned income only (no income phase-out: above the direct range it is a backdoor Roth, like yours). The HSA uses the family limit when there is a partner or any child, else the self-only limit. A partner who keeps working after you retire is taxed the same way, and their pay is the first income on the year's return, so your withdrawals and conversions stack on top of it.
 
 ### 5.2 Contribution limit inflation
 
-IRS contribution limits are CPI-indexed in reality, so in the all-real frame they are **held flat at their 2024 values** (`CONTRIBUTION_LIMIT_INFLATION_RATE = 0.0`). See `TAX_MODEL.md` §11 for the 2024 base values.
+IRS contribution limits are CPI-indexed in reality, so in the all-real frame they are **held flat at their 2026 values** (`CONTRIBUTION_LIMIT_INFLATION_RATE = 0.0`). See `TAX_MODEL.md` §11 for the 2026 base values.
 
 ---
 
@@ -141,7 +145,7 @@ Each retirement year proceeds in this order:
 1. **Compute gross annual expenses** — sum of housing, food, transport, healthcare (age-banded), child costs (each child in `CHILDREN` costs their own monthly amount from birth until their own leave-home age), college (paid first from that child's own 529), leisure, and discretionary (see 6.1 and 6.2 for housing and the retirement lifestyle phases).
 2. **Apply dynamic spending adjustments** (Section 8) if enabled.
 3. **Apply return-based spending adjustments** (Section 9) if enabled.
-4. **Subtract Social Security** income for both spouses, if each has reached their claim age.
+4. **Subtract Social Security** income for both spouses, if each has reached their claim age. Benefits start at the claim age even while still working (the working-year cash flow adds them, with the taxable part taxed as ordinary income). The earnings test (benefits withheld above about $24k of wages before full retirement age) is not modeled, so an early claimant who keeps working is shown the full reduced benefit.
 5. **Subtract RMD** income (Section 13) — RMDs must be withdrawn regardless of need.
 6. **Compute net withdrawal** needed from the portfolio = expenses + taxes − SS − RMD surplus.
 7. **Withdraw from accounts** in the tax-efficient order described in Section 7.

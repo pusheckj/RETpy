@@ -225,15 +225,14 @@ def test_stray_partner_numbers_change_nothing_for_a_single():
     assert _run({**single, **_LEAKED}, 60) == _run(single, 60)
 
 
-def test_partner_roth_follows_the_income_phase_out_not_marriage(monkeypatch):
-    """Marriage is the filing status (the wedding-year flag is gone), and the
-    partner's direct Roth follows the Roth income phase-out of their return --
-    being married no longer blocks it (that was the author's own situation:
-    a joint income over the phase-out)."""
+def test_partner_roth_ignores_marriage_and_income(monkeypatch):
+    """Marriage is the filing status (the wedding-year flag is gone). The partner's
+    Roth IRA is not blocked by being married, nor by income over the direct-Roth
+    range: there it is a backdoor Roth, as YOUR_BACKDOOR_ROTH is for you."""
     monkeypatch.setattr(cfg, "PARTNER_ROTH_CONTRIBUTION", 2_000)
     for status, partner_pay, expected in (("Single", None, 2_000),
                                           ("Married filing jointly", None, 2_000),
-                                          ("Married filing jointly", 400_000, 0)):
+                                          ("Married filing jointly", 400_000, 2_000)):
         monkeypatch.setattr(cfg, "FILING_STATUS", status)
         if partner_pay is not None:
             monkeypatch.setattr(cfg, "PARTNER_SALARY", partner_pay)

@@ -389,8 +389,8 @@ PARTNER_401K_CONTRIBUTION = 2_500  # ~6% of salary (median contribution)
 # Partner's employer match, same rule as YOUR_401K_MATCH_PCT: dollar for dollar
 # on the partner's deferral, up to this % of the partner's base pay.
 PARTNER_401K_MATCH_PCT = 0.0       # Many jobs have no match
-# Direct Roth IRA. Reduced by the Roth income phase-out (household income on a
-# joint return, the partner's own income otherwise) -- see roth_ira_allowed().
+# Roth IRA, limited by earned income and the IRA limit. No income phase-out: above
+# the direct-Roth range it is a backdoor Roth, as YOUR_BACKDOOR_ROTH is for you.
 PARTNER_ROTH_CONTRIBUTION = 2_000
 PARTNER_BROKERAGE_CONTRIBUTION = 0 # Annual partner after-tax savings to brokerage
 
@@ -451,7 +451,7 @@ def calculate_partner_total_savings(salary: float, years_from_now: int, married:
                                status=status, partner=True)
     after_tax = taxes["partner"]["take_home"]
 
-    roth = roth_ira_allowed(PARTNER_ROTH_CONTRIBUTION, salary - savings_401k, status)
+    roth = max(0.0, min(float(PARTNER_ROTH_CONTRIBUTION), salary - savings_401k))
 
     # What goes to brokerage after spending
     to_brokerage = max(0, after_tax - roth - PARTNER_ANNUAL_SPENDING)
@@ -557,20 +557,8 @@ def granular_nonhousing_annual():
     return monthly * 12 + PARTNER_OTHER_MONTHLY * 12
 
 
-# Total current expenses (includes partner's personal spending so the
-# household total is complete). Prefers the granular SPEND_* categories when
-# present; falls back to the legacy YOUR_OTHER / UTILITIES bundle otherwise.
-_granular_current = granular_nonhousing_annual()
-CURRENT_ANNUAL_EXPENSES = (
-    MORTGAGE_ANNUAL + _granular_current
-    if _granular_current is not None
-    else (
-        MORTGAGE_ANNUAL
-        + UTILITIES_ANNUAL
-        + YOUR_OTHER_ANNUAL
-        + (PARTNER_OTHER_MONTHLY * 12)
-    )
-)
+# CURRENT_ANNUAL_EXPENSES (today's living + housing, ex-children) is set below,
+# right after housing_annual() it is built from.
 
 # -----------------------------------------------------------------------------
 # LIFE EVENTS - CHILDREN
@@ -829,6 +817,25 @@ def housing_annual(your_age: int) -> float:
     if has_mortgage(your_age):
         return MORTGAGE_ANNUAL
     return rent_annual(your_age) + home_carrying_cost_annual(globals().get("HOME_VALUE", 0))
+
+
+def current_annual_expenses() -> float:
+    """Today's household spending, excluding children: the non-housing living
+    base (granular SPEND_* categories when any are set, else the legacy
+    bundle, plus partner spending) plus today's housing -- the mortgage while it
+    is being paid, RENT for a renter, else the owner's carrying cost
+    (``housing_annual``). Leaving housing out for renters understated this by
+    the whole rent and sized the FI-number grid and emergency-fund months too
+    small. Consumer debts (DEBTS) are not part of it; the engine adds them."""
+    granular = granular_nonhousing_annual()
+    if granular is None:
+        granular = UTILITIES_ANNUAL + YOUR_OTHER_ANNUAL + PARTNER_OTHER_MONTHLY * 12
+    return granular + housing_annual(YOUR_AGE)
+
+
+# Total current expenses (includes partner's personal spending so the
+# household total is complete).
+CURRENT_ANNUAL_EXPENSES = current_annual_expenses()
 
 
 # -----------------------------------------------------------------------------
@@ -1331,22 +1338,32 @@ INFLATION_VOLATILITY = 0.015
 # Slider semantics: 'general' is the single source of truth for general CPI and is
 # derived from EXPECTED_INFLATION (the UI slider), so moving the slider moves it.
 # The engine is all-real: the general inflation factor is pinned to 1.0 for liability
-# growth, so the slider does NOT rescale liabilities directly. Instead it drives
-# (a) healthcare/childcare real-excess growth (= category nominal literal - general),
-# and (b) the historical-path single-year deflation. healthcare/childcare stay their
-# own nominal literals so raising the slider shrinks their real-excess, lowering it
-# widens the gap. Default EXPECTED_INFLATION (0.0275) equals the prior hardcoded
-# general rate, so defaults are preserved.
+# growth, so the slider does NOT rescale liabilities directly. It drives only
+# (a) the historical-path single-year deflation and (b) the NOMINAL-frozen tax
+# thresholds (real_frozen_threshold). healthcare/childcare are written as nominal
+# rates AT THE DEFAULT general rate, i.e. a fixed premium over CPI
+# (INFLATION_REAL_EXCESS, computed once below): their real growth does NOT move
+# with the slider. (They used to be nominal literals measured against whatever
+# the slider said, so 10% "inflation" turned healthcare and childcare into 5%/yr
+# REAL DEFLATION and made a plan look better the more inflation you assumed.)
 INFLATION_RATES = {
     'general': EXPECTED_INFLATION,  # Slider-driven general CPI (single source of truth)
     'healthcare': 0.045,  # Healthcare-specific inflation
     'childcare': 0.04,    # Childcare costs
+    # (INFLATION_REAL_EXCESS is derived just below.)
     # NOTE: 'housing' was removed. Its nominal rate equaled 'general' (2.75%), so its
     # real-excess rate is 0 and it never grows a liability in the all-real frame. It
     # was never wired into the engine's inflation_factors dicts either. If housing is
     # ever meant to outpace general CPI, add it back here AND thread a housing_factor
     # through calculate_annual_expenses to the base/mortgage component.
 }
+
+# Real-excess growth per year of each non-general category: its premium over general
+# CPI at this file's own rates (healthcare 4.5% - 2.75% = 1.75%, childcare 1.25%).
+# Fixed at import: the Expected inflation slider changes INFLATION_RATES['general']
+# but must not change these premiums. Edit INFLATION_RATES above to change them.
+INFLATION_REAL_EXCESS = {k: v - INFLATION_RATES['general']
+                         for k, v in INFLATION_RATES.items() if k != 'general'}
 
 # -----------------------------------------------------------------------------
 # SOCIAL SECURITY

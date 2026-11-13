@@ -10,12 +10,12 @@ How each limit is worked out (the same as the simulation and Auto-allocate):
   no more than their pay.
 * HSA: the family limit when there is a partner or a child, else the self-only
   limit (catch-up from 55), and no more than their pay left after the 401(k).
-  (Auto-allocate and the engine always use the family limit.)
+  (Auto-allocate and the engine use the same rule.)
 * Your Roth IRA: the IRA limit (catch-up from 50). It is modeled as a backdoor
   Roth, so there is no income limit.
-* Partner Roth IRA: a direct Roth, so the IRA limit cut by the income
-  phase-out (derived.partner_roth_allowed). That depends on the other amounts,
-  because 401(k)/HSA saving lowers the income the phase-out looks at.
+* Partner Roth IRA: the IRA limit too (catch-up from 50), and no more than the
+  earned income behind it (derived.partner_roth_allowed). No income limit:
+  above the direct-Roth range it goes in as a backdoor Roth, as yours does.
 """
 from __future__ import annotations
 
@@ -53,7 +53,6 @@ INPUT_MAX: Dict[str, int] = {
 # The states a Max out control can be in.
 BUTTON = "button"        # below the limit: offer the button
 AT_LIMIT = "at_limit"    # already there: show "At the limit"
-OVER_INCOME = "over_income"  # partner Roth: income is above the Roth limit
 NONE = "none"            # nothing to show
 
 
@@ -86,9 +85,7 @@ def _pay(overrides: dict, key: str) -> int:
     return int(kw["partner_wages" if key.startswith("PARTNER_") else "your_wages"])
 
 
-def hsa_family(overrides: dict) -> bool:
-    """Family HSA coverage: a partner or at least one child in the plan."""
-    return _age(overrides, "PARTNER_AGE", 0) > 0 or bool(derived.cfg.children_in(overrides))
+hsa_family = derived.hsa_family  # one rule for Max out, Auto-allocate and the engine
 
 
 def irs_limit(key: str, overrides: dict) -> int:
@@ -134,24 +131,19 @@ def max_out_target(key: str, overrides: dict, input_max: int = None) -> int:
 
 
 def max_out_state(key: str, overrides: dict, input_max: int = None) -> MaxOut:
-    """What to show beside ``key``'s input: a button, "at the limit", the
-    partner-Roth income note, or nothing."""
+    """What to show beside ``key``'s input: a button, "at the limit", or nothing."""
     current = _amount(overrides, key)
     if irs_limit(key, overrides) <= 0:
         return MaxOut(NONE, 0, current)
     target = max_out_target(key, overrides, input_max)
     if target <= 0:
-        # Only the partner Roth can be blocked by income while pay is there.
-        if key == PARTNER_ROTH and _pay(overrides, key) > 0:
-            return MaxOut(OVER_INCOME, 0, current)
         return MaxOut(NONE, 0, current)
     return MaxOut(AT_LIMIT if current >= target else BUTTON, target, current)
 
 
 def max_out_updates(overrides: dict, keys: Iterable[str] = MAX_OUT_ORDER) -> Dict[str, int]:
     """{key: new amount} for every account in ``keys`` that has room to raise,
-    worked through in order so each sees the ones set before it (the partner
-    Roth limit depends on the 401(k)/HSA amounts)."""
+    worked through in order so each sees the ones set before it."""
     work = dict(overrides)
     out: Dict[str, int] = {}
     for key in keys:
@@ -159,16 +151,6 @@ def max_out_updates(overrides: dict, keys: Iterable[str] = MAX_OUT_ORDER) -> Dic
         if st.state == BUTTON:
             out[key] = work[key] = st.target
     return out
-
-
-def over_income_note(overrides: dict) -> str:
-    """The caption for a partner Roth that income rules out. It adds the way
-    out only when one exists: maxing the other accounts lowers the income
-    enough to open the Roth."""
-    note = "Income is above the Roth IRA limit."
-    if PARTNER_ROTH in max_out_updates(overrides):
-        note += " More 401(k) or HSA saving can lower it."
-    return note
 
 
 def live_overrides(state) -> dict:
@@ -193,17 +175,13 @@ def max_out_help(key: str, overrides: dict, target: int) -> str:
     amount = f"\\${target:,}"
     limit = irs_limit(key, overrides)
     age = _age(overrides, "PARTNER_AGE", 0) if key.startswith("PARTNER_") else _age(overrides, "YOUR_AGE", 30)
-    if key == PARTNER_ROTH:
-        return (f"Sets this to {amount}, the most a direct Roth IRA allows at your household's "
-                "income. The IRA limit shrinks as income passes the Roth range. Saving in "
-                "401(k)s and an HSA lowers that income, so max those out first.")
     if target < limit:
         return f"Sets this to {amount}, as much as your pay allows. The limit is \\${limit:,}."
     if key in (YOUR_HSA,):
-        note = (f"the 2024 {'family' if hsa_family(overrides) else 'self-only'} limit"
+        note = (f"the 2026 {'family' if hsa_family(overrides) else 'self-only'} limit"
                 + (", with the catch-up for 55 and over" if age >= 55 else ""))
     elif key in (YOUR_401K, PARTNER_401K):
-        note = "the 2024 limit" + (", with the catch-up for 50 and over" if age >= 50 else "")
+        note = "the 2026 limit" + (", with the catch-up for 50 and over" if age >= 50 else "")
     else:
-        note = "the 2024 IRA limit" + (", with the catch-up for 50 and over" if age >= 50 else "")
+        note = "the 2026 IRA limit" + (", with the catch-up for 50 and over" if age >= 50 else "")
     return f"Sets this to {amount}, {note}."
