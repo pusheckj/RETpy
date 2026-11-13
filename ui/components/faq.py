@@ -73,6 +73,14 @@ QUESTIONS: list[tuple[str, str]] = [
         "number at [ssa.gov/myaccount](https://www.ssa.gov/myaccount).",
     ),
     (
+        "Does the plan include survivor benefits or a widow's situation?",
+        "No. The model assumes both of you live to the end of the plan. It pays no "
+        "survivor benefit, and your filing status and costs do not change if one of you "
+        "dies. If you are already a widow or widower, choose \"Just me\" under About you "
+        "and enter the benefit you receive now as your full-age Social Security amount. "
+        "Full retirement age is 67, which is right for anyone born in 1960 or later.",
+    ),
+    (
         "What about healthcare costs?",
         "The years before Medicare (ages 50-64) are often the most expensive. "
         "ACA premiums can run \\$20k or more a year for a couple without "

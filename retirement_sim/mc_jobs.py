@@ -149,14 +149,17 @@ def scan_age(age: int, max_n: int, seed: int, target: float,
     99% interval is clear of ``target`` by ``margin``: an age that is plainly
     hopeless or plainly safe doesn't need ``max_n`` runs to show it, while the
     ages near the target -- the ones that decide the earliest retirement age --
-    always get all of them. Deterministic: one seeded stream, fixed checkpoints.
+    always get all of them. Deterministic, with COMMON RANDOM NUMBERS: path ``i``
+    is seeded ``seed + i``, so the same ``seed`` at every age replays the same
+    market paths, and the success curve moves with the retirement age instead of
+    with sampling noise (otherwise it zigzags by several points at 500 runs).
     """
     _seed(seed)
     successes = n = errors = 0
     first_error = None
     for i in range(int(max_n)):
         try:
-            ok, _pf = sim.run_detailed_simulation(age, verbose=False)
+            ok, _pf = sim.run_detailed_simulation(age, verbose=False, random_seed=int(seed) + i)
         except Exception as exc:  # noqa: BLE001 - one bad path must not kill the batch
             errors += 1
             first_error = first_error or repr(exc)
@@ -204,10 +207,24 @@ def investable_at_retirement(age: int, n: int = 40, seed: int = 98765) -> float:
     return float(np.median(vals)) if vals else 0.0
 
 
+def first_full_retirement_age(age: int) -> int:
+    """First age at or after ``age`` when nobody in the household still earns
+    wages. A partner who works on after you retire keeps pay flowing in, which
+    nets against the draw and makes the first years look nearly free."""
+    ra = int(age)
+    p_ret = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
+    if p_ret is None or not cfg.has_partner():
+        return ra
+    gap = int(cfg.YOUR_AGE) - int(cfg.PARTNER_AGE)          # your age minus theirs
+    return max(ra, int(p_ret) + gap)
+
+
 def median_year1_withdrawal(age: int, n: int = 20, seed: int = 13579) -> float:
-    """Median first-retirement-year total withdrawal across n sims at the
-    current spending settings. Seeded, so an SWR grid reuses the same paths."""
+    """Median portfolio withdrawal in the first FULL retirement year (the first
+    year both of you have stopped working) across n sims at the current spending
+    settings. Seeded, so an SWR grid reuses the same paths."""
     _seed(seed)
+    target_age = first_full_retirement_age(age)
     vals = []
     for _ in range(int(n)):
         try:
@@ -215,7 +232,7 @@ def median_year1_withdrawal(age: int, n: int = 20, seed: int = 13579) -> float:
         except Exception:  # noqa: BLE001
             continue
         log = getattr(pf, "withdrawal_log", None) or []
-        row = next((r for r in log if int(r.get("age", -1)) == int(age)), (log[0] if log else None))
+        row = next((r for r in log if int(r.get("age", -1)) == target_age), (log[0] if log else None))
         if row:
             vals.append(float(row.get("total", 0.0) or 0.0))
     return float(np.median(vals)) if vals else 0.0

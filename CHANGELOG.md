@@ -17,6 +17,17 @@ All notable changes to this project will be documented in this file. Format: [Ke
 - Contribution limits are the 2026 IRS values ($24,500 401(k), $8,000 catch-up, $11,250 at 60-63, $7,500 IRA, $4,400 / $8,750 HSA, $72,000 415(c)); the model's table is `CONTRIBUTION_LIMITS_2026` and the planner reads it
 - Child tax credit ($2,200 a child under 17, phased out above $200k single / $400k joint, with the refundable part) is applied to working-year federal tax
 
+### Fixed (engine and numbers, round-2 QA)
+- Safe withdrawal rate: "your withdrawal rate" is the portfolio draw in the first year nobody works, divided by the balance at retirement. A partner who still works no longer nets their pay out of year 1 (the sample couple read 0.06%, now 1.6%, and the safe rate moves with it). The tile says which age it uses and that it tests your target retirement age
+- Effective retirement tax rate: the denominator is every dollar taxed (withdrawals, the whole forced RMD, Roth conversions, Social Security, a working partner's pay), not the RMD after its own tax, so it can no longer pass the top bracket
+- A partner who works after you retire now shows in the Tax tile (federal, state, FICA, gross pay) and the Savings tiles (401(k), match, Roth) for those years
+- A contribution set at today's limit (Auto-allocate, Max out) follows the limit as you age: 50+ and 60-63 catch-ups for the 401(k), 50+ for the IRA, 55+ for the HSA. Smaller amounts stay flat
+- Presets and the break-even grid use the 2026 limits
+- Early-withdrawal penalties follow the account owner's own age and Rule of 55 separation, not always yours. An older partner's 401(k) is penalty-free at their 59.5, and the Bridge to 59½ chart counts it (a younger partner's is penalized until their 59.5)
+- The Spending chart says why the health band can start after retirement (a working partner's employer plan covers the household)
+- The success-by-age curve replays the same market paths at every age (common random numbers), so it no longer zigzags at low simulation counts
+- Social Security notes: full retirement age is 67 (exact for anyone born 1960 or later), and survivor benefits are not modeled (FAQ, Retirement section, METHODOLOGY)
+
 ### Changed
 - Spending: **Use my actual spending** no longer sets a category to $0 when your statements have no rows for it (a card-only export has no rent): the plan keeps its own figure, the table shows a dash, and the caption names the categories left alone. The header's month range is now the months loaded, not the 12-month window
 - Presets: the median US household now has plausible spending ($1,300 rent, lean boxes, children at $1,000 and $700 a month) instead of the family-sized defaults that spent more than its pay and failed at every age. The last step of the guided setup now includes children's costs in "Spending" and warns when spending exceeds pay after tax

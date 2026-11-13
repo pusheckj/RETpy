@@ -2233,7 +2233,7 @@ def calculate_early_withdrawal_penalty(amount: float, account_type: str,
                     and account_type == 'traditional_401k'
                     and separation_age is not None
                     and separation_age >= RULE_OF_55_MIN_SEPARATION_AGE
-                    and age >= RULE_OF_55_MIN_SEPARATION_AGE):
+                    and age >= separation_age):
                 return 0
             return amount * EARLY_WITHDRAWAL_PENALTY_401K_IRA
 

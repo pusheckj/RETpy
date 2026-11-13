@@ -162,7 +162,7 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 
 | Parameter | Default | Description |
 |---|---|---|
-| `YOUR_401K_CONTRIBUTION` | `$24,500` | Your annual 401(k) deferral. Capped by `get_401k_limit()` and by your pay. |
+| `YOUR_401K_CONTRIBUTION` | `$24,500` | Your annual 401(k) deferral, in today's dollars. Capped by `get_401k_limit()` for your age that year and by your pay. An amount at or above today's limit means "the max" (Auto-allocate and Max out set it) and follows the limit as you age, so the 50+ and 60-63 catch-ups apply when they start. A smaller amount stays flat. The HSA, IRA and partner amounts work the same way. |
 | `YOUR_401K_MATCH_PCT` | `0.06` | Employer match: dollar for dollar on your deferral, up to this fraction of base salary. The match is `min(your 401(k) contribution, pct x base)`, so contributing less than the match % earns less match. Set in the Savings section. |
 | `YOUR_HSA_CONTRIBUTION` | `$7,550` | Your HSA contribution. |
 | `YOUR_HSA_MATCH` | `$750` | Employer HSA contribution. |
