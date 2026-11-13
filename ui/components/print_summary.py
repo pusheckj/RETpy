@@ -99,6 +99,8 @@ def _narrative_html(results: dict, overrides: dict) -> str:
     if verdict is not None:
         if verdict["funded"]:
             parts.append("Your penalty-free savings look big enough to reach age 59½.")
+        elif verdict.get("ran_out"):
+            parts.append(f"Your money looks gone by age {verdict['first_short']}.")
         else:
             parts.append(f"Your penalty-free savings look short starting around age {verdict['first_short']}.")
 

@@ -429,7 +429,7 @@ DERIVED_MAPPINGS: Dict[str, Any] = {
 #                       treated as hand-customized and never re-derives from
 #                       that profile's own base/bonus/RSU inputs.
 #   le_age              life-expectancy card's age (seeded from YOUR_AGE).
-_EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "_sync_notes")
+_EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "ay_partner_later", "_sync_notes")
 
 # Prefixes for widget families that are NOT (fully) enumerated above: either
 # dynamically keyed (count varies at runtime) or whole sections whose widgets

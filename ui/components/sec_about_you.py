@@ -77,6 +77,14 @@ def render_body(st) -> None:
                           help="Head of household: you're unmarried and pay more than half "
                                "the cost of a home for a child or another dependent.")
         set_override(st, "FILING_STATUS", filing)
+        if filing == SINGLE and household == JUST_ME:
+            try:
+                from utils.derived import children_at_home_now
+            except ImportError:  # pragma: no cover
+                from ui.utils.derived import children_at_home_now  # type: ignore
+            if children_at_home_now(st.session_state.get("user_overrides", {}) or {}):
+                st.caption("You have children at home. If you pay most of their costs, Head of "
+                           "household usually means a lower tax bill.")
 
     # The retirement-age sliders live in Retirement (drawn later this run).
     # Their widget values are already current, so apply the target age now:

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import html
+import re
 from datetime import date
 from typing import Any, Dict, List
 
@@ -25,12 +26,14 @@ import plotly.graph_objects as go
 try:
     from utils import simple_finance as sf
     from utils import simple_to_full
-    from utils.formatting import money, money_md
+    from utils.formatting import money, money_md, money_echo
+    from utils.profile_io import serialize_checkup, deserialize_checkup
     from utils.plot_theme import is_dark, style_fig
 except ImportError:  # pragma: no cover
     from ui.utils import simple_finance as sf  # type: ignore
     from ui.utils import simple_to_full  # type: ignore
-    from ui.utils.formatting import money, money_md  # type: ignore
+    from ui.utils.formatting import money, money_md, money_echo  # type: ignore
+    from ui.utils.profile_io import serialize_checkup, deserialize_checkup  # type: ignore
     from ui.utils.plot_theme import is_dark, style_fig  # type: ignore
 
 STATE_KEY = "simple_inputs"
@@ -54,6 +57,11 @@ _TEAL, _SLATE = "#0d9488", "#7a8db3"
 def _h(text: Any) -> str:
     """HTML-escape, and keep ``$`` away from Streamlit's markdown math."""
     return html.escape(str(text)).replace("$", "&#36;")
+
+
+def _md(text: Any) -> str:
+    """Escape ``text`` for Streamlit markdown (a debt name with ``$``, ``*`` or ``_`` in it)."""
+    return re.sub(r"([\\`*_{}\[\]()#+\-.!|~$<>])", r"\\\1", str(text))
 
 
 def _m(value: float) -> str:
@@ -151,6 +159,12 @@ def _money_input(st, field: str, label: str, help_text: str, step: float = 50.0,
                  hi: float = sf.MONTHLY_MAX) -> None:
     st.number_input(label, min_value=0.0, max_value=hi, step=step, format="%.0f",
                     key=_W + field, help=help_text, icon=_DOLLAR)
+    money_echo(st, st.session_state.get(_W + field))
+
+
+def _whole_input(st, field: str, label: str, help_text: str) -> None:
+    st.number_input(label, min_value=0, max_value=100, step=1, format="%d",
+                    key=_W + field, help=help_text)
 
 
 def _pct_input(st, field: str, label: str, help_text: str) -> None:
@@ -211,7 +225,12 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
     _group(st, "Work and retirement")
     now = _collect(ss, inputs)                   # what the widgets hold on this run
     today = date.today()
-    limits = sf.contribution_limits(now["hsa_family"], today)
+    limits = sf.contribution_limits(now["hsa_family"], today, now["age"])
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        _whole_input(st, "age", "Your age (optional)",
+                     "Adds the catch-up amounts for savers 50 and over (401(k) and IRA) and "
+                     "55 and over (HSA) to the limits below. Leave it at 0 to leave them out.")
     c1, c2, c3 = st.columns(3)
     with c1:
         _money_input(st, "gross_salary_annual", "Yearly salary (before tax)",
@@ -221,7 +240,7 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
         _pct_input(st, "retirement_contrib_pct", "You put in (% of pay)",
                    "The percent of each paycheck going into your 401(k) or 403(b).")
         _max_out(st, "retirement_contrib_pct", now["retirement_contrib_pct"],
-                 sf.max_401k_pct(now["gross_salary_annual"], today),
+                 sf.max_401k_pct(now["gross_salary_annual"], today, now["age"]),
                  f"Sets this to the share of your pay that reaches this year's "
                  f"{money_md(limits['401k'])} 401(k) limit.")
     with c3:
@@ -372,7 +391,7 @@ def _render_ladder(st, steps: List[sf.LadderStep]) -> None:
                 f'<div class="simple-step-body">{target}<div>{_h(s.why)}</div>{detail}</div></div>')
         st.markdown(f'<div class="simple-steps">{"".join(cards)}</div>', unsafe_allow_html=True)
         st.caption("Rules of thumb, not personal advice. Contribution limits are yearly "
-                   "and don't include age-50+ catch-up amounts.")
+                   "include age-50+ catch-up amounts only when you enter your age.")
 
 
 def _plan_card(res: sf.PayoffResult, name: str, sub: str, best: bool, badge: str,
@@ -387,9 +406,14 @@ def _plan_card(res: sf.PayoffResult, name: str, sub: str, best: bool, badge: str
                        for i, r in enumerate(res.order))
     else:
         big = "Won't pay off at these payments"
-        meta = (f"After {sf.MAX_PAYOFF_MONTHS // 12} years you'd still owe "
-                f"{_m(res.remaining_balance)}. Pay extra each month or raise "
-                f"the payments.")
+        if res.balances and res.remaining_balance > res.balances[0] + 0.5:
+            # Compounded over 50 years the balance is a meaningless figure: say what is wrong.
+            meta = ("The balance keeps growing: these payments don't cover the interest. "
+                    "Pay extra each month or raise the payments.")
+        else:
+            meta = (f"After {sf.MAX_PAYOFF_MONTHS // 12} years you'd still owe "
+                    f"{_m(res.remaining_balance)}. Pay extra each month or raise "
+                    f"the payments.")
         rows = "".join(f'<li><span>{_h(r["name"])}</span><span>'
                        f'{"paid off " + _h(r["payoff_date"]) if r["payoff_date"] else "not paid off"}'
                        f'</span></li>' for r in res.order)
@@ -447,7 +471,7 @@ def _render_payoff(st, payoff: Dict[str, Any], inputs: Dict[str, Any], start: da
             f'{_m(av.monthly_payment - extra)} in minimums + {_m(extra)} extra.</div>',
             unsafe_allow_html=True)
         if av.underwater:
-            names = ", ".join(av.underwater)
+            names = _md(", ".join(av.underwater))
             st.warning(f"The minimum on **{names}** doesn't cover its monthly interest, so on "
                        "its own that balance never shrinks. Paying extra fixes this.")
         saved = payoff["interest_saved"]
@@ -498,6 +522,30 @@ def _render_budget(st, buckets: List[sf.BudgetBucket]) -> None:
         st.markdown("".join(rows), unsafe_allow_html=True)
         st.caption("The tick on each bar marks the guide. Minimum debt payments count as "
                    "needs; extra debt payments count as savings.")
+
+
+def _load_checkup(ss, answers: Dict[str, Any]) -> None:
+    """Button callback: replace the check-up's answers (every widget reseeds)."""
+    ss[STATE_KEY] = sf.normalize_inputs(answers)
+    ss[_SYNC_KEY] = None
+
+
+def _render_save_load(st, inputs: Dict[str, Any]) -> None:
+    """Save the check-up's answers to a file and load them back."""
+    with st.expander("Save or load my answers", icon=":material/save:"):
+        st.download_button("Download my answers", data=serialize_checkup(inputs),
+                           file_name=f"money_checkup_{date.today().isoformat()}.json",
+                           mime="application/json", key="simple_save_download")
+        st.caption("Keep your numbers in a file, or turn on Remember me to keep them on this device.")
+        up = st.file_uploader("Upload saved answers", type=["json"], key="simple_save_upload")
+        if up is not None:
+            try:
+                answers = deserialize_checkup(up.getvalue())
+            except ValueError as exc:
+                st.error(f"Couldn't read that file: {exc}")
+                return
+            st.button("Load these answers", key="simple_save_apply", type="primary",
+                      on_click=_load_checkup, args=(st.session_state, answers))
 
 
 # ---------------------------------------------------------------------------
@@ -551,3 +599,4 @@ def render(st) -> None:
     _render_ladder(st, res["ladder"])
     _render_payoff(st, res["payoff"], inputs, today)
     _render_budget(st, res["budget"])
+    _render_save_load(st, inputs)

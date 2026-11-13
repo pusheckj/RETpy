@@ -35,9 +35,19 @@ except ImportError:  # pragma: no cover
                                      PLAN_UNTIL_MIN, PLAN_UNTIL_MAX)
 
 try:
-    from utils.slider_input import slider_with_box
+    from utils.slider_input import slider_with_box, forget_box
 except ImportError:  # pragma: no cover
-    from ui.utils.slider_input import slider_with_box  # type: ignore
+    from ui.utils.slider_input import slider_with_box, forget_box  # type: ignore
+
+PARTNER_YEARS_MAX = 30
+
+
+def _move_partner_retirement(st, target: int, age_gap: int) -> None:
+    """Number-box callback: the partner retires ``ay_partner_later`` years after you,
+    which moves their own-age slider (the engine stores their age, not the gap)."""
+    n = int(st.session_state.get("ay_partner_later", 0) or 0)
+    st.session_state["ay_partner_target_age"] = max(25, min(75, target - age_gap + n))
+    forget_box(st, "ay_partner_target_age")
 
 
 def _section_label(st, txt):
@@ -155,7 +165,16 @@ def render_retirement_ages(st) -> None:
                                   "from yours if one of you retires first. The other keeps "
                                   "earning and saving, and their take-home pay offsets "
                                   "withdrawals.")
-        if not together_in_range and p_target == slider_default:
+        keep_none = not together_in_range and p_target == slider_default
+        # "N years after you" is how people think of it; the slider is in their own age.
+        st.session_state["ay_partner_later"] = 0 if keep_none else max(
+            -PARTNER_YEARS_MAX, min(PARTNER_YEARS_MAX, safe_int(p_target) + age_gap - target))
+        st.number_input("Partner retires this many years after you", min_value=-PARTNER_YEARS_MAX,
+                        max_value=PARTNER_YEARS_MAX, step=1, key="ay_partner_later",
+                        help="0 means the same year as you. A negative number means they "
+                             "retire first. It moves the partner's retirement age above.",
+                        on_change=_move_partner_retirement, args=(st, target, age_gap))
+        if keep_none:
             # "Retire together" isn't representable on the slider and the user
             # hasn't moved it -> keep None so results match the retire-together default.
             set_override(st, "PARTNER_RETIREMENT_AGE", None)
@@ -289,7 +308,7 @@ def render_body(st) -> None:
             (f"At age {claim_age} (**{factor:.0%}** of your full-age benefit): " if not has_partner else
              "Once you've both claimed: ")
             + f"your Social Security ≈ {money_md(annual_ss, shorten=True)}/yr "
-            f"({money_md(annual_ss / 12, shorten=True)}/mo combined)."
+            f"({money_md(annual_ss / 12, shorten=True)}/mo{' combined' if has_partner else ''})."
         )
 
     # ----- Long-term care -----

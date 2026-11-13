@@ -269,3 +269,36 @@ def deserialize_overrides(json_str: str) -> dict:
         return cfg.migrate_legacy_overrides(values)
     except RecursionError as exc:
         raise ValueError("Malformed JSON: nested too deeply") from exc
+
+
+# ---------------------------------------------------------------------------
+# Money check-up answers (utils/simple_finance.py): their own small envelope,
+# so a check-up file is never mistaken for a planner profile (or the reverse).
+# ---------------------------------------------------------------------------
+CHECKUP_APP_TAG = "retirement-money-checkup"
+
+
+def serialize_checkup(inputs: dict) -> str:
+    """JSON text for the check-up's answers (a ``normalize_inputs`` dict)."""
+    if not isinstance(inputs, dict):
+        raise TypeError(f"inputs must be a dict, got {type(inputs).__name__}")
+    payload = {"version": SCHEMA_VERSION, "app": CHECKUP_APP_TAG,
+               "saved_at": datetime.now().isoformat(timespec="seconds"), "checkup": inputs}
+    return json.dumps(payload, indent=2, default=str)
+
+
+def deserialize_checkup(json_str: Any) -> dict:
+    """The check-up answers in ``json_str`` (not yet normalized: pass them to
+    ``simple_finance.normalize_inputs``). Raises ValueError with a plain reason."""
+    if not isinstance(json_str, (str, bytes, bytearray)):
+        raise ValueError(f"Expected JSON string/bytes, got {type(json_str).__name__}")
+    try:
+        data = json.loads(json_str)
+    except (ValueError, RecursionError) as exc:
+        raise ValueError("That isn't a valid JSON file.") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Top-level JSON value must be an object/dict.")
+    if data.get("app") != CHECKUP_APP_TAG or not isinstance(data.get("checkup"), dict):
+        raise ValueError("That file isn't saved money check-up answers. "
+                         "Planner profiles load in the Retirement planner.")
+    return data["checkup"]
