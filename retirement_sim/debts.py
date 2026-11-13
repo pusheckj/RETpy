@@ -131,9 +131,18 @@ def total_owed(debts: Any) -> float:
 
 
 def underwater(debts: Sequence[Dict[str, Any]]) -> List[int]:
-    """Indexes of debts whose minimum doesn't cover a month's interest."""
+    """Indexes of debts whose minimum doesn't cover a month's interest. A debt
+    with no interest (0% APR) can't be underwater: its balance never grows."""
     return [k for k, d in enumerate(debts)
-            if d["balance"] > PAID_EPS and d["min_payment"] <= d["balance"] * d["apr"] / 12.0 + 1e-9]
+            if d["balance"] > PAID_EPS and d["apr"] > 0
+            and d["min_payment"] <= d["balance"] * d["apr"] / 12.0 + 1e-9]
+
+
+def no_minimum(debts: Sequence[Dict[str, Any]]) -> List[int]:
+    """Indexes of 0% debts with a balance and no minimum payment: nothing pays
+    them down except money rolled over from other debts, or the extra payment."""
+    return [k for k, d in enumerate(debts)
+            if d["balance"] > PAID_EPS and d["apr"] <= 0 and d["min_payment"] <= 0]
 
 
 @dataclass
@@ -154,6 +163,15 @@ class Payoff:
     balances: List[float] = field(default_factory=list)   # total owed, month 0..months
     payments: List[float] = field(default_factory=list)   # total paid, month 1..months
     underwater: List[int] = field(default_factory=list)
+    ending: List[float] = field(default_factory=list)     # per row, owed at the end
+
+    @property
+    def growing(self) -> bool:
+        """True when a debt is still owed and has grown past what it started at:
+        the payments never cover its interest (a 50-year balance of millions
+        is meaningless, so screens say this instead of printing it)."""
+        return any(self.payoff_month[k] is None and self.ending[k] > r["balance"] + 0.5
+                   for k, r in enumerate(self.rows) if k < len(self.ending))
 
     @property
     def first_win(self) -> Optional[int]:
@@ -218,7 +236,19 @@ def amortize(debts: Any, extra_monthly: Any = 0.0, strategy: Any = "avalanche",
     done = all(b <= PAID_EPS for b in bal)
     return Payoff(strategy, rows, done, month, budget, interest, paid,
                   0.0 if done else sum(bal), payoff_month, interest_by, order,
-                  balances, payments, underwater(rows))
+                  balances, payments, underwater(rows), [0.0 if m is not None else b for m, b in zip(payoff_month, bal)])
+
+
+def until_runaway(balances: Sequence[float], factor: float = 2.0) -> List[float]:
+    """``balances`` cut just before the total first passes ``factor`` times what
+    is owed now, so a chart of a balance that keeps growing stays readable."""
+    if not balances:
+        return []
+    limit = factor * balances[0]
+    for k, b in enumerate(balances):
+        if b > limit and k > 0:
+            return list(balances[:k])
+    return list(balances)
 
 
 # ---------------------------------------------------------------------------

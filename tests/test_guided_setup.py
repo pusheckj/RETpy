@@ -15,6 +15,7 @@ for _p in (_ROOT, UI):
 
 from utils import simple_to_full as s2f  # noqa: E402
 from utils.derived import KEEP_AMOUNTS_MODE  # noqa: E402
+from utils import simple_finance as sf  # noqa: E402
 from utils.simple_finance import DEFAULT_INPUTS  # noqa: E402
 from components import guided_setup as gs  # noqa: E402
 
@@ -54,7 +55,7 @@ def test_housing_comes_out_of_other_and_values_fit_the_inputs():
                         "retirement_contrib_pct": 100.0, "hsa_eligible": True,
                         "hsa_contrib_annual": 50_000.0})
     assert huge["SPEND_OTHER_MONTHLY"] == 20_000 and huge["YOUR_BASE_SALARY"] == s2f.SALARY_MAX
-    assert huge["YOUR_401K_CONTRIBUTION"] == s2f.CONTRIB_401K_MAX
+    assert huge["YOUR_401K_CONTRIBUTION"] == sf.contribution_limits(False, None, 0)["401k"]   # the year's limit
     assert huge["YOUR_HSA_CONTRIBUTION"] == s2f.CONTRIB_MAX
 
 

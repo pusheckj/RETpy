@@ -24,11 +24,17 @@ from retirement_sim import config as cfg
 from retirement_sim import debts as dm
 
 try:
-    from utils.simple_finance import DEFAULT_INPUTS, normalize_inputs, to_engine_debts
+    from utils.age_limits import AGE_MIN, AGE_MAX
+except ImportError:  # pragma: no cover
+    from ui.utils.age_limits import AGE_MIN, AGE_MAX  # type: ignore
+
+try:
+    from utils.simple_finance import DEFAULT_INPUTS, contribution_limits, normalize_inputs, to_engine_debts
     from utils.derived import KEEP_AMOUNTS_MODE, PRETAX_KEYS, debt_payments_this_year, savings_budget
     from utils.expense_categories import CATEGORIES, INPUTS
 except ImportError:  # pragma: no cover
-    from ui.utils.simple_finance import DEFAULT_INPUTS, normalize_inputs, to_engine_debts  # type: ignore
+    from ui.utils.simple_finance import (  # type: ignore
+        DEFAULT_INPUTS, contribution_limits, normalize_inputs, to_engine_debts)
     from ui.utils.derived import (  # type: ignore
         KEEP_AMOUNTS_MODE, PRETAX_KEYS, debt_payments_this_year, savings_budget)
     from ui.utils.expense_categories import CATEGORIES, INPUTS  # type: ignore
@@ -51,7 +57,10 @@ def used(simple: Any) -> bool:
 
 
 def debt_minimums(simple: Any) -> float:
-    return float(sum(d["min_payment"] for d in normalize_inputs(simple)["debts"]))
+    """The minimums still being paid: a paid-off row (balance 0) owes none, and the
+    planner never pays it either."""
+    return float(sum(d["min_payment"] for d in normalize_inputs(simple)["debts"]
+                     if d["balance"] > dm.PAID_EPS))
 
 
 def contribution_401k(salary: float, pct: float, limit: Optional[int] = None) -> int:
@@ -151,7 +160,10 @@ def carried(simple: Any) -> Dict[str, Any]:
     salary = s["gross_salary_annual"]
     out: Dict[str, Any] = {
         "YOUR_CASH": _cap(s["cash_savings"], BALANCE_MAX),
-        "YOUR_401K_CONTRIBUTION": contribution_401k(salary, s["retirement_contrib_pct"]),
+        # at most this year's limit (Max out rounds the percent up, so pay x percent can
+        # pass it by a few dollars)
+        "YOUR_401K_CONTRIBUTION": contribution_401k(
+            salary, s["retirement_contrib_pct"], contribution_limits(False, None, s["age"])["401k"]),
         "YOUR_401K_MATCH_PCT": s["employer_match_pct"] / 100.0,
         "YOUR_HSA_CONTRIBUTION": _cap(s["hsa_contrib_annual"], CONTRIB_MAX) if s["hsa_eligible"] else 0,
         "YOUR_BACKDOOR_ROTH": _cap(s["ira_contrib_annual"], CONTRIB_MAX),
@@ -165,6 +177,8 @@ def carried(simple: Any) -> Dict[str, Any]:
     }
     if salary > 0:
         out["YOUR_BASE_SALARY"] = _cap(salary, SALARY_MAX)
+    if AGE_MIN <= s["age"] <= AGE_MAX:           # 0 = not given
+        out["YOUR_AGE"] = int(s["age"])
     return out
 
 
@@ -174,7 +188,8 @@ def summary(simple: Any) -> Dict[str, float]:
     return {"needs": s["needs_monthly"], "wants": s["wants_monthly"],
             "debt_min": debt_minimums(s), "ira_so_far": s["ira_contrib_annual"],
             "salary": s["gross_salary_annual"],
-            "pct_401k": s["retirement_contrib_pct"], "hsa_eligible": bool(s["hsa_eligible"])}
+            "pct_401k": s["retirement_contrib_pct"], "hsa_eligible": bool(s["hsa_eligible"]),
+            "age": int(s["age"]) if AGE_MIN <= s["age"] <= AGE_MAX else 0}
 
 
 def partner_answers(simple: Any) -> Dict[str, Any]:

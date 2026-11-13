@@ -23,6 +23,8 @@ from typing import Any, Dict, List
 
 import plotly.graph_objects as go
 
+from retirement_sim import debts as debt_math
+
 try:
     from utils import simple_finance as sf
     from utils import simple_to_full
@@ -167,8 +169,8 @@ def _whole_input(st, field: str, label: str, help_text: str) -> None:
                     key=_W + field, help=help_text)
 
 
-def _pct_input(st, field: str, label: str, help_text: str) -> None:
-    st.number_input(label, min_value=0.0, max_value=sf.PCT_MAX, step=0.5, format="%.1f",
+def _pct_input(st, field: str, label: str, help_text: str, decimals: int = 1) -> None:
+    st.number_input(label, min_value=0.0, max_value=sf.PCT_MAX, step=0.5, format=f"%.{decimals}f",
                     key=_W + field, help=help_text, icon=_PCT)
 
 
@@ -236,7 +238,8 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
                      hi=sf.BALANCE_MAX)
     with c2:
         _pct_input(st, "retirement_contrib_pct", "You put in (% of pay)",
-                   "The percent of each paycheck going into your 401(k) or 403(b).")
+                   "The percent of each paycheck going into your 401(k) or 403(b).",
+                   decimals=2)      # Max out sets 2 decimals; one would show 10.2% for 10.16%
         _max_out(st, "retirement_contrib_pct", now["retirement_contrib_pct"],
                  sf.max_401k_pct(now["gross_salary_annual"], today, now["age"]),
                  f"Sets this to the share of your pay that reaches this year's "
@@ -389,7 +392,7 @@ def _render_ladder(st, steps: List[sf.LadderStep]) -> None:
                 f'<div class="simple-step-body">{target}<div>{_h(s.why)}</div>{detail}</div></div>')
         st.markdown(f'<div class="simple-steps">{"".join(cards)}</div>', unsafe_allow_html=True)
         st.caption("Rules of thumb, not personal advice. Contribution limits are yearly "
-                   "include age-50+ catch-up amounts only when you enter your age.")
+                   "limits. They include age-50+ catch-up amounts only when you enter your age.")
 
 
 def _plan_card(res: sf.PayoffResult, name: str, sub: str, best: bool, badge: str,
@@ -428,9 +431,10 @@ def _payoff_chart(st, av: sf.PayoffResult, sb: sf.PayoffResult, start: date) -> 
     fig = go.Figure()
     for res, name, color, dash in ((av, "Avalanche", _TEAL, "solid"),
                                    (sb, "Snowball", _SLATE, "dash")):
-        xs = [sf.month_date(start, k).isoformat() for k in range(len(res.balances))]
+        ys = debt_math.until_runaway(res.balances)   # a balance that keeps growing is cut off
+        xs = [sf.month_date(start, k).isoformat() for k in range(len(ys))]
         fig.add_trace(go.Scatter(
-            x=xs, y=res.balances, name=name, mode="lines",
+            x=xs, y=ys, name=name, mode="lines",
             line=dict(color=color, width=3, dash=dash),
             hovertemplate=f"{name}: $%{{y:,.0f}}<extra></extra>"))
     fig.update_layout(height=300, margin=dict(l=8, r=28, t=8, b=40), dragmode=False,

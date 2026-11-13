@@ -97,11 +97,15 @@ def _summary(st, overrides: Dict[str, Any]) -> None:
                    f"with {money_md(s.interest)} of interest. The Debt payoff section has the details.")
     else:
         st.caption(f"{head}.")
-        st.warning("At these payments the debts aren't paid off within 50 years. "
-                   "Raise the extra payment or a minimum.")
+        st.warning("At these payments the debts aren't paid off within 50 years"
+                   + (": the interest is more than the payments, so they keep growing. "
+                      if s.growing else ". ") + "Raise the extra payment or a minimum.")
     if s.underwater:
         st.caption("⚠ The minimum on " + ", ".join(s.underwater)
                    + " doesn't cover its monthly interest, so on its own that balance grows.")
+    if s.no_minimum:
+        st.caption(", ".join(s.no_minimum) + " has no interest and no minimum, so only extra "
+                   "money (or a minimum rolled over from another debt) pays it down.")
 
 
 def render_body(st) -> None:

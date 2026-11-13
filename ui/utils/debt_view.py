@@ -70,6 +70,16 @@ def seed_rows(ss, debts: List[Dict[str, Any]], force: bool = False) -> None:
                 ss[row_key(i, f)] = v
 
 
+def reseed_widgets(ss) -> None:
+    """Rewrite every Debts widget (rows, extra, order) from the plan's overrides.
+    For when the section comes back after a run that did not draw it: Streamlit
+    dropped the widgets' values, and reading a key then gives its first seed."""
+    ov = ss.get("user_overrides", {}) or {}
+    seed_rows(ss, ov.get("DEBTS") or [], force=True)
+    ss.pop(EXTRA_KEY, None)
+    ss.pop(STRATEGY_KEY, None)
+
+
 def current_rows(ss) -> List[Dict[str, Any]]:
     """DEBTS as the row widgets hold them on this run."""
     base = dm.normalize_debts((ss.get("user_overrides", {}) or {}).get("DEBTS"))
@@ -141,6 +151,8 @@ class Summary:
     debt_free: Optional[str]       # "Mar 2029"
     interest: float                # nominal, over the whole plan
     underwater: List[str]          # names whose minimum doesn't cover the interest
+    no_minimum: List[str]          # 0% debts with no minimum payment
+    growing: bool                  # a debt is never paid off and keeps growing
     per_debt: List[Dict[str, Any]]  # name, kind, band, balance, apr, min, payoff_month, payoff, interest
 
 
@@ -156,7 +168,8 @@ def summary(overrides: Any, start: Optional[date] = None) -> Summary:
                     "interest": p.interest_by_debt[k]})
     return Summary(sum(d["balance"] for d in p.rows), p.monthly_budget, p.paid_off, p.months,
                    when(start, p.months) if p.paid_off else None, p.total_interest,
-                   [p.rows[k]["name"] for k in p.underwater], per)
+                   [p.rows[k]["name"] for k in p.underwater],
+                   [p.rows[k]["name"] for k in dm.no_minimum(p.rows)], p.growing, per)
 
 
 def compare(overrides: Any, start: Optional[date] = None) -> Dict[str, Dict[str, Any]]:
@@ -168,7 +181,7 @@ def compare(overrides: Any, start: Optional[date] = None) -> Dict[str, Dict[str,
         first = p.first_win
         first_name = next((p.rows[k]["name"] for k in p.focus_order
                            if first is not None and p.payoff_month[k] == first), None)
-        out[s] = {"plan": p, "paid_off": p.paid_off, "months": p.months,
+        out[s] = {"plan": p, "paid_off": p.paid_off, "months": p.months, "growing": p.growing,
                   "debt_free": when(start, p.months) if p.paid_off else None,
                   "interest": p.total_interest, "first_win": when(start, first),
                   "first_win_months": first, "first_name": first_name,

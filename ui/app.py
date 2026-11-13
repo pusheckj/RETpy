@@ -697,7 +697,9 @@ MODES = {"simple": "Money check-up", "full": "Retirement planner"}
 
 def _on_mode_switch(key: str) -> None:
     picked = st.session_state.get(key)
-    mode = next(m for m, label in MODES.items() if label == picked)
+    mode = next((m for m, label in MODES.items() if label == picked), None)
+    if mode is None:             # a late event from a switch that is no longer drawn
+        return
     if mode != st.session_state.get("app_mode"):
         _share_debts(mode)
     st.session_state.app_mode = mode
@@ -716,13 +718,16 @@ def _share_debts(to_mode: str) -> None:
             if new is not None:
                 ss.simple_inputs = new
                 ss._simple_inputs_synced = None          # the check-up reseeds its widgets
-        elif guided_setup.started(st):                   # (a new setup copies them itself)
-            new = s2f.debts_to_planner(ss.get("simple_inputs"), ss.get("user_overrides"))
-            if new is not None:
-                ss.setdefault("user_overrides", {}).update(new)
-                from utils.debt_view import seed_rows
-                seed_rows(ss, new["DEBTS"], force=True)
-                ss.pop("debt_extra", None)
+        else:
+            if guided_setup.started(st):                 # (a new setup copies them itself)
+                new = s2f.debts_to_planner(ss.get("simple_inputs"), ss.get("user_overrides"))
+                if new is not None:
+                    ss.setdefault("user_overrides", {}).update(new)
+            # The Debts widgets were not drawn while the check-up showed, so
+            # Streamlit dropped their values and left only the first seed
+            # (extra $0, avalanche). Reseed them from the plan's own values.
+            from utils.debt_view import reseed_widgets
+            reseed_widgets(ss)
     except Exception:            # never block the switch itself
         import logging
         logging.getLogger("retirement_ui").exception("Couldn't share debts across versions")
