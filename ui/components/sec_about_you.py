@@ -28,6 +28,12 @@ except ImportError:  # pragma: no cover
 from retirement_sim.config import plan_end_age
 
 
+try:
+    from utils.slider_input import slider_with_box
+except ImportError:  # pragma: no cover
+    from ui.utils.slider_input import slider_with_box  # type: ignore
+
+
 def render_body(st) -> None:
     ensure_default(st, "ay_your_age", safe_int(get_override(st, "YOUR_AGE", 30), 30))
     v = st.number_input("Your age", min_value=18, max_value=100, step=1, key="ay_your_age")
@@ -75,8 +81,8 @@ def render_body(st) -> None:
     # two, so a younger partner is covered to their own plan-until age.
     ensure_default(st, "ay_plan_until",
                    safe_int(get_override(st, "PLAN_UNTIL_AGE", 95), 95))
-    plan_until = st.slider("Plan-until age", min_value=75, max_value=100,
-                           step=1, key="ay_plan_until",
+    plan_until = slider_with_box(st, "Plan-until age", 75, 100,
+                           1, key="ay_plan_until",
                            help="Your money needs to last through this age."
                                 + ("" if household == JUST_ME else
                                    " About 30-40% of couples have one partner live past 90."))
@@ -85,7 +91,7 @@ def render_body(st) -> None:
         ensure_default(st, "ay_partner_plan_until",
                        safe_int(get_override(st, "PARTNER_PLAN_UNTIL_AGE", None) or plan_until,
                                 plan_until))
-        p_until = st.slider("Partner's plan-until age", min_value=75, max_value=100, step=1,
+        p_until = slider_with_box(st, "Partner's plan-until age", 75, 100, 1,
                             key="ay_partner_plan_until", help="Same idea, using your partner's age.")
         set_override(st, "PARTNER_PLAN_UNTIL_AGE", safe_int(p_until))
         # Whoever is covered longer sets the end; every result uses this horizon.

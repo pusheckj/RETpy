@@ -27,6 +27,12 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
 
 
+try:
+    from utils.slider_input import slider_with_box
+except ImportError:  # pragma: no cover
+    from ui.utils.slider_input import slider_with_box  # type: ignore
+
+
 def _section_label(st, txt):
     st.markdown(f'<div style="font-size: 13px; color: #64748b; text-transform: uppercase; '
                 f'letter-spacing: 0.05em; margin: 12px 0 6px 0;">{txt}</div>',
@@ -71,21 +77,17 @@ def _lifestyle(st, overrides: dict) -> None:
         v = st.number_input("Until age", min_value=50, max_value=100, step=1,
                             key="rg_leisure_until")
         set_override(st, "EARLY_RETIREMENT_LEISURE_UNTIL_AGE", safe_int(v))
-    c3, c4 = st.columns(2, vertical_alignment="bottom")
-    with c3:
-        ensure_default(st, "rg_late_pct", int(round(safe_float(
-            get_override(st, "LATE_RETIREMENT_LEISURE_DECREASE", 0.15), 0.15) * 100)))
-        v = st.slider("Spend less later (%)", min_value=0, max_value=50, step=5,
-                      key="rg_late_pct",
-                      help="Day-to-day spending usually falls as you age. Housing "
-                           "costs stay the same.")
-        set_override(st, "LATE_RETIREMENT_LEISURE_DECREASE", v / 100)
-    with c4:
-        ensure_default(st, "rg_late_from",
-                       safe_int(get_override(st, "LATE_RETIREMENT_START_AGE", 75), 75))
-        v = st.number_input("From age", min_value=55, max_value=100, step=1,
-                            key="rg_late_from")
-        set_override(st, "LATE_RETIREMENT_START_AGE", safe_int(v))
+    ensure_default(st, "rg_late_pct", int(round(safe_float(
+        get_override(st, "LATE_RETIREMENT_LEISURE_DECREASE", 0.15), 0.15) * 100)))
+    v = slider_with_box(st, "Spend less later (%)", 0, 50, 5, key="rg_late_pct", unit="%",
+                        help="Day-to-day spending usually falls as you age. Housing "
+                             "costs stay the same.")
+    set_override(st, "LATE_RETIREMENT_LEISURE_DECREASE", v / 100)
+    ensure_default(st, "rg_late_from",
+                   safe_int(get_override(st, "LATE_RETIREMENT_START_AGE", 75), 75))
+    v = st.number_input("Spend less from age", min_value=55, max_value=100, step=1,
+                        key="rg_late_from")
+    set_override(st, "LATE_RETIREMENT_START_AGE", safe_int(v))
 
     # The ages the engine will actually use for the retirement age you're planning.
     ret = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60)
@@ -110,8 +112,8 @@ def render_retirement_ages(st) -> None:
     has_partner = safe_int(get_override(st, "PARTNER_AGE", 0), 0) > 0
     ensure_default(st, "ay_target_age",
                    safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60))
-    target = st.slider("Target retirement age", min_value=25, max_value=75,
-                       step=1, key="ay_target_age",
+    target = slider_with_box(st, "Target retirement age", 25, 75,
+                       1, key="ay_target_age",
                        help="When you plan to stop working.")
     set_override(st, "TARGET_RETIREMENT_AGE", safe_int(target))
     if target < your_age:
@@ -140,8 +142,8 @@ def render_retirement_ages(st) -> None:
         ensure_default(st, "ay_partner_target_age",
                        safe_int(get_override(st, "PARTNER_RETIREMENT_AGE", None) or slider_default,
                                 slider_default))
-        p_target = st.slider("Partner's retirement age", min_value=25, max_value=75,
-                             step=1, key="ay_partner_target_age",
+        p_target = slider_with_box(st, "Partner's retirement age", 25, 75,
+                             1, key="ay_partner_target_age",
                              help="Your partner's age when they stop working. Set it apart "
                                   "from yours if one of you retires first. The other keeps "
                                   "earning and saving, and their take-home pay offsets "
@@ -192,8 +194,10 @@ def render_body(st) -> None:
     if mode == "% of today's expenses":
         ensure_default(st, "rg_spend_pct",
                        safe_float(get_override(st, "RETIREMENT_SPENDING_PCT", 0.80), 0.80) * 100)
-        v = st.slider("Retirement spending (% of today's)", min_value=50.0,
-                      max_value=150.0, step=5.0, key="rg_spend_pct")
+        v = slider_with_box(st, "Retirement spending (% of today's)", 50.0, 150.0, 5.0,
+                            key="rg_spend_pct", unit="%",
+                            help="What you plan to spend each year in retirement, as a share "
+                                 "of what you spend today. 100% means the same.")
         set_override(st, "RETIREMENT_SPENDING_PCT", v / 100)
         st.caption(f"= {v:.0f}% of your current yearly expenses, rising with inflation.")
     elif mode == "Absolute amount ($/yr)":
@@ -222,8 +226,8 @@ def render_body(st) -> None:
 
     ensure_default(st, "rg_ss_claim",
                    safe_int(get_override(st, "SS_CLAIM_AGE", 67), 67))
-    claim_age = st.slider("Your claim age" if has_partner else "Claim age",
-                          min_value=62, max_value=70, step=1,
+    claim_age = slider_with_box(st, "Your claim age" if has_partner else "Claim age",
+                          62, 70, 1,
                           key="rg_ss_claim",
                           help="62 = earliest (about 30% less if your full retirement age is 67). "
                                "67 = full retirement age. "
@@ -234,7 +238,7 @@ def render_body(st) -> None:
         ensure_default(st, "rg_partner_ss_claim",
                        safe_int(get_override(st, "PARTNER_SS_CLAIM_AGE", None) or claim_age,
                                 claim_age))
-        partner_claim = st.slider("Partner's claim age", min_value=62, max_value=70, step=1,
+        partner_claim = slider_with_box(st, "Partner's claim age", 62, 70, 1,
                                   key="rg_partner_ss_claim",
                                   help="The age your partner starts claiming.")
         set_override(st, "PARTNER_SS_CLAIM_AGE", safe_int(partner_claim))
@@ -299,8 +303,9 @@ def render_body(st) -> None:
         ensure_default(st, "rg_ltc_start",
                        safe_int(get_override(st, "LTC_START_AGE",
                                              getattr(cfg, "LTC_START_AGE", 83) if cfg else 83), 83))
-        start = st.slider("Care starts around age", min_value=70, max_value=95, step=1,
-                          key="rg_ltc_start")
+        start = slider_with_box(st, "Care starts around age", 70, 95, 1,
+                                key="rg_ltc_start",
+                                help="The age from which each year carries a chance of a care bill.")
         set_override(st, "LTC_START_AGE", safe_int(start))
 
         ensure_default(st, "rg_ltc_cost",
@@ -319,8 +324,8 @@ def render_body(st) -> None:
                            safe_float(get_override(st, "LTC_PROBABILITY",
                                                    getattr(cfg, "LTC_PROBABILITY", 0.20) if cfg else 0.20),
                                       0.20) * 100)))))
-        prob = st.slider("Chance of needing care each year (%)", min_value=0, max_value=100,
-                         step=5, key="rg_ltc_prob",
+        prob = slider_with_box(st, "Chance of needing care each year (%)", 0, 100,
+                         5, key="rg_ltc_prob", unit="%",
                          help="Chance of paying the cost in any one year from the start "
                               "age. Lower it if you have LTC insurance or expect "
                               "family care.")
@@ -341,8 +346,8 @@ def render_body(st) -> None:
     current_thr = safe_float(get_override(st, "TARGET_SUCCESS_RATE", 0.80), 0.80)
     ensure_default(st, "rg_target_success",
                    max(70, min(95, int(round(current_thr * 100)))))
-    v = st.slider("Success target (%)", min_value=70, max_value=95, step=1,
-                  key="rg_target_success",
+    v = slider_with_box(st, "Success target (%)", 70, 95, 1,
+                  key="rg_target_success", unit="%",
                   help="Your plan counts as a success if the money lasts in at least this "
                        "share of simulated futures. 80% is a common default; "
                        "early retirees often aim for 90-95%.")

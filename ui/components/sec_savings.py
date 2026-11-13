@@ -39,6 +39,12 @@ except ImportError:  # pragma: no cover
     from ui.utils import planner_max as pm  # type: ignore
 
 
+try:
+    from utils.slider_input import slider_with_box
+except ImportError:  # pragma: no cover
+    from ui.utils.slider_input import slider_with_box  # type: ignore
+
+
 _ACCOUNT_LABELS = [
     ("Your 401(k)",          "YOUR_401K_CONTRIBUTION",        "#0d9488"),
     ("Partner 401(k)",       "PARTNER_401K_CONTRIBUTION",     "#d97706"),
@@ -156,9 +162,9 @@ def render_body(st) -> None:
     # ---- Mega backdoor Roth (after-tax 401(k) -> in-plan Roth conversion) ----
     ensure_default(st, "sv_after_tax_401k",
                    safe_float(get_override(st, "YOUR_AFTER_TAX_401K_PCT", 0.0), 0.0) * 100)
-    atp = st.slider(
-        "After-tax 401(k) → Roth (% of base pay)",
-        min_value=0.0, max_value=20.0, step=0.5, key="sv_after_tax_401k",
+    atp = slider_with_box(
+        st, "After-tax 401(k) → Roth (% of base pay)",
+        0.0, 20.0, 0.5, key="sv_after_tax_401k", unit="%",
         help="Extra after-tax 401(k) contributions, converted to Roth inside the plan "
              "(the \"mega backdoor Roth\"). "
              "They use the room left under the total 401(k) limit (yours plus employer) "
@@ -309,8 +315,8 @@ def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
     for label, key, _ in _shown_accounts(overrides):
         widget_key = pct_widget_key(key)
         ensure_default(st, widget_key, defaults.get(key, 0))
-        v = st.slider(f"{label} %", min_value=0, max_value=100, step=1,
-                      key=widget_key)
+        v = slider_with_box(st, f"{label} %", 0, 100, 1, key=widget_key, unit="%",
+                            help="The share of what's left to save that goes to this account.")
         pcts[key] = v
         total_pct += v
 

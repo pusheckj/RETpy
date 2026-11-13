@@ -335,3 +335,18 @@ def test_an_unanswered_question_opens_blank_after_skip_and_continue(wizard):
     at.button(key="gs_skip").click().run()
     at.button(key="gs_resume").click().run()
     assert at.number_input(key="gs_age").value == 41
+
+
+def test_retirement_age_slider_has_a_typed_box(wizard):
+    """The walkthrough's one slider (key gs_target) keeps its key and gains gs_target__box."""
+    at = wizard()
+    _walk_to(at, "Retirement")
+    assert at.slider(key="gs_target").value == at.number_input(key="gs_target__box").value
+    at.number_input(key="gs_target__box").set_value(52).run()
+    assert at.slider(key="gs_target").value == 52
+    at.slider(key="gs_target").set_value(58).run()
+    assert at.number_input(key="gs_target__box").value == 58
+    at.number_input(key="gs_target__box").set_value(200).run()          # clamped to the range
+    assert at.slider(key="gs_target").value == 75
+    _next(at)
+    assert at.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] == 75

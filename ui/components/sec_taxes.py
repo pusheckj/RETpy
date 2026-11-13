@@ -25,6 +25,12 @@ except ImportError:  # pragma: no cover
 
 # Widget label <-> stored STATE_CHOICE (all states + DC, plus the two legacy
 # choices). Kept as module names for callers and tests.
+try:
+    from utils.slider_input import slider_with_box
+except ImportError:  # pragma: no cover
+    from ui.utils.slider_input import slider_with_box  # type: ignore
+
+
 _STATE_OPTIONS = state_choice.OPTIONS
 _STATE_TO_CODE = {label: state_choice.code_for(label) for label in _STATE_OPTIONS}
 _CODE_TO_STATE = {code: label for label, code in _STATE_TO_CODE.items()}
@@ -47,8 +53,8 @@ def render_body(st) -> None:
     if state == state_choice.FLAT_LABEL:
         ensure_default(st, "st_marginal",
                        float(safe_float(get_override(st, "YOUR_MARGINAL_TAX_RATE", 0.05), 0.05)) * 100)
-        r = st.slider("State income tax rate (%)",
-                      min_value=0.0, max_value=15.0, step=0.5,
+        r = slider_with_box(st, "State income tax rate (%)",
+                      0.0, 15.0, 0.5, unit="%",
                       key="st_marginal",
                       help="A flat state tax on income above the federal standard "
                            "deduction. 5% is a middle-of-the-road guess.")

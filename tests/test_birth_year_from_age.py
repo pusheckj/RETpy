@@ -58,6 +58,7 @@ def test_about_you_asks_for_age_only():
 
     at = AppTest.from_function(app, default_timeout=30).run()
     assert not at.exception
-    labels = [n.label.strip() for n in at.number_input]
+    # (the typed boxes beside the sliders are number inputs too: key ends "__box")
+    labels = [n.label.strip() for n in at.number_input if not n.key.endswith("__box")]
     assert labels == ["Your age", "Partner's age"]
     assert not any("birth" in lbl.lower() for lbl in labels)

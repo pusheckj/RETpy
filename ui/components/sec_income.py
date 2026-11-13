@@ -22,6 +22,12 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
     from ui.utils.config_builder import QUICK_INCOME_SAVINGS_RATE as _SAVED_SHARE  # type: ignore
 
+try:
+    from utils.slider_input import slider_with_box
+except ImportError:  # pragma: no cover
+    from ui.utils.slider_input import slider_with_box  # type: ignore
+
+
 _OTHER_INCOME_HELP = ("Taxable income that isn't pay, like rent, interest or side work. "
                       "Counted while you work. No Social Security or Medicare tax.")
 
@@ -74,8 +80,10 @@ def render_body(st) -> None:
 
     ensure_default(st, "si_your_growth",
                    safe_float(get_override(st, "YOUR_SALARY_GROWTH_RATE", 0.02), 0.02) * 100)
-    r = st.slider("Your salary growth (%/yr, real)", min_value=0.0,
-                  max_value=10.0, step=0.5, key="si_your_growth")
+    r = slider_with_box(st, "Your salary growth (%/yr, real)", 0.0, 10.0, 0.5,
+                        key="si_your_growth", unit="%",
+                        help="How fast your pay grows each year, after inflation. 0 means "
+                             "raises only keep pace with prices.")
     set_override(st, "YOUR_SALARY_GROWTH_RATE", r / 100)
     you_growth = r / 100
 
@@ -99,8 +107,10 @@ def render_body(st) -> None:
 
         ensure_default(st, "si_partner_growth",
                        safe_float(get_override(st, "PARTNER_SALARY_GROWTH_RATE", 0.02), 0.02) * 100)
-        r = st.slider("Partner salary growth (%/yr, real)", min_value=0.0,
-                      max_value=10.0, step=0.5, key="si_partner_growth")
+        r = slider_with_box(st, "Partner salary growth (%/yr, real)", 0.0, 10.0, 0.5,
+                            key="si_partner_growth", unit="%",
+                            help="How fast your partner's pay grows each year, after inflation. "
+                                 "0 means raises only keep pace with prices.")
         set_override(st, "PARTNER_SALARY_GROWTH_RATE", r / 100)
 
         p_total = p_base + p_bonus + p_rsu + p_other

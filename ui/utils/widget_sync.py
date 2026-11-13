@@ -17,9 +17,11 @@ from typing import Any, Dict
 try:
     from utils.expense_categories import CATEGORIES
     from utils.household import household_of
+    from utils.slider_input import SUFFIXES as _BOX_SUFFIXES, forget_box
 except ImportError:  # pragma: no cover
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
     from ui.utils.household import household_of  # type: ignore
+    from ui.utils.slider_input import SUFFIXES as _BOX_SUFFIXES, forget_box  # type: ignore
 
 from retirement_sim import config as cfg
 
@@ -424,8 +426,10 @@ def reset_input_widget_state(st) -> None:
         except (KeyError, AttributeError):
             pass
     try:
+        # Also the typed boxes beside the sliders (utils/slider_input.py), whatever the slider's key.
         for key in [k for k in list(st.session_state.keys())
-                    if isinstance(k, str) and k.startswith(_EXTRA_INPUT_PREFIXES)]:
+                    if isinstance(k, str) and (k.startswith(_EXTRA_INPUT_PREFIXES)
+                                               or k.endswith(_BOX_SUFFIXES))]:
             del st.session_state[key]
     except (KeyError, AttributeError):
         pass
@@ -445,12 +449,14 @@ def sync_widgets_from_overrides(st) -> None:
         if override_key in overrides and overrides[override_key] is not None:
             try:
                 st.session_state[widget_key] = cast(overrides[override_key])
+                forget_box(st, widget_key)     # the typed box beside a slider re-seeds from it
             except Exception:
                 pass
 
     for widget_key, derive_fn in DERIVED_MAPPINGS.items():
         try:
             st.session_state[widget_key] = derive_fn(overrides)
+            forget_box(st, widget_key)
         except Exception:
             pass
 
