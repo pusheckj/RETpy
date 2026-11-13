@@ -21,7 +21,7 @@ callback runs before the script, so only it can save that value.
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Dict, List, NamedTuple, Optional
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 from retirement_sim import config as cfg
 
@@ -33,7 +33,7 @@ try:
                                compute_expenses_today)
     from utils import simple_to_full as s2f
     from utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH, household_of,
-                                 clear_partner)
+                                 clear_partner, forget_partner_widgets)
     from utils import state_choice as sc
     from utils import planner_max as pm
     from utils.age_limits import AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX
@@ -45,7 +45,7 @@ except ImportError:  # pragma: no cover
                                   compute_total_income, compute_taxes, compute_expenses_today)
     from ui.utils import simple_to_full as s2f  # type: ignore
     from ui.utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH,  # type: ignore
-                                    household_of, clear_partner)
+                                    household_of, clear_partner, forget_partner_widgets)
     from ui.utils import state_choice as sc  # type: ignore
     from ui.utils import planner_max as pm  # type: ignore
     from ui.utils.age_limits import AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX  # type: ignore
@@ -226,9 +226,9 @@ def _partner(st) -> bool:
 
 def draw_you(st) -> None:
     ov = _ov(st)
-    _whole(st, "gs_age", "How old are you?", ov.get("YOUR_AGE"), None, AGE_MIN, AGE_MAX)
-    _cue(st, "Your age today, in years.")
     c = state(st).get("checkup") or {}
+    _whole(st, "gs_age", "How old are you?", ov.get("YOUR_AGE"), c.get("age") or None, AGE_MIN, AGE_MAX)
+    _cue(st, "Your age today, in years.", bool(c.get("age")))
     hh = _choice(st, "gs_household", "Who is this plan for?", [JUST_ME, SPOUSE, PARTNER],
                  household_of(ov), SPOUSE if c.get("married") else None)
     if c.get("married") and hh == SPOUSE:
@@ -247,6 +247,8 @@ def commit_you(st) -> None:
         ov["YOUR_AGE"] = int(_val(st, "gs_age"))
     hh = _val(st, "gs_household")
     if hh == JUST_ME:
+        if int(_num(ov.get("PARTNER_AGE"))) > 0:
+            forget_partner_widgets(st.session_state)     # a partner added later starts clean
         clear_partner(ov)
         ov["FILING_STATUS"] = SINGLE
     elif hh in (SPOUSE, PARTNER):
@@ -682,14 +684,17 @@ def draw_spending(st) -> None:
     for row in range(0, len(cats), 2):      # one row of columns per pair, so the boxes line up
         for col, cat in zip(st.columns(2), cats[row:row + 2]):
             with col:
+                # The check-up's wants already cover the whole household, so a partner's own
+                # box starts at 0 there (not at the sample household's amount).
+                first = 0 if c and cat.partner_only else ov.get(cat.key, cat.default)
                 _money(st, "gs_spend_" + cat.key, cat.label, ov.get(cat.key),
-                       ov.get(cat.key, cat.default), hi=cat.max_value, step=cat.step)
+                       first, hi=cat.max_value, step=cat.step)
                 _cue(st, _SPEND_HINTS.get(cat.key, ""))
     total = sum(_num(_val(st, "gs_spend_" + cat.key)) for cat in cats)
     line = f"**{money_md(total)} a month**, plus {money_md(housing)} for housing."
     if c:
         target = max(0.0, c["needs"] + c["wants"] - housing - debt_min)
-        gap = total - (_num(_val(st, "gs_spend_PARTNER_OTHER_MONTHLY")) if _partner(st) else 0) - target
+        gap = total - target
         if abs(gap) < 1:
             line += " ✓ Matches your check-up."
         else:
@@ -708,7 +713,7 @@ def commit_spending(st) -> None:
                 ov[cat.mirror] = int(v)
 
 
-MAX_PARTNER_YEARS = 30
+LATER_KEY = "gs_partner_later"
 
 
 def _partner_gap(ov) -> int:
@@ -718,8 +723,29 @@ def _partner_gap(ov) -> int:
 
 def _partner_retire_age(ov, target: int, later: int) -> int:
     """The partner's own age when they retire ``later`` years after you (you retire
-    at ``target``), within the planner's 25-75 range."""
-    return max(25, min(75, target - _partner_gap(ov) + later))
+    at ``target``), within the range of the planner's retirement-age slider."""
+    return max(TARGET_MIN, min(TARGET_MAX, target - _partner_gap(ov) + later))
+
+
+def _later_bounds(ov, target: int) -> Tuple[int, int]:
+    """The fewest and most years after you the partner can retire: the ones that
+    put their retirement age inside the slider's range."""
+    base = target - _partner_gap(ov)
+    return TARGET_MIN - base, TARGET_MAX - base
+
+
+def _on_later(st, lo: int, hi: int) -> None:
+    """A typed gap is moved into range, with a note (a box limit would refuse it)."""
+    ss = st.session_state
+    ss.pop(LATER_KEY + "__note", None)
+    v = ss.get(LATER_KEY)
+    if v is None:
+        return
+    n = int(min(max(_num(v), lo), hi))
+    if n != int(_num(v)):
+        ss[LATER_KEY + "__note"] = (f"A retirement age can only be {TARGET_MIN} to {TARGET_MAX}, "
+                                    f"so {n} years was used.")
+    ss[LATER_KEY] = n
 
 
 def _partner_later_saved(ov) -> int:
@@ -728,7 +754,7 @@ def _partner_later_saved(ov) -> int:
     if pra is None:
         return 0
     target = int(_num(ov.get("TARGET_RETIREMENT_AGE"), 60))
-    return max(-MAX_PARTNER_YEARS, min(MAX_PARTNER_YEARS, int(_num(pra)) + _partner_gap(ov) - target))
+    return int(_num(pra)) + _partner_gap(ov) - target
 
 
 def draw_retire(st) -> None:
@@ -743,10 +769,14 @@ def draw_retire(st) -> None:
     _cue(st, "A guess is fine. Your results show the earliest age that works, and you can "
              "adjust from there.")
     if _partner(st):
-        gap = _partner_gap(ov)
-        _whole(st, "gs_partner_later", "Your partner retires how many years after you?",
-               _partner_later_saved(ov), 0, -MAX_PARTNER_YEARS, MAX_PARTNER_YEARS)
-        later = int(_num(_val(st, "gs_partner_later")))
+        tgt = int(_num(_val(st, "gs_target")))
+        lo, hi = _later_bounds(ov, tgt)
+        _seed(st, LATER_KEY, min(max(_partner_later_saved(ov), lo), hi), 0)
+        st.number_input("Your partner retires how many years after you?", step=1, key=LATER_KEY,
+                        on_change=_on_later, args=(st, lo, hi))
+        if st.session_state.get(LATER_KEY + "__note"):
+            st.caption(st.session_state[LATER_KEY + "__note"])
+        later = int(_num(_val(st, LATER_KEY)))
         _cue(st, "0 means the same year as you. Enter a negative number if they stop first."
              + ("" if later == 0 else
                 f" That's when they're {_partner_retire_age(ov, int(_num(_val(st, 'gs_target'))), later)}."))

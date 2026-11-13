@@ -19,13 +19,13 @@ import plotly.graph_objects as go
 
 try:
     from utils import debt_view as dv
-    from utils.coerce import ensure_default, safe_int
+    from utils.coerce import safe_int
     from utils.formatting import money, money_md
     from utils.plot_theme import PLOTLY_CONFIG, is_dark, show_chart
     from utils.simple_finance import month_date
 except ImportError:  # pragma: no cover
     from ui.utils import debt_view as dv  # type: ignore
-    from ui.utils.coerce import ensure_default, safe_int  # type: ignore
+    from ui.utils.coerce import safe_int  # type: ignore
     from ui.utils.formatting import money, money_md  # type: ignore
     from ui.utils.plot_theme import PLOTLY_CONFIG, is_dark, show_chart  # type: ignore
     from ui.utils.simple_finance import month_date  # type: ignore
@@ -63,8 +63,12 @@ def stats_html(s: dv.Summary, extra: float) -> str:
     else:
         free, free_sub = "Not within 50 years", "at these payments"
     mins = s.monthly - extra
+    if s.growing:      # a compounded 50-year figure would be millions: say what is wrong
+        interest, int_sub = "Keeps growing", "payments don't cover the interest"
+    else:
+        interest, int_sub = _m(s.interest), "under this plan" if s.paid_off else "in 50 years"
     cards = [("Debt-free", free, free_sub),
-             ("Interest still to pay", _m(s.interest), "under this plan" if s.paid_off else "in 50 years"),
+             ("Interest still to pay", interest, int_sub),
              ("Paying each month", _m(s.monthly),
               f"{_m(mins)} minimums + {_m(extra)} extra" if extra > 0 else "minimums only"),
              ("Owed now", _m(s.owed), f"{len(s.per_debt)} debt{'s' if len(s.per_debt) != 1 else ''}")]
@@ -78,14 +82,15 @@ def debts_html(s: dv.Summary) -> str:
     items = []
     for n, d in enumerate(s.per_debt, 1):
         label, tone = BAND_CHIPS[d["band"]]
-        when = (f"Paid off <b>{_h(d['payoff'])}</b>" if d["payoff"] else "<b>Not paid off</b> in 50 years")
+        when = (f"Paid off <b>{_h(d['payoff'])}</b> · {_m(d['interest'])} interest" if d["payoff"]
+                else "<b>Not paid off</b> in 50 years")
         items.append(
             f'<div class="debt-item" role="listitem"><div class="debt-item-head"><span class="debt-item-num">{n}</span>'
             f'<span class="debt-item-name">{_h(d["name"])}</span>{_chip(d["kind_label"])}'
             f'{_chip(label, tone)}</div>'
             f'<div class="debt-item-body">{_m(d["balance"])} at {d["apr"] * 100:.2f}% · '
             f'{_m(d["min_payment"])}/mo minimum</div>'
-            f'<div class="debt-item-body">{when} · {_m(d["interest"])} interest</div></div>')
+            f'<div class="debt-item-body">{when}</div></div>')
     # Divs, not <ol>/<li>: Streamlit's markdown styles lists (markers, indents).
     return f'<div class="debt-list" role="list">{"".join(items)}</div>'
 
@@ -107,7 +112,7 @@ def plans_html(cmp: Dict[str, Dict[str, Any]], current: str) -> str:
                 (_chip("Least interest", "good") if key == cheaper else "") + \
                 (_chip("Quickest first win", "good") if key == quicker else "")
         rows = [("Debt-free", _h(p["debt_free"]) if p["paid_off"] else "Not within 50 years"),
-                ("Interest", _m(p["interest"])),
+                ("Interest", "Keeps growing" if p["growing"] else _m(p["interest"])),
                 ("First debt gone", f'{_h(p["first_win"])} ({_h(p["first_name"])})' if p["first_win"] else "—")]
         body = "".join(f'<div class="debt-plan-row"><span>{a}</span><b>{b}</b></div>' for a, b in rows)
         target = f'<div class="debt-plan-sub">{_h(sub)}: extra goes to {_h(p["first_target"])} first</div>' \
@@ -135,16 +140,20 @@ def balance_figure(now: dm.Payoff, faster: dm.Payoff, mins: dm.Payoff, more: flo
     horizon = max(now.months, faster.months, 1)
     mins_end = mins.months if mins.paid_off else dm.MAX_MONTHS
     cap = max(horizon, min(mins_end, max(2 * horizon, 24)))
+    # A balance that keeps growing would stretch the axis to millions: stop its
+    # line once it passes twice what is owed (the caption under the chart says so).
+    series = [dm.until_runaway(p.balances[:cap + 1]) for p in (mins, now, faster)]
+    cap = max(len(ys) for ys in series) - 1
     teal = "#2dd4bf" if dark else "#0d9488"
     amber = "#fbbf24" if dark else "#b45309"
     slate = "#94a3b8" if dark else "#64748b"
     fig = go.Figure()
-    mins_name = "Minimums only" if mins.paid_off else "Minimums only (not paid off in 50 yrs)"
-    for p, name, color, dash, width in (
+    mins_name = ("Minimums only" if mins.paid_off else "Minimums only (keeps growing)" if mins.growing
+                 else "Minimums only (not paid off in 50 yrs)")
+    for ys, (p, name, color, dash, width) in zip(series, (
             (mins, mins_name, slate, "dot", 2),
             (now, "Your plan", teal, "solid", 3),
-            (faster, f"Paying {money(more)} more", amber, "dash", 2.5)):
-        ys = p.balances[:cap + 1]
+            (faster, f"Paying {money(more)} more", amber, "dash", 2.5))):
         xs = [month_date(start, k).isoformat() for k in range(len(ys))]
         fig.add_trace(go.Scatter(x=xs, y=ys, name=name, mode="lines",
                                  line=dict(color=color, width=width, dash=dash),
@@ -234,11 +243,14 @@ def _things_to_know(st) -> None:
 # ---------------------------------------------------------------------------
 def _whatif(st, ov: Dict[str, Any], start: date) -> None:
     st.markdown('<div class="debt-subhead">Pay more each month</div>', unsafe_allow_html=True)
-    ensure_default(st, WHATIF_KEY, WHATIF_DEFAULT)
     c1, c2 = st.columns([1, 2], vertical_alignment="bottom")
     with c1:
+        # An explicit value=, not a value seeded into session state: this tile is drawn
+        # lazily, and a box that mounts again (after Run simulation) starts from what the
+        # element carries. Seeded through session state, that was 0 while the text used 100.
         more = safe_int(st.number_input("Try paying this much more ($/mo)", min_value=0,
-                                        max_value=WHATIF_MAX, step=25, key=WHATIF_KEY,
+                                        max_value=WHATIF_MAX, step=25, value=WHATIF_DEFAULT,
+                                        key=WHATIF_KEY,
                                         help="A what-if only: it doesn't change your plan. "
                                              "To keep it, raise Extra each month in Debts."), 0)
     w = dv.what_if(ov, more)
@@ -248,7 +260,8 @@ def _whatif(st, ov: Dict[str, Any], start: date) -> None:
         elif w["months_saved"] is None:
             line = (f"Paying {_m(more)} more a month: debt-free in "
                     f"{_h(dv.duration(w['faster'].months))}." if w["faster"].paid_off else
-                    "Even that doesn't pay the debts off within 50 years.")
+                    ("Even that doesn't cover the interest, so what you owe keeps growing."
+                     if w["faster"].growing else "Even that doesn't pay the debts off within 50 years."))
         else:
             line = (f"Paying {_m(more)} more a month makes you debt-free "
                     f"<b>{_h(dv.duration(w['months_saved']))} sooner</b> and saves "
@@ -258,6 +271,9 @@ def _whatif(st, ov: Dict[str, Any], start: date) -> None:
     dark = is_dark(st)
     show_chart(st, lambda compact: balance_figure(w["now"], w["faster"], mins, more, start, dark, compact),
                f"debt_balance_{'dk' if dark else 'lt'}", {**PLOTLY_CONFIG, "displayModeBar": False})
+    if any(p.growing for p in (mins, w["now"], w["faster"])):
+        st.caption("A line that stops is a balance that keeps growing: the payments don't cover "
+                   "the interest. It is cut off once it passes twice what you owe.")
     _retirement_line(st, ov, more)
 
 
@@ -267,8 +283,14 @@ def _retirement_line(st, ov: Dict[str, Any], more: float) -> None:
     total = sum(real.payments)
     age = safe_int(ov.get("TARGET_RETIREMENT_AGE", 55), 55)
     text = (f"Your simulation already pays these debts: about {money_md(total)} in today's "
-            f"dollars over {dv.duration(real.payoff.months)}.")
-    if more > 0:
+            f"dollars over {dv.duration(real.payoff.months)}"
+            + ("." if real.payoff.paid_off else ", and they are still not paid off."))
+    if more > 0 and not real.payoff.paid_off:
+        # The comparison counts payments over 50 years only, so with debts that are
+        # never paid off it would price the benefit of paying more at nothing.
+        text += (" At these payments the debts are never paid off, so there is no fair "
+                 "comparison with investing the money yet. Raise Extra each month first.")
+    elif more > 0:
         effect = dv.retirement_effect(ov, more, age)
         rate = dv.real_return(ov)
         if effect is not None:
@@ -297,11 +319,16 @@ def render(st, results: Optional[dict] = None) -> None:
     s = dv.summary(ov, today)
     st.markdown(stats_html(s, dv.extra(ov)), unsafe_allow_html=True)
     if not s.paid_off:
-        st.warning("At these payments your debts aren't paid off within 50 years. "
-                   "Raise Extra each month in the Debts section.")
+        st.warning("At these payments your debts aren't paid off within 50 years"
+                   + (": the interest is more than the payments, so what you owe keeps growing. "
+                      if s.growing else ". ")
+                   + "Raise Extra each month in the Debts section.")
     if s.underwater:
         st.warning(f"The minimum on **{', '.join(s.underwater)}** doesn't cover its monthly "
                    "interest, so on its own that balance never shrinks.")
+    if s.no_minimum:
+        st.caption(f"**{', '.join(s.no_minimum)}** has no minimum payment and no interest, so only "
+                   "extra money (or a minimum rolled over from another debt) pays it down.")
 
     st.markdown('<div class="debt-subhead">When each debt is paid off</div>', unsafe_allow_html=True)
     st.markdown(debts_html(s), unsafe_allow_html=True)

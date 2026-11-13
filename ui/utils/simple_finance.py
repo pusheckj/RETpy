@@ -621,7 +621,7 @@ def month_date(start: date, months_ahead: int) -> date:
 def underwater_debts(debts: List[Dict[str, Any]]) -> List[str]:
     """Names of debts whose minimum payment doesn't cover the monthly interest."""
     return [d["name"] for d in debts
-            if d["balance"] > _PAID_EPS
+            if d["balance"] > _PAID_EPS and d["apr_pct"] > 0
             and d["min_payment"] <= d["balance"] * d["apr_pct"] / 1200.0 + 1e-9]
 
 

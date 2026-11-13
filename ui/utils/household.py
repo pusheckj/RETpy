@@ -49,6 +49,24 @@ def clear_partner(overrides: dict) -> None:
     overrides["PRIMARY_PAYS_HOUSING"] = False
 
 
+def forget_partner_widgets(session_state) -> None:
+    """Drop what every partner widget holds (and the typed box beside each slider).
+
+    ``clear_partner`` zeroes the plan's values, but the widgets keep their own: a
+    partner added again would come back with the old 401(k) and Roth amounts and
+    retirement age. With the widgets dropped, each reseeds from the cleared plan."""
+    try:
+        from utils.widget_sync import DIRECT_MAPPINGS
+        from utils.slider_input import SUFFIXES
+    except ImportError:  # pragma: no cover
+        from ui.utils.widget_sync import DIRECT_MAPPINGS  # type: ignore
+        from ui.utils.slider_input import SUFFIXES  # type: ignore
+    keys = [w for w, (okey, _cast) in DIRECT_MAPPINGS.items() if okey.startswith("PARTNER_")]
+    for key in keys + ["ay_partner_later"]:
+        for k in [key] + [key + sfx for sfx in SUFFIXES]:
+            session_state.pop(k, None)
+
+
 def _value(values: dict, key: str):
     """``values[key]``, else the active config's (what the simulation would use)."""
     from retirement_sim import config as cfg
