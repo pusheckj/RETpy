@@ -116,13 +116,16 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
         if wd:
             actual_rate = float(wd[0].get("total", 0.0) or 0.0) / inv0
 
+    rate_age = swr.get("rate_age")
     lower_bound = bool(swr.get("swr_is_lower_bound")) and swr_rate is not None
     top_rate = curve[-1]["realized_rate"] if curve else None
 
     cols = st.columns(3)
     with cols[0]:
         st.metric("Your withdrawal rate", f"{actual_rate:.1%}" if actual_rate else "run sim",
-                  help="First-year withdrawal ÷ investable balance at retirement, from your last run.")
+                  help=("Portfolio withdrawals in the first year nobody is working, ÷ your investable balance at "
+                              "retirement. Pay from a partner who is still working is not counted as a withdrawal"
+                              + (f" (this is age {rate_age})." if rate_age and rate_age != swr.get("retirement_age") else ".")))
     with cols[1]:
         # "none" read as "no rate is safe". Say what was actually found.
         st.metric("Safe rate at target",
@@ -138,10 +141,18 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
                   delta_arrow=("up" if (gap or 0) >= 0 else "down"),
                   help="Safe rate minus your rate. Positive means room to spend more. Negative means risk.")
 
+    ret_age = swr.get("retirement_age")
+    earliest = (results or {}).get("earliest_retirement_age")
+    if ret_age is not None:
+        st.caption(
+            f"Tested for retiring at age {int(ret_age)}, your target retirement age."
+            + (f" Your earliest age that meets the target is {int(earliest)}." if earliest and int(earliest) != int(ret_age) else "")
+        )
     if swr_rate is None:
         low = curve[0]["realized_rate"] if curve else None
         st.info(
             "No withdrawal rate tested meets your success target"
+            + (f" at age {int(ret_age)}" if ret_age is not None else "")
             + (f", even the lowest, {low:.1%}" if low is not None else "")
             + ". Try retiring later, saving more, or lowering your success target."
         )
@@ -201,6 +212,6 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
     show_chart(st, _build, f"swr_curve_{'dk' if dark else 'lt'}", PLOTLY_CONFIG)
     st.caption(
         "Each point re-runs the full simulation at a different first-year spending level. The rate is the "
-        "**total** first-year withdrawal ÷ investable balance at retirement, so you can compare it "
-        "directly to your plan's rate. This uses today's inputs. **Recalculate after you change them.**"
+        "**total** withdrawal in the first year nobody is working ÷ investable balance at retirement, "
+        "so you can compare it directly to your plan's rate. This uses today's inputs. **Recalculate after you change them.**"
     )

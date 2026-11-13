@@ -5,6 +5,8 @@ import json
 import os
 import warnings
 
+from retirement_sim import config as cfg
+
 try:
     from utils.hosting import is_hosted
     from utils.profile_io import deserialize_overrides, personal_profile_path
@@ -46,6 +48,12 @@ def _load_my_situation(path: str | None = None) -> dict | None:
     """Just the private profile's overrides (None when there isn't one)."""
     found = load_personal_profile(path)
     return found[1] if found else None
+
+
+# Contribution presets use the engine's own base-year limits, not hard-coded figures.
+_LIM = cfg.CONTRIBUTION_LIMITS_2026
+_MAX_401K, _MAX_IRA = _LIM['401k'], _LIM['ira']
+_HSA_SELF, _HSA_FAMILY = _LIM['hsa_individual'], _LIM['hsa_family']
 
 
 def _kid(years_until_birth: int, monthly_cost: int) -> dict:
@@ -92,8 +100,8 @@ PROFILES = {
         'FILING_STATUS': "Single", 'STATE_CHOICE': "CA",
         'RETIREMENT_SPENDING_MODE': "Same as today's expenses", 'SAVINGS_MODE': "Auto-allocate (recommended)",
         'HOME_VALUE': 0, 'MORTGAGE_BALANCE': 0, 'MORTGAGE_MONTHLY': 0, 'MORTGAGE_YEARS_REMAINING': 0,
-        'YOUR_401K_CONTRIBUTION': 24_500, 'YOUR_401K_MATCH_PCT': 0.06,
-        'YOUR_HSA_CONTRIBUTION': 4_400, 'YOUR_HSA_MATCH': 750, 'YOUR_BACKDOOR_ROTH': 7_500, 'YOUR_ESPP_PCT': 0.10, 'YOUR_ESPP_DISCOUNT': 0.15,
+        'YOUR_401K_CONTRIBUTION': _MAX_401K, 'YOUR_401K_MATCH_PCT': 0.06,
+        'YOUR_HSA_CONTRIBUTION': _HSA_SELF, 'YOUR_HSA_MATCH': 750, 'YOUR_BACKDOOR_ROTH': _MAX_IRA, 'YOUR_ESPP_PCT': 0.10, 'YOUR_ESPP_DISCOUNT': 0.15,
         'YOUR_SS_MONTHLY_FRA': 2_800, 'PARTNER_SS_MONTHLY_FRA': 0,
         'TARGET_RETIREMENT_AGE': 55,
     },
@@ -114,8 +122,8 @@ PROFILES = {
         'PARTNER_BASE_SALARY': 120_000, 'PARTNER_BONUS_AMOUNT': 0, 'PARTNER_RSU_AMOUNT': 0, 'PARTNER_OTHER_INCOME': 0,
         'FILING_STATUS': "Married filing jointly", 'STATE_CHOICE': "CA",
         'RETIREMENT_SPENDING_MODE': "Same as today's expenses", 'SAVINGS_MODE': "Auto-allocate (recommended)",
-        'YOUR_401K_CONTRIBUTION': 24_500, 'YOUR_401K_MATCH_PCT': 0.06,
-        'YOUR_HSA_CONTRIBUTION': 8_750, 'YOUR_HSA_MATCH': 750,
+        'YOUR_401K_CONTRIBUTION': _MAX_401K, 'YOUR_401K_MATCH_PCT': 0.06,
+        'YOUR_HSA_CONTRIBUTION': _HSA_FAMILY, 'YOUR_HSA_MATCH': 750,
         'YOUR_SS_MONTHLY_FRA': 3_200, 'PARTNER_SS_MONTHLY_FRA': 2_400,
         'TARGET_RETIREMENT_AGE': 55,
     },

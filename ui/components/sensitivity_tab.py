@@ -7,7 +7,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st_mod  # for session_state access
 
+from retirement_sim import config as cfg
 from utils.formatting import pct, money
+
+_LIM = cfg.CONTRIBUTION_LIMITS_2026   # the engine's base-year limits (LIMITS_BASE_YEAR)
 
 
 def render(st, results: dict) -> None:
@@ -104,11 +107,15 @@ def render(st, results: dict) -> None:
 _BREAK_EVEN_PARAMS = {
     "Your 401(k) contribution ($/yr)": (
         "YOUR_401K_CONTRIBUTION",
-        [10_000, 15_000, 20_000, 24_500, 28_000, 32_500],
+        # up to the 401(k) limit, then the 50+ and 60-63 limits (higher amounts are held to the limit for your age)
+        [10_000, 15_000, 18_500, _LIM["401k"], _LIM["401k"] + _LIM["401k_catchup"],
+         _LIM["401k"] + _LIM["401k_supercatchup"]],
     ),
     "Your HSA contribution ($/yr)": (
         "YOUR_HSA_CONTRIBUTION",
-        [1_000, 2_000, 3_000, 4_400, 6_000, 8_750],
+        # self-only limit, with the 55+ catch-up, and the family limit
+        [1_000, 2_000, 3_000, _LIM["hsa_individual"],
+         _LIM["hsa_individual"] + _LIM["hsa_catchup"], _LIM["hsa_family"]],
     ),
     "Retirement age": (
         "TARGET_RETIREMENT_AGE_SWEEP",  # handled specially below

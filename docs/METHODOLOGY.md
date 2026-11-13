@@ -298,7 +298,7 @@ If `LTC_ENABLED = True`, an additional long-term-care shock is modeled in late-l
 
 ### 12.1 Full retirement age
 
-For users born in 1960 or later, FRA is **67**.
+For users born in 1960 or later, FRA is **67**. The engine uses 67 for everyone (`ss_claim_factor` has no birth-year table), which is exact for anyone aged 66 or younger today. A person born earlier has an FRA of 66 to 66 years 10 months, so their early-claim and delayed-credit factors are a little off; enter the benefit at 67 or the amount they are already paid. Survivor benefits are not modeled (see Section 16); a widow or widower should plan as "Just me" and enter the benefit they receive now.
 
 ### 12.2 Claim-age adjustments
 

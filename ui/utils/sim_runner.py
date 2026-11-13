@@ -749,7 +749,8 @@ def plan_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
             store(result)
             return Plan("swr", key, user_overrides, result=result)
 
-        # Anchor the sweep on the user's ACTUAL plan. Total year-1 withdrawal W0 =
+        # Anchor the sweep on the user's ACTUAL plan. Total first-full-retirement-year
+        # (both of you stopped working) withdrawal W0 =
         # living base (the knob) + c, where c is everything layered on top by the engine
         # (housing, healthcare, kids) MINUS income that covers it (Social Security, RMDs):
         # c is negative when income covers more than the fixed costs. To hit a target
@@ -759,6 +760,7 @@ def plan_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
         # couple at 0.7%) or one whose income covers most spending (a 0.3% draw) still has its
         # crossing inside the sweep. If the top still passes, the result says so ("above X").
         living_0 = float(getattr(cfg, "retirement_living_base", lambda: 0.0)())
+        rate_age = mc_jobs.first_full_retirement_age(ra)
         w0 = _median_year1_withdrawal(ra)
         if w0 <= 0:
             w0 = 0.04 * inv0  # fallback anchor if the baseline draw is unavailable
@@ -805,6 +807,7 @@ def plan_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
             "target_success": target,
             "investable_at_retirement": inv0,
             "retirement_age": ra,
+            "rate_age": rate_age,
         }
 
     return Plan("swr", key, user_overrides, job, finish, store=store)
@@ -1026,7 +1029,7 @@ def plan_place_check(user_overrides: dict, place_overrides: dict, n_simulations:
         for a, p in patch_for.items():
             index[a] = len(patches)
             patches.append(p)
-        calls = [["scan", index.get(age, -1), [age, scan_sims, 1000 + i, target_success]]
+        calls = [["scan", index.get(age, -1), [age, scan_sims, 1000, target_success]]
                  for i, age in enumerate(ages)]
         # The target age runs as the main analysis does (same chunks and seeds, no
         # per-path detail), so a place that changes nothing gives the plan's own numbers.
@@ -1653,8 +1656,9 @@ def plan_full_analysis(
         detail_per = max(1, -(-detail_cap // max(1, len(chunk_sizes))))  # ceil-divide
         calls = [["batch", -1, [target_retirement_age, size, detail_per, 2000 + j]]
                  for j, size in enumerate(chunk_sizes)]
-        calls += [["scan", -1, [age, scan_sims, 1000 + i, target_success]]
-                  for i, age in enumerate(scan_ages)]
+        # One seed for every age: the ages replay the same market paths (mc_jobs.scan_age).
+        calls += [["scan", -1, [age, scan_sims, 1000, target_success]]
+                  for age in scan_ages]
         job = {"base": mc_jobs.snapshot(), "patches": [], "calls": calls}
         # Record the count ACTUALLY run (the UI's n_simulations), not cfg's
         # NUM_SIMULATIONS default -- otherwise "out of N simulations" in the UI
@@ -1905,6 +1909,9 @@ def _bytype_log_from_portfolio(portfolio) -> List[dict]:
             row = {"age": int(record["age"])}
             for k, v in bt.items():
                 row[str(k)] = float(v)
+            # The partner's own balances, as "partner_<category>" (bridge to 59½).
+            for k, v in (record.get("partner_by_type") or {}).items():
+                row["partner_" + str(k)] = float(v)
             out.append(row)
         except (KeyError, TypeError, ValueError):
             continue
@@ -1919,8 +1926,8 @@ def _accessible_percentiles(bytype_logs: List[List[dict]], withdrawal_logs: List
     verdict are computed on the SAME statistical object.
 
     Accessible = cash + taxable brokerage + Roth (contribution basis APPROXIMATED
-    by the full Roth balance), plus the 401(k) when Rule of 55 applies and one
-    year's 72(t) payment while a schedule runs. Penalized = traditional 401k/IRA + HSA
+    by the full Roth balance), plus the 401(k) when Rule of 55 applies, the partner's
+    401(k) once THEY pass 59.5, and one year's 72(t) payment while a schedule runs. Penalized = traditional 401k/IRA + HSA
     (shown in full, including any part Rule of 55 frees). The
     reported ``accessible`` is the SUM of the per-source medians (so the stacked
     chart height equals the accessible figure). ``burn`` = median total annual
@@ -1937,27 +1944,45 @@ def _accessible_percentiles(bytype_logs: List[List[dict]], withdrawal_logs: List
         return []
     # Early-access rules the engine honours: Rule of 55 frees the 401(k) (not IRAs)
     # once you separate at 55 or later; a 72(t) schedule pays a fixed penalty-free
-    # amount each year of its run.
-    r55 = (bool(getattr(cfg, "RULE_OF_55_ENABLED", False))
-           and int(retirement_age) >= int(getattr(cfg, "RULE_OF_55_MIN_SEPARATION_AGE", 55)))
+    # amount each year of its run. Each owner's age decides their own accounts: your
+    # 401(k) by your age, the partner's by theirs (open outright at 59.5, or at 55
+    # with the Rule of 55 once they have stopped working).
+    r55_on = bool(getattr(cfg, "RULE_OF_55_ENABLED", False))
+    r55_min = int(getattr(cfg, "RULE_OF_55_MIN_SEPARATION_AGE", 55))
+    r55 = r55_on and int(retirement_age) >= r55_min
+    has_partner = cfg.has_partner()
+    age_gap = int(getattr(cfg, "YOUR_AGE", 0)) - int(getattr(cfg, "PARTNER_AGE", 0))
+    p_ret = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
+    partner_sep = float(p_ret) if p_ret is not None else float(retirement_age - age_gap)
+    p_r55 = r55_on and has_partner and partner_sep >= r55_min
     sepp_on = bool(getattr(cfg, "SEPP_72T_ENABLED", False))
     sepp_start = int(getattr(cfg, "SEPP_72T_START_AGE", 45) or 45)
     sepp_amount = None
     out: List[dict] = []
     for a in range(int(retirement_age), hi_age + 1):
-        cash, taxable, roth, penal, k401, trad = [], [], [], [], [], []
+        p_age = a - age_gap
+        you_r55_now = r55 and a >= r55_min
+        p_free_now = has_partner and p_age >= early
+        p_r55_now = p_r55 and not p_free_now and p_age >= partner_sep and p_age >= r55_min
+        cash, taxable, roth, penal, rule55_paths, p_free, trad = [], [], [], [], [], [], []
         for d in per_bt:
             r = d.get(a)
             cash.append(float(r.get("cash", 0.0)) if r else 0.0)
             taxable.append(float(r.get("taxable", 0.0)) if r else 0.0)
             roth.append((float(r.get("roth_ira", 0.0)) + float(r.get("roth_401k", 0.0))) if r else 0.0)
-            k401.append(float(r.get("traditional_401k", 0.0)) if r else 0.0)
-            trad.append((float(r.get("traditional_401k", 0.0)) + float(r.get("traditional_ira", 0.0))) if r else 0.0)
-            penal.append((float(r.get("traditional_401k", 0.0)) + float(r.get("traditional_ira", 0.0))
-                          + float(r.get("hsa", 0.0))) if r else 0.0)
+            k401_all = float(r.get("traditional_401k", 0.0)) if r else 0.0
+            k401_partner = float(r.get("partner_traditional_401k", 0.0)) if r else 0.0
+            ira_partner = float(r.get("partner_traditional_ira", 0.0)) if r else 0.0
+            rule55_paths.append((k401_all - k401_partner if you_r55_now else 0.0)
+                                + (k401_partner if p_r55_now else 0.0))
+            p_free.append(k401_partner + ira_partner if p_free_now else 0.0)
+            trad.append((k401_all + float(r.get("traditional_ira", 0.0))) if r else 0.0)
+            penal.append((k401_all + float(r.get("traditional_ira", 0.0)) + float(r.get("hsa", 0.0))
+                          - p_free[-1]) if r else 0.0)
         if not cash:
             continue
-        rule55_m = float(np.percentile(k401, 50)) if (r55 and a >= int(getattr(cfg, "RULE_OF_55_MIN_SEPARATION_AGE", 55))) else 0.0
+        rule55_m = float(np.percentile(rule55_paths, 50))
+        partner_m = float(np.percentile(p_free, 50))
         sepp_m = 0.0
         if sepp_on and a >= sepp_start and cfg.sepp_72t_must_continue(a, sepp_start):
             if sepp_amount is None:  # locked at the schedule's first year
@@ -1979,9 +2004,10 @@ def _accessible_percentiles(bytype_logs: List[List[dict]], withdrawal_logs: List
             "taxable": tax_m,
             "roth": roth_m,
             "rule55": rule55_m,
+            "partner_open": partner_m,   # an older partner's 401(k), open by THEIR age
             "sepp": sepp_m,
             "penalized": float(np.percentile(penal, 50)),
-            "accessible": cash_m + tax_m + roth_m + rule55_m + sepp_m,  # = stacked chart height
+            "accessible": cash_m + tax_m + roth_m + rule55_m + partner_m + sepp_m,  # = stacked chart height
             "burn": float(np.percentile(burn, 50)) if burn else 0.0,
             "penalty": float(np.percentile(pen, 50)) if pen else 0.0,
         })
@@ -2063,6 +2089,17 @@ def _compute_allocation_by_year(median_traj, retirement_age: int) -> List[Alloca
     return out
 
 
+def _partner_last_work_age(retirement_age: int) -> int:
+    """First age (yours) at which nobody in the household earns wages, at least
+    ``retirement_age``. A partner with their own later PARTNER_RETIREMENT_AGE keeps
+    earning, and paying tax and saving, after you retire."""
+    pra = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
+    if pra is None or not cfg.has_partner():
+        return int(retirement_age)
+    gap = int(getattr(cfg, "YOUR_AGE", 25)) - int(getattr(cfg, "PARTNER_AGE", 0))
+    return min(max(int(retirement_age), int(pra) + gap), int(cfg.plan_end_age()))
+
+
 def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContributionYearRow]:
     """Per-year contribution breakdown from current age to retirement.
 
@@ -2095,8 +2132,9 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
     does.
     """
     start_age = int(getattr(cfg, "YOUR_AGE", 25))
-    # Use target retirement age as exclusive upper bound.
-    end_age = int(retirement_age)
+    # Exclusive upper bound: your retirement, or later when a partner with their
+    # own retirement age keeps working (and saving) after you stop.
+    end_age = _partner_last_work_age(retirement_age)
     if end_age <= start_age:
         return []
 
@@ -2129,8 +2167,11 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
     out: List[dict] = []
     for age in range(start_age, end_age):
         # The engine's own per-year pay, deferrals, match, Roth limits, taxes
-        # and take-home (account_simulation.working_year_cashflow).
-        cf = sim.working_year_cashflow(age, partner_working=_partner_working(age))
+        # and take-home (account_simulation.working_year_cashflow). After your
+        # own retirement only the partner's side is filled in.
+        you_working = age < retirement_age
+        cf = sim.working_year_cashflow(age, partner_working=_partner_working(age),
+                                       you_working=you_working)
         base = cf["base_salary"]
         saved = cf["saved"]
         your_after_tax = cf["your_take_home"]
@@ -2152,7 +2193,12 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
         partner_roth = cf["partner_roth"]
         partner_401k_year = cf["partner_401k"]
 
-        if savings_mode.startswith("Auto") and calc_expenses is not None:
+        if not you_working:
+            # You are retired: the partner's pay covers spending first and any
+            # surplus is banked by the engine without being tracked per year, so
+            # only their 401(k), match and Roth are shown.
+            your_brokerage = partner_brokerage = 0.0
+        elif savings_mode.startswith("Auto") and calc_expenses is not None:
             # AUTO — same residual sweep as simulate_accumulation_year:
             # household_after_tax - living - after_tax_electives, then attributed
             # by the "split expenses evenly, bank your own remainder" rule (each
@@ -2212,7 +2258,7 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
             "age": int(age),
             "your_401k": float(cf["your_401k"]),
             "your_employer_match": float(employer_match),
-            "your_hsa": float(cf["your_hsa"] + your_hsa_match),
+            "your_hsa": float(cf["your_hsa"] + (your_hsa_match if you_working else 0.0)),
             "your_roth": float(your_roth_contribution),
             "your_aftertax_roth": float(your_after_tax_401k),
             "your_brokerage": float(your_brokerage),
@@ -2267,6 +2313,7 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
     _pra = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
     _age_gap = start_age - int(getattr(cfg, "PARTNER_AGE", 0))
     _has_partner = int(getattr(cfg, "PARTNER_AGE", 0)) > 0
+    last_work_age = _partner_last_work_age(retirement_age)
 
     out: List[dict] = []
     for age in ages:
@@ -2284,10 +2331,20 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
                 "gross_income": float(cf["gross_income"]),
             })
         else:
+            # A partner who keeps working after you retire still earns and pays tax
+            # on that pay; the engine's withdrawal log carries only the portfolio side.
+            partner_pay = None
+            if age < last_work_age:
+                partner_pay = sim.working_year_cashflow(age, partner_working=True,
+                                                        you_working=False)
             # Retirement year: the median withdrawal row's logged taxes for this
             # age (zeros if no run covers it, e.g. every run ended earlier).
-            # gross_income = withdrawals (already includes RMDs) + real SS income,
-            # since SS is a separate income source netted out of `total` upstream.
+            # gross_income = every dollar the year's tax is charged on: the
+            # withdrawals, the whole forced RMD (the part reinvested rather than
+            # spent is still taxed), Roth conversions (their tax is in the total),
+            # real SS income (netted out of `total` upstream) and a working
+            # partner's pay. Using the net RMD (after its tax) pushed the
+            # effective rate above the top bracket.
             row = taxes_by_age.get(age)
             if row is not None:
                 total_taxes = float(row.get("total_taxes", 0.0))
@@ -2303,12 +2360,21 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
                             ss_income = float(calc_ss(age, ss_claim_age))
                         except Exception:
                             ss_income = 0.0
-                gross_income = float(row.get("total", 0.0)) + ss_income
+                reinvested_rmd = max(0.0, float(row.get("rmd_gross", 0.0)) - float(row.get("rmd_spent", 0.0)))
+                gross_income = (float(row.get("total", 0.0)) + reinvested_rmd
+                                + float(row.get("roth_conversion", 0.0)) + ss_income)
             else:
                 total_taxes = 0.0
                 niit = 0.0
                 state_tax = 0.0
                 gross_income = 0.0
+            federal = max(0.0, total_taxes - niit - state_tax)
+            fica = 0.0
+            if partner_pay is not None:
+                federal += float(partner_pay["federal"])
+                state_tax += float(partner_pay["state"])
+                fica = float(partner_pay["fica"])
+                gross_income += float(partner_pay["gross_income"])
             out.append({
                 "age": int(age),
                 # finding #17 — `total_taxes` already INCLUDES niit (see
@@ -2318,11 +2384,11 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
                 # (the chart's _total()) recovers the real total exactly once,
                 # instead of double-counting NIIT on top of an already-inclusive
                 # federal figure.
-                "federal": max(0.0, total_taxes - niit - state_tax),
+                "federal": federal,
                 "state": state_tax,
                 "ltcg": 0.0,
                 "niit": niit,
-                "fica": 0.0,
+                "fica": fica,
                 "gross_income": gross_income,
             })
     return out

@@ -63,6 +63,9 @@ def _bytype_from_portfolio(portfolio) -> List[Dict[str, float]]:
             row: Dict[str, float] = {"age": int(record["age"])}
             for k, v in bt.items():
                 row[str(k)] = float(v)
+            # The partner's own balances, as "partner_<category>" (bridge to 59½).
+            for k, v in (record.get("partner_by_type") or {}).items():
+                row["partner_" + str(k)] = float(v)
             out.append(row)
         except (KeyError, TypeError, ValueError):
             continue

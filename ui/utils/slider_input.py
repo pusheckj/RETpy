@@ -154,6 +154,13 @@ def slider_with_box(st, label: str, min_value, max_value, step=1, *, key: str,
 
     if key not in ss:
         ss[key] = value if value is not None else min_value
+    if max_value <= min_value:
+        # Nothing to slide: st.slider raises when min and max are equal (a 99-year-old's
+        # retirement age can only be 99). Show the one value as text.
+        ss[key] = min_value
+        shown = f"{_fmt(min_value, decimals)}{unit}"
+        st.markdown(f"{label}: **{shown}**")
+        return min_value
     try:
         inside = min_value <= ss[key] <= max_value
     except TypeError:

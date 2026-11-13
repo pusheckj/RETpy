@@ -377,6 +377,28 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
     return series, payoff_age
 
 
+def _health_gap_note(health_by_age: dict, retirement_age, overrides: dict) -> str:
+    """Why the health band starts after retirement, when it does: a partner who
+    still works is on their employer plan, so the engine charges no marketplace
+    premium until they stop (``PARTNER_EMPLOYER_HEALTH_COVERAGE``)."""
+    try:
+        ret = int(retirement_age)
+        paid = sorted(a for a, v in (health_by_age or {}).items() if a >= ret and v > 0)
+        if not paid or paid[0] <= ret:
+            return ""
+        first = paid[0]
+        zero = [a for a in range(ret, first) if (health_by_age or {}).get(a, 0.0) <= 0]
+        if not zero:
+            return ""
+        partner = int((overrides or {}).get("PARTNER_AGE", 0) or 0) > 0
+        why = ("your partner is still working, so their employer plan covers the household "
+               "and the model charges no marketplace premium. Put their payroll premium in your "
+               "living expenses" if partner else "no premium is charged in those years")
+        return (f" The health band starts at age {first}, not {ret}: {why}.")
+    except (TypeError, ValueError):
+        return ""
+
+
 def _vline_label_side(x, ages: list) -> str:
     """Plotly ``annotation_position`` for a vertical reference line at ``x``.
 
@@ -640,6 +662,7 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
             "**health insurance** band is what the simulation pays for ACA "
             "coverage before 65 and Medicare after."
         )
+        base_caption += _health_gap_note(health_by_age, retirement_age, overrides)
         if future:
             st.caption(
                 base_caption + " Shown in **future dollars**: each year is "

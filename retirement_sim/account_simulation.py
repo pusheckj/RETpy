@@ -672,6 +672,8 @@ class AccountPortfolio:
         # Rule of 55 needs it because the exception depends on the age you LEFT
         # the employer, not just your current age.
         self.separation_age = None
+        # The partner's own separation age, in THEIR age (set with separation_age).
+        self.partner_separation_age = None
         # 72(t) SEPP: the annual payment is fixed at the schedule's start age.
         self.sepp_annual_amount = None
         self.sepp_start_age = None
@@ -763,12 +765,23 @@ class AccountPortfolio:
         return sum(a.balance for a in self.accounts.values()
                    if a.account_type != AccountType.COLLEGE_529)
 
-    def get_balance_by_type(self) -> Dict[str, float]:
+    def get_balance_by_type(self, owner: Optional[str] = None) -> Dict[str, float]:
+        """Balances by account category; ``owner="partner"`` counts only their accounts."""
         by_type = {}
         for account in self.accounts.values():
+            if owner is not None and account.owner != owner:
+                continue
             type_name = account.account_type.value
             by_type[type_name] = by_type.get(type_name, 0) + account.balance
         return by_type
+
+    @staticmethod
+    def owner_age(owner: str, your_age: float) -> float:
+        """The age of the person who owns an account, given the primary's age:
+        penalty-free ages (59.5, 65) and the Rule of 55 follow the owner."""
+        if owner == "partner" and cfg.has_partner():
+            return your_age - (cfg.YOUR_AGE - cfg.PARTNER_AGE)
+        return your_age
 
     def reset_yearly_income(self):
         """Reset yearly income tracking at the start of each year."""
@@ -1052,7 +1065,7 @@ class AccountPortfolio:
         # qualified medical). See _withdrawal_order for the full selection logic.
         withdrawal_order = _withdrawal_order(your_age, is_medical)
 
-        for account_types, tax_treatment in withdrawal_order:
+        for account_types, base_treatment in withdrawal_order:
             if remaining <= 0:
                 break
             for account in self.accounts.values():
@@ -1062,6 +1075,13 @@ class AccountPortfolio:
                     withdraw_amount = min(remaining, account.balance)
                     tax = 0
                     penalty = 0
+                    tax_treatment = base_treatment
+                    # The order above follows YOUR age. A traditional account owned by
+                    # someone still under 59.5 (a younger partner) is penalized anyway.
+                    if (base_treatment == "income" and account.account_type in _TRADITIONAL_TYPES
+                            and self.owner_age(account.owner, your_age)
+                            < cfg.EARLY_WITHDRAWAL_AGE_401K_IRA):
+                        tax_treatment = "income_early"
 
                     if tax_treatment == "none":
                         tax = 0
@@ -1160,9 +1180,13 @@ class AccountPortfolio:
                         # sepp_covered for the ENTIRE withdraw_amount, with no
                         # reference to the SEPP amount or the designated balance,
                         # turning an active 72(t) into a universal penalty waiver.
+                        # The owner's own age and separation date decide the penalty.
+                        is_partner = account.owner == "partner"
                         penalty = cfg.calculate_early_withdrawal_penalty(
-                            withdraw_amount, account.account_type.value, your_age,
-                            separation_age=self.separation_age,
+                            withdraw_amount, account.account_type.value,
+                            self.owner_age(account.owner, your_age),
+                            separation_age=(self.partner_separation_age if is_partner
+                                            else self.separation_age),
                             sepp_covered=False,
                         )
                         self.total_early_withdrawal_penalties += penalty
@@ -1171,9 +1195,10 @@ class AccountPortfolio:
                         # HSA non-medical before 65: income tax + 20% penalty
                         tax = self.calculate_marginal_tax_on_income(withdraw_amount,
                                                                     owner=account.owner)
-                        if your_age < cfg.EARLY_WITHDRAWAL_AGE_HSA:
+                        owner_age = self.owner_age(account.owner, your_age)
+                        if owner_age < cfg.EARLY_WITHDRAWAL_AGE_HSA:
                             penalty = cfg.calculate_early_withdrawal_penalty(
-                                withdraw_amount, 'hsa', your_age, is_medical=False
+                                withdraw_amount, 'hsa', owner_age, is_medical=False
                             )
                             self.total_early_withdrawal_penalties += penalty
 
@@ -1334,6 +1359,9 @@ class AccountPortfolio:
         record = {
             'year': year, 'age': age, 'total': self.get_total_balance(),
             'by_type': self.get_balance_by_type(),
+            # The partner's share of by_type, so penalty-free access can follow
+            # each owner's own age (an older partner's 401(k) opens first).
+            'partner_by_type': self.get_balance_by_type("partner"),
             'accounts': {name: acc.balance for name, acc in self.accounts.items()},
             'home_equity': self.home_equity, 'home_equity_used': self.home_equity_used,
             # Loan state, so the UI can chart real home equity (value − principal)
@@ -1856,6 +1884,11 @@ class AccountPortfolio:
         self.contribute("reinvest_brokerage", amount)
 
 
+def partner_age_at_retirement(retirement_age: float) -> float:
+    """The partner's age in the year you reach ``retirement_age``."""
+    return retirement_age - (cfg.YOUR_AGE - cfg.PARTNER_AGE)
+
+
 def create_initial_portfolio() -> AccountPortfolio:
     """Create portfolio with current account balances."""
     portfolio = AccountPortfolio()
@@ -1912,6 +1945,20 @@ def _your_comp_for_age(your_age: int) -> Dict[str, Optional[float]]:
             "after_tax": None if after_tax is None else float(after_tax) * growth}
 
 
+def _contribution_for_year(desired: float, limit_now: float, limit_year: float) -> float:
+    """This year's contribution for an account whose set amount is ``desired``
+    (an amount in today's dollars, set against today's age limit ``limit_now``).
+
+    A set amount below today's limit is a deliberate amount: it stays flat and is
+    only held down to the year's own limit. An amount AT today's limit means "the
+    max" (Auto-allocate, a Max out click, a typed-in limit), so it follows the
+    limit as the person ages and the 50+, 60-63 (401(k)) and 55+ (HSA) catch-ups
+    apply from the year they start. Pay caps are applied by the caller."""
+    if limit_now > 0 and desired >= limit_now:
+        return float(limit_year)
+    return max(0.0, min(float(desired), float(limit_year)))
+
+
 def working_year_cashflow(your_age: int, partner_working: bool = True,
                           you_working: bool = True) -> Dict[str, Any]:
     """One working year's pay, pre-tax savings, taxes and take-home.
@@ -1954,7 +2001,8 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
     if you_working:
         limit_401k = cfg.get_401k_limit(your_age, current_year)
         desired = float(getattr(cfg, "YOUR_401K_CONTRIBUTION", limit_401k))
-        your_401k = max(0.0, min(desired, limit_401k, your_wages))
+        your_401k = max(0.0, min(_contribution_for_year(
+            desired, cfg.get_401k_limit(cfg.YOUR_AGE, cfg.CURRENT_YEAR), limit_401k), your_wages))
         your_match = min(your_401k, base_salary * cfg.YOUR_401K_MATCH_PCT)
         # Mega backdoor Roth: after-tax 401(k) up to the 415(c) total-additions
         # room left after the deferral and the match (see simulate_accumulation_year).
@@ -1965,9 +2013,13 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
             your_after_tax_401k = min(after_tax_pct * base_salary, room)
         hsa_limit = cfg.get_hsa_limit(your_age, current_year, is_family=cfg.hsa_is_family())
         desired = float(getattr(cfg, "YOUR_HSA_CONTRIBUTION", hsa_limit))
-        your_hsa = max(0.0, min(desired, hsa_limit, your_wages - your_401k))
+        hsa_now = cfg.get_hsa_limit(cfg.YOUR_AGE, cfg.CURRENT_YEAR, is_family=cfg.hsa_is_family())
+        your_hsa = max(0.0, min(_contribution_for_year(desired, hsa_now, hsa_limit),
+                                your_wages - your_401k))
         ira_limit = cfg.get_ira_limit(your_age, current_year)
-        your_roth = max(0.0, min(float(getattr(cfg, "YOUR_BACKDOOR_ROTH", ira_limit)), ira_limit))
+        your_roth = max(0.0, _contribution_for_year(
+            float(getattr(cfg, "YOUR_BACKDOOR_ROTH", ira_limit)),
+            cfg.get_ira_limit(cfg.YOUR_AGE, cfg.CURRENT_YEAR), ira_limit))
 
     # ----- Partner -------------------------------------------------------
     partner_base = partner_wages = partner_other = 0.0
@@ -1981,7 +2033,8 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
         partner_other = float(getattr(cfg, "PARTNER_OTHER_INCOME", 0.0) or 0.0)
         limit_401k = cfg.get_401k_limit(partner_age, current_year)
         desired = float(getattr(cfg, "PARTNER_401K_CONTRIBUTION", limit_401k))
-        partner_401k = max(0.0, min(desired, limit_401k, partner_wages))
+        partner_401k = max(0.0, min(_contribution_for_year(
+            desired, cfg.get_401k_limit(cfg.PARTNER_AGE, cfg.CURRENT_YEAR), limit_401k), partner_wages))
         partner_match = min(partner_401k, partner_base
                             * float(getattr(cfg, "PARTNER_401K_MATCH_PCT", 0.0) or 0.0))
 
@@ -2018,7 +2071,9 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
     partner_roth = 0.0
     if partner_working:
         ira_limit = cfg.get_ira_limit(partner_age, current_year)
-        desired = max(0.0, min(float(getattr(cfg, "PARTNER_ROTH_CONTRIBUTION", ira_limit)), ira_limit))
+        desired = _contribution_for_year(
+            float(getattr(cfg, "PARTNER_ROTH_CONTRIBUTION", ira_limit)),
+            cfg.get_ira_limit(cfg.PARTNER_AGE, cfg.CURRENT_YEAR), ira_limit)
         joint = (not two) and cfg.normalize_filing_status() == cfg._FILING_MFJ
         # An IRA contribution needs earned income (a spouse's counts on a joint return).
         # No income phase-out: above the direct-Roth range it goes in as a backdoor
@@ -3209,6 +3264,11 @@ def simulate_retirement_year(
     # the first time we enter the retirement phase.
     if portfolio.separation_age is None:
         portfolio.separation_age = float(retirement_age)
+        # The partner leaves work at their own retirement age (theirs, not yours);
+        # without one they retire with you.
+        _pra = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
+        portfolio.partner_separation_age = (float(_pra) if _pra is not None
+                                            else float(partner_age_at_retirement(retirement_age)))
 
     # Spending guardrails: adjust the discretionary portion of expenses
     # (housing held fixed when MODEL_GUARDRAILS_EXCLUDE_HOUSING).

@@ -14,11 +14,13 @@ except ImportError:  # pragma: no cover
 try:
     from utils.overrides import get_override, set_override
     from utils.household import (HOUSEHOLDS, JUST_ME, SPOUSE, MFJ, SINGLE, HOH,
-                                 UNMARRIED_FILING, household_of, clear_partner)
+                                 UNMARRIED_FILING, household_of, clear_partner,
+                                 forget_partner_widgets)
 except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
     from ui.utils.household import (HOUSEHOLDS, JUST_ME, SPOUSE, MFJ, SINGLE, HOH,  # type: ignore
-                                    UNMARRIED_FILING, household_of, clear_partner)
+                                    UNMARRIED_FILING, household_of, clear_partner,
+                                    forget_partner_widgets)
 
 try:
     from utils.household import plan_end_ages, plan_end_text
@@ -41,6 +43,14 @@ except ImportError:  # pragma: no cover
     from ui.utils.widget_guard import fit_number  # type: ignore
 
 
+def _on_household(st) -> None:
+    """Choosing "Just me": forget the partner's widget values too (see
+    ``forget_partner_widgets``), so adding a partner again starts clean."""
+    if st.session_state.get("ay_household") == JUST_ME:
+        clear_partner(st.session_state.setdefault("user_overrides", {}))
+        forget_partner_widgets(st.session_state)
+
+
 def render_body(st) -> None:
     ensure_default(st, "ay_your_age", safe_int(get_override(st, "YOUR_AGE", 30), 30))
     v = st.number_input("Your age", min_value=AGE_MIN, max_value=AGE_MAX, step=1, key="ay_your_age")
@@ -51,7 +61,8 @@ def render_body(st) -> None:
     # is PARTNER_AGE > 0, and a married couple files jointly (utils/household).
     ensure_default(st, "ay_household", household_of(st.session_state.get("user_overrides", {}) or {}))
     household = st.radio("Who is this plan for?", HOUSEHOLDS, key="ay_household",
-                         help="Pick spouse or partner if you share bills and savings.")
+                         help="Pick spouse or partner if you share bills and savings.",
+                         on_change=_on_household, args=(st,))
     if household == JUST_ME:
         clear_partner(st.session_state.setdefault("user_overrides", {}))
     else:

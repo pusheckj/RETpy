@@ -104,7 +104,8 @@ class TestSavingsAndTaxesAgree:
                 electives = (cf["your_roth"] + cf["your_after_tax_401k"] + cf["partner_roth"]
                              + cfg.calculate_529_contribution(age))
                 left = cf["your_take_home"] + cf["partner_take_home"] - living - electives
-                row = sr._approximate_savings_contributions(age + 1)[-1]
+                row = next(r for r in sr._approximate_savings_contributions(age + 1)
+                           if r["age"] == age)
                 assert row["your_brokerage"] + row["partner_brokerage"] == pytest.approx(
                     max(0.0, left), abs=1.0), age
         finally:

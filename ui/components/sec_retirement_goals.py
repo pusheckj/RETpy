@@ -39,14 +39,21 @@ try:
 except ImportError:  # pragma: no cover
     from ui.utils.slider_input import slider_with_box, forget_box  # type: ignore
 
-PARTNER_YEARS_MAX = 30
+LATER_NOTE = "ay_partner_later__note"      # (age used, sentence) after a typed gap was moved into range
 
 
 def _move_partner_retirement(st, target: int, age_gap: int) -> None:
     """Number-box callback: the partner retires ``ay_partner_later`` years after you,
     which moves their own-age slider (the engine stores their age, not the gap)."""
-    n = int(st.session_state.get("ay_partner_later", 0) or 0)
-    st.session_state["ay_partner_target_age"] = max(25, min(75, target - age_gap + n))
+    ss = st.session_state
+    n = int(ss.get("ay_partner_later", 0) or 0)
+    want = target - age_gap + n
+    age = max(TARGET_MIN, min(TARGET_MAX, want))       # the same range as the slider
+    ss["ay_partner_target_age"] = age
+    ss.pop(LATER_NOTE, None)
+    if age != want:
+        ss[LATER_NOTE] = (age, f"A retirement age can only be {TARGET_MIN} to {TARGET_MAX}, "
+                               f"so {age} was used.")
     forget_box(st, "ay_partner_target_age")
 
 
@@ -174,13 +181,16 @@ def render_retirement_ages(st) -> None:
                                   "withdrawals.")
         keep_none = not together_in_range and p_target == slider_default
         # "N years after you" is how people think of it; the slider is in their own age.
-        st.session_state["ay_partner_later"] = 0 if keep_none else max(
-            -PARTNER_YEARS_MAX, min(PARTNER_YEARS_MAX, safe_int(p_target) + age_gap - target))
-        st.number_input("Partner retires this many years after you", min_value=-PARTNER_YEARS_MAX,
-                        max_value=PARTNER_YEARS_MAX, step=1, key="ay_partner_later",
+        st.session_state["ay_partner_later"] = 0 if keep_none else safe_int(p_target) + age_gap - target
+        # No min/max on the box: Streamlit would refuse a typed value past them without
+        # a word. The callback moves it into the slider's range and says so.
+        st.number_input("Partner retires this many years after you", step=1, key="ay_partner_later",
                         help="0 means the same year as you. A negative number means they "
                              "retire first. It moves the partner's retirement age above.",
                         on_change=_move_partner_retirement, args=(st, target, age_gap))
+        note = st.session_state.get(LATER_NOTE)
+        if note and note[0] == p_target:
+            st.caption(note[1])
         if keep_none:
             # "Retire together" isn't representable on the slider and the user
             # hasn't moved it -> keep None so results match the retire-together default.
@@ -316,6 +326,16 @@ def render_body(st) -> None:
              "Once you've both claimed: ")
             + f"your Social Security ≈ {money_md(annual_ss, shorten=True)}/yr "
             f"({money_md(annual_ss / 12, shorten=True)}/mo{' combined' if has_partner else ''})."
+        )
+    if include:
+        st.caption(
+            "Full retirement age is 67 for everyone, which is right if you were born in 1960 or later. "
+            "The model does not pay a survivor benefit. It assumes both of you live to the end of the plan. "
+            "If you are a widow or widower, enter the benefit you get now as your own full-age amount."
+            if has_partner else
+            "Full retirement age is 67, which is right if you were born in 1960 or later. "
+            "If you are a widow or widower, enter the benefit you get now as your full-age amount. "
+            "The model does not change it."
         )
 
     # ----- Long-term care -----
