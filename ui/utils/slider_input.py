@@ -24,6 +24,7 @@ Units: the slider and the box are both in DISPLAY units (percent as 4.0, not
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Optional
 
 BOX = "__box"
@@ -56,7 +57,9 @@ def snap(raw, lo, hi, step, as_int: bool):
     decimals = 0 if as_int else _decimals(step)
     try:
         value = round(float(raw), decimals)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        return None, None
+    if not math.isfinite(value):                   # NaN and infinity are not values
         return None, None
     note = None
     if value < lo:
@@ -75,8 +78,16 @@ def _to_box(value, as_int: bool, decimals: int):
         return 0 if as_int else 0.0
 
 
+def _loaded_note(ss, key: str):
+    """The (loaded value, value used) pair ``widget_sync`` recorded when it had to move
+    this slider's saved value into range, while the slider still holds that value."""
+    pair = (ss.get("_sync_notes") or {}).get(key)
+    return pair if pair and ss.get(key) == pair[1] else None
+
+
 def _on_slider(st, key: str, as_int: bool, decimals: int) -> None:
     ss = st.session_state
+    (ss.get("_sync_notes") or {}).pop(key, None)
     ss[key + BOX] = _to_box(ss[key], as_int, decimals)
     ss[key + SEEN] = ss[key]
     ss.pop(key + NOTE, None)
@@ -84,6 +95,7 @@ def _on_slider(st, key: str, as_int: bool, decimals: int) -> None:
 
 def _on_box(st, key: str, lo, hi, step, as_int: bool) -> None:
     ss = st.session_state
+    (ss.get("_sync_notes") or {}).pop(key, None)
     decimals = 0 if as_int else _decimals(step)
     value, note = snap(ss.get(key + BOX), lo, hi, step, as_int)
     if value is None:                              # the box was emptied: keep the slider's value
@@ -122,6 +134,13 @@ def slider_with_box(st, label: str, min_value, max_value, step=1, *, key: str,
 
     if key not in ss:
         ss[key] = value if value is not None else min_value
+    try:
+        inside = min_value <= ss[key] <= max_value
+    except TypeError:
+        inside = False
+    if not inside:                          # a value past the ends (a saved plan, another widget) moves in
+        fitted, _ = snap(ss[key], min_value, max_value, step, as_int)
+        ss[key] = min_value if fitted is None else fitted
     bkey = key + BOX
     if bkey not in ss or ss.get(key + SEEN) != ss[key]:
         ss[bkey] = _to_box(ss[key], as_int, decimals)     # changed from outside: follow it
@@ -139,6 +158,10 @@ def slider_with_box(st, label: str, min_value, max_value, step=1, *, key: str,
                         label_visibility="collapsed", width=BOX_WIDTH,
                         on_change=_on_box, args=(st, key, min_value, max_value, step, as_int))
     note = ss.get(key + NOTE)
+    loaded = _loaded_note(ss, key)
     if note:
         st.caption(note)
+    elif loaded:
+        st.caption(f"Your saved value {loaded[0]:g} is outside {min_value:g} to {max_value:g}, "
+                   f"so {loaded[1]:g} is used.")
     return out

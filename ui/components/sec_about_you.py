@@ -27,16 +27,23 @@ except ImportError:  # pragma: no cover
 
 from retirement_sim.config import plan_end_age
 
+try:
+    from utils.age_limits import AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX, PLAN_UNTIL_MIN, PLAN_UNTIL_MAX
+except ImportError:  # pragma: no cover
+    from ui.utils.age_limits import (AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX,  # type: ignore
+                                     PLAN_UNTIL_MIN, PLAN_UNTIL_MAX)
 
 try:
     from utils.slider_input import slider_with_box
+    from utils.widget_guard import fit_number
 except ImportError:  # pragma: no cover
     from ui.utils.slider_input import slider_with_box  # type: ignore
+    from ui.utils.widget_guard import fit_number  # type: ignore
 
 
 def render_body(st) -> None:
     ensure_default(st, "ay_your_age", safe_int(get_override(st, "YOUR_AGE", 30), 30))
-    v = st.number_input("Your age", min_value=18, max_value=100, step=1, key="ay_your_age")
+    v = st.number_input("Your age", min_value=AGE_MIN, max_value=AGE_MAX, step=1, key="ay_your_age")
     set_override(st, "YOUR_AGE", safe_int(v))
     your_age = safe_int(v)
 
@@ -50,10 +57,10 @@ def render_body(st) -> None:
     else:
         # A partner age left at 0 by a single plan would sit below the input's
         # minimum; start it at your own age instead.
-        if safe_int(st.session_state.get("ay_partner_age", 0), 0) < 18:
+        if safe_int(st.session_state.get("ay_partner_age", 0), 0) < AGE_MIN:
             st.session_state["ay_partner_age"] = max(
-                18, safe_int(get_override(st, "PARTNER_AGE", 0), 0) or your_age)
-        v = st.number_input("Partner's age", min_value=18, max_value=100, step=1,
+                AGE_MIN, safe_int(get_override(st, "PARTNER_AGE", 0), 0) or your_age)
+        v = st.number_input("Partner's age", min_value=AGE_MIN, max_value=AGE_MAX, step=1,
                             key="ay_partner_age")
         set_override(st, "PARTNER_AGE", safe_int(v))
 
@@ -70,18 +77,28 @@ def render_body(st) -> None:
                           help="Head of household: you're unmarried and pay more than half "
                                "the cost of a home for a child or another dependent.")
         set_override(st, "FILING_STATUS", filing)
+        if filing == SINGLE and household == JUST_ME:
+            try:
+                from utils.derived import children_at_home_now
+            except ImportError:  # pragma: no cover
+                from ui.utils.derived import children_at_home_now  # type: ignore
+            if children_at_home_now(st.session_state.get("user_overrides", {}) or {}):
+                st.caption("You have children at home. If you pay most of their costs, Head of "
+                           "household usually means a lower tax bill.")
 
     # The retirement-age sliders live in Retirement (drawn later this run).
     # Their widget values are already current, so apply the target age now:
     # sections drawn before Retirement then see this run's value, not last run's.
     if "ay_target_age" in st.session_state:
-        set_override(st, "TARGET_RETIREMENT_AGE", safe_int(st.session_state["ay_target_age"]))
+        # (Read before the slider draws, so keep it inside the slider's range here too.)
+        set_override(st, "TARGET_RETIREMENT_AGE", safe_int(
+            fit_number(st.session_state["ay_target_age"], TARGET_MIN, TARGET_MAX, 1), 60))
 
     # Plan-until age: each person's own. The plan runs until the later of the
     # two, so a younger partner is covered to their own plan-until age.
     ensure_default(st, "ay_plan_until",
                    safe_int(get_override(st, "PLAN_UNTIL_AGE", 95), 95))
-    plan_until = slider_with_box(st, "Plan-until age", 75, 100,
+    plan_until = slider_with_box(st, "Plan-until age", PLAN_UNTIL_MIN, PLAN_UNTIL_MAX,
                            1, key="ay_plan_until",
                            help="Your money needs to last through this age."
                                 + ("" if household == JUST_ME else
@@ -91,7 +108,7 @@ def render_body(st) -> None:
         ensure_default(st, "ay_partner_plan_until",
                        safe_int(get_override(st, "PARTNER_PLAN_UNTIL_AGE", None) or plan_until,
                                 plan_until))
-        p_until = slider_with_box(st, "Partner's plan-until age", 75, 100, 1,
+        p_until = slider_with_box(st, "Partner's plan-until age", PLAN_UNTIL_MIN, PLAN_UNTIL_MAX, 1,
                             key="ay_partner_plan_until", help="Same idea, using your partner's age.")
         set_override(st, "PARTNER_PLAN_UNTIL_AGE", safe_int(p_until))
         # Whoever is covered longer sets the end; every result uses this horizon.

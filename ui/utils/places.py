@@ -338,7 +338,7 @@ def get_state(overrides: Optional[dict]) -> Dict[str, Any]:
             state["custom"].append(_clean_custom(c, pid, name, v1, home))
     hidden = raw.get("hidden")
     if isinstance(hidden, list):
-        state["hidden"] = [h for h in hidden if h in _BUILT_IN_BY_ID and h != HERE_ID]
+        state["hidden"] = [h for h in hidden if isinstance(h, str) and h in _BUILT_IN_BY_ID and h != HERE_ID]
     return state
 
 

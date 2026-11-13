@@ -46,11 +46,9 @@ from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Uni
 
 try:
     from utils import place_costs as pc
-    from utils.formatting import months_text
     from utils.places import Place, engine_state, HOUSING_BUY, HOUSING_RENT, HOUSING_KEEP
 except ImportError:  # pragma: no cover
     from ui.utils import place_costs as pc  # type: ignore
-    from ui.utils.formatting import months_text  # type: ignore
     from ui.utils.places import Place, engine_state, HOUSING_BUY, HOUSING_RENT, HOUSING_KEEP  # type: ignore
 
 REACHED, PROGRESS, BEYOND = "reached", "progress", "beyond"
@@ -77,6 +75,7 @@ class Milestone:
     detail: str = ""                 # one short line
     place_id: Optional[str] = None
     unit: str = "$"                  # "$" or "months"
+    after_retire: bool = False       # PROGRESS, but only after the retirement age (the path growing back)
 
     @property
     def reached(self) -> bool:
@@ -153,6 +152,7 @@ class Inputs:
     mortgage_years: int              # years left on the mortgage (0 = none)
     places: Sequence[Place] = field(default_factory=tuple)
     cost: CostBasis = field(default_factory=CostBasis)
+    debt: Sequence[float] = ()       # owed at each age (today's dollars); empty = none. Net worth subtracts it.
 
 
 @dataclass(frozen=True)
@@ -175,13 +175,12 @@ def short_money(value: float) -> str:
     """$250K, $1M, $1.5M, $12.5K, $850."""
     v = abs(float(value))
     sign = "-" if value < 0 else ""
-    units = ((1e9, "B"), (1e6, "M"), (1e3, "K"))
-    for i, (size, suffix) in enumerate(units):
+    for size, suffix, up in ((1e9, "B", None), (1e6, "M", "B"), (1e3, "K", "M")):
         if v >= size:
             n = v / size
-            if i and round(n) >= 1000:   # $999.6K rounds up to $1M, not "$1000K"
-                n, suffix = v / units[i - 1][0], units[i - 1][1]
             text = f"{n:.1f}".rstrip("0").rstrip(".") if n < 100 else f"{n:.0f}"
+            if up and float(text) >= 1000:   # $999.96K rounds to "1000K": say $1M
+                return f"{sign}$1{up}"
             return f"{sign}${text}{suffix}"
     return f"{sign}${v:,.0f}"
 
@@ -237,17 +236,23 @@ def track(ages: Sequence[int], values: Sequence[float], need: Need):
 
 
 def _make(inp: Inputs, key, kind, label, status, current, target, age, progress, detail="",
-          place_id=None, unit="$") -> Milestone:
+          place_id=None, unit="$", after_retire=False) -> Milestone:
     return Milestone(key=key, kind=kind, label=label, status=status, current=float(current),
                      target=float(target), progress=progress, age=age,
                      year=year_of(age, inp.your_age, inp.year), detail=detail,
-                     place_id=place_id, unit=unit)
+                     place_id=place_id, unit=unit, after_retire=after_retire)
 
 
 def _tracked(inp: Inputs, key, kind, label, values, need, current, target, detail="",
-             place_id=None) -> Milestone:
+             place_id=None, before_retirement: bool = False) -> Milestone:
+    """``before_retirement``: a marker about being ready to retire (FIRE, Coast FIRE,
+    the other markers). If the median path only clears it AFTER the retirement age,
+    that is the path growing back while you spend it down, so it is flagged."""
     status, age, prog = track(inp.ages, values, need)
-    return _make(inp, key, kind, label, status, current, target, age, prog, detail, place_id)
+    late = (before_retirement and status == PROGRESS and age is not None
+            and int(inp.retire_age) > int(inp.your_age) and int(age) > int(inp.retire_age))
+    return _make(inp, key, kind, label, status, current, target, age, prog, detail, place_id,
+                 after_retire=late)
 
 
 # --------------------------------------------------------------------------- the spending rule
@@ -419,7 +424,7 @@ def _place_result(inp: Inputs, place: Place) -> PlaceResult:
     fire_m = _tracked(
         inp, f"fire:{place.id}", KIND_FIRE, f"FIRE in {place.name}", values,
         lambda a: fire_number(cost_at(a).spend, inp.rate), current, fire,
-        f"Covers {short_money(here.spend)} a year at {rate_txt}.", place.id)
+        f"Covers {short_money(here.spend)} a year at {rate_txt}.", place.id, before_retirement=True)
 
     # Coast FIRE: invested alone grows to (FIRE number - what the move frees) by retirement.
     def coast_at(a: int) -> float:
@@ -432,7 +437,7 @@ def _place_result(inp: Inputs, place: Place) -> PlaceResult:
         inp, f"coast:{place.id}", KIND_COAST, f"Coast FIRE in {place.name}", inp.invested,
         coast_at, float(inp.invested[0]) if len(inp.invested) else 0.0, coast_at(first_age),
         f"Stop saving. Growth alone gets you to {short_money(fire)} by {max(ret, inp.your_age)}.",
-        place.id)
+        place.id, before_retirement=True)
     return PlaceResult(place, here.spend, fire, coast, fire_m, here)
 
 
@@ -451,7 +456,8 @@ def _markers(inp: Inputs, spending_known: bool) -> List[Milestone]:
                              f"{months}-month emergency fund", status, inp.cash, need,
                              inp.your_age if status == REACHED else None,
                              min(1.0, max(0.0, inp.cash / need)),
-                             f"Cash covers {months_text(have)} (goal: {months}).", unit="months"))
+                             f"Cash covers {'100+' if have >= 100 else format(have, '.1f')} months. "
+                             f"The goal is {months}.", unit="months"))
 
     if spending_known:
         total = inp.spend_core + inp.health
@@ -459,17 +465,20 @@ def _markers(inp: Inputs, spending_known: bool) -> List[Milestone]:
         lean = fire_number(essentials, inp.rate)
         out.append(_tracked(inp, "lean", KIND_MARKER, "Investments cover the essentials", inp.invested,
                             lean, current, lean,
-                            f"Essentials are about {short_money(essentials)} a year."))
+                            f"Essentials are about {short_money(essentials)} a year.",
+                            before_retirement=True))
         gap = max(0.0, total - max(0.0, inp.barista_income))
         barista = fire_number(gap, inp.rate)
         out.append(_tracked(inp, "barista", KIND_MARKER, "Barista FIRE", inp.invested, barista, current,
                             barista,
-                            f"Part-time {short_money(inp.barista_income)} a year, investments cover the rest."))
+                            f"Part-time {short_money(inp.barista_income)} a year, investments cover the rest.",
+                            before_retirement=True))
         if inp.real_return > 0:
             need = total / inp.real_return
             out.append(_tracked(inp, "returns", KIND_MARKER, "A year of returns pays a year of costs",
                                 inp.invested, need, current, need,
-                                f"Growth at {inp.real_return * 100:.1f}% a year covers {short_money(total)}."))
+                                f"Growth at {inp.real_return * 100:.1f}% a year covers {short_money(total)}.",
+                                before_retirement=True))
 
     if inp.mortgage_years > 0:
         age = inp.your_age + int(inp.mortgage_years)
@@ -479,13 +488,14 @@ def _markers(inp: Inputs, spending_known: bool) -> List[Milestone]:
 
 
 def _next_up(all_ms: Sequence[Milestone]) -> Optional[Milestone]:
-    coming = [m for m in all_ms if m.status == PROGRESS and m.age is not None]
+    coming = [m for m in all_ms if m.status == PROGRESS and m.age is not None and not m.after_retire]
     return min(coming, key=lambda m: m.age) if coming else None
 
 
 def build(inp: Inputs) -> Report:
     """Every milestone for these inputs."""
-    nw_values = [float(i) + float(h) for i, h in zip(inp.invested, inp.home)]
+    debt = list(inp.debt) + [0.0] * max(0, len(inp.invested) - len(inp.debt))
+    nw_values = [float(i) + float(h) - float(d) for i, h, d in zip(inp.invested, inp.home, debt)]
     networth, e_nw = _ladder(inp, KIND_NETWORTH, nw_values, "net worth")
     invested, e_inv = _ladder(inp, KIND_INVESTED, inp.invested, "invested")
 

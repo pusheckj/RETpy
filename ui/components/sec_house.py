@@ -53,7 +53,10 @@ def _section_label(st, txt):
 def _housing(st) -> None:
     """Rent or own today, and the loan on the home you own."""
     _section_label(st, "Housing")
-    owns_default = safe_int(get_override(st, "HOME_VALUE", 0), 0) > 0
+    # A payment with no home value still means you own (the engine counts it), so it must
+    # not be shown as "Renting", which would zero the loan keys on the next run.
+    owns_default = (safe_int(get_override(st, "HOME_VALUE", 0), 0) > 0
+                    or safe_int(get_override(st, "MORTGAGE_MONTHLY", 0), 0) > 0)
     ensure_default(st, "se_rent_own", "Own home" if owns_default else "Renting")
     status = st.radio("Rent or own?", ["Renting", "Own home"], horizontal=True, key="se_rent_own")
     owns = status == "Own home"
@@ -102,7 +105,7 @@ def _migrate_legacy_move(st) -> None:
     legacy = housing_timeline({**ov, "HOME_EVENTS": []})
     for e in legacy:
         e["down_pct"] = round(1.0 - e["loan"] / e["price"], 4) if e["price"] > 0 else 0.0
-    events = sorted(list(ov.get("HOME_EVENTS") or []) + legacy, key=lambda e: e.get("age", 0))
+    events = sorted(_events(st) + legacy, key=lambda e: e.get("age", 0))
     set_override(st, "HOME_EVENTS", events)
     set_override(st, "HOUSE_MOVE_ENABLED", False)
 
@@ -253,7 +256,7 @@ def _move_summary(st, event: dict, owns_before: bool) -> None:
         ret = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60)
         if payoff > ret:
             st.warning(
-                f"This loan runs until **{payoff}**, **{payoff - ret} years into "
+                f"This loan runs until **{payoff}**, **{payoff - ret} {'year' if payoff - ret == 1 else 'years'} into "
                 f"retirement** (you plan to retire at {ret}). Those payments come "
                 f"out of your savings. A shorter term costs more each month while "
                 f"you work, but can let you retire *sooner*. Try both."

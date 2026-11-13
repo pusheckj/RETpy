@@ -123,4 +123,7 @@ def render(st, results: dict) -> None:
             unsafe_allow_html=True,
         )
 
+    if (median_final or 0) >= 10_000_000:
+        st.caption("Final balances are before any federal or state estate tax, which the model "
+                   "does not include.")
     st.markdown('<div style="margin-bottom: 24px;"></div>', unsafe_allow_html=True)

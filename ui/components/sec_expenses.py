@@ -21,9 +21,11 @@ except ImportError:  # pragma: no cover
 try:
     from utils.overrides import get_override, set_override
     from utils.expense_categories import CATEGORIES
+    from utils.derived import LIFECYCLE_PRESETS
 except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
+    from ui.utils.derived import LIFECYCLE_PRESETS  # type: ignore
 
 from retirement_sim import config as cfg
 
@@ -89,12 +91,7 @@ def render_body(st) -> None:
 
     # ----- Lifecycle preset -----
     _section_label(st, "Lifecycle pattern")
-    presets = [
-        "Flat (no change)",
-        "Early-retirement travel boom, quieter later",
-        "Conservative senior years",
-        "Children then empty-nest",
-    ]
+    presets = LIFECYCLE_PRESETS
     current_preset = str(get_override(st, "SPEND_LIFECYCLE_PRESET", presets[0]))
     if current_preset not in presets:
         current_preset = presets[0]

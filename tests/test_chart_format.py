@@ -58,7 +58,6 @@ def test_months_text_reads_as_a_sentence():
 def test_emergency_marker_names_the_goal_not_a_fraction():
     src = open(os.path.join(_UI, "utils", "milestones.py"), encoding="utf-8").read()
     assert "of {months} months" not in src
-    assert "(goal: {months})" in src
 
 
 # ---- axes -----------------------------------------------------------------

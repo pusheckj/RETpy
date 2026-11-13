@@ -64,7 +64,7 @@ def render(st, results: dict = None, chart_key: str = "mortgage_paydown") -> Non
             f"from {pct(base['success_rate'])} to {pct(best['success_rate'])} "
             f"(**{best['delta_success'] * 100:+.1f} points**) and you own the house outright "
             f"at **{best['payoff_age']}** instead of {base['payoff_age']}. That's "
-            f"{best.get('years_saved') or 0} years earlier and saves "
+            f"{best.get('years_saved') or 0} {'year' if (best.get('years_saved') or 0) == 1 else 'years'} earlier and saves "
             f"{money_md((base.get('total_interest') or 0) - (best.get('total_interest') or 0))} "
             f"in interest."
         )
