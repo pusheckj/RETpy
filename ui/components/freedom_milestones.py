@@ -248,6 +248,25 @@ def series(clean: dict, results):
     return det_ages, det_invested, home, "projection"
 
 
+def _debt_by_age(clean: dict, ages) -> list:
+    """What the plan's debts leave owed at each age (today's dollars), so net worth
+    here subtracts them as the top bar does. Empty when there are no debts."""
+    try:
+        from retirement_sim import debts as dm
+        try:
+            from utils import debt_view as dv
+        except ImportError:  # pragma: no cover
+            from ui.utils import debt_view as dv  # type: ignore
+        if not dv.rows(clean):
+            return []
+        bal = dm.real_schedule(dv.rows(clean), dv.extra(clean), dv.strategy(clean),
+                               dv.inflation(clean)).balances
+        first = int(ages[0])
+        return [float(bal[a - first]) if 0 <= a - first < len(bal) else 0.0 for a in (int(x) for x in ages)]
+    except Exception:
+        return []
+
+
 def build_inputs(overrides: dict, results, state: dict, rate: float, barista: float):
     """The pure-logic inputs for this plan, or None if there is no timeline.
 
@@ -286,7 +305,7 @@ def build_inputs(overrides: dict, results, state: dict, rate: float, barista: fl
         discretionary_ratio=basis["discretionary_ratio"], rate=rate, real_return=_real_return(clean),
         cash=cash, barista_income=float(barista),
         mortgage_years=safe_int(clean.get("MORTGAGE_YEARS_REMAINING", 0), 0) if mort else 0,
-        places=pl.resolve(state), cost=cost)
+        places=pl.resolve(state), cost=cost, debt=_debt_by_age(clean, ages))
     return (inp, basis, sale), source
 
 

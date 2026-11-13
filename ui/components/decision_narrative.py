@@ -80,8 +80,9 @@ def render(st, results: dict = None) -> None:
             )
         elif verdict.get("ran_out"):
             parts.append(
-                f"On a typical path, your money **runs out around age {verdict['first_short']}**, "
-                f"before 59½."
+                f"On a typical path, your money **is gone by age {verdict['first_short']}**"
+                + (f", before you retire at {retire_age}." if verdict["first_short"] <= retire_age
+                   else ", before 59½.")
             )
         else:
             parts.append(

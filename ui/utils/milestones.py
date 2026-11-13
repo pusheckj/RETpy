@@ -152,6 +152,7 @@ class Inputs:
     mortgage_years: int              # years left on the mortgage (0 = none)
     places: Sequence[Place] = field(default_factory=tuple)
     cost: CostBasis = field(default_factory=CostBasis)
+    debt: Sequence[float] = ()       # owed at each age (today's dollars); empty = none. Net worth subtracts it.
 
 
 @dataclass(frozen=True)
@@ -491,7 +492,8 @@ def _next_up(all_ms: Sequence[Milestone]) -> Optional[Milestone]:
 
 def build(inp: Inputs) -> Report:
     """Every milestone for these inputs."""
-    nw_values = [float(i) + float(h) for i, h in zip(inp.invested, inp.home)]
+    debt = list(inp.debt) + [0.0] * max(0, len(inp.invested) - len(inp.debt))
+    nw_values = [float(i) + float(h) - float(d) for i, h, d in zip(inp.invested, inp.home, debt)]
     networth, e_nw = _ladder(inp, KIND_NETWORTH, nw_values, "net worth")
     invested, e_inv = _ladder(inp, KIND_INVESTED, inp.invested, "invested")
 

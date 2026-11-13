@@ -282,7 +282,7 @@ def render_body(st) -> None:
             (f"At age {claim_age} (**{factor:.0%}** of your full-age benefit): " if not has_partner else
              "Once you've both claimed: ")
             + f"your Social Security ≈ {money_md(annual_ss, shorten=True)}/yr "
-            f"({money_md(annual_ss / 12, shorten=True)}/mo combined)."
+            f"({money_md(annual_ss / 12, shorten=True)}/mo{' combined' if has_partner else ''})."
         )
 
     # ----- Long-term care -----

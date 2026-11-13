@@ -253,7 +253,7 @@ def _move_summary(st, event: dict, owns_before: bool) -> None:
         ret = safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60)
         if payoff > ret:
             st.warning(
-                f"This loan runs until **{payoff}**, **{payoff - ret} years into "
+                f"This loan runs until **{payoff}**, **{payoff - ret} {'year' if payoff - ret == 1 else 'years'} into "
                 f"retirement** (you plan to retire at {ret}). Those payments come "
                 f"out of your savings. A shorter term costs more each month while "
                 f"you work, but can let you retire *sooner*. Try both."
