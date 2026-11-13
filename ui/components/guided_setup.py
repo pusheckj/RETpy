@@ -72,7 +72,8 @@ _SPEND_HINTS = {
     "SPEND_TRANSPORT_MONTHLY": "Gas, car insurance, repairs, transit.",
     "SPEND_HEALTH_MONTHLY": "Health insurance you pay each month (on your pay stub).",
     "SPEND_DISCRETIONARY_MONTHLY": "Travel, shopping, hobbies, subscriptions.",
-    "SPEND_OTHER_MONTHLY": "Everything else: other insurance, pets, personal care, debt payments.",
+    "SPEND_OTHER_MONTHLY": "Everything else: other insurance, pets, personal care. "
+                           "Not debt payments: the Debts section pays those.",
     "PARTNER_OTHER_MONTHLY": "Your partner's own spending, beyond the shared costs above.",
 }
 
@@ -611,7 +612,16 @@ def commit_home(st) -> None:
     c = state(st).get("checkup")
     if c and "gs_spend_SPEND_OTHER_MONTHLY" not in state(st).get("seen", []):
         ov["SPEND_OTHER_MONTHLY"] = s2f.spending_split(
-            {"needs_monthly": c["needs"], "wants_monthly": c["wants"]}, _housing(st))["SPEND_OTHER_MONTHLY"]
+            {"needs_monthly": c["needs"], "wants_monthly": c["wants"]}, _housing(st),
+            _carried_debt_min(st))["SPEND_OTHER_MONTHLY"]
+
+
+def _carried_debt_min(st) -> float:
+    """The check-up's minimum debt payments, now paid by the planner's Debts
+    section (0 if no debts came across -- a setup begun before debts were
+    carried keeps them in Other)."""
+    c = state(st).get("checkup") or {}
+    return float(c.get("debt_min") or 0.0) if _ov(st).get("DEBTS") else 0.0
 
 
 def check_home(st) -> Optional[str]:
@@ -634,21 +644,22 @@ def draw_spending(st) -> None:
     ov = _ov(st)
     c = state(st).get("checkup")
     housing = _num(ov.get("MORTGAGE_MONTHLY")) or _num(ov.get("SPEND_RENT_MONTHLY"))
+    debt_min = _carried_debt_min(st)
     if c:
-        rest = max(0.0, c["needs"] - housing)
+        rest = max(0.0, c["needs"] - housing - debt_min)
         _cue(st, f"From your check-up: {money_md(c['needs'])} of needs and {money_md(c['wants'])} "
-                 f"of wants a month. Housing ({money_md(housing)}) was the last step, so the "
-                 f"other {money_md(rest)} of needs is in Other below"
-                 + (f", including {money_md(c['debt_min'])} of minimum debt payments"
-                    if c.get("debt_min") else "")
-                 + ". Move parts of it into the right boxes if you can, especially health "
-                   "insurance. The total matters most."
-                 + (" Leave the debt payments in Other, and lower it once a debt is paid off."
-                    if c.get("debt_min") else ""))
+                 f"of wants a month. Housing ({money_md(housing)}) was the last step"
+                 + (f", and your debts ({money_md(debt_min)} of minimum payments) are in the "
+                    "planner's Debts section, which pays them until each is gone"
+                    if debt_min else "")
+                 + f", so the other {money_md(rest)} of needs is in Other below. Move parts of it "
+                   "into the right boxes if you can, especially health insurance. The total "
+                   "matters most.")
     else:
         _cue(st, "About how much do you spend each month? Your bank or card app's spending "
-                 "summary can help. Leave out housing (the last step) and "
-                 "money you save. Each box starts at a typical amount. Change any that don't fit.")
+                 "summary can help. Leave out housing (the last step), debt payments (add "
+                 "your debts later in the Debts section) and money you save. Each box starts "
+                 "at a typical amount. Change any that don't fit.")
     cats = _shown_categories(st)
     for row in range(0, len(cats), 2):      # one row of columns per pair, so the boxes line up
         for col, cat in zip(st.columns(2), cats[row:row + 2]):
@@ -659,7 +670,7 @@ def draw_spending(st) -> None:
     total = sum(_num(_val(st, "gs_spend_" + cat.key)) for cat in cats)
     line = f"**{money_md(total)} a month**, plus {money_md(housing)} for housing."
     if c:
-        target = max(0.0, c["needs"] + c["wants"] - housing)
+        target = max(0.0, c["needs"] + c["wants"] - housing - debt_min)
         gap = total - (_num(_val(st, "gs_spend_PARTNER_OTHER_MONTHLY")) if _partner(st) else 0) - target
         if abs(gap) < 1:
             line += " ✓ Matches your check-up."
@@ -748,8 +759,24 @@ def review_lines(ov: Dict[str, Any]) -> List[str]:
         + "; the rest of what you don't spend is invested.",
         f"**Spending:** {money_md(spend + housing)} a month, including "
         f"{money_md(housing)} for housing.",
+        *_debts_line(ov),
         f"**Retirement:** at {int(_num(ov.get('TARGET_RETIREMENT_AGE'), 60))}, {ss}.",
     ]
+
+
+def _debts_line(ov: Dict[str, Any]) -> List[str]:
+    """The debts that came over from the check-up (none: no line)."""
+    try:
+        from retirement_sim import debts as dm
+    except ImportError:  # pragma: no cover
+        return []
+    rows = [d for d in dm.normalize_debts(ov.get("DEBTS")) if d["balance"] > 0]
+    if not rows:
+        return []
+    pay = sum(d["min_payment"] for d in rows) + _num(ov.get("DEBT_EXTRA_MONTHLY"))
+    n = len(rows)
+    return [f"**Debts:** {n} {'debt' if n == 1 else 'debts'}, {money_md(sum(d['balance'] for d in rows))} "
+            f"owed, {money_md(pay)} a month until paid off (see the Debts section)."]
 
 
 def draw_review(st) -> None:

@@ -2169,6 +2169,17 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     if college_bill > 0:
         living += college_bill - portfolio.withdraw_529_for_college(your_age)
 
+    # Consumer debts: this year's payments (minimums + extra, in today's
+    # dollars; see cfg.debt_payment_for_age). Spending like any other: in the
+    # Auto modes they come out of the brokerage sweep below -- the extra
+    # payment is money that would otherwise have been saved -- and stop once
+    # the debts are paid off. (Manual mode invests fixed amounts, so, as with
+    # all spending, they only bite when spending passes take-home.)
+    # No debts -> 0 and nothing changes.
+    debt_payment = cfg.debt_payment_for_age(your_age)
+    if debt_payment > 0:
+        living += debt_payment
+
     # Record working-year spending too (deterministic, so no cross-scenario
     # spread — it anchors the spending-range chart before retirement). Living
     # expenses already include housing/children/base, so living == total here.
@@ -3151,6 +3162,12 @@ def simulate_retirement_year(
     adjusted_expenses = _apply_spending_guardrails(
         portfolio, expenses, annual_return, your_age, inflation_factor
     )
+    # Consumer debts still owed in retirement: their payments (today's dollars,
+    # cfg.debt_payment_for_age) are withdrawn like other spending. Added after
+    # the guardrails: a loan payment can't be trimmed in a bad year.
+    debt_payment = cfg.debt_payment_for_age(your_age)
+    if debt_payment > 0:
+        adjusted_expenses += debt_payment
 
     # RMD collection (drains traditional balances, computes RMD tax).
     rmd_total, rmd_tax = _collect_rmds(portfolio, your_age, partner_age)

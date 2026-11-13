@@ -35,14 +35,20 @@ def test_checkup_answers_map_onto_planner_keys():
     assert ov["YOUR_401K_CONTRIBUTION"] == 4_000 and ov["YOUR_401K_MATCH_PCT"] == 0.04
     assert ov["YOUR_BACKDOOR_ROTH"] == 1_000 and ov["YOUR_HSA_CONTRIBUTION"] == 0  # not HSA-eligible
     assert ov["SAVINGS_MODE"] == KEEP_AMOUNTS_MODE and ov["YOUR_BROKERAGE_CONTRIBUTION"] == 0
-    # total spending = the check-up's until housing is asked: all needs in Other
-    assert ov["SPEND_OTHER_MONTHLY"] == 2_600 and ov["SPEND_DISCRETIONARY_MONTHLY"] == 900
+    # total spending = the check-up's until housing is asked: needs in Other, less the
+    # minimum debt payments ($600), which move to the planner's Debts section
+    assert ov["SPEND_OTHER_MONTHLY"] == 2_000 and ov["SPEND_DISCRETIONARY_MONTHLY"] == 900
+    assert [d["name"] for d in ov["DEBTS"]] == ["Credit card", "Car loan", "Student loan"]
+    assert ov["DEBTS"][0] == {"name": "Credit card", "kind": "credit_card", "balance": 6_500.0,
+                              "apr": 0.24, "min_payment": 160.0}
+    assert ov["DEBT_EXTRA_MONTHLY"] == 150
     assert ov["SPEND_RENT_MONTHLY"] == ov["MORTGAGE_MONTHLY"] == ov["HOME_VALUE"] == 0
     assert ov["SPEND_FOOD_MONTHLY"] == ov["SPEND_UTILITIES_MONTHLY"] == 0
 
 
 def test_housing_comes_out_of_other_and_values_fit_the_inputs():
-    assert s2f.spending_split(CHECKUP, 1_400)["SPEND_OTHER_MONTHLY"] == 1_200
+    assert s2f.spending_split(CHECKUP, 1_400)["SPEND_OTHER_MONTHLY"] == 600     # less $600 minimums
+    assert s2f.spending_split(CHECKUP, 1_400, 0)["SPEND_OTHER_MONTHLY"] == 1_200
     assert s2f.spending_split(CHECKUP, 9_999)["SPEND_OTHER_MONTHLY"] == 0
     huge = s2f.carried({**CHECKUP, "needs_monthly": 900_000.0, "gross_salary_annual": 9e7,
                         "retirement_contrib_pct": 100.0, "hsa_eligible": True,
@@ -214,7 +220,8 @@ def test_checkup_answers_prefill_and_housing_comes_out_of_other(wizard):
     assert at.number_input(key="gs_401k_pct").value == 5.0
     assert at.radio(key="gs_invest").value == gs.KEEP
     _walk_to(at, "Monthly spending")
-    assert at.session_state["user_overrides"]["SPEND_OTHER_MONTHLY"] == 1_200   # 2,600 - 1,400 rent
+    # 2,600 needs - 1,400 rent - 600 minimum debt payments (now in the Debts section)
+    assert at.session_state["user_overrides"]["SPEND_OTHER_MONTHLY"] == 600
     assert any("✓ Matches your check-up" in m.value for m in at.markdown)
 
 
@@ -335,3 +342,14 @@ def test_an_unanswered_question_opens_blank_after_skip_and_continue(wizard):
     at.button(key="gs_skip").click().run()
     at.button(key="gs_resume").click().run()
     assert at.number_input(key="gs_age").value == 41
+
+
+def test_checkup_debts_carry_into_the_planner_and_the_review(wizard):
+    at = wizard(simple=CHECKUP)
+    ov = at.session_state["user_overrides"]
+    assert [d["name"] for d in ov["DEBTS"]] == ["Credit card", "Car loan", "Student loan"]
+    _walk_to(at, "Monthly spending")
+    assert any("Debts section" in c.value for c in at.caption)
+    _walk_to(at, "All set")
+    line = next(m.value for m in at.markdown if "**Debts:**" in m.value)
+    assert "3 debts" in line and "28,700" in line                   # 6,500 + 4,200 + 18,000 owed

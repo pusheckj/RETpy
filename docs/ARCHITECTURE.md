@@ -13,8 +13,10 @@ The repository has two layers:
   with no UI dependencies: `config.py` (all financial data/parameters, plus
   derived constants computed at import time), `account_simulation.py` (the
   `AccountPortfolio` class and the accumulation/retirement year simulation
-  functions), and `historical_returns.py` (optional historical backtesting
-  data, not used by the default parametric Monte Carlo).
+  functions), `debts.py` (the consumer-debt payoff math, shared by the engine,
+  the planner's Debts screens and the Money check-up), and
+  `historical_returns.py` (optional historical backtesting data, not used by
+  the default parametric Monte Carlo).
 - **`ui/`** — a Streamlit application that sits on top of the engine.
   `app.py` is the entry point; it adds the project root to `sys.path` so it
   can `import retirement_sim` alongside its own local `components/` (render
