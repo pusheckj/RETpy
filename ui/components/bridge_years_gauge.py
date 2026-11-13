@@ -42,15 +42,24 @@ def compute_verdict(results: dict, retire_age: int) -> dict | None:
         return None
 
     first_short = None
+    ran_out = False
     for r in access:
         a = int(r["age"])
         acc_v = float(r["accessible"]); burn_v = float(r.get("burn", 0.0))
+        # Nothing left anywhere on the median path: not "funded" just because
+        # there is no withdrawal to cover (a failing plan has $0 and burns $0).
+        if acc_v + float(r.get("penalized", 0.0)) <= 1.0:
+            first_short, ran_out = a, True
+            break
         if float(r.get("penalty", 0.0)) > 1.0 or (burn_v > 0 and acc_v < burn_v):
             first_short = a
             break
     return {
         "funded": first_short is None,
         "first_short": first_short,
+        "ran_out": ran_out,
+        "uses_rule55": any(float(r.get("rule55", 0.0)) > 0 for r in access),
+        "uses_sepp": any(float(r.get("sepp", 0.0)) > 0 for r in access),
         "accessible_at_retire": float(access[0]["accessible"]) if access else 0.0,
     }
 
@@ -86,27 +95,34 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
     cash = [float(r["cash"]) for r in access]
     taxable = [float(r["taxable"]) for r in access]
     roth = [float(r["roth"]) for r in access]
+    rule55 = [float(r.get("rule55", 0.0)) for r in access]
+    sepp = [float(r.get("sepp", 0.0)) for r in access]
     burn = [float(r.get("burn", 0.0)) for r in access]
 
     verdict = compute_verdict(results, retire_age)
     funded = verdict["funded"]
     first_short = verdict["first_short"]
     accessible_at_retire = verdict["accessible_at_retire"]
+    ran_out = verdict["ran_out"]
 
     # ---- Verdict tiles ----
     cols = st.columns(3)
     with cols[0]:
-        st.metric("Bridge to 59½", "Funded ✓" if funded else "Shortfall",
+        st.metric("Bridge to 59½",
+                  "Funded ✓" if funded else ("Out of money" if ran_out else "Shortfall"),
                   help="Whether the median plan reaches 59½ with penalty-free money covering "
                        "each year's withdrawal. Uses the same median as the chart.")
     with cols[1]:
         st.metric("First shortfall",
-                  "None" if funded else f"age {first_short}",
+                  "No shortfall" if funded else f"age {first_short}",
                   help="First year before 59½ that the median plan pays an early-withdrawal penalty "
                        "or runs out of penalty-free money.")
     with cols[2]:
         st.metric("Penalty-free money at retirement", money(accessible_at_retire, shorten=True),
-                  help="Median cash + taxable brokerage + Roth balance in your first retirement year.")
+                  help="Median cash + taxable brokerage + Roth balance in your first retirement year"
+                       + (", plus the 401(k) your Rule of 55 frees" if any(rule55) else "")
+                       + (" and a year of 72(t) payments" if any(sepp) else "")
+                       + ".")
 
     dark = is_dark(st)
     ref_line = "#e2e8f0" if dark else "#0f172a"
@@ -117,6 +133,8 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
         ("Cash", cash, concept_color("Cash", st)),
         ("Taxable brokerage", taxable, concept_color("Taxable brokerage", st)),
         ("Roth (basis, approx.)", roth, concept_color("Roth IRA", st)),
+        *([("401(k) via Rule of 55", rule55, concept_color("401(k)", st))] if any(rule55) else []),
+        *([("72(t) payment (one year)", sepp, concept_color("Traditional IRA", st))] if any(sepp) else []),
     ]:
         fig.add_trace(go.Scatter(
             x=ages, y=series, mode="lines", line=dict(width=0.5, color=color),
@@ -134,7 +152,7 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
                   annotation_font=dict(size=10, color="#64748b"))
     if not funded:
         fig.add_vline(x=first_short, line_dash="dot", line_color="#dc2626",
-                      annotation_text=f"shortfall · age {first_short}",
+                      annotation_text=f"{'out of money' if ran_out else 'shortfall'} · age {first_short}",
                       annotation_position="bottom left", annotation_font=dict(size=10, color="#dc2626"))
 
     fig.update_layout(
@@ -157,6 +175,10 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
         "You can use these before 59½ without a 10% penalty. The dotted line is the median annual "
         "withdrawal. The bridge is funded as long as that balance stays above the withdrawal line. "
         "If it doesn't, save more in taxable or Roth accounts before you retire. "
-        "Roth counts at its full balance, which stands in for what you've put in, so accessible "
+        + ("The Rule of 55 band is your 401(k), open penalty-free because you leave work at 55 or later "
+           "(IRAs don't qualify). " if any(rule55) else "")
+        + ("The 72(t) band is one year of your fixed penalty-free payment while the schedule runs. "
+           if any(sepp) else "")
+        + "Roth counts at its full balance, which stands in for what you've put in, so accessible "
         "Roth is slightly overstated."
     )

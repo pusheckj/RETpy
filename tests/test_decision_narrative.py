@@ -59,7 +59,8 @@ def test_compute_verdict_funded():
     rows = [_accessible_row(a, burn=15_000, cash=10_000, taxable=20_000, roth=5_000) for a in range(50, 60)]
     results = {"primary_result": {"accessible_by_year": rows}}
     v = bridge_years_gauge.compute_verdict(results, 50)
-    assert v == {"funded": True, "first_short": None, "accessible_at_retire": 35_000.0}
+    assert v == {"funded": True, "first_short": None, "ran_out": False, "uses_rule55": False,
+                 "uses_sepp": False, "accessible_at_retire": 35_000.0}
 
 
 def test_compute_verdict_shortfall():

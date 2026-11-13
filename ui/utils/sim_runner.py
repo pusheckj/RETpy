@@ -585,6 +585,8 @@ def plan_networth_analysis(user_overrides: dict, n_simulations: int = 1000,
     original = _apply_overrides(build_config_overrides(user_overrides))
     try:
         target = float(getattr(cfg, "TARGET_SUCCESS_RATE", 0.80))
+        already_retired = (int(user_overrides.get("TARGET_RETIREMENT_AGE", 99) or 99)
+                           <= int(getattr(cfg, "YOUR_AGE", 0)))
         current_inv = float(sim.create_initial_portfolio().get_investable_balance())
         exp = float(getattr(cfg, "CURRENT_ANNUAL_EXPENSES", 100_000) or 100_000)
         your_age = float(getattr(cfg, "YOUR_AGE", 0))
@@ -593,8 +595,17 @@ def plan_networth_analysis(user_overrides: dict, n_simulations: int = 1000,
         # already-FI household is detected honestly (grid[0] = retire-now) instead of
         # being pinned to a fabricated floor figure below their own balance.
         lo = max(0.0, current_inv)
-        hi = max(lo * 1.5, 45.0 * exp, lo + 1_000_000.0)
-        grid = [float(v) for v in np.linspace(lo, hi, 14)]
+        # The top must reach any number the plan can actually meet: working to the
+        # cap, you retire with about ``cap_inv`` (bigger targets only retire at the cap
+        # with that), so nothing above it adds information. Expenses alone can
+        # understate a household that saves hard (rent, RSUs), hence the balance at the cap.
+        try:
+            cap_inv = float(_investable_at_retirement(max(int(max_work_age), int(your_age) + 1), 20))
+        except Exception:  # noqa: BLE001
+            cap_inv = 0.0
+        hi = max(lo * 1.5, 45.0 * exp, lo + 1_000_000.0, 1.15 * cap_inv)
+        # Squared spacing: fine steps where most numbers are, a long tail for the rare big one.
+        grid = [float(lo + (hi - lo) * (i / 15.0) ** 2) for i in range(16)]
         # Cap the per-point sim count so the sweep stays responsive even when the
         # main selector is set high (e.g. 25k) -- precision past ~1k/point is
         # dwarfed by the grid spacing anyway.
@@ -659,9 +670,12 @@ def plan_networth_analysis(user_overrides: dict, n_simulations: int = 1000,
             "fi_age_low": fi_age_low,
             "fi_age_high": fi_age_high,
             "already_fi": already_fi,
+            "already_retired": already_retired,
             "target_success": target,
             "current_investable": current_inv,
-            "success_by_networth": curve,
+            # Already past the target: the points far above today's balance only add a flat
+            # line (and stretch the axis), so keep the first few.
+            "success_by_networth": curve[:4] if already_fi else curve,
             "max_work_age": int(max_work_age),
         }
 
@@ -734,24 +748,37 @@ def plan_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
             store(result)
             return Plan("swr", key, user_overrides, result=result)
 
-        # Anchor the sweep on the user's ACTUAL plan, not an arbitrary % band.
-        # Total year-1 withdrawal W0 = living base (the knob) + fixed costs
-        # (housing/healthcare/kids, layered on top by the engine). To hit a target
-        # TOTAL withdrawal of m*W0 we set the living base to m*W0 - fixed. Sweeping
-        # m in [0.6, 1.6] brackets the user's plan (m=1) so the crossing is found.
+        # Anchor the sweep on the user's ACTUAL plan. Total year-1 withdrawal W0 =
+        # living base (the knob) + c, where c is everything layered on top by the engine
+        # (housing, healthcare, kids) MINUS income that covers it (Social Security, RMDs):
+        # c is negative when income covers more than the fixed costs. To hit a target
+        # draw W = r * inv0 we set the living base to W - c.
+        # The rates run from below the plan's own (or 2%) up to the larger of 1.6x the
+        # plan's rate and 10%, in geometric steps: a household with real headroom (a $25M
+        # couple at 0.7%) or one whose income covers most spending (a 0.3% draw) still has its
+        # crossing inside the sweep. If the top still passes, the result says so ("above X").
         living_0 = float(getattr(cfg, "retirement_living_base", lambda: 0.0)())
         w0 = _median_year1_withdrawal(ra)
         if w0 <= 0:
             w0 = 0.04 * inv0  # fallback anchor if the baseline draw is unavailable
-        fixed = max(0.0, w0 - living_0)
+        c = w0 - living_0
         actual_rate = w0 / inv0
-        m_grid = [float(m) for m in np.linspace(0.6, 1.6, 13)]
+        r_lo = max(0.003, min(0.6 * actual_rate, 0.02))
+        r_hi = max(1.6 * actual_rate, 0.10)
+        r_grid = [float(r_lo * (r_hi / r_lo) ** (i / 17.0)) for i in range(18)]
+        living_grid, kept = [], []
+        for r in r_grid:
+            living = float(max(0.0, r * inv0 - c))
+            if living <= 0.0 and any(v <= 0.0 for v in living_grid):
+                continue  # the same plan again: spending can't go below zero
+            living_grid.append(living)
+            kept.append(r)
+        r_grid = kept
         scan_sims = max(300, min(int(n_simulations), 3000))
         patches = [{"RETIREMENT_SPENDING_MODE": "Absolute amount ($/yr)",
-                    "RETIREMENT_SPENDING_ABSOLUTE": float(max(0.0, m * w0 - fixed))}
-                   for m in m_grid]
+                    "RETIREMENT_SPENDING_ABSOLUTE": living} for living in living_grid]
         calls = []
-        for i in range(len(m_grid)):
+        for i in range(len(r_grid)):
             calls += [["w1", i, [ra]], ["mc", i, [ra, scan_sims, 5000 + i]]]
         job = {"base": mc_jobs.snapshot(), "patches": patches, "calls": calls}
     finally:
@@ -759,11 +786,11 @@ def plan_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
 
     def finish(results: List[Any]) -> Dict[str, Any]:
         curve = []
-        for i, m in enumerate(m_grid):
+        for i, r in enumerate(r_grid):
             w1, mc = results[2 * i], results[2 * i + 1]
             curve.append({
-                "realized_rate": float(w1 / inv0) if inv0 > 0 else float(m * actual_rate),
-                "spending": float(m * w0),
+                "realized_rate": float(w1 / inv0) if inv0 > 0 else float(r),
+                "spending": float(r * inv0),
                 "success": float(mc.get("success_rate", 0.0)),
             })
         # Order by realized rate for a monotone x-axis; success DESCENDS with rate.
@@ -771,6 +798,8 @@ def plan_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
         return {
             "success_by_rate": curve,
             "swr_rate": _swr_crossing(curve, target),
+            # Even the highest rate tested met the target: the safe rate is "at least" it.
+            "swr_is_lower_bound": bool(curve) and curve[-1]["success"] >= target,
             "actual_rate": float(actual_rate),
             "target_success": target,
             "investable_at_retirement": inv0,
@@ -784,11 +813,12 @@ def run_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
                      target_retirement_age: int = 55, progress_callback=None) -> Dict[str, Any]:
     """Personalized safe-withdrawal-rate sweep.
 
-    Sweeps the initial retirement spending from ~3%-6% of the investable balance
-    AT retirement, runs the Monte Carlo at each, and returns success rate vs the
+    Sweeps the initial retirement spending from about 2% to 10% (or 1.6x the plan's
+    own rate if higher) of the investable balance AT retirement, runs the Monte Carlo at each, and returns success rate vs the
     REALIZED initial total-withdrawal rate (so the curve shares an axis with the
     user's actual plan). ``swr_rate`` is the highest rate still meeting
-    TARGET_SUCCESS_RATE. NOTE: RETIREMENT_SPENDING_ABSOLUTE sets the non-housing
+    TARGET_SUCCESS_RATE (``swr_is_lower_bound`` when even the top of the sweep met it).
+    NOTE: RETIREMENT_SPENDING_ABSOLUTE sets the non-housing
     living base; housing/healthcare/kids are layered on top by the engine, which
     is exactly why we plot the REALIZED total rate rather than the input rate.
     """
@@ -1861,7 +1891,9 @@ def _accessible_percentiles(bytype_logs: List[List[dict]], withdrawal_logs: List
     verdict are computed on the SAME statistical object.
 
     Accessible = cash + taxable brokerage + Roth (contribution basis APPROXIMATED
-    by the full Roth balance). Penalized = traditional 401k/IRA + HSA. The
+    by the full Roth balance), plus the 401(k) when Rule of 55 applies and one
+    year's 72(t) payment while a schedule runs. Penalized = traditional 401k/IRA + HSA
+    (shown in full, including any part Rule of 55 frees). The
     reported ``accessible`` is the SUM of the per-source medians (so the stacked
     chart height equals the accessible figure). ``burn`` = median total annual
     withdrawal; ``penalty`` = median early-withdrawal penalty paid. A path that
@@ -1875,18 +1907,36 @@ def _accessible_percentiles(bytype_logs: List[List[dict]], withdrawal_logs: List
     per_wd = [{int(r["age"]): r for r in (log or []) if "age" in r} for log in (withdrawal_logs or [])]
     if not per_bt:
         return []
+    # Early-access rules the engine honours: Rule of 55 frees the 401(k) (not IRAs)
+    # once you separate at 55 or later; a 72(t) schedule pays a fixed penalty-free
+    # amount each year of its run.
+    r55 = (bool(getattr(cfg, "RULE_OF_55_ENABLED", False))
+           and int(retirement_age) >= int(getattr(cfg, "RULE_OF_55_MIN_SEPARATION_AGE", 55)))
+    sepp_on = bool(getattr(cfg, "SEPP_72T_ENABLED", False))
+    sepp_start = int(getattr(cfg, "SEPP_72T_START_AGE", 45) or 45)
+    sepp_amount = None
     out: List[dict] = []
     for a in range(int(retirement_age), hi_age + 1):
-        cash, taxable, roth, penal = [], [], [], []
+        cash, taxable, roth, penal, k401, trad = [], [], [], [], [], []
         for d in per_bt:
             r = d.get(a)
             cash.append(float(r.get("cash", 0.0)) if r else 0.0)
             taxable.append(float(r.get("taxable", 0.0)) if r else 0.0)
             roth.append((float(r.get("roth_ira", 0.0)) + float(r.get("roth_401k", 0.0))) if r else 0.0)
+            k401.append(float(r.get("traditional_401k", 0.0)) if r else 0.0)
+            trad.append((float(r.get("traditional_401k", 0.0)) + float(r.get("traditional_ira", 0.0))) if r else 0.0)
             penal.append((float(r.get("traditional_401k", 0.0)) + float(r.get("traditional_ira", 0.0))
                           + float(r.get("hsa", 0.0))) if r else 0.0)
         if not cash:
             continue
+        rule55_m = float(np.percentile(k401, 50)) if (r55 and a >= int(getattr(cfg, "RULE_OF_55_MIN_SEPARATION_AGE", 55))) else 0.0
+        sepp_m = 0.0
+        if sepp_on and a >= sepp_start and cfg.sepp_72t_must_continue(a, sepp_start):
+            if sepp_amount is None:  # locked at the schedule's first year
+                basis = float(np.percentile(trad, 50))
+                carve = float(getattr(cfg, "SEPP_72T_CARVEOUT", 0.0) or 0.0)
+                sepp_amount = cfg.sepp_72t_annual_amount(min(carve, basis) if carve > 0 else basis, max(a, sepp_start))
+            sepp_m = float(sepp_amount)
         burn, pen = [], []
         for d in per_wd:
             r = d.get(a)
@@ -1900,8 +1950,10 @@ def _accessible_percentiles(bytype_logs: List[List[dict]], withdrawal_logs: List
             "cash": cash_m,
             "taxable": tax_m,
             "roth": roth_m,
+            "rule55": rule55_m,
+            "sepp": sepp_m,
             "penalized": float(np.percentile(penal, 50)),
-            "accessible": cash_m + tax_m + roth_m,  # = stacked chart height
+            "accessible": cash_m + tax_m + roth_m + rule55_m + sepp_m,  # = stacked chart height
             "burn": float(np.percentile(burn, 50)) if burn else 0.0,
             "penalty": float(np.percentile(pen, 50)) if pen else 0.0,
         })

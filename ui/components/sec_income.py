@@ -138,10 +138,13 @@ def render_body(st) -> None:
         '<hr style="margin: 12px 0 8px 0; border: 0; border-top: 1px solid #e5e7eb;">',
         unsafe_allow_html=True,
     )
-    cols = st.columns(3, gap="small")
-    with cols[0]: st.metric("You", money(you_total, shorten=True))
-    with cols[1]: st.metric("Partner", money(p_total, shorten=True))
-    with cols[2]: st.metric("Total", money(household_total, shorten=True))
+    if has_partner:
+        cols = st.columns(3, gap="small")
+        with cols[0]: st.metric("You", money(you_total, shorten=True))
+        with cols[1]: st.metric("Partner", money(p_total, shorten=True))
+        with cols[2]: st.metric("Total", money(household_total, shorten=True))
+    else:  # no partner: no "Partner $0" card, and "Total" would just repeat "You"
+        st.metric("Your income", money(you_total, shorten=True))
 
     # Comp table editor (advanced)
     with st.expander("Your pay by year (advanced)", expanded=False):

@@ -87,9 +87,14 @@ def money_echo(st, value, at_least: float = 10_000) -> None:
 
 
 def pct(value: Union[float, None], precision: int = 1) -> str:
-    """Format as percentage (expects 0.82 -> '82.0%')."""
+    """Format as percentage (expects 0.82 -> '82.0%').
+
+    Never shows 100% for a value below 1: 0.9996 reads "99.9%" (">99%" at zero
+    decimals), because a rounded 100% claims certainty the simulation lacks."""
     if _is_bad(value):
         return "—"
+    if value < 1 and round(value * 100, precision) >= 100:
+        return ">99%" if precision <= 0 else f"{100 - 10 ** -precision:.{precision}f}%"
     return f"{value * 100:.{precision}f}%"
 
 

@@ -1,6 +1,6 @@
 """Safe withdrawal rate (SWR) section — the personalized version of the 4% rule.
 
-Sweeps the initial retirement spending (~3%–6% of investable assets at
+Sweeps the initial retirement spending (from about 2% to 10% of investable assets at
 retirement) via ``sim_runner.run_swr_analysis`` and plots success rate vs the
 realized initial withdrawal rate, marking the user's actual planned rate and the
 rate that meets the success target. Behind a button because the sweep runs many
@@ -116,27 +116,40 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
         if wd:
             actual_rate = float(wd[0].get("total", 0.0) or 0.0) / inv0
 
+    lower_bound = bool(swr.get("swr_is_lower_bound")) and swr_rate is not None
+    top_rate = curve[-1]["realized_rate"] if curve else None
+
     cols = st.columns(3)
     with cols[0]:
         st.metric("Your withdrawal rate", f"{actual_rate:.1%}" if actual_rate else "run sim",
                   help="First-year withdrawal ÷ investable balance at retirement, from your last run.")
     with cols[1]:
+        # "none" read as "no rate is safe". Say what was actually found.
         st.metric("Safe rate at target",
-                  f"{swr_rate:.1%}" if swr_rate else "none",
-                  help=f"The highest starting withdrawal rate with at least a {target:.0%} chance of success.")
+                  (f"Above {swr_rate:.1%}" if lower_bound else f"{swr_rate:.1%}") if swr_rate else "None found",
+                  help=f"The highest starting withdrawal rate with at least a {target:.0%} chance of success."
+                       + (" Even the highest rate tested met the target, so the real limit is higher."
+                          if lower_bound else ""))
     with cols[2]:
         gap = (swr_rate - actual_rate) if (swr_rate and actual_rate is not None) else None
-        st.metric("Headroom", f"{gap:+.1%}" if gap is not None else "—",
+        st.metric("Headroom", (f"{gap:+.1%}" if not lower_bound else f"{gap:+.1%} or more") if gap is not None else "—",
                   delta=("cushion" if (gap or 0) >= 0 else "overspending") if gap is not None else None,
                   delta_color=("normal" if (gap or 0) >= 0 else "inverse"),
                   delta_arrow=("up" if (gap or 0) >= 0 else "down"),
                   help="Safe rate minus your rate. Positive means room to spend more. Negative means risk.")
 
     if swr_rate is None:
+        low = curve[0]["realized_rate"] if curve else None
         st.info(
-            "No withdrawal rate tested meets your success target, even a much "
-            "lower first-year spend. Try retiring later, saving more, or lowering your "
-            "success target."
+            "No withdrawal rate tested meets your success target"
+            + (f", even the lowest, {low:.1%}" if low is not None else "")
+            + ". Try retiring later, saving more, or lowering your success target."
+        )
+    elif lower_bound:
+        st.info(
+            f"Every rate tested, up to {top_rate:.1%}, met your {target:.0%} target. Your plan is not "
+            "limited by how fast you draw on the portfolio. Social Security, a large balance or a short "
+            "horizon carry it. The real safe rate is higher than the sweep went."
         )
 
     xs = [c["realized_rate"] * 100 for c in curve]
@@ -154,7 +167,7 @@ def _render_result(st, swr: dict, results: dict = None) -> None:
     add_target_line(fig, target, st)
     if swr_rate:
         fig.add_vline(x=swr_rate * 100, line_dash="dot", line_color=line,
-                      annotation_text=f"safe ≈ {swr_rate:.1%}", annotation_position="top left",
+                      annotation_text=(f"safe above {swr_rate:.1%}" if lower_bound else f"safe ≈ {swr_rate:.1%}"), annotation_position="top left",
                       annotation_font=dict(size=11, color=line))
     if actual_rate is not None:
         fig.add_vline(x=actual_rate * 100, line_dash="solid", line_color=you,
