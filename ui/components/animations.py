@@ -622,6 +622,7 @@ _ANIM_JS = """
   // (instantly) until it holds still; any touch or wheel by the user stops it.
   function mcJump(name){
     var main = mainEl(); if(!main) return;
+    if(P.__mcFoldOpen) P.__mcFoldOpen(name);     // a folded section opens first
     var tries = 0, calm = 0, stopped = false;
     var stop = function(){ stopped = true; };
     // The tapped chip stays lit until the reader scrolls on their own.
@@ -732,9 +733,90 @@ _ANIM_JS = """
     });
   }
 
+  // ---------- collapsible section tiles ----------
+  // Each planner tile's own heading (the .mc-section in the tile's FIRST row;
+  // sub-headings further down stay plain) becomes a button that folds the tile
+  // down to that row. Collapse all / Expand all ([data-mc-fold-all], app.py)
+  // fold every tile. All in the browser: instant, no rerun. The folded tiles are
+  // one {name: 1} map in localStorage, so the state survives reruns (applyFold
+  // runs on every DOM change, see the observer at the bottom) and reloads.
+  // Default: everything open. theme.css ("Collapsible section tiles") hides a
+  // folded tile's other rows; hidden lazy placeholders don't load (checkLazy
+  // skips elements with no offsetParent) until the tile is opened.
+  var FOLD_KEY = 'mcFoldedTiles';
+  var FOLD_TILES = '[class*="st-key-mc-tile-"]:not([class*="st-key-mc-tile-simple-"])';
+  function foldMap(){
+    try{ var m = JSON.parse(P.localStorage.getItem(FOLD_KEY) || '{}'); return (m && typeof m === 'object') ? m : {}; }
+    catch(e){ return {}; }
+  }
+  function foldStore(m){ try{ P.localStorage.setItem(FOLD_KEY, JSON.stringify(m)); }catch(e){} }
+  function tileName(t){ var m = /(?:^|\\s)st-key-mc-tile-([a-z0-9-]+)/.exec(t.className || ''); return m ? m[1] : null; }
+  function tileHead(t){ var row = t.firstElementChild; return row ? row.querySelector('.mc-section') : null; }
+  function applyFold(){
+    var m = foldMap(), anyFolded = false, anyOpen = false;
+    D.querySelectorAll(FOLD_TILES).forEach(function(t){
+      var name = tileName(t), h = tileHead(t), folded = false;
+      if(name && h){
+        folded = !!m[name];
+        if(h.getAttribute('data-mc-fold') !== name){
+          h.setAttribute('data-mc-fold', name); h.setAttribute('role', 'button'); h.setAttribute('tabindex', '0');
+        }
+        var exp = folded ? 'false' : 'true';
+        if(h.getAttribute('aria-expanded') !== exp) h.setAttribute('aria-expanded', exp);
+        if(folded) anyFolded = true; else anyOpen = true;
+      }
+      if(folded !== t.hasAttribute('data-mc-folded')){
+        if(folded) t.setAttribute('data-mc-folded', ''); else t.removeAttribute('data-mc-folded');
+      }
+    });
+    // The button that would change nothing is shown as unavailable.
+    D.querySelectorAll('[data-mc-fold-all]').forEach(function(a){
+      var off = a.getAttribute('data-mc-fold-all') === '1' ? !anyOpen : !anyFolded;
+      if(off !== (a.getAttribute('aria-disabled') === 'true')){
+        if(off) a.setAttribute('aria-disabled', 'true'); else a.removeAttribute('aria-disabled');
+      }
+    });
+  }
+  function setFold(name, folded){
+    var m = foldMap();
+    if(folded) m[name] = 1; else delete m[name];
+    foldStore(m); applyFold();
+    if(!folded) checkLazy();          // an opened tile's placeholder is visible now: load it
+  }
+  function foldAll(collapse){
+    var m = {};
+    if(collapse) D.querySelectorAll(FOLD_TILES).forEach(function(t){
+      var n = tileName(t); if(n && tileHead(t)) m[n] = 1; });
+    foldStore(m); applyFold();
+    if(!collapse) checkLazy();
+  }
+  // Jumping to a section (phone chips) opens it first.
+  P.__mcFoldOpen = function(name){ try{ if(foldMap()[name]) setFold(name, false); }catch(e){} };
+  // Listeners are re-installed on each iframe load (the old realm's are removed).
+  if(P.__mcFoldClick){ try{ D.removeEventListener('click', P.__mcFoldClick, true);
+    D.removeEventListener('keydown', P.__mcFoldKey, true); }catch(e){} }
+  P.__mcFoldClick = function(ev){
+    try{
+      var t = ev.target && ev.target.closest ? ev.target : null; if(!t) return;
+      var all = t.closest('[data-mc-fold-all]');
+      if(all){ ev.preventDefault(); foldAll(all.getAttribute('data-mc-fold-all') === '1'); return; }
+      var h = t.closest('[data-mc-fold]');
+      if(h){ var name = h.getAttribute('data-mc-fold'); setFold(name, !foldMap()[name]); }
+    }catch(e){}
+  };
+  // Enter / Space on a focused heading or Collapse all / Expand all.
+  P.__mcFoldKey = function(ev){
+    if(ev.key !== 'Enter' && ev.key !== ' ') return;
+    var t = ev.target;
+    if(!t || !t.matches || !t.matches('[data-mc-fold], [data-mc-fold-all]')) return;
+    ev.preventDefault(); t.click();
+  };
+  D.addEventListener('click', P.__mcFoldClick, true);
+  D.addEventListener('keydown', P.__mcFoldKey, true);
+
   // ---------- scan (debounced, on real DOM changes only) ----------
   function scan(){ try{ odometer(); entrance(); segAll(); checkCelebrate(); checkLazy(); drawScan(); runFan();
-                         phoneBar(); showResultsLabel(); foldText(); }catch(e){} }
+                         phoneBar(); showResultsLabel(); foldText(); applyFold(); }catch(e){} }
   scan();
   if(P.__mcAnimObs){ try{ P.__mcAnimObs.disconnect(); }catch(e){} }
   if(P.__mcAnimTimer){ try{ P.clearInterval(P.__mcAnimTimer); }catch(e){} P.__mcAnimTimer=null; }
@@ -753,6 +835,10 @@ _ANIM_JS = """
       relevant = true; break;
     }
     if(!relevant) return;
+    // Re-fold right away (a microtask, before the browser paints): a rerun
+    // replaces tile and heading nodes, and waiting for the debounced scan would
+    // flash a folded tile open.
+    try{ applyFold(); }catch(e){}
     if(pend) return; pend=true;
     P.setTimeout(function(){ pend=false; scan(); }, 90);
   });

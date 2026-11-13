@@ -3466,6 +3466,109 @@ html:root .st-key-mc-tile-freedom table.ms-break tr.ms-total td { font-weight: 6
 /* -- end Freedom milestones -- */
 
 /* ==========================================================================
+   Collapsible section tiles. Only this block styles them. The page script
+   (components/animations.py, "collapsible section tiles") marks each planner
+   tile's own heading (.mc-section[data-mc-fold], role="button") and sets
+   [data-mc-folded] on a folded tile. Collapse all / Expand all is .mc-fold-all
+   (app.py, right-aligned above the first tile). Every colour is a theme token,
+   so dark mode needs no values of its own. Print and page export ignore the
+   folded state: the hide rule is screen-only and off while exporting.
+   ========================================================================== */
+/* A folded tile keeps only its first row: the heading. */
+@media screen {
+    html:not([data-mc-exporting]) [class*="st-key-mc-tile-"][data-mc-folded] > :not(:first-child) {
+        display: none !important;
+    }
+}
+/* The heading is the toggle. Room for the chevron is kept in both states, so
+   folding moves nothing in the heading row. */
+.mc-section[data-mc-fold] {
+    cursor: pointer;
+    padding-right: 44px;
+    border-radius: 10px;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+/* Chevron: points down when open, right when folded. Centred on the text line
+   (above the 4px accent bar). */
+.mc-section[data-mc-fold]::before {
+    content: "";
+    position: absolute;
+    right: 10px;
+    top: 0;
+    bottom: 14px;
+    width: 20px;
+    height: 20px;
+    margin: auto 0;
+    background-color: var(--mc-muted);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.15s ease;
+}
+.mc-section[data-mc-fold][aria-expanded="false"]::before { transform: rotate(-90deg); }
+/* Hover: the chevron turns teal on a soft round tint (drawn as the heading's
+   background, so nothing moves). */
+@media (hover: hover) and (pointer: fine) {
+    .mc-section[data-mc-fold]:hover::before { background-color: var(--mc-teal); }
+    .mc-section[data-mc-fold]:hover {
+        background: radial-gradient(circle at calc(100% - 20px) calc(50% - 7px),
+                    color-mix(in srgb, var(--mc-teal) 14%, transparent) 17px, transparent 17.5px);
+    }
+}
+.mc-section[data-mc-fold]:focus { outline: none; }
+.mc-section[data-mc-fold]:focus-visible {
+    outline: 2px solid var(--mc-teal);
+    outline-offset: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .mc-section[data-mc-fold]::before { transition: none; }
+}
+
+/* Collapse all / Expand all: two small pills (the "Max out" chip size), right-aligned. */
+.mc-fold-all {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.mc-fold-all a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--mc-pill-h);
+    padding: 0 14px;
+    border-radius: var(--mc-ctl-r);
+    border: 1px solid var(--mc-btn-border);
+    background: var(--mc-btn-fill);
+    color: var(--mc-btn-ink) !important;
+    font-size: var(--mc-pill-fs);
+    font-weight: var(--mc-btn-fw);
+    line-height: 1;
+    text-decoration: none !important;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+    .mc-fold-all a:not([aria-disabled="true"]):hover {
+        background: var(--mc-btn-fill-hover);
+        border-color: var(--mc-btn-border-hover);
+    }
+}
+.mc-fold-all a:focus { outline: none; }
+.mc-fold-all a:focus-visible { outline: 2px solid var(--mc-teal); outline-offset: 2px; }
+.mc-fold-all a[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+@media (hover: none) and (pointer: coarse) {
+    .mc-fold-all a { min-height: 44px; padding: 0 16px; }
+}
+@media print {
+    .mc-fold-all, .mc-section[data-mc-fold]::before { display: none !important; }
+}
+/* -- end Collapsible section tiles -- */
+
+/* ==========================================================================
    Top card layout. The card (.st-key-mc-topbar) holds two keyed rows built by
    app._topbar_head, each a wrapping flex row:
      mc-topbar-head: the title (left), then Run / simulations / Settings (right);

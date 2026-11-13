@@ -217,13 +217,21 @@ def render(st) -> None:
             try {
               say('Saving\\u2026');
               const liveRoot = doc.documentElement;
-              const clone = liveRoot.cloneNode(true);
+              // Folded section tiles (theme.css, "Collapsible section tiles")
+              // open for the capture, so the file shows every section.
+              liveRoot.setAttribute('data-mc-exporting', '');
+              let clone;
+              try {
+                clone = liveRoot.cloneNode(true);
 
-              // Streamlit's layout CSS is CSS-in-JS (inserted via the CSSOM,
-              // not as <style> text) -- a plain clone captures none of it.
-              // Bake in resolved values on every element instead; see the
-              // module docstring for why.
-              inlineComputedStyles(liveRoot, clone);
+                // Streamlit's layout CSS is CSS-in-JS (inserted via the CSSOM,
+                // not as <style> text) -- a plain clone captures none of it.
+                // Bake in resolved values on every element instead; see the
+                // module docstring for why.
+                inlineComputedStyles(liveRoot, clone);
+              } finally {
+                liveRoot.removeAttribute('data-mc-exporting');
+              }
 
               // NOW it's safe to strip <script> (would error/freeze
               // re-executing with no backend) and <iframe> (this exporter,

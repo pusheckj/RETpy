@@ -448,7 +448,8 @@ _bc_poll = st.fragment(run_every=3)(_config_locked(_bc_poll_body)) if hasattr(st
 # Sections the phone bar can jump to: (tile key suffix, chip label).
 _JUMP_SECTIONS = [("retirement", "Retirement"), ("freedom", "Milestones"), ("fi", "Net worth"), ("swr", "Withdrawal"),
                   ("bridge", "Bridge to 59½"), ("spending", "Spending"), ("savings", "Savings"),
-                  ("income", "Income"), ("tax", "Tax"), ("lifespan", "Lifespan")]
+                  ("income", "Income"), ("tax", "Tax"), ("lifespan", "Lifespan"),
+                  ("whatif", "What if"), ("deepdives", "Deep dives")]
 
 
 def _phone_bar(results) -> None:
@@ -1028,9 +1029,6 @@ def main() -> None:
     results = st.session_state.results
     whatif_results = st.session_state.get("whatif_results")
 
-    def _subheader(text: str) -> None:
-        st.markdown(f'<div class="mc-section">{text}</div>', unsafe_allow_html=True)
-
     def _run_hint(what: str) -> None:
         if results is None:
             st.caption(f"Run a simulation to see {what}.")
@@ -1047,6 +1045,15 @@ def main() -> None:
         st.warning("Your inputs changed since this simulation ran. The results "
                    "below, including the chance of success at the top, still use the "
                    "old inputs. Click **Run simulation** to refresh.")
+
+    # Collapse all / Expand all for the section tiles below. A click on a tile's
+    # heading folds that tile. The page script (components.animations,
+    # "collapsible section tiles") does the folding in the browser: instant, no
+    # rerun, remembered in the browser.
+    st.markdown('<div class="mc-fold-all" role="group" aria-label="Sections">'
+                '<a role="button" tabindex="0" data-mc-fold-all="1">Collapse all</a>'
+                '<a role="button" tabindex="0" data-mc-fold-all="0">Expand all</a></div>',
+                unsafe_allow_html=True)
 
     # ============================ 1. RETIREMENT ============================
     with st.container(border=True, key="mc-tile-retirement"):
@@ -1160,28 +1167,41 @@ def main() -> None:
     @_as_fragment
     def _tile_lifespan():
         with st.container(border=True, key="mc-tile-lifespan"):
+            # Heading drawn here, not by the section: the tile has its heading
+            # (and so its collapse toggle) before the lazy content loads.
+            st.markdown('<div class="mc-section">Your life expectancy</div>', unsafe_allow_html=True)
             if st.session_state.get("_lz_lifespan"):
-                _safe_render("components.life_expectancy_section")
+                _safe_render("components.life_expectancy_section", show_header=False)
             else:
                 _lazy_ph("lifespan", 1030)
     _tile_lifespan()
 
     # ============================ 6. WHAT IF ============================
-    # Collapsed by default AND lazy — its charts (incl. 3 deep-dive tabs) render
-    # only once the section is expanded and scrolled to, so they never load on
-    # the initial results burst.
-    with st.expander("What if", expanded=False, icon=":material/compare_arrows:"):
-        @_as_fragment
-        def _tile_whatif():
+    # Lazy like the tiles above: its charts render only once scrolled near.
+    @_as_fragment
+    def _tile_whatif():
+        with st.container(border=True, key="mc-tile-whatif"):
+            st.markdown('<div class="mc-section">What if</div>', unsafe_allow_html=True)
             if not results:
-                st.caption("Run a simulation to see what-if comparisons and deeper charts.")
+                _run_hint("what-if comparisons")
             elif st.session_state.get("_lz_whatif"):
                 _safe_render("components.whatif_retirement_curve", results=results)
                 st.divider()
                 if whatif_results and whatif_results.get("active_toggles"):
                     _safe_render("components.what_if_pane", results=whatif_results)
                 _safe_render("components.scenario_compare", results=results)
-                _subheader("Deep dives")
+            else:
+                _lazy_ph("whatif", 500)
+    _tile_whatif()
+
+    # ============================ 7. DEEP DIVES ============================
+    @_as_fragment
+    def _tile_deepdives():
+        with st.container(border=True, key="mc-tile-deepdives"):
+            st.markdown('<div class="mc-section">Deep dives</div>', unsafe_allow_html=True)
+            if not results:
+                _run_hint("trajectories, withdrawals, sensitivity, stress tests and mortgage paydown")
+            elif st.session_state.get("_lz_deepdives"):
                 tabs = st.tabs(["Trajectories", "Withdrawal", "Sensitivity", "Stress tests", "Mortgage paydown"])
                 with tabs[0]:
                     _safe_render("components.trajectories_tab", results=results)
@@ -1194,8 +1214,8 @@ def main() -> None:
                 with tabs[4]:
                     _safe_render("components.mortgage_paydown_tab", results=results)
             else:
-                _lazy_ph("whatif", 500)
-        _tile_whatif()
+                _lazy_ph("deepdives", 600)
+    _tile_deepdives()
 
     # Arrow-key navigation for the sidebar sections (injected once).
     _inject_keyboard_nav()
