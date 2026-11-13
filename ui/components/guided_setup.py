@@ -36,6 +36,7 @@ try:
                                  clear_partner)
     from utils import state_choice as sc
     from utils import planner_max as pm
+    from utils.age_limits import AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX
 except ImportError:  # pragma: no cover
     from ui.utils.expense_categories import CATEGORIES  # type: ignore
     from ui.utils.formatting import money, money_md, money_echo  # type: ignore
@@ -47,6 +48,7 @@ except ImportError:  # pragma: no cover
                                     household_of, clear_partner)
     from ui.utils import state_choice as sc  # type: ignore
     from ui.utils import planner_max as pm  # type: ignore
+    from ui.utils.age_limits import AGE_MIN, AGE_MAX, TARGET_MIN, TARGET_MAX  # type: ignore
 
 STATE = "setup"
 try:
@@ -224,7 +226,7 @@ def _partner(st) -> bool:
 
 def draw_you(st) -> None:
     ov = _ov(st)
-    _whole(st, "gs_age", "How old are you?", ov.get("YOUR_AGE"), None, 18, 100)
+    _whole(st, "gs_age", "How old are you?", ov.get("YOUR_AGE"), None, AGE_MIN, AGE_MAX)
     _cue(st, "Your age today, in years.")
     c = state(st).get("checkup") or {}
     hh = _choice(st, "gs_household", "Who is this plan for?", [JUST_ME, SPOUSE, PARTNER],
@@ -732,12 +734,12 @@ def _partner_later_saved(ov) -> int:
 def draw_retire(st) -> None:
     ov = _ov(st)
     age = int(_num(ov.get("YOUR_AGE"), 30))
-    lo = max(25, min(age, 75))
+    lo = max(TARGET_MIN, min(age, TARGET_MAX))
     target = int(_num(ov.get("TARGET_RETIREMENT_AGE"), 60))
-    _seed(st, "gs_target", max(lo, min(target, 75)), max(lo, min(target, 75)))
+    _seed(st, "gs_target", max(lo, min(target, TARGET_MAX)), max(lo, min(target, TARGET_MAX)))
     if st.session_state["gs_target"] < lo:
         st.session_state["gs_target"] = lo
-    slider_with_box(st, "At what age would you like to retire?", lo, 75, 1, key="gs_target")
+    slider_with_box(st, "At what age would you like to retire?", lo, TARGET_MAX, 1, key="gs_target")
     _cue(st, "A guess is fine. Your results show the earliest age that works, and you can "
              "adjust from there.")
     if _partner(st):

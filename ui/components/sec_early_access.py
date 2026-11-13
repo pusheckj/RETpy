@@ -26,6 +26,11 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
 
 try:
+    from utils.age_limits import AGE_MIN, AGE_MAX
+except ImportError:  # pragma: no cover
+    from ui.utils.age_limits import AGE_MIN, AGE_MAX  # type: ignore
+
+try:
     from utils.formatting import money
 except ImportError:  # pragma: no cover
     from ui.utils.formatting import money  # type: ignore
@@ -106,7 +111,7 @@ def render_body(st) -> None:
         with c1:
             ensure_default(st, "ea_sepp_age",
                            safe_int(get_override(st, "SEPP_72T_START_AGE", retire_age), retire_age))
-            a = st.number_input("Start age", min_value=25, max_value=70, step=1,
+            a = st.number_input("Start age", min_value=AGE_MIN, max_value=AGE_MAX, step=1,
                                 key="ea_sepp_age")
             set_override(st, "SEPP_72T_START_AGE", safe_int(a))
         with c2:
@@ -201,7 +206,7 @@ def render_body(st) -> None:
         suggested = max(your_age + 1, retire_age - max(2, (retire_age - your_age) // 2))
         ensure_default(st, "ea_coast_age",
                        safe_int(get_override(st, "COAST_FIRE_AGE", suggested), suggested))
-        a = st.number_input("Stop saving at", min_value=25, max_value=70, step=1,
+        a = st.number_input("Stop saving at", min_value=AGE_MIN, max_value=AGE_MAX, step=1,
                             key="ea_coast_age")
         set_override(st, "COAST_FIRE_AGE", safe_int(a))
         coast_age = safe_int(a)
