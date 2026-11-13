@@ -92,7 +92,8 @@ def test_working_year_sources_sum_to_gross_income():
         ov, None, current_age=30, retirement_age=55, plan_until=90,
         future_dollars=False, inflation_rate=0.0275,
     )
-    assert ages[0] == 30 and ages[-1] == 90
+    # The simulation covers the years before the plan-end age, so the axis stops at 89.
+    assert ages[0] == 30 and ages[-1] == 89
 
     # Every working source is present (all non-zero in this scenario).
     for label in iot._WORKING_LABELS:

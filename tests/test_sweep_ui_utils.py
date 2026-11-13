@@ -584,27 +584,36 @@ class TestDerivedGetLimit:
         assert derived.get_limit("") == 0
 
     def test_401k_catchup_boundary(self):
-        assert derived.get_limit("401k", 49) == derived.LIMITS_2024["401k_employee"]
-        assert (derived.get_limit("401k", 50)
-                == derived.LIMITS_2024["401k_employee"] + derived.LIMITS_2024["401k_catchup_50"])
+        L = cfg.CONTRIBUTION_LIMITS_2026
+        assert derived.get_limit("401k", 49) == L["401k"]
+        assert derived.get_limit("401k", 50) == L["401k"] + L["401k_catchup"]
+
+    def test_401k_super_catchup_only_at_60_to_63(self):
+        L = cfg.CONTRIBUTION_LIMITS_2026
+        assert derived.get_limit("401k", 59) == L["401k"] + L["401k_catchup"]
+        for age in (60, 61, 62, 63):
+            assert derived.get_limit("401k", age) == L["401k"] + L["401k_supercatchup"]
+        assert derived.get_limit("401k", 64) == L["401k"] + L["401k_catchup"]
 
     def test_ira_catchup_boundary(self):
-        assert derived.get_limit("ira", 49) == derived.LIMITS_2024["ira"]
-        assert (derived.get_limit("ira", 50)
-                == derived.LIMITS_2024["ira"] + derived.LIMITS_2024["ira_catchup_50"])
+        L = cfg.CONTRIBUTION_LIMITS_2026
+        assert derived.get_limit("ira", 49) == L["ira"]
+        assert derived.get_limit("ira", 50) == L["ira"] + L["ira_catchup"]
 
     def test_hsa_family_flag(self):
-        assert derived.get_limit("hsa", 30, family=True) == derived.LIMITS_2024["hsa_family"]
-        assert derived.get_limit("hsa", 30, family=False) == derived.LIMITS_2024["hsa_individual"]
+        L = cfg.CONTRIBUTION_LIMITS_2026
+        assert derived.get_limit("hsa", 30, family=True) == L["hsa_family"]
+        assert derived.get_limit("hsa", 30, family=False) == L["hsa_individual"]
 
     def test_401k_and_ira_agree_with_the_engine(self):
-        for age in (30, 49, 50, 60):
-            assert derived.get_limit("401k", age) == cfg.get_401k_limit(age, 2024)
-            assert derived.get_limit("ira", age) == cfg.get_ira_limit(age, 2024)
+        for age in (30, 49, 50, 60, 64):
+            assert derived.get_limit("401k", age) == cfg.get_401k_limit(age, cfg.CURRENT_YEAR)
+            assert derived.get_limit("ira", age) == cfg.get_ira_limit(age, cfg.CURRENT_YEAR)
 
     # FIXED 2026-08-22: was xfail(strict) while the defect stood; the fix is in.
     def test_hsa_catchup_at_55_matches_engine(self):
-        assert derived.get_limit("hsa", 55, family=True) == cfg.get_hsa_limit(55, 2024, True)
+        assert (derived.get_limit("hsa", 55, family=True)
+                == cfg.get_hsa_limit(55, cfg.CURRENT_YEAR, True))
 
 
 # ---------------------------------------------------------------------------

@@ -339,10 +339,13 @@ def _sync_debts(st, overrides: dict) -> None:
 
 
 def _derive_rent_own(overrides: dict) -> str:
+    # Owning = a home value OR a mortgage payment, as cfg.is_renter() decides: a
+    # payment with no home value is still a housing cost and must not be dropped.
     try:
-        owns = int(overrides.get("HOME_VALUE", 0)) > 0 or int(overrides.get("MORTGAGE_MONTHLY", 0)) > 0
+        owns = (int(overrides.get("HOME_VALUE", 0) or 0) > 0
+                or int(overrides.get("MORTGAGE_MONTHLY", 0) or 0) > 0)
     except (TypeError, ValueError):
-        owns = False
+        return "Renting"
     return "Own home" if owns else "Renting"
 
 

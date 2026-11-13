@@ -203,7 +203,8 @@ def build_income_series(
 
     Only sources that are non-zero in at least one year are included.
     """
-    ages = list(range(current_age, plan_until + 1))
+    # The simulation covers the years BEFORE the plan-end age; a bar at that age would be empty.
+    ages = list(range(current_age, plan_until))
     if not ages:
         return [], {}
 
@@ -256,6 +257,8 @@ def build_income_series(
             series["Your bonus"][i] = ybo
             series["Your RSU"][i] = yr
             series["Your other income"][i] = yo
+            # Social Security claimed while still working (engine: working_year_cashflow).
+            series["Social Security"][i] = _retirement_ss_for_age(age, ss_claim_age, overrides)
 
         # --- Partner working income (their OWN retirement boundary) ---
         # Runs independently of the primary's phase so a partner who keeps
@@ -401,7 +404,7 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
     # Assign palette colors at render time so they follow the runtime palette.
     colors = {l: concept_color(l, st) for l in _ALL_LABELS}
 
-    ages = list(range(current_age, plan_until + 1))
+    ages = list(range(current_age, plan_until))
     if not ages:
         st.info("Set your current age and plan end age in the sidebar to see income over time.")
         return

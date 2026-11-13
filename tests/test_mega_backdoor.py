@@ -3,7 +3,7 @@
 The engine contributes an after-tax 401(k) amount (up to the 415(c) total-
 additions room) to the Roth bucket, funded from take-home, when
 YOUR_AFTER_TAX_401K_PCT > 0. These pin:
-1. get_401k_total_limit returns the 415(c) limit (69k base, +catchup at 50+).
+1. get_401k_total_limit returns the 415(c) limit (72k base, +catchup at 50+).
 2. 0% is a no-op (byte-identical to the pre-feature behavior).
 3. A positive % reallocates take-home from taxable brokerage into Roth, and
    terminal wealth does not fall (Roth grows tax-free vs the taxable drag).
@@ -31,8 +31,9 @@ def _restore():
 
 
 def test_415c_total_limit_helper():
-    assert cfg.get_401k_total_limit(40, 2024) == 69_000        # base 415(c)
-    assert cfg.get_401k_total_limit(55, 2024) == 69_000 + 7_500  # +catch-up at 50+
+    assert cfg.get_401k_total_limit(40, 2026) == 72_000        # base 415(c)
+    assert cfg.get_401k_total_limit(55, 2026) == 72_000 + 8_000  # +catch-up at 50+
+    assert cfg.get_401k_total_limit(61, 2026) == 72_000 + 11_250  # super catch-up at 60-63
 
 
 def _balances(seed):

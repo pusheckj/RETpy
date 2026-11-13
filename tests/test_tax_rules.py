@@ -302,7 +302,7 @@ class TestIncomeWiringAndMatch:
                 YOUR_COMPENSATION_BY_AGE=_comp(60_000), YEARS_UNTIL_WEDDING=0)
         assert asim.working_year_cashflow(40)["partner_roth"] == 7_000
         sandbox(YOUR_COMPENSATION_BY_AGE=_comp(300_000))
-        assert asim.working_year_cashflow(40)["partner_roth"] == 0.0
+        assert asim.working_year_cashflow(40)["partner_roth"] == 7_000   # backdoor above the range
 
     def test_explicit_after_tax_is_still_honoured(self, sandbox):
         sandbox(YOUR_COMPENSATION_BY_AGE=_comp(150_000, after_tax=99_000))

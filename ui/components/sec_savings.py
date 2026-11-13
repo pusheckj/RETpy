@@ -240,7 +240,7 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
 
     st.caption(
         "Fills accounts in this order: **401(k) → HSA → Roth IRA → Taxable brokerage** "
-        "(whatever is left). Each is capped at its 2024 limit, in today's dollars. "
+        "(whatever is left). Each is capped at its 2026 limit, in today's dollars. "
         "To set your own amounts, choose Keep my amounts."
     )
 
@@ -309,7 +309,7 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
 def _render_custom_pct(st, disposable: int, overrides: dict) -> None:
     """Custom %: user provides allocation percentages."""
     st.caption("Choose what share of your leftover savings goes to each account. "
-               "Each is capped at its 2024 limit, in today's dollars.")
+               "Each is capped at its 2026 limit, in today's dollars.")
 
     # Defaults (100% either way) and amounts come from utils.derived, which
     # also uses them to work out what's left to save (sidebar_savings_budget).
@@ -356,8 +356,8 @@ def _apply_max_out(st, keys) -> None:
 
 
 def _max_out_control(st, cfg_key: str, max_value: int) -> None:
-    """Under a manual input: a Max out button while there is room, a short
-    note once it is full, or why a partner's Roth can't be filled."""
+    """Under a manual input: a Max out button while there is room, or a short
+    note once it is full."""
     overrides = pm.live_overrides(st.session_state)
     m = pm.max_out_state(cfg_key, overrides, max_value)
     if m.state == pm.BUTTON:
@@ -366,8 +366,6 @@ def _max_out_control(st, cfg_key: str, max_value: int) -> None:
                   help=pm.max_out_help(cfg_key, overrides, m.target))
     elif m.state == pm.AT_LIMIT:
         st.caption("✓ At the limit")
-    elif m.state == pm.OVER_INCOME:
-        st.caption(pm.over_income_note(overrides))
 
 
 def _max_out_all(st) -> None:

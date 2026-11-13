@@ -780,9 +780,9 @@ class TestWithdrawalLogLogsPerYearTaxes:
 # of truth for general CPI. config.INFLATION_RATES['general'] is derived from it,
 # and the sim_runner override path propagates a slider change into the built dict.
 # The all-real frame pins the general growth factor at 1.0 (liabilities do not
-# rescale), but the slider DOES drive healthcare/childcare real-excess growth
-# (= category nominal literal - general) and the historical-path single-year
-# deflation. At the default slider value the model number is unchanged.
+# rescale). The slider drives the historical-path single-year deflation and the
+# frozen-nominal tax thresholds, but NOT healthcare/childcare real-excess growth
+# (a fixed premium, cfg.INFLATION_REAL_EXCESS). At the default the number is unchanged.
 # ==============================================================================
 class TestInflationSliderIsLive:
     def test_default_general_equals_expected_inflation_and_prior_literal(self):
@@ -800,25 +800,23 @@ class TestInflationSliderIsLive:
         update_inflation_factors(factors)
         assert factors['general'] == 1.0
 
-    def test_slider_moves_healthcare_real_excess_growth(self):
-        # Real-excess = healthcare_nominal - general. Zero volatility isolates the mean.
+    def test_slider_does_not_move_healthcare_real_excess_growth(self):
+        # Healthcare runs a FIXED premium over CPI (cfg.INFLATION_REAL_EXCESS, 1.75%).
+        # It used to be "nominal literal - general", so a higher slider shrank it and
+        # above 4.5% turned it into real deflation: more assumed inflation then made
+        # every plan look better. Zero volatility isolates the mean.
         from retirement_sim import account_simulation as S
         orig_general = cfg.INFLATION_RATES['general']
         orig_vol = cfg.INFLATION_VOLATILITY
         try:
             cfg.INFLATION_VOLATILITY = 0.0
-            # Low general -> larger real-excess -> faster healthcare growth.
-            cfg.INFLATION_RATES['general'] = 0.02
-            low = {'healthcare': 1.0}
-            S.update_inflation_factors(low)
-            # High general -> smaller real-excess -> slower healthcare growth.
-            cfg.INFLATION_RATES['general'] = 0.04
-            high = {'healthcare': 1.0}
-            S.update_inflation_factors(high)
-            # 0.045 - 0.02 = 0.025 vs 0.045 - 0.04 = 0.005
-            assert low['healthcare'] == 1.0 + (0.045 - 0.02)
-            assert high['healthcare'] == 1.0 + (0.045 - 0.04)
-            assert low['healthcare'] > high['healthcare']
+            grown = []
+            for general in (0.0, 0.02, 0.04, 0.10):
+                cfg.INFLATION_RATES['general'] = general
+                f = {'healthcare': 1.0}
+                S.update_inflation_factors(f)
+                grown.append(f['healthcare'])
+            assert all(g == pytest.approx(1.0 + (0.045 - 0.0275)) for g in grown)
         finally:
             cfg.INFLATION_RATES['general'] = orig_general
             cfg.INFLATION_VOLATILITY = orig_vol

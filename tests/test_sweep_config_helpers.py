@@ -40,13 +40,13 @@ class TestContributionLimits:
         base-year limit must come back unchanged."""
         assert cfg.CONTRIBUTION_LIMIT_INFLATION_RATE == 0.0
         assert (cfg.get_inflation_adjusted_limit(limit_type, 0)
-                == cfg.CONTRIBUTION_LIMITS_2024[limit_type])
+                == cfg.CONTRIBUTION_LIMITS_2026[limit_type])
 
     # FIXED 2026-08-22: was xfail(strict) while the defect stood; the fix is in.
     @pytest.mark.parametrize("limit_type", ["hsa_family", "hsa_individual"])
     def test_zero_inflation_is_identity_for_hsa(self, limit_type):
         assert (cfg.get_inflation_adjusted_limit(limit_type, 0)
-                == cfg.CONTRIBUTION_LIMITS_2024[limit_type])
+                == cfg.CONTRIBUTION_LIMITS_2026[limit_type])
 
     def test_limits_are_flat_across_years_in_real_terms(self):
         for year in (2024, 2030, 2060):
@@ -54,21 +54,21 @@ class TestContributionLimits:
             assert cfg.get_ira_limit(40, year) == cfg.get_ira_limit(40, 2024)
 
     def test_401k_catchup_boundary_at_50(self):
-        assert cfg.get_401k_limit(49, 2024) == cfg.CONTRIBUTION_LIMITS_2024["401k"]
+        assert cfg.get_401k_limit(49, 2024) == cfg.CONTRIBUTION_LIMITS_2026["401k"]
         assert (cfg.get_401k_limit(50, 2024)
-                == cfg.CONTRIBUTION_LIMITS_2024["401k"]
-                + cfg.CONTRIBUTION_LIMITS_2024["401k_catchup"])
+                == cfg.CONTRIBUTION_LIMITS_2026["401k"]
+                + cfg.CONTRIBUTION_LIMITS_2026["401k_catchup"])
 
     def test_ira_catchup_boundary_at_50(self):
-        assert cfg.get_ira_limit(49, 2024) == cfg.CONTRIBUTION_LIMITS_2024["ira"]
+        assert cfg.get_ira_limit(49, 2024) == cfg.CONTRIBUTION_LIMITS_2026["ira"]
         assert (cfg.get_ira_limit(50, 2024)
-                == cfg.CONTRIBUTION_LIMITS_2024["ira"]
-                + cfg.CONTRIBUTION_LIMITS_2024["ira_catchup"])
+                == cfg.CONTRIBUTION_LIMITS_2026["ira"]
+                + cfg.CONTRIBUTION_LIMITS_2026["ira_catchup"])
 
     def test_401k_total_limit_exceeds_employee_limit(self):
         assert cfg.get_401k_total_limit(40, 2024) > cfg.get_401k_limit(40, 2024)
         assert (cfg.get_401k_total_limit(50, 2024) - cfg.get_401k_total_limit(49, 2024)
-                == cfg.CONTRIBUTION_LIMITS_2024["401k_catchup"])
+                == cfg.CONTRIBUTION_LIMITS_2026["401k_catchup"])
 
     def test_hsa_family_exceeds_individual_and_catchup_at_55(self):
         fam = cfg.get_hsa_limit(40, 2024, is_family=True)
@@ -77,7 +77,7 @@ class TestContributionLimits:
         # 55+ catch-up (not 50) for HSA.
         assert cfg.get_hsa_limit(54, 2024) == fam
         assert (cfg.get_hsa_limit(55, 2024) - fam
-                == cfg.CONTRIBUTION_LIMITS_2024["hsa_catchup"])
+                == cfg.CONTRIBUTION_LIMITS_2026["hsa_catchup"])
 
     def test_negative_years_from_2024_does_not_crash(self):
         assert cfg.get_inflation_adjusted_limit("401k", -5) > 0
@@ -452,12 +452,12 @@ class TestTotalSavingsHelpers:
         assert cfg.calculate_partner_total_savings(salary, 0, married=False) == pytest.approx(expected)
 
     def test_partner_roth_follows_income_not_marriage(self, monkeypatch):
-        """Marriage no longer zeroes the partner's Roth; the phase-out does."""
+        """Neither marriage nor income zeroes the partner's Roth (backdoor above the range)."""
         monkeypatch.setattr(cfg, "PARTNER_401K_CONTRIBUTION", 0)
         monkeypatch.setattr(cfg, "PARTNER_ROTH_CONTRIBUTION", 7_000)
         monkeypatch.setattr(cfg, "PARTNER_ANNUAL_SPENDING", 10_000_000)   # no brokerage
         assert cfg.calculate_partner_total_savings(80_000, 0, married=True) == pytest.approx(7_000)
-        assert cfg.calculate_partner_total_savings(300_000, 0, married=True) == 0.0
+        assert cfg.calculate_partner_total_savings(300_000, 0, married=True) == pytest.approx(7_000)
 
     def test_partner_savings_floors_brokerage_at_zero(self, monkeypatch):
         monkeypatch.setattr(cfg, "PARTNER_401K_CONTRIBUTION", 1_000)

@@ -32,24 +32,29 @@ def household(**kw):
 
 # ---------------------------------------------------------------- limits by age
 
-@pytest.mark.parametrize("age,k401,ira", [(49, 23_000, 7_000), (50, 30_500, 8_000)])
+@pytest.mark.parametrize("age,k401,ira", [(49, 24_500, 7_500), (50, 32_500, 8_600)])
 def test_catch_up_starts_at_50_for_401k_and_ira(age, k401, ira):
     o = household(YOUR_AGE=age, PARTNER_AGE=age)
     assert pm.max_out_target(K401, o) == pm.max_out_target(P401, o) == k401
     assert pm.max_out_target(ROTH, o) == pm.max_out_target(PROTH, o) == ira
 
 
-@pytest.mark.parametrize("age,hsa", [(54, 8_300), (55, 9_300)])
+@pytest.mark.parametrize("age,hsa", [(54, 8_750), (55, 9_750)])
 def test_hsa_catch_up_starts_at_55(age, hsa):
     assert pm.max_out_target(HSA, household(YOUR_AGE=age)) == hsa
 
 
 def test_each_person_uses_their_own_age():
     o = household(YOUR_AGE=49, PARTNER_AGE=50)
-    assert pm.max_out_target(K401, o) == 23_000
-    assert pm.max_out_target(P401, o) == 30_500
-    assert pm.max_out_target(ROTH, o) == 7_000
-    assert pm.max_out_target(PROTH, o) == 8_000
+    assert pm.max_out_target(K401, o) == 24_500
+    assert pm.max_out_target(P401, o) == 32_500
+    assert pm.max_out_target(ROTH, o) == 7_500
+    assert pm.max_out_target(PROTH, o) == 8_600
+
+
+def test_the_401k_super_catch_up_applies_at_60_to_63():
+    for age, limit in ((59, 32_500), (60, 35_750), (63, 35_750), (64, 32_500)):
+        assert pm.max_out_target(K401, household(YOUR_AGE=age, PARTNER_AGE=age)) == limit
 
 
 def test_every_limit_fits_its_input_at_every_age():
@@ -99,94 +104,79 @@ def test_no_pay_means_nothing_to_show():
 # ---------------------------------------------------------------- already at the limit
 
 def test_below_at_and_over_the_limit():
-    assert pm.max_out_state(K401, household(YOUR_401K_CONTRIBUTION=22_999)).state == pm.BUTTON
-    assert pm.max_out_state(K401, household(YOUR_401K_CONTRIBUTION=23_000)).state == pm.AT_LIMIT
+    assert pm.max_out_state(K401, household(YOUR_401K_CONTRIBUTION=24_499)).state == pm.BUTTON
+    assert pm.max_out_state(K401, household(YOUR_401K_CONTRIBUTION=24_500)).state == pm.AT_LIMIT
     assert pm.max_out_state(K401, household(YOUR_401K_CONTRIBUTION=31_000)).state == pm.AT_LIMIT
     m = pm.max_out_state(HSA, household(YOUR_HSA_CONTRIBUTION=100))
-    assert m == pm.MaxOut(pm.BUTTON, 8_300, 100)
+    assert m == pm.MaxOut(pm.BUTTON, 8_750, 100)
 
 
 def test_updates_skip_accounts_already_full():
-    o = household(YOUR_401K_CONTRIBUTION=23_000, YOUR_HSA_CONTRIBUTION=8_300)
+    o = household(YOUR_401K_CONTRIBUTION=24_500, YOUR_HSA_CONTRIBUTION=8_750)
     assert K401 not in pm.max_out_updates(o) and HSA not in pm.max_out_updates(o)
-    full = {**o, P401: 23_000, ROTH: 7_000, PROTH: 7_000}
+    full = {**o, P401: 24_500, ROTH: 7_500, PROTH: 7_500}
     assert pm.max_out_updates(full) == {}
 
 
-# ---------------------------------------------------------------- partner Roth (direct, phase-out)
+# ---------------------------------------------------------------- partner Roth (backdoor, no phase-out)
 
-def test_partner_roth_below_the_phase_out_gets_the_ira_limit():
-    assert pm.max_out_state(PROTH, household()) == pm.MaxOut(pm.BUTTON, 7_000, 0)
+@pytest.mark.parametrize("you,partner", [
+    (120_000, 80_000),       # well under the direct-Roth range
+    (150_000, 85_000),       # inside it ($235k joint)
+    (300_000, 90_000),       # far above it
+])
+def test_partner_roth_gets_the_ira_limit_at_any_income(you, partner):
+    # Above the direct range it is a backdoor Roth, as YOUR_BACKDOOR_ROTH is for you.
+    o = household(YOUR_BASE_SALARY=you, PARTNER_BASE_SALARY=partner)
+    assert pm.max_out_state(PROTH, o) == pm.MaxOut(pm.BUTTON, 7_500, 0)
+    assert pm.max_out_state(ROTH, o).target == 7_500
+    assert pm.derived.partner_roth_allowed(o, pm._contributions(o)) == 7_500
 
 
-def test_partner_roth_inside_the_phase_out_gets_part_of_it():
-    # $235k of pay is the middle of the $230k-$240k joint range: half the limit.
-    o = household(YOUR_BASE_SALARY=150_000, PARTNER_BASE_SALARY=85_000)
-    m = pm.max_out_state(PROTH, o)
-    assert m.state == pm.BUTTON and 3_000 < m.target < 4_000
-    # The engine's own figure for the same inputs.
-    assert m.target == int(pm.derived.partner_roth_allowed(o, pm._contributions(o)))
-
-
-def test_partner_roth_above_the_phase_out_has_no_button_and_a_note():
+def test_partner_roth_already_at_the_limit_is_at_limit():
     o = household(YOUR_BASE_SALARY=300_000, PARTNER_BASE_SALARY=90_000)
-    m = pm.max_out_state(PROTH, o)
-    assert m == pm.MaxOut(pm.OVER_INCOME, 0, 0)
-    assert pm.over_income_note(o) == "Income is above the Roth IRA limit."
+    assert pm.max_out_state(PROTH, {**o, PROTH: 7_500}).state == pm.AT_LIMIT
 
 
-def test_partner_roth_note_says_when_saving_more_would_open_it():
-    # $240k of pay is just out of range, but maxed 401(k)s and an HSA bring it back in.
-    o = household(YOUR_BASE_SALARY=150_000, PARTNER_BASE_SALARY=90_000)
-    assert pm.max_out_state(PROTH, o).state == pm.OVER_INCOME
-    assert "401(k)" in pm.over_income_note(o)
-    assert pm.max_out_updates(o)[PROTH] == 7_000
-
-
-def test_partner_roth_already_at_what_income_allows_is_at_limit():
-    o = household(YOUR_BASE_SALARY=150_000, PARTNER_BASE_SALARY=85_000)
-    allowed = pm.max_out_target(PROTH, o)
-    assert pm.max_out_state(PROTH, {**o, PROTH: allowed}).state == pm.AT_LIMIT
-
-
-def test_single_filer_partner_roth_uses_the_single_range():
-    # An unmarried couple files two returns; the partner's $155k is inside $146k-$161k.
-    o = household(FILING_STATUS="Single", YOUR_BASE_SALARY=60_000, PARTNER_BASE_SALARY=155_000)
-    m = pm.max_out_state(PROTH, o)
-    assert m.state == pm.BUTTON and 0 < m.target < 7_000
+def test_partner_roth_is_still_held_to_earned_income():
+    o = household(YOUR_BASE_SALARY=300_000, PARTNER_BASE_SALARY=2_000)
+    # A joint return counts your pay too, so the spouse's own pay is no cap there ...
+    assert pm.max_out_target(PROTH, o) == 7_500
+    # ... but an unmarried partner needs pay of their own.
+    single = household(FILING_STATUS="Single", YOUR_BASE_SALARY=300_000, PARTNER_BASE_SALARY=2_000)
+    assert pm.max_out_target(PROTH, single) == 2_000
 
 
 # ---------------------------------------------------------------- order and live values
 
 def test_max_out_all_sets_the_401ks_before_working_out_the_partner_roth():
     o = household(YOUR_BASE_SALARY=100_000, PARTNER_BASE_SALARY=140_000)
-    assert pm.max_out_state(PROTH, o).state == pm.OVER_INCOME      # on its own: no room
     up = pm.max_out_updates(o)
-    assert up == {K401: 23_000, P401: 23_000, HSA: 8_300, ROTH: 7_000, PROTH: 7_000}
+    assert up == {K401: 24_500, P401: 24_500, HSA: 8_750, ROTH: 7_500, PROTH: 7_500}
 
 
 def test_one_account_only():
-    assert pm.max_out_updates(household(), (HSA,)) == {HSA: 8_300}
+    assert pm.max_out_updates(household(), (HSA,)) == {HSA: 8_750}
 
 
 def test_typed_amounts_beat_stored_overrides():
     state = {"user_overrides": household(YOUR_401K_CONTRIBUTION=0),
-             pm.MANUAL_WIDGETS[K401]: 23_000}
-    assert pm.live_overrides(state)[K401] == 23_000
+             pm.MANUAL_WIDGETS[K401]: 24_500}
+    assert pm.live_overrides(state)[K401] == 24_500
     assert pm.live_overrides({})  == {}
 
 
 def test_label_has_one_dollar_sign_and_is_escaped():
-    assert pm.max_out_label(23_000) == "Max out \\$23,000"
-    assert pm.max_out_label(23_000).count("$") == 1
+    assert pm.max_out_label(24_500) == "Max out \\$24,500"
+    assert pm.max_out_label(24_500).count("$") == 1
 
 
 def test_tooltips_say_where_the_figure_comes_from():
     o = household(YOUR_AGE=55)
-    assert "catch-up for 55" in pm.max_out_help(HSA, o, 9_300)
-    assert "catch-up for 50" in pm.max_out_help(K401, o, 30_500)
+    assert "catch-up for 55" in pm.max_out_help(HSA, o, 9_750)
+    assert "catch-up for 50" in pm.max_out_help(K401, o, 32_500)
     assert "pay allows" in pm.max_out_help(K401, household(YOUR_BASE_SALARY=15_000), 15_000)
-    assert "direct Roth" in pm.max_out_help(PROTH, o, 3_000)
+    assert "2026 IRA limit" in pm.max_out_help(PROTH, o, 7_500)
 
 
 # ---------------------------------------------------------------- the Investments section
@@ -222,8 +212,8 @@ def test_clicking_max_out_fills_the_input_and_the_override(monkeypatch, mode):
             "sv_max_partner_roth_contribution", "sv_max_all"} <= _keys(at)
     at.button(key="sv_max_your_hsa_contribution").click().run()
     assert not at.exception, at.exception
-    assert at.number_input(key="sv_manual_your_hsa").value == 8_300
-    assert at.session_state["user_overrides"]["YOUR_HSA_CONTRIBUTION"] == 8_300
+    assert at.number_input(key="sv_manual_your_hsa").value == 8_750
+    assert at.session_state["user_overrides"]["YOUR_HSA_CONTRIBUTION"] == 8_750
     assert "sv_max_your_hsa_contribution" not in _keys(at)        # now full
     assert any(c.value == "✓ At the limit" for c in at.caption)
     assert at.number_input(key="sv_manual_your_401k").value == 0  # nothing else moved
@@ -235,17 +225,17 @@ def test_max_out_all_applies_every_account_at_once(monkeypatch):
     assert not at.exception, at.exception
     ov = at.session_state["user_overrides"]
     assert (ov[K401], ov[P401], ov[HSA], ov[ROTH], ov[PROTH]) == (
-        30_500, 30_500, 8_300, 8_000, 8_000)
-    assert at.number_input(key="sv_manual_partner_roth").value == 8_000
+        32_500, 32_500, 8_750, 8_600, 8_600)
+    assert at.number_input(key="sv_manual_partner_roth").value == 8_600
     assert not any(k.startswith("sv_max_") for k in _keys(at))     # nothing left to max
 
 
-def test_max_out_all_opens_a_partner_roth_the_income_blocked(monkeypatch):
+def test_max_out_all_fills_a_partner_roth_at_any_income(monkeypatch):
     at = _savings(monkeypatch, YOUR_BASE_SALARY=100_000, PARTNER_BASE_SALARY=140_000)
-    assert "sv_max_partner_roth_contribution" not in _keys(at)
-    assert any("above the Roth IRA limit" in c.value for c in at.caption)
+    assert "sv_max_partner_roth_contribution" in _keys(at)       # backdoor: no income block
+    assert not any("above the Roth IRA limit" in c.value for c in at.caption)
     at.button(key="sv_max_all").click().run()
-    assert at.number_input(key="sv_manual_partner_roth").value == 7_000
+    assert at.number_input(key="sv_manual_partner_roth").value == 7_500
 
 
 def test_no_partner_no_partner_buttons(monkeypatch):
@@ -253,7 +243,7 @@ def test_no_partner_no_partner_buttons(monkeypatch):
     assert not any("partner" in k for k in _keys(at))
     at.button(key="sv_max_all").click().run()
     ov = at.session_state["user_overrides"]
-    assert ov[K401] == 23_000 and ov[P401] == 0 and ov[PROTH] == 0
+    assert ov[K401] == 24_500 and ov[P401] == 0 and ov[PROTH] == 0
 
 
 def test_taxable_brokerage_has_no_button(monkeypatch):
@@ -267,7 +257,7 @@ def test_a_typed_amount_counts_when_max_out_is_clicked(monkeypatch):
     at = _savings(monkeypatch, MANUAL_MODE)
     at.number_input(key="sv_manual_your_hsa").set_value(100)
     at.button(key="sv_max_all").click().run()
-    assert at.session_state["user_overrides"]["YOUR_HSA_CONTRIBUTION"] == 8_300
+    assert at.session_state["user_overrides"]["YOUR_HSA_CONTRIBUTION"] == 8_750
 
 
 def test_auto_and_custom_modes_have_no_max_out_buttons(monkeypatch):
@@ -308,18 +298,18 @@ def test_guided_setup_has_max_out_for_401k_hsa_and_ira(monkeypatch):
     assert "gs_max_gs_hsa_amt" in _keys(at)
 
     at.button(key="gs_max_gs_hsa_amt").click().run()
-    assert at.number_input(key="gs_hsa_amt").value == 8_300
+    assert at.number_input(key="gs_hsa_amt").value == 8_750
     at.button(key="gs_max_gs_ira").click().run()
-    assert at.number_input(key="gs_ira").value == 7_000
+    assert at.number_input(key="gs_ira").value == 7_500
     at.button(key="gs_max_gs_401k_pct").click().run()
     assert not at.exception, at.exception
     ov = at.session_state["user_overrides"]
-    assert (ov["YOUR_HSA_CONTRIBUTION"], ov["YOUR_BACKDOOR_ROTH"], ov[K401]) == (8_300, 7_000, 23_000)
-    assert at.number_input(key="gs_401k_pct").value == 19.2          # 23,000 of $120,000, rounded up
+    assert (ov["YOUR_HSA_CONTRIBUTION"], ov["YOUR_BACKDOOR_ROTH"], ov[K401]) == (8_750, 7_500, 24_500)
+    assert at.number_input(key="gs_401k_pct").value == 20.5          # 24,500 of $120,000, rounded up
     assert "gs_max_gs_401k_pct" not in _keys(at)
     assert sum(c.value == "✓ At the limit" for c in at.caption) == 3
     at.button(key="gs_max_gs_p401k_pct").click().run()
-    assert at.session_state["user_overrides"][P401] == 23_000
+    assert at.session_state["user_overrides"][P401] == 24_500
 
 
 def test_hsa_limit_is_self_only_for_a_single_person_without_children():
