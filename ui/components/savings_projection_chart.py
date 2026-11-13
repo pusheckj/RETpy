@@ -62,6 +62,10 @@ def render(st, results: dict = None, chart_key: str = "savings_projection_main")
         running += t
         cumulative.append(running)
     years = len(rows)
+    if cumulative[-1] <= 0:
+        st.info("Nothing is saved in the working years (spending takes all of your take-home "
+                "pay), so there are no contributions to chart.")
+        return
 
     # KPI strip. "Year 1 savings rate" is the savings-rate chart's first bar.
     first = rows[0]

@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover
 
 try:
     from utils.coerce import safe_int, safe_float, as_fraction  # noqa: F401
+    from utils.formatting import money
     from components.spending_inputs import (
         SPENDING_CATEGORIES,
         compute_lifecycle_multipliers,
@@ -26,6 +27,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, as_fraction  # noqa: F401
+    from ui.utils.formatting import money
     from ui.components.spending_inputs import (
         SPENDING_CATEGORIES,
         compute_lifecycle_multipliers,
@@ -33,9 +35,9 @@ except ImportError:  # pragma: no cover
     )
 
 try:
-    from utils.plot_theme import style_fig, show_chart, assign_colors, series_color, PLOTLY_CONFIG, is_dark
+    from utils.plot_theme import style_fig, show_chart, assign_colors, series_color, PLOTLY_CONFIG, is_dark, _lighten
 except ImportError:  # pragma: no cover
-    from ui.utils.plot_theme import style_fig, show_chart, assign_colors, series_color, PLOTLY_CONFIG, is_dark
+    from ui.utils.plot_theme import style_fig, show_chart, assign_colors, series_color, PLOTLY_CONFIG, is_dark, _lighten
 
 
 # Category keys in stacking order (housing first, then declared spending
@@ -51,6 +53,11 @@ _CATEGORY_KEYS = [
     "SPEND_DISCRETIONARY_MONTHLY",
     "SPEND_OTHER_MONTHLY",
 ]
+
+
+# The y-axis stops at this multiple of the tallest stack when the 4% rule line
+# would otherwise stretch it and squash the bars.
+_FOUR_PCT_AXIS_CAP = 1.6
 
 
 # --- Big-purchase / goal event helpers -------------------------------------
@@ -257,8 +264,21 @@ def _owns_by_age(overrides: dict, ages: list) -> list:
     return [bool(by_age.get(safe_int(a, 0), {}).get("owns", False)) for a in ages]
 
 
+def _owner_housing_label(overrides: dict, ages: list) -> str:
+    """Label for housing that is owned every year: "mortgage" while a loan is
+    being paid, else the property tax and insurance an owned-outright home costs."""
+    try:
+        from utils.derived import mortgage_schedule
+    except ImportError:  # pragma: no cover
+        from ui.utils.derived import mortgage_schedule  # type: ignore
+    by_age = mortgage_schedule(overrides, ages)["by_age"]
+    if any(by_age.get(safe_int(a, 0), {}).get("scheduled", 0.0) > 0 for a in ages):
+        return "Housing (mortgage)"
+    return "Housing (property tax, insurance)"
+
+
 def build_category_series(ages, overrides, multipliers, retirement_age,
-                          *, inflation_factors=None, st=None):
+                          *, inflation_factors=None, health_by_age=None, st=None):
     """Ordered ``[(label, color, values-per-age)]`` for the spending stack over
     ``ages``: auto-derived housing, each declared category, retirement vacation,
     and car purchases (in stacking order, bottom → top). Values are today's
@@ -288,7 +308,7 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
     scaled = _apply(housing_series)
     housing_series = [v if o else sv for v, sv, o in zip(housing_series, scaled, owns)]
     if any(v > 0 for v in housing_series):
-        housing_label = ("Housing (mortgage)" if all(owns) else
+        housing_label = (_owner_housing_label(overrides, ages) if all(owns) else
                          "Housing (rent)" if not any(owns) else "Housing")
         series.append((housing_label, category_colors["_AUTO_HOUSING"], housing_series))
 
@@ -298,6 +318,15 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
         cat_mults = multipliers.get(okey, {})
         ys = _apply([annual_today * cat_mults.get(a, 1.0) for a in ages])
         series.append((label, category_colors.get(okey, "#94a3b8"), ys))
+
+    # The partner's own spending: its own line in the engine's living base
+    # (cfg.PARTNER_OTHER_MONTHLY, zeroed when there is no partner), not part of
+    # any category above.
+    partner_monthly = safe_float(overrides.get("PARTNER_OTHER_MONTHLY",
+                                               _cfg_default("PARTNER_OTHER_MONTHLY", 0)), 0.0)
+    if partner_monthly > 0:
+        series.append(("Partner's spending", series_color(9, st),
+                       _apply([partner_monthly * 12] * len(ages))))
 
     # Children — annual child-rearing cost from the engine's own function
     # (ramps up as kids are born, drops as each leaves home). Only shown when
@@ -320,7 +349,10 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
 
     gogo_series = _apply([_go_go_extra(overrides, a, retirement_age) for a in ages])
     if any(v > 0 for v in gogo_series):
-        series.append(("Early-retirement extra", series_color(len(_CATEGORY_KEYS) + 4, st), gogo_series))
+        # "Early" only fits someone who has not retired yet.
+        gogo_label = ("Early-retirement extra" if min(ages) < int(retirement_age)
+                      else "Travel and hobbies extra")
+        series.append((gogo_label, series_color(len(_CATEGORY_KEYS) + 4, st), gogo_series))
 
     car_series = _apply([_car_outlay(overrides, a) for a in ages])
     if any(v > 0 for v in car_series):
@@ -332,6 +364,15 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
     ltc_series = _apply([_ltc_expected(overrides, a) for a in ages])
     if any(v > 0 for v in ltc_series):
         series.append(("Long-term care (expected)", series_color(len(_CATEGORY_KEYS) + 3, st), ltc_series))
+
+    # Health insurance in retirement (ACA before 65, Medicare after): what the
+    # engine pays on top of the categories, the median across its runs. Only
+    # known once the simulation has run.
+    if health_by_age:
+        health_series = _apply([health_by_age.get(int(a), 0.0) for a in ages])
+        if any(v > 0 for v in health_series):
+            series.append(("Health insurance (ACA, Medicare)",
+                           _lighten(category_colors["SPEND_HEALTH_MONTHLY"], 0.35), health_series))
 
     return series, payoff_age
 
@@ -365,6 +406,7 @@ def _build_figure(
     *,
     inflation_factors: list | None = None,
     four_pct_series: list | None = None,
+    health_by_age: dict | None = None,
     four_pct_color: str = "#0f172a",
     mortgage_color: str = "#1d4ed8",
     title: str,
@@ -385,8 +427,9 @@ def _build_figure(
     # matching the other charts. Series are built once via the shared helper.
     series, payoff_age = build_category_series(
         ages, overrides, multipliers, retirement_age,
-        inflation_factors=inflation_factors, st=st,
+        inflation_factors=inflation_factors, health_by_age=health_by_age, st=st,
     )
+    stack_max = max((sum(ys[i] for _, _, ys in series) for i in range(len(ages))), default=0.0)
     for label, color, ys in series:
         fig.add_trace(go.Bar(
             x=ages,
@@ -400,9 +443,11 @@ def _build_figure(
     # "4% rule" overlay: 4% of the projected portfolio each year = a per-year
     # gauge of how much you could theoretically spend. Values arrive in today's
     # dollars and are inflated to match the chart's dollar mode. Drawn on the
-    # SAME y-axis as the category bars so it's directly comparable (the axis
-    # expands to fit it).
+    # SAME y-axis as the category bars so it's directly comparable -- but the
+    # axis stops short of it when it would dwarf the bars (a large portfolio),
+    # and a note says where the line is (see y_top below).
     has_4pct = four_pct_series is not None and any(v is not None for v in four_pct_series)
+    y_top = None
     if has_4pct:
         if inflation_factors is not None:
             fp = [None if v is None else v * f for v, f in zip(four_pct_series, inflation_factors)]
@@ -414,6 +459,13 @@ def _build_figure(
             line=dict(color=four_pct_color, width=2, dash="dot"),
             hovertemplate="4% rule safe spend: $%{y:,.0f}/yr<extra></extra>",
         ))
+        line_max = max((v for v in fp if v is not None), default=0.0)
+        if stack_max > 0 and line_max > _FOUR_PCT_AXIS_CAP * stack_max:
+            y_top = _FOUR_PCT_AXIS_CAP * stack_max
+            fig.add_annotation(
+                xref="paper", yref="paper", x=1, y=1, xanchor="right", yanchor="top",
+                showarrow=False, align="right", font=dict(size=10, color="#64748b"),
+                text=f"4% rule line runs off the top (up to {money(line_max, shorten=True)}/yr)")
     if current_age <= retirement_age <= plan_until:
         fig.add_vline(
             x=retirement_age,
@@ -459,7 +511,8 @@ def _build_figure(
                    tickfont=dict(color="#64748b"), fixedrange=False),
         yaxis=dict(title=yaxis_title, gridcolor="#f1f5f9",
                    zeroline=False, tickfont=dict(color="#64748b"),
-                   rangemode="tozero", tickformat="$,.3~s"),
+                   rangemode="tozero", tickformat="$,.3~s",
+                   **({"range": [0, y_top]} if y_top else {})),
         hovermode="x unified", dragmode="pan",
         legend=dict(orientation="v", yanchor="top", y=1.0, xanchor="left",
                     x=1.02, bgcolor="rgba(0,0,0,0)",
@@ -522,6 +575,13 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
                 for a in ages
             ]
 
+    health_by_age = {}
+    for row in ((results or {}).get("primary_result", {}) or {}).get("health_by_year") or []:
+        try:
+            health_by_age[int(row["age"])] = float(row["p50"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
     inflation_factors = [(1.0 + inflation_rate) ** (age - current_age) for age in ages]
 
     # Single chart with a Today's / Future-dollars toggle (wrapped in a fragment
@@ -543,7 +603,7 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
         if future:
             fig = _build_figure(
                 ages, overrides, multipliers, current_age, retirement_age, plan_until, preset,
-                inflation_factors=inflation_factors,
+                inflation_factors=inflation_factors, health_by_age=health_by_age,
                 four_pct_series=four_pct_today, four_pct_color=four_pct_color,
                 mortgage_color=mortgage_color,
                 title="Projected annual spending by category (future dollars)",
@@ -555,7 +615,8 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
         else:
             fig = _build_figure(
                 ages, overrides, multipliers, current_age, retirement_age, plan_until, preset,
-                four_pct_series=four_pct_today, four_pct_color=four_pct_color,
+                four_pct_series=four_pct_today, health_by_age=health_by_age,
+                four_pct_color=four_pct_color,
                 mortgage_color=mortgage_color,
                 title="Projected annual spending by category",
                 subtitle=f"Today's dollars · lifecycle: {preset}",
@@ -574,7 +635,10 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
             "in the sidebar scales the other categories at certain ages. After you "
             "run the simulation, the dotted **4% rule** line shows 4% of your "
             "median projected portfolio each year, a rough ceiling for safe "
-            "spending, on the same axis as the bars."
+            "spending, on the same axis as the bars (a line far above them runs "
+            "off the top so the bars stay readable). After the run, the "
+            "**health insurance** band is what the simulation pays for ACA "
+            "coverage before 65 and Medicare after."
         )
         if future:
             st.caption(

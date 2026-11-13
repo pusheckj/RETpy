@@ -1508,6 +1508,11 @@ def _spending_percentiles(spending_logs, field: str = "living") -> List[dict]:
     return _percentiles_by_age(_spending_by_age(spending_logs, field))
 
 
+def _median_by_age(by_age: Dict[int, List[float]]) -> List[dict]:
+    """``[{age, p50}, ...]`` from ``{age: [dollars, ...]}`` (empty ages left out)."""
+    return [{"age": int(a), "p50": float(np.median(v))} for a, v in sorted(by_age.items()) if v]
+
+
 def _percentiles_by_age(by_age: Dict[int, List[float]]) -> List[dict]:
     """``_spending_percentiles`` rows from ``{age: [dollars, ...]}``."""
     out: List[dict] = []
@@ -1544,6 +1549,7 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
     n = 0
     details: List[dict] = []
     spending_by_age: Dict[int, List[float]] = {}
+    health_by_age: Dict[int, List[float]] = {}
     for r in chunks:
         finals.extend(r.get("finals", []))
         successes += int(r.get("successes", 0))
@@ -1552,6 +1558,8 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
         for age, vals in (r.get("spending_by_age") or {}).items():
             spending_by_age.setdefault(int(age), []).extend(
                 v for v in vals if v == v and abs(v) != float("inf"))
+        for age, vals in (r.get("health_by_age") or {}).items():
+            health_by_age.setdefault(int(age), []).extend(vals)
 
     if n == 0:
         # Nothing ran (all errored) — defer to the legacy serial path.
@@ -1584,6 +1592,7 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
     # Every run's spending (sim_task.spending_by_age), not just the detail
     # sample, so the spending-range chart covers the same runs as the success rate.
     spending_by_year = _percentiles_by_age(spending_by_age)
+    health_by_year = _median_by_age(health_by_age)
     bytype_logs = [d.get("bytype", []) for d in details if d.get("trajectory")]
 
     return {
@@ -1607,6 +1616,7 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
         "withdrawals_by_year": withdrawals_by_year,
         "withdrawals_basis": _withdrawals_basis(det_successes),
         "spending_by_year": spending_by_year,
+        "health_by_year": health_by_year,
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, logs, retirement_age),
     }
@@ -1718,6 +1728,7 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
     taxes_by_year = _approximate_taxes(withdrawals_by_year, retirement_age)
     spending_logs = [getattr(p, "spending_log", []) or [] for p in portfolios if p is not None]
     spending_by_year = _spending_percentiles(spending_logs)
+    health_by_year = _median_by_age(_spending_by_age(spending_logs, "health"))
     bytype_logs = [_bytype_log_from_portfolio(p) for p in portfolios if p is not None]
     wlogs = [list(getattr(p, "withdrawal_log", []) or []) for p in portfolios if p is not None]
 
@@ -1742,6 +1753,7 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
         "withdrawals_by_year": withdrawals_by_year,
         "withdrawals_basis": _withdrawals_basis(successes),
         "spending_by_year": spending_by_year,
+        "health_by_year": health_by_year,
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, wlogs, retirement_age),
     }
@@ -1803,6 +1815,19 @@ def _synthetic_trajectory(retirement_age: int) -> List[Tuple[int, float]]:
     return path
 
 
+def _horizon_ages(all_ages: List[int]) -> List[int]:
+    """Ages from the first one a path recorded to the plan's last year. A path
+    that depleted stops recording, so when every run fails early the recorded
+    ages alone end almost at once (a plan that is broke in year one would chart
+    a single point); the percentile charts run to the plan's end, with the
+    depleted paths at $0."""
+    try:
+        end = max(all_ages[-1], int(cfg.plan_end_age()))
+    except Exception:  # pragma: no cover - defensive: no engine config
+        end = all_ages[-1]
+    return list(range(all_ages[0], end + 1))
+
+
 def _percentile_trajectories(paths: List[List[Tuple[int, float]]]):
     """p10/p50/p90 of balances at each age, across the FULL horizon.
 
@@ -1819,7 +1844,7 @@ def _percentile_trajectories(paths: List[List[Tuple[int, float]]]):
     all_ages = sorted({int(a) for p in paths for (a, _) in p})
     if not all_ages:
         return [], [], []
-    ages = list(range(all_ages[0], all_ages[-1] + 1))
+    ages = _horizon_ages(all_ages)
     rows = []
     for p in paths:
         by_age = {int(a): float(v) for a, v in p}
@@ -1846,7 +1871,7 @@ def _networth_percentiles(paths: List[List[Tuple[int, float]]]) -> List[dict]:
     all_ages = sorted({int(a) for p in paths for (a, _) in p})
     if not all_ages:
         return []
-    ages = list(range(all_ages[0], all_ages[-1] + 1))
+    ages = _horizon_ages(all_ages)
     rows = []
     for p in paths:
         by_age = {int(a): float(v) for a, v in p}

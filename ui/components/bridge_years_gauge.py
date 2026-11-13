@@ -124,6 +124,11 @@ def render(st, results: dict = None, chart_key: str = "bridge_gauge") -> None:
                        + (" and a year of 72(t) payments" if any(sepp) else "")
                        + ".")
 
+    if max(a + b + c for a, b, c in zip(cash, taxable, roth)) < 1 and max(burn, default=0.0) < 1:
+        st.caption("There is no penalty-free money (cash, taxable brokerage or Roth) in the median "
+                   "plan before 59½, so there is nothing to chart.")
+        return
+
     dark = is_dark(st)
     ref_line = "#e2e8f0" if dark else "#0f172a"
     fig = go.Figure()

@@ -3015,6 +3015,9 @@ def _fund_net_expenses(
     true_health_insurance = portfolio.quote_health_insurance_cost(
         your_age, actual_magi, healthcare_factor
     )
+    # The year's logged premium becomes the true one (the logged row is this year's).
+    if portfolio.spending_log and portfolio.spending_log[-1].get("age") == int(your_age):
+        portfolio.spending_log[-1]["health"] = float(true_health_insurance)
     # Record the TRUE premium into the running totals (once).
     if true_health_insurance > 0:
         if your_age >= cfg.MEDICARE_AGE:
@@ -3245,6 +3248,10 @@ def simulate_retirement_year(
         "age": int(your_age),
         "living": float(adjusted_expenses),
         "total": float(adjusted_expenses + health_insurance + ltc_cost + car_cost),
+        # The premium (ACA before 65, Medicare after), so the spending chart can
+        # show what the engine really pays. Trued up from actual MAGI in
+        # _fund_net_expenses.
+        "health": float(health_insurance),
     })
 
     # Net-expense withdrawals + Roth conversion + premium true-up + solvency.

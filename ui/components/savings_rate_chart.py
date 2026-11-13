@@ -60,6 +60,9 @@ def render(st, results: dict = None, chart_key: str = "savings_rate_main") -> No
         return
 
     avg = sum(rates) / len(rates)
+    if max(rates) <= 0:
+        st.info("Nothing is saved in the working years, so the savings rate is 0%.")
+        return
     bar_color = "#14b8a6" if is_dark(st) else "#0d9488"
     ref_color = "#e2e8f0" if is_dark(st) else "#0f172a"
     basis_label = "take-home (after-tax)" if post_tax else "pre-tax (gross)"

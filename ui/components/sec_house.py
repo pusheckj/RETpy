@@ -65,7 +65,7 @@ def _housing(st) -> None:
         c1, c2 = st.columns(2, vertical_alignment="bottom")
         with c1:
             _money_input(st, "Home value", "se_home_value", "HOME_VALUE",
-                         800_000, 10_000_000, 10_000)
+                         800_000, 100_000_000, 10_000)
         with c2:
             _money_input(st, "Monthly mortgage payment", "se_mortgage_monthly",
                          "MORTGAGE_MONTHLY", 3_000, 20_000, 100)

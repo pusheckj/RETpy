@@ -14,6 +14,9 @@ def _is_bad(value) -> bool:
     return False
 
 
+_UNITS = ((1e9, "B"), (1e6, "M"), (1e3, "K"))
+
+
 def success_tier(rate, target) -> str:
     """"good" (>= target), "warn" (>= 75% of target) or "bad", for the user's target."""
     rate = rate or 0.0
@@ -44,17 +47,30 @@ def money(value: Union[int, float, None], precision: int = 0, shorten: bool = Fa
     value = abs(value)
     if shorten:
         abs_val = value
-        if abs_val >= 1e9:
-            body = f"{abs_val / 1e9:,.{precision + 1}f}B"
-        elif abs_val >= 1e6:
-            body = f"{abs_val / 1e6:,.{precision + 1}f}M"
-        elif abs_val >= 1e3:
-            body = f"{abs_val / 1e3:,.{precision + 1}f}K"
-        else:
-            body = f"{abs_val:,.{precision}f}"
+        digits = precision + 1
+        body = f"{abs_val:,.{precision}f}"
+        for i, (size, suffix) in enumerate(_UNITS):
+            if abs_val >= size:
+                # A value that rounds up to 1000 of its unit is one of the next
+                # unit ($999,999 -> "$1.0M", not "$1,000.0K").
+                if i and round(abs_val / size, digits) >= 1000:
+                    size, suffix = _UNITS[i - 1]
+                body = f"{abs_val / size:,.{digits}f}{suffix}"
+                break
     else:
         body = f"{value:,.{precision}f}"
     return f"-${body}" if negative else f"${body}"
+
+
+def months_text(n: float) -> str:
+    """A count of months for a sentence: "5.3 months", "1 month"; a cash pile
+    that covers decades reads "over 100 years", not "1000000.0 months"."""
+    if _is_bad(n):
+        return "—"
+    if n >= 1200:
+        return "over 100 years"
+    text = f"{n:.1f}".rstrip("0").rstrip(".") if n < 100 else f"{n:,.0f}"
+    return f"{text} month" + ("" if text == "1" else "s")
 
 
 def money_precise(value: Union[int, float, None]) -> str:

@@ -79,6 +79,8 @@ def sim_task(args) -> Dict[str, Any]:
     ``spending_by_age`` is every sim's guardrail-adjusted living spending by age
     (``{age: [dollars, ...]}``), so the spending-range chart covers the same
     runs as the success rate rather than only the ``detail_k`` sample.
+    ``health_by_age`` is the same for the health-insurance premium the engine
+    pays on top of it (``spending_log["health"]``), for the spending chart.
 
     A simulation that RAISES is dropped from both ``successes`` and ``finals``,
     which silently shrinks the denominator the caller divides by — a config that
@@ -98,6 +100,7 @@ def sim_task(args) -> Dict[str, Any]:
     finals: List[float] = []
     details: List[dict] = []
     spending_by_age: Dict[int, List[float]] = {}
+    health_by_age: Dict[int, List[float]] = {}
     for _ in range(int(n_sims)):
         try:
             success, portfolio = sim.run_detailed_simulation(age, verbose=False)
@@ -112,6 +115,7 @@ def sim_task(args) -> Dict[str, Any]:
         finals.append(fb)
         for row in (getattr(portfolio, "spending_log", None) or []):
             spending_by_age.setdefault(int(row["age"]), []).append(float(row.get("living", 0.0)))
+            health_by_age.setdefault(int(row["age"]), []).append(float(row.get("health", 0.0)))
         if len(details) < detail_k:
             traj = _trajectory_from_portfolio(portfolio)
             if traj:
@@ -124,4 +128,5 @@ def sim_task(args) -> Dict[str, Any]:
                 })
     return {"age": age, "n": len(finals), "successes": successes, "finals": finals,
             "details": details, "spending_by_age": spending_by_age,
+            "health_by_age": health_by_age,
             "errors": errors, "first_error": first_error}

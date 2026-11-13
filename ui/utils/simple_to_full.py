@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover
 
 # The planner inputs' upper bounds (a number_input errors on a larger value).
 SALARY_MAX = 2_000_000          # components/sec_income.py
-BALANCE_MAX = 10_000_000        # components/account_inputs.py
+BALANCE_MAX = 100_000_000       # components/account_inputs.py
 CONTRIB_401K_MAX = 40_000       # components/sec_savings.py _MANUAL_401K_MAX
 CONTRIB_MAX = 10_000            # HSA / IRA inputs
 
