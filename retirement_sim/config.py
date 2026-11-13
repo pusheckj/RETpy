@@ -774,16 +774,18 @@ def rent_annual(your_age: int) -> float:
     return 0.0
 
 
-def home_carrying_cost_annual(home_value: float) -> float:
+def home_carrying_cost_annual(home_value: float, pct=None) -> float:
     """Annual property tax + insurance on an owned home worth ``home_value``.
 
     Callers charge this only for years with NO mortgage payment (the all-in
     payment already includes escrow). 0 for renters (value 0) and when
-    MODEL_HOME_CARRYING_COST_AFTER_PAYOFF is off.
+    MODEL_HOME_CARRYING_COST_AFTER_PAYOFF is off. ``pct`` is the home's own
+    rate (a HOME_EVENTS purchase may carry one); None = HOME_CARRYING_COST_PCT.
     """
     if not globals().get("MODEL_HOME_CARRYING_COST_AFTER_PAYOFF", False):
         return 0.0
-    return max(0.0, float(home_value or 0)) * HOME_CARRYING_COST_PCT
+    rate = HOME_CARRYING_COST_PCT if pct is None else max(0.0, float(pct))
+    return max(0.0, float(home_value or 0)) * rate
 
 
 def owner_housing_annual(your_age: int) -> float:
@@ -2920,8 +2922,10 @@ def calculate_car_purchase(age: int) -> float:
 #       sell the home you own and buy another (move, upgrade, downsize);
 #   {"age": 72, "action": "sell_rent", "rent": 2_500, "costs": 5_000}
 #       sell the home and rent from then on (rent is monthly, today's dollars).
-# Optional on a purchase: "loan" (instead of down_pct) and "monthly" (the
-# all-in payment; derived from loan, rate, term and HOME_CARRYING_COST_PCT when
+# Optional on a purchase: "loan" (instead of down_pct), "carrying_pct" (that
+# home's property tax + insurance a year as a fraction of its price, e.g. for a
+# home in another state; left out = HOME_CARRYING_COST_PCT) and "monthly" (the
+# all-in payment; derived from loan, rate, term and the carrying rate when
 # left out). Missing costs / selling_cost_pct use HOUSE_MOVING_COSTS /
 # HOME_SELLING_COST_PCT. Normalized by housing_events().
 HOME_EVENTS = []
@@ -3042,9 +3046,15 @@ def housing_events(source=None) -> list:
                 loan = price * (1.0 - down)
             else:
                 loan = max(0.0, _num(e.get("loan"), 0.0))
+            carrying = e.get("carrying_pct")
+            if carrying is not None:
+                carrying = max(0.0, _num(carrying, 0.0))
+                ev["carrying_pct"] = carrying
             monthly = e.get("monthly")
             if monthly is None:
-                escrow = price * max(0.0, _num(get("HOME_CARRYING_COST_PCT", 0.0135), 0.0135)) / 12.0
+                pct = (_num(get("HOME_CARRYING_COST_PCT", 0.0135), 0.0135)
+                       if carrying is None else carrying)
+                escrow = price * max(0.0, pct) / 12.0
                 monthly = level_payment(loan, rate, years) + escrow
             ev.update(price=price, loan=loan, rate=rate, years=years,
                       monthly=max(0.0, _num(monthly, 0.0)))

@@ -98,7 +98,8 @@ HOME_EVENTS = [
 | `age`, `action` | required | `buy`, `sell_buy` or `sell_rent`. Any purchase sells the home you own first. |
 | `price`, `down_pct` | — , `0.20` | Purchase price and down payment. `loan` may be given instead of `down_pct`. |
 | `rate`, `years` | `MORTGAGE_RATE_FOR_PAYOFF`, `30` | The new loan. |
-| `monthly` | derived | All-in payment: level P&I + `price × HOME_CARRYING_COST_PCT / 12`. |
+| `carrying_pct` | `HOME_CARRYING_COST_PCT` | That home's property tax + insurance a year, as a share of its price (e.g. a home in another state). Used for its escrow and for its cost after payoff. |
+| `monthly` | derived | All-in payment: level P&I + `price × carrying rate / 12`. |
 | `costs` | `HOUSE_MOVING_COSTS` | Buying and moving costs, paid from savings. |
 | `selling_cost_pct` | `HOME_SELLING_COST_PCT` | Agent fees and closing costs on a sale. |
 | `rent` | `0` | `sell_rent` only: monthly rent from then on (today's dollars). |

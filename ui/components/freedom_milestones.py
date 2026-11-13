@@ -8,9 +8,12 @@ A section on the planner's results page. It shows
   costs, mortgage paid off.
 
 The test for each is a quick rule that costs nothing to run (utils/milestones.py).
-Each place has a "Confirm with simulation" button that runs the real Monte Carlo
-with that place's spending and tax (sim_runner.plan_place_check), on the server or in
-the visitor's browser like the other sweeps.
+A place's spending is built per category against where you live now, and moving
+there sells your home, then buys or rents at that place's prices (utils/place_costs.py
+holds the rough data). Each place has a "Confirm with simulation" button that runs
+the real Monte Carlo with the same move, spending, health prices and tax
+(sim_runner.plan_place_check), on the server or in the visitor's browser like the
+other sweeps.
 
 Edits and custom places are saved in ``user_overrides["MS_PLACES"]`` (utils/places.py),
 so they travel with Save/Load, Remember me and profiles. Widget keys start with ``ms_``.
@@ -22,6 +25,7 @@ from datetime import date
 
 try:
     from utils import milestones as ms
+    from utils import place_costs as pc
     from utils import places as pl
     from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money
@@ -29,6 +33,7 @@ try:
     from utils.sim_runner import _hashable
 except ImportError:  # pragma: no cover
     from ui.utils import milestones as ms  # type: ignore
+    from ui.utils import place_costs as pc  # type: ignore
     from ui.utils import places as pl  # type: ignore
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money  # type: ignore
@@ -107,18 +112,66 @@ def summary_html(rep: "ms.Report", end_age) -> str:
             f'</div></div>')
 
 
-def place_html(pr: "ms.PlaceResult", end_age, next_keys) -> str:
+_HOUSING_CHIP = {"buy": "Buys a home", "rent": "Rents", "keep": "Keeps your home"}
+
+
+def _facts(pr: "ms.PlaceResult", ret_age) -> str:
+    """The pieces of a place's FIRE test, as label / value rows."""
+    c = pr.cost
+    rows = [("Spending there", f"{ms.short_money(pr.spend)} a year")]
+    if c is not None and not pr.place.here and pr.place.housing != "keep":
+        if c.proceeds > 0:
+            rows.append(("Home sale frees", ms.short_money(c.proceeds)))
+        if c.price > 0:
+            buy = ms.short_money(c.price) + (f" (loan {ms.short_money(c.loan)})" if c.loan > 0 else "")
+            rows.append(("Home there costs", buy))
+        elif c.rent > 0:
+            rows.append(("Rent there", f"${c.rent:,.0f} a month"))
+    rows.append(("FIRE number", ms.short_money(pr.fire_number)))
+    body = "".join(f"<dt>{_e(k)}</dt><dd>{_e(v)}</dd>" for k, v in rows)
+    return f'<dl class="ms-facts">{body}</dl>'
+
+
+def place_html(pr: "ms.PlaceResult", end_age, next_keys, ret_age=None) -> str:
     p = pr.place
     tax = pl.tax_label(p.tax, p.abroad)
     rows = "".join(_item(m, end_age, m.key in next_keys, with_detail=False, label=lab)
                    for m, lab in ((pr.coast, "Coast FIRE"), (pr.fire, "FIRE")))
     note = f'<div class="ms-note">{_e(p.note)}</div>' if p.note else ""
+    ratio = (pr.cost.ratio if pr.cost is not None else 1.0) * p.adjust
+    housing = "keep" if p.here else p.housing
     return (f'<div class="ms-place-head"><b>{_e(p.name)}</b>'
-            f'<span class="ms-chip">{p.factor:.2f}&times; costs</span>'
+            f'<span class="ms-chip">{_e(_HOUSING_CHIP.get(housing, ""))}</span>'
+            f'<span class="ms-chip">Everyday {ratio:.2f}&times;</span>'
             f'<span class="ms-chip">{_e(tax)}</span></div>'
-            f'<div class="ms-place-sub">Lives on {_e(ms.short_money(pr.spend))} a year. '
-            f'FIRE number {_e(ms.short_money(pr.fire_number))}.</div>'
+            f'<div class="ms-place-sub">At age {_e(ret_age if ret_age is not None else "")}, in today\'s dollars.</div>'
+            f'{_facts(pr, ret_age)}'
             f'<ul class="ms-list ms-list-place">{rows}</ul>{note}')
+
+
+def breakdown_html(pr: "ms.PlaceResult", here: "ms.PlaceCost", home_name: str) -> str:
+    """Monthly spending now and there, line by line, so you see what scales."""
+    c = pr.cost
+    if c is None:
+        return ""
+    now_by = {k: v for k, v, _ in here.categories}
+    rows = [("Housing", here.housing, c.housing)]
+    rows += [(pc.LABELS.get(k, k), now_by.get(k, v_now), v_there) for k, v_now, v_there in c.categories]
+    rows.append(("Health insurance and care", here.health, c.health))
+    if c.other > 0.5:
+        rows.append(("Children and other planned costs", here.other, c.other))
+    rows.append(("Total", here.spend, c.spend))
+
+    def m(v):
+        return f"${v / 12.0:,.0f}"
+
+    total = ' class="ms-total"'
+    body = "".join(
+        f'<tr{total if lab == "Total" else ""}><th scope="row">{_e(lab)}</th>'
+        f"<td>{_e(m(a))}</td><td>{_e(m(b))}</td></tr>" for lab, a, b in rows)
+    return (f'<table class="ms-break"><caption>A month in retirement. Everyday costs are compared '
+            f'with {_e(home_name)}.</caption><thead><tr><th scope="col">Item</th>'
+            f'<th scope="col">Now</th><th scope="col">There</th></tr></thead><tbody>{body}</tbody></table>')
 
 
 def result_html(res: dict, plan_age, stale: bool) -> str:
@@ -191,7 +244,10 @@ def series(clean: dict, results):
 
 
 def build_inputs(overrides: dict, results, state: dict, rate: float, barista: float):
-    """The pure-logic inputs for this plan, or None if there is no timeline."""
+    """The pure-logic inputs for this plan, or None if there is no timeline.
+
+    Returns ((inputs, basis, sale), source): ``basis`` is
+    sim_runner.retirement_spending_basis, ``sale`` sim_runner.home_sale_path."""
     try:
         from utils import sim_runner as sr
     except ImportError:  # pragma: no cover
@@ -205,17 +261,28 @@ def build_inputs(overrides: dict, results, state: dict, rate: float, barista: fl
         basis = sr.retirement_spending_basis(clean, ret_age)
     except Exception:
         basis = {"core": 0.0, "health": 0.0, "living": 0.0, "today": 0.0, "discretionary_ratio": 0.30}
+    try:
+        sale = sr.home_sale_path(clean, max(int(ages[-1]), ret_age, 76))
+    except Exception:
+        sale = {"proceeds": {}, "events": []}
     couple = has_partner(clean)
     cash = safe_float(clean.get("YOUR_CASH", 0), 0.0) + (safe_float(clean.get("PARTNER_CASH", 0), 0.0) if couple else 0.0)
     mort = safe_float(clean.get("MORTGAGE_BALANCE", 0), 0.0) > 0
+    cost = ms.CostBasis(
+        home=pl.home_area(state, clean), weights=dict(basis.get("weights") or {}),
+        housing_now=float(basis.get("housing", 0.0)),
+        housing_plan=(sale.get("housing") or {}).get(ret_age), pre_medicare=bool(basis.get("pre_medicare", True)),
+        proceeds=dict(sale.get("proceeds") or {}), moving_costs=float(sale.get("moving_costs", 10_000.0)),
+        mortgage_rate=float(sale.get("mortgage_rate", 0.065)),
+        carry_after_payoff=bool(sale.get("carry_after_payoff", True)))
     inp = ms.Inputs(
         your_age=ages[0], retire_age=ret_age, year=date.today().year, ages=ages, invested=invested,
         home=home, spend_core=basis["core"], living_base=basis["living"], health=basis["health"], today_spend=basis["today"],
         discretionary_ratio=basis["discretionary_ratio"], rate=rate, real_return=_real_return(clean),
         cash=cash, barista_income=float(barista),
         mortgage_years=safe_int(clean.get("MORTGAGE_YEARS_REMAINING", 0), 0) if mort else 0,
-        places=pl.resolve(state))
-    return (inp, basis), source
+        places=pl.resolve(state), cost=cost)
+    return (inp, basis, sale), source
 
 
 # --------------------------------------------------------------------------- state writes (callbacks)
@@ -229,10 +296,17 @@ def _current_state(st) -> dict:
     return pl.get_state(st.session_state.get("user_overrides", {}))
 
 
+_EDIT_FIELDS = ("area", "housing", "price", "rent", "adjust", "tax", "note")
+
+
 def _forget_edit_widgets(st, pid: str) -> None:
-    """Drop a place's edit-form values so the form re-reads the saved place."""
-    for field in ("factor", "tax", "note"):
-        st.session_state.pop(f"ms_edit_{field}_{pid}", None)
+    """Drop a place's edit values so the inputs re-read the saved place."""
+    for f in _EDIT_FIELDS:
+        st.session_state.pop(f"ms_{f}_{pid}", None)
+
+
+def _clean_overrides(st) -> dict:
+    return {k: v for k, v in (st.session_state.get("user_overrides", {}) or {}).items() if k != pl.KEY}
 
 
 def _on_rate(st) -> None:
@@ -250,20 +324,30 @@ def _on_use_swr(st, rate: float) -> None:
     _on_rate(st)
 
 
-def _on_save_place(st, pid: str) -> None:
+def _on_home(st) -> None:
+    _write_state(st, pl.with_home(_current_state(st), st.session_state.get("ms_home_area"), _clean_overrides(st)))
+
+
+def _on_field(st, pid: str, f: str) -> None:
+    """One edit input changed: save it on the place."""
     ss = st.session_state
-    note = ss.get(f"ms_edit_note_{pid}")
-    state = pl.with_edit(_current_state(st), pid, factor=ss.get(f"ms_edit_factor_{pid}"),
-                         tax=ss.get(f"ms_edit_tax_{pid}"), note=note)
-    _write_state(st, state)
+    value = ss.get(f"ms_{f}_{pid}")
+    state = _current_state(st)
+    place = pl.get_place(state, pid)
+    if place is None:
+        return
+    if f in ("price", "rent"):
+        home = pl.home_area(state, _clean_overrides(st))
+        typical = getattr(pc.get(place.area_code(home)), f)
+        value = None if value is None or int(round(float(value))) == int(typical) else value
+    _write_state(st, pl.with_edit(state, pid, **{f: value}))
+    if f == "area":
+        for k in ("price", "rent", "housing"):
+            ss.pop(f"ms_{k}_{pid}", None)
 
 
 def _on_reset_place(st, pid: str) -> None:
-    state = _current_state(st)
-    base = pl.default_place(pid)
-    if base is not None:
-        state = pl.with_edit(state, pid, factor=base.factor, tax=base.tax, note=base.note)
-    _write_state(st, state)
+    _write_state(st, pl.with_reset(_current_state(st), pid))
     _forget_edit_widgets(st, pid)
 
 
@@ -271,17 +355,22 @@ def _on_remove_place(st, pid: str) -> None:
     _write_state(st, pl.with_removed(_current_state(st), pid))
     _forget_edit_widgets(st, pid)
     st.session_state.pop(f"ms_res_{pid}", None)
-    st.session_state.pop("ms_edit_pick", None)
 
 
 def _on_restore(st) -> None:
     _write_state(st, pl.with_restored(_current_state(st)))
 
 
+_AUTO = "auto"
+
+
 def _on_add_place(st) -> None:
     ss = st.session_state
-    state, pid = pl.with_custom(_current_state(st), ss.get("ms_new_name"), ss.get("ms_new_factor", 1.0),
-                                ss.get("ms_new_tax", pl.TAX_SAME), ss.get("ms_new_note", ""))
+    housing = ss.get("ms_new_housing", _AUTO)
+    tax = ss.get("ms_new_tax", _AUTO)
+    state, pid = pl.with_custom(_current_state(st), ss.get("ms_new_name"), ss.get("ms_new_area", pc.US_CODE),
+                                None if housing == _AUTO else housing, None if tax == _AUTO else tax,
+                                ss.get("ms_new_note", ""))
     if pid is None:
         ss["ms_new_msg"] = ("Enter a name." if not str(ss.get("ms_new_name") or "").strip()
                             else f"You can add up to {pl.MAX_CUSTOM} places.")
@@ -290,21 +379,36 @@ def _on_add_place(st) -> None:
     _write_state(st, state)
     for k in ("ms_new_name", "ms_new_note"):
         ss[k] = ""
-    ss["ms_new_factor"] = 1.0
-    ss["ms_new_tax"] = pl.TAX_SAME
-    ss["ms_edit_pick"] = pid
+    ss["ms_new_housing"] = _AUTO
+    ss["ms_new_tax"] = _AUTO
 
 
 # --------------------------------------------------------------------------- the confirm run
 
-def _check_hash(clean: dict, n_sims: int, target_age: int, place) -> int:
+def _check_hash(clean: dict, n_sims: int, target_age: int, place, home: str) -> int:
     try:
-        return hash((_hashable(clean), int(n_sims), int(target_age), round(place.factor, 4), place.tax))
+        return hash((_hashable(clean), int(n_sims), int(target_age), place, home))
     except Exception:
         return 0
 
 
-def _confirm(st, clean: dict, place, basis: dict, n_sims: int, target_age: int, res_key: str, h: int) -> None:
+def confirm_settings(inp, place, basis: dict, sale: dict):
+    """(engine overrides, per-age patch or None) that test ``place`` in the real
+    simulation: the quick rule's spending, health and tax, and the same move at
+    each age the scan tries (sim_runner.plan_place_check)."""
+    place_ov = ms.place_overrides(inp, place, basis.get("health_knobs"))
+    if not ms.moves(place):
+        return place_ov, None
+    events = list(sale.get("events") or [])
+
+    def age_patch(age: int) -> dict:
+        return {"HOME_EVENTS": ms.place_home_events(inp, place, age, events), "HOUSE_MOVE_ENABLED": False}
+
+    return place_ov, age_patch
+
+
+def _confirm(st, clean: dict, inp, place, basis: dict, sale: dict, n_sims: int, target_age: int,
+             res_key: str, h: int) -> None:
     """Run the real Monte Carlo for one place. In the visitor's browser when its
     workers are ready, else here with a progress bar."""
     try:
@@ -320,8 +424,8 @@ def _confirm(st, clean: dict, place, basis: dict, n_sims: int, target_age: int, 
         for e in errs:
             st.error(e)
         return
-    place_ov = ms.place_overrides(place, basis["core"], basis["living"])
-    plan = sr.plan_place_check(clean, place_ov, n_sims, target_age)
+    place_ov, age_patch = confirm_settings(inp, place, basis, sale)
+    plan = sr.plan_place_check(clean, place_ov, n_sims, target_age, age_patch)
 
     def store(res):
         st.session_state[res_key] = {**res, "_inputs_hash": h}
@@ -348,12 +452,16 @@ def _confirm(st, clean: dict, place, basis: dict, n_sims: int, target_age: int, 
 
 # --------------------------------------------------------------------------- render
 
-def _place_cards(st, rep, inp, basis, clean, results, n_sims, target_age, end_age, next_keys) -> None:
+def _place_cards(st, rep, inp, basis, sale, state, clean, results, n_sims, target_age, end_age,
+                 next_keys) -> None:
     plan_age = (results or {}).get("earliest_retirement_age") if results else None
     try:
         from utils import browser_compute as bc
     except ImportError:  # pragma: no cover
         from ui.utils import browser_compute as bc  # type: ignore
+    home = inp.cost.home
+    here_place = pl.default_place(pl.HERE_ID)
+    here_cost = ms.place_cost(inp, here_place, inp.retire_age)
     per_row = 3
     for start in range(0, len(rep.places), per_row):
         cols = st.columns(per_row)
@@ -362,8 +470,8 @@ def _place_cards(st, rep, inp, basis, clean, results, n_sims, target_age, end_ag
             res_key = f"ms_res_{p.id}"
             with col:
                 with st.container(border=True, key=f"ms-place-{p.id}"):
-                    st.markdown(place_html(pr, end_age, next_keys), unsafe_allow_html=True)
-                    h = _check_hash(clean, n_sims, target_age, p)
+                    st.markdown(place_html(pr, end_age, next_keys, inp.retire_age), unsafe_allow_html=True)
+                    h = _check_hash(clean, n_sims, target_age, p, home)
                     res = st.session_state.get(res_key)
                     fresh = bool(res) and res.get("_inputs_hash") == h
                     stale = bool(res) and not fresh
@@ -372,102 +480,129 @@ def _place_cards(st, rep, inp, basis, clean, results, n_sims, target_age, end_ag
                     if st.button(label, key=f"ms_confirm_{p.id}", type="secondary",
                                  disabled=fresh or waiting,
                                  help=("Up to date. Change an input or this place to run it again." if fresh else
-                                       "Runs the full simulation with this place's spending and tax.")):
-                        _confirm(st, clean, p, basis, n_sims, target_age, res_key, h)
+                                       "Runs the full simulation with this place's move, spending and tax.")):
+                        _confirm(st, clean, inp, p, basis, sale, n_sims, target_age, res_key, h)
                     if res:
                         st.markdown(result_html(res, plan_age, stale), unsafe_allow_html=True)
+                    _edit_place(st, state, p, pr, here_cost, home)
 
 
-def _edit_places(st, state: dict, end_age) -> None:
-    all_places = pl.resolve(state)
-    with st.expander("Edit or add places", expanded=False, icon=":material/edit_location:"):
-        st.caption("Cost factors are rough guesses for a household that now lives in an "
-                   "average-cost area. Set your own. Changes are saved with your profile.")
-        ids = [p.id for p in all_places]
-        by_id = {p.id: p for p in all_places}
-        if "ms_edit_pick" in st.session_state and st.session_state["ms_edit_pick"] not in ids:
-            del st.session_state["ms_edit_pick"]
-        pid = st.selectbox("Place to edit", ids, key="ms_edit_pick",
-                           format_func=lambda i: by_id[i].name) if ids else None
-        if pid:
-            p = by_id[pid]
-            tax_opts = [v for _, v in pl.tax_choices()]
-            tax_labels = {v: l for l, v in pl.tax_choices()}
-            ensure_default(st, f"ms_edit_factor_{pid}", float(p.factor))
-            ensure_default(st, f"ms_edit_tax_{pid}", p.tax if p.tax in tax_opts else pl.TAX_SAME)
-            ensure_default(st, f"ms_edit_note_{pid}", p.note)
-            with st.form(f"ms_edit_form_{pid}", border=False):
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.number_input("Costs compared with now (1.00 = same)", min_value=pl.FACTOR_MIN,
-                                    max_value=pl.FACTOR_MAX, step=0.05, format="%.2f",
-                                    key=f"ms_edit_factor_{pid}")
-                with c2:
-                    st.selectbox("Income tax", tax_opts, key=f"ms_edit_tax_{pid}",
-                                 format_func=lambda v: tax_labels.get(v, v))
-                st.text_input("Note", key=f"ms_edit_note_{pid}", max_chars=pl.NOTE_MAX)
-                st.form_submit_button("Save place", type="primary", on_click=_on_save_place, args=(st, pid))
-            b1, b2 = st.columns(2)
-            with b1:
-                if not p.custom and pl.is_edited(state, pid):
-                    st.button("Reset to built-in", key=f"ms_reset_{pid}", on_click=_on_reset_place, args=(st, pid))
-            with b2:
-                if pid != pl.HERE_ID:
-                    st.button("Remove this place", key=f"ms_remove_{pid}", on_click=_on_remove_place,
-                              args=(st, pid))
-        if state.get("hidden"):
-            st.button("Bring back removed places", key="ms_restore", on_click=_on_restore, args=(st,))
+def _edit_place(st, state: dict, p, pr, here_cost, home: str) -> None:
+    """The place's costs line by line, and its settings (saved as you change them)."""
+    with st.expander("Costs and settings", expanded=False):
+        st.markdown(breakdown_html(pr, here_cost, pc.get(home).name), unsafe_allow_html=True)
+        pid = p.id
+        args = lambda f: (st, pid, f)  # noqa: E731
+        if p.custom:
+            opts = pc.place_options()
+            ensure_default(st, f"ms_area_{pid}", p.area if p.area in opts else pc.US_CODE)
+            st.selectbox("Based on", opts, key=f"ms_area_{pid}", format_func=pc.label,
+                         on_change=_on_field, args=args("area"),
+                         help="The area whose prices this place uses.")
+        if not p.here:
+            choices = list(pl.HOUSING_CHOICES)
+            ensure_default(st, f"ms_housing_{pid}", p.housing)
+            st.radio("Housing", choices, key=f"ms_housing_{pid}", format_func=pl.HOUSING_LABELS.get,
+                     on_change=_on_field, args=args("housing"),
+                     help="Buying or renting sells the home you own at the retirement age. "
+                          "The sale pays for the new home; a loan covers any shortfall.")
+            if p.housing == pl.HOUSING_BUY:
+                ensure_default(st, f"ms_price_{pid}", int(p.home_price(home)))
+                st.number_input("Home price there ($)", min_value=0, max_value=pl.PRICE_MAX, step=10_000,
+                                key=f"ms_price_{pid}", on_change=_on_field, args=args("price"),
+                                help=f"Typical for the area: ${pc.get(p.area_code(home)).price:,}. "
+                                     f"Property tax and insurance: {p.carry(home) * 100:.2f}% a year.")
+            elif p.housing == pl.HOUSING_RENT:
+                ensure_default(st, f"ms_rent_{pid}", int(p.monthly_rent(home)))
+                st.number_input("Rent there ($ a month)", min_value=0, max_value=pl.RENT_MAX, step=50,
+                                key=f"ms_rent_{pid}", on_change=_on_field, args=args("rent"),
+                                help=f"Typical for the area: ${pc.get(p.area_code(home)).rent:,} a month.")
+        ensure_default(st, f"ms_adjust_{pid}", float(p.adjust))
+        st.number_input("Everyday costs adjustment (1.00 = as estimated)", min_value=pl.ADJUST_MIN,
+                        max_value=pl.ADJUST_MAX, step=0.05, format="%.2f", key=f"ms_adjust_{pid}",
+                        on_change=_on_field, args=args("adjust"),
+                        help="Multiplies every everyday category above. Housing and children are not changed.")
+        tax_opts = [v for _, v in pl.tax_choices()]
+        tax_labels = {v: lab for lab, v in pl.tax_choices()}
+        ensure_default(st, f"ms_tax_{pid}", p.tax if p.tax in tax_opts else pl.TAX_SAME)
+        st.selectbox("Income tax in retirement", tax_opts, key=f"ms_tax_{pid}",
+                     format_func=lambda v: tax_labels.get(v, v), on_change=_on_field, args=args("tax"))
+        ensure_default(st, f"ms_note_{pid}", p.note)
+        st.text_area("Note", key=f"ms_note_{pid}", max_chars=pl.NOTE_MAX, height=68, on_change=_on_field,
+                     args=args("note"))
+        if not p.custom and pl.is_edited(state, pid):
+            st.button("Reset to built-in", key=f"ms_reset_{pid}", on_click=_on_reset_place, args=(st, pid))
+        if not p.here:
+            st.button("Remove this place", key=f"ms_remove_{pid}", on_click=_on_remove_place, args=(st, pid))
 
-        st.markdown('<div class="ms-subhead">Add a place</div>', unsafe_allow_html=True)
+
+def _add_places(st, state: dict) -> None:
+    with st.expander("Add a place", expanded=False, icon=":material/add_location:"):
+        st.caption("Base it on any state, metro area or city abroad, then fine-tune it in its card. "
+                   "Changes are saved with your profile.")
         ensure_default(st, "ms_new_name", "")
         ensure_default(st, "ms_new_note", "")
-        ensure_default(st, "ms_new_factor", 1.0)
-        ensure_default(st, "ms_new_tax", pl.TAX_SAME)
-        tax_opts = [v for _, v in pl.tax_choices()]
-        tax_labels = {v: l for l, v in pl.tax_choices()}
+        ensure_default(st, "ms_new_area", pc.US_CODE)
+        ensure_default(st, "ms_new_housing", _AUTO)
+        ensure_default(st, "ms_new_tax", _AUTO)
+        housing_opts = [_AUTO, pl.HOUSING_BUY, pl.HOUSING_RENT]
+        housing_labels = {_AUTO: "Typical for the area", **pl.HOUSING_LABELS}
+        tax_opts = [_AUTO] + [v for _, v in pl.tax_choices()]
+        tax_labels = {_AUTO: "The area's own tax", **{v: lab for lab, v in pl.tax_choices()}}
         with st.form("ms_new_form", border=False):
             st.text_input("Name", key="ms_new_name", max_chars=pl.NAME_MAX)
-            c1, c2 = st.columns(2)
-            with c1:
-                st.number_input("Costs compared with now (1.00 = same)", min_value=pl.FACTOR_MIN,
-                                max_value=pl.FACTOR_MAX, step=0.05, format="%.2f", key="ms_new_factor")
-            with c2:
-                st.selectbox("Income tax", tax_opts, key="ms_new_tax",
-                             format_func=lambda v: tax_labels.get(v, v))
+            st.selectbox("Based on", pc.place_options(), key="ms_new_area", format_func=pc.label)
+            st.selectbox("Housing", housing_opts, key="ms_new_housing", format_func=housing_labels.get,
+                         help="Typical: buy a home in the US, rent abroad.")
+            st.selectbox("Income tax", tax_opts, key="ms_new_tax", format_func=lambda v: tax_labels.get(v, v))
             st.text_input("Note", key="ms_new_note", max_chars=pl.NOTE_MAX)
             st.form_submit_button("Add place", type="primary", on_click=_on_add_place, args=(st,))
         msg = st.session_state.get("ms_new_msg")
         if msg:
             st.caption(msg)
+        if state.get("hidden"):
+            st.button("Bring back removed places", key="ms_restore", on_click=_on_restore, args=(st,))
 
 
 def _how_it_works(st, inp, rate: float, basis: dict, source: str, end_age) -> None:
+    home = pc.get(inp.cost.home).name
     with st.expander("How this is calculated", expanded=False, icon=":material/help:"):
         st.markdown(
-            "**Quick rule, then a real test.** Each card compares your invested balance with a target. "
+            "**Quick rule, then a real test.** Each card compares your money with a target. "
             "The test costs nothing to run. It is an estimate. Press **Confirm with simulation** on a "
             "place to test it with the full Monte Carlo model.\n\n"
             f"- **Money in today's dollars.** Inflation is already taken out.\n"
             f"- **Timeline.** {'The median path of your last simulation.' if source == 'median' else 'A simple projection, because no simulation has run yet. Run one for the median path.'} "
             "Net worth adds home equity. Invested leaves it out.\n"
-            f"- **FIRE in a place.** Invested balance at least yearly spending there divided by the "
-            f"withdrawal rate (now **{rate * 100:.2f}%**). Spending is everyday costs, housing and children at "
-            f"age {inp.retire_age} times the place's cost factor, plus health costs "
-            f"(about {_md(ms.short_money(inp.health))} a year, not scaled). Your plan spends about "
-            f"{_md(ms.short_money(inp.spend_core + inp.health))} a year this way.\n"
-            f"- **Coast FIRE.** Your balance, left alone with no more saving, grows at "
+            f"- **Spending in a place** is built line by line at age {inp.retire_age}. Each everyday "
+            f"category (utilities, food, transport, healthcare premiums, fun, other, partner) is your plan's "
+            f"amount times that place's price level divided by the price level where you live now "
+            f"(**{_md(home)}**), times the place's adjustment. Health insurance before Medicare scales the "
+            "same way. Medicare years and children's costs stay as planned.\n"
+            "- **Housing in a place.** Moving sells the home you own at that age. You get its value less "
+            "the loan, selling costs and tax on any gain above the exclusion. Then you buy a typical home "
+            "there with that money (a loan covers any shortfall, at your plan's new-loan rate) and pay its "
+            "property tax and insurance, or you rent there. Leftover sale money joins your investments. "
+            "*Where you live now* keeps your housing as planned.\n"
+            f"- **FIRE in a place.** Investments plus what the move frees cover a year of spending there "
+            f"divided by the withdrawal rate (now **{rate * 100:.2f}%**). Your plan spends about "
+            f"{_md(ms.short_money(inp.spend_core + inp.health))} a year in retirement.\n"
+            f"- **Coast FIRE.** Your investments, left alone with no more saving, grow at "
             f"**{inp.real_return * 100:.1f}%** a year after inflation (the rate behind the net-worth "
-            f"projection chart) to the FIRE number by age {inp.retire_age}.\n"
+            f"projection chart). With the move's cash they reach the FIRE number by age {inp.retire_age}.\n"
             f"- **Other markers.** Essentials are {100 - int(round(inp.discretionary_ratio * 100))}% of everyday "
             "spending plus health. Barista FIRE subtracts the part-time income you set. "
             "The emergency fund counts cash accounts only.\n"
             "- **Not in the quick rule.** Income tax, Social Security, guardrails and market swings. "
             "The simulation counts them.\n\n"
-            "**What Confirm changes.** It moves your retirement spending by the cost factor and applies "
-            "the place's state tax to retirement-year tax only. Your working years keep the state you "
-            "live in now. Housing stays as your plan has it, so a move that changes housing is only in "
-            "the cost factor.\n\n"
-            f"**Rough numbers.** The built-in cost factors are illustrative guesses, not data. {pl.ABROAD_CAVEAT}"
+            "**What Confirm changes.** For each retirement age it tries, it moves you at that age: the "
+            "same sale, purchase or rent as the card. Any home moves in your plan from that age on are "
+            "replaced. It sets your retirement everyday spending to the place's, scales pre-Medicare "
+            "health prices, and applies the place's state tax to retirement years. Your working years "
+            "keep the state you live in now.\n\n"
+            "**Rough numbers.** Prices, home values and rents are rough estimates in the shape of "
+            "BEA regional price parities, typical home values and rents, and Numbeo-style ratios abroad. "
+            f"They are not data. Edit any place. {pl.ABROAD_CAVEAT}"
         )
 
 
@@ -509,7 +644,7 @@ def render(st, results: dict = None) -> None:
     if built is None:
         st.info("Add your accounts and ages to see your milestones.")
         return
-    inp, basis = built
+    inp, basis, sale = built
     rep = ms.build(inp)
     end_age = inp.ages[-1] if len(inp.ages) else None
     overall = rep.next_up.key if rep.next_up else None
@@ -536,11 +671,20 @@ def render(st, results: dict = None) -> None:
         st.caption("Add your spending to see Coast FIRE and FIRE by place.")
     else:
         st.caption("**Coast FIRE:** stop saving, growth does the rest. **FIRE:** your investments pay for "
-                   "life there. Costs and tax are rough, so confirm the ones you care about.")
-        _place_cards(st, rep, inp, basis, clean, results, n_sims, target_age, end_age, next_keys)
+                   "life there. Moving sells your home, then buys or rents there. Everyday costs are "
+                   "scaled line by line against where you live now. The numbers are rough, so confirm "
+                   "the places you care about.")
+        homes = pc.home_options()
+        ensure_default(st, "ms_home_area", inp.cost.home if inp.cost.home in homes else pc.US_CODE)
+        with st.columns(2)[0]:
+            st.selectbox("Where you live now", homes, key="ms_home_area", format_func=pc.label,
+                         on_change=_on_home, args=(st,),
+                         help="Everyday costs in each place are compared with this area. "
+                              "Your own housing comes from your plan. Starts at your plan's state.")
+        _place_cards(st, rep, inp, basis, sale, state, clean, results, n_sims, target_age, end_age, next_keys)
         if any(p.abroad for p in inp.places):
             st.caption(pl.ABROAD_CAVEAT)
-    _edit_places(st, state, end_age)
+    _add_places(st, state)
 
     # ---- other markers ----
     if rep.markers:

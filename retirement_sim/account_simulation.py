@@ -608,6 +608,9 @@ class AccountPortfolio:
         self.mortgage_payoff_age = cfg.YOUR_AGE + cfg.MORTGAGE_YEARS_REMAINING
         self.mortgage_monthly = float(cfg.MORTGAGE_MONTHLY)
         self.home_value = float(cfg.HOME_VALUE)
+        # Property tax + insurance rate of the home held now. None = the plan's
+        # HOME_CARRYING_COST_PCT; a purchase with its own "carrying_pct" sets it.
+        self.home_carrying_pct = None
         # Monthly rent while renting (0 once a home is bought).
         self.rent_monthly = (float(getattr(cfg, "SPEND_RENT_MONTHLY", 0) or 0)
                              if cfg.is_renter() else 0.0)
@@ -1655,7 +1658,7 @@ class AccountPortfolio:
         mortgage = self.mortgage_expense_for_age(your_age)
         if mortgage > 0:
             return mortgage
-        return mortgage + cfg.home_carrying_cost_annual(self.home_value)
+        return mortgage + cfg.home_carrying_cost_annual(self.home_value, self.home_carrying_pct)
 
     def pay_lump_sum(self, amount: float, your_age: float) -> Tuple[float, float]:
         """
@@ -1777,6 +1780,7 @@ class AccountPortfolio:
         self.pay_lump_sum(down_payment + event["costs"], your_age)
         self.home_value = float(event["price"])
         self.home_cost_basis = self.home_value
+        self.home_carrying_pct = event.get("carrying_pct")
         self.mortgage_monthly = float(event["monthly"])
         self.mortgage_annual = float(event["monthly"]) * 12.0
         self.mortgage_payoff_age = your_age + event["years"]
@@ -1794,6 +1798,7 @@ class AccountPortfolio:
         """Rent from now on: moving costs from the portfolio, no home or loan."""
         self.pay_lump_sum(event["costs"], your_age)
         self.home_value = self.home_cost_basis = 0.0
+        self.home_carrying_pct = None
         self.mortgage_monthly = self.mortgage_annual = 0.0
         self.mortgage_payoff_age = your_age
         self.mortgage_balance = self._mortgage_pi = 0.0

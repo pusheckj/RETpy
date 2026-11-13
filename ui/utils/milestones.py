@@ -14,29 +14,42 @@ is the projection) and BEYOND if it never does within the plan.
 
 * Net worth / invested ladders: fixed rungs ($100K, $250K, $500K, $1M, ...). Net
   worth is invested balance plus home equity. Invested leaves the home out.
-* FIRE in a place: invested balance >= that place's yearly spending / withdrawal
-  rate. Spending there = everyday spending, housing and children at the retirement
-  age, times the place's cost factor, plus health costs (health is not scaled).
-  Housing and children's costs stay as the plan has them, so the factor cannot
-  take spending below those.
+* FIRE in a place: what you could spend from (invested balance + the cash a move
+  frees or costs) >= that place's yearly spending / withdrawal rate. A move sells
+  your home at that age (net of the loan, selling costs and tax on the gain) and
+  buys a typical home there (the proceeds pay for it; a loan covers any
+  shortfall) or rents there. Spending there is built per category:
+    - each everyday category (utilities, food, transport, healthcare premiums,
+      fun, other, partner) at the plan's retirement amount x the place's price
+      level / your home area's price level x the place's adjustment. The plan's
+      retirement-spending mode (% of today / absolute) scales them as a group,
+      as the engine does;
+    - housing there: rent x 12, or the new loan's payment plus property tax and
+      insurance at that place's rate ("Where you live now" keeps your housing);
+    - children's costs as planned (not scaled);
+    - health insurance and care: pre-Medicare costs scaled by the place's health
+      price level, Medicare years as planned.
 * Coast FIRE in a place: the balance, left alone with no more saving, grows at the
-  real return to the FIRE number by the planned retirement age.
+  real return to (FIRE number - cash the move frees) by the planned retirement age.
 * Other markers: emergency fund (cash covers 6 / 12 months), investments cover
   essentials (Lean FIRE), Barista FIRE (part-time income closes the gap), returns
   cover a year of costs, mortgage paid off.
 
 These are quick rules to show direction. The simulation is the real test:
-``place_overrides`` turns a place into the engine settings that test it.
+``place_overrides`` and ``place_home_events`` turn a place into the engine
+settings that test it (the same move, spending and tax).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Sequence, Union
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 try:
-    from utils.places import Place, engine_state, GROUP_ABROAD
+    from utils import place_costs as pc
+    from utils.places import Place, engine_state, HOUSING_BUY, HOUSING_RENT, HOUSING_KEEP
 except ImportError:  # pragma: no cover
-    from ui.utils.places import Place, engine_state, GROUP_ABROAD  # type: ignore
+    from ui.utils import place_costs as pc  # type: ignore
+    from ui.utils.places import Place, engine_state, HOUSING_BUY, HOUSING_RENT, HOUSING_KEEP  # type: ignore
 
 REACHED, PROGRESS, BEYOND = "reached", "progress", "beyond"
 
@@ -69,12 +82,53 @@ class Milestone:
 
 
 @dataclass(frozen=True)
+class CostBasis:
+    """What a place's spending and move are built from (sim_runner.retirement_spending_basis
+    and sim_runner.home_sale_path). All yearly, today's dollars."""
+    home: str = pc.US_CODE                       # where you live now (place_costs code)
+    weights: Mapping[str, float] = field(default_factory=dict)   # category -> today's yearly amount
+    housing_now: float = 0.0                     # config housing term at the retirement age (inside spend_core)
+    housing_plan: Optional[float] = None         # what the plan really pays then, its own moves included
+    pre_medicare: bool = True                    # retirement age before Medicare
+    proceeds: Mapping[int, float] = field(default_factory=dict)  # age -> net cash from selling your home then
+    moving_costs: float = 10_000.0               # each move (HOUSE_MOVING_COSTS)
+    mortgage_rate: float = 0.065                 # a new loan's rate
+    loan_years: int = 30
+    carry_after_payoff: bool = True              # property tax + insurance once a home is paid off
+
+
+@dataclass(frozen=True)
+class PlaceCost:
+    """One place at one move age."""
+    categories: Tuple[Tuple[str, float, float], ...]   # (category, yearly now, yearly there)
+    living: float                    # everyday spending there (sum of the categories)
+    housing: float                   # housing there, yearly
+    other: float                     # children's and other planned costs (not scaled)
+    health: float                    # health insurance and care
+    spend: float                     # all of it
+    proceeds: float                  # cash from selling your home (0 if you keep it or rent now)
+    price: float                     # home bought there (0 if renting or keeping)
+    loan: float                      # the loan for any shortfall
+    down: float                      # cash put into the home
+    costs: float                     # moving costs
+    rent: float                      # monthly rent there (0 unless renting)
+    carry: float                     # property tax + insurance rate there
+    ratio: float                     # everyday spending there / here, before the adjustment
+
+    @property
+    def release(self) -> float:
+        """Cash the move adds to your investments (negative when it costs you)."""
+        return self.proceeds - self.down - self.costs
+
+
+@dataclass(frozen=True)
 class PlaceResult:
     place: Place
-    spend: float                     # yearly spending there (today's dollars)
-    fire_number: float               # invested balance that covers it at the rate
+    spend: float                     # yearly spending there at the retirement age (today's dollars)
+    fire_number: float               # what it takes at the withdrawal rate
     coast: Milestone
     fire: Milestone
+    cost: Optional[PlaceCost] = None  # the pieces, at the retirement age
 
 
 @dataclass(frozen=True)
@@ -96,6 +150,7 @@ class Inputs:
     barista_income: float            # part-time income per year
     mortgage_years: int              # years left on the mortgage (0 = none)
     places: Sequence[Place] = field(default_factory=tuple)
+    cost: CostBasis = field(default_factory=CostBasis)
 
 
 @dataclass(frozen=True)
@@ -192,15 +247,64 @@ def _tracked(inp: Inputs, key, kind, label, values, need, current, target, detai
 
 # --------------------------------------------------------------------------- the spending rule
 
-def place_spend(core: float, health: float, factor: float, living: Optional[float] = None) -> float:
-    """Yearly spending in a place: everyday spending times the cost factor, plus health.
+def everyday_ratio(weights: Mapping[str, float], place_area: str, home: str) -> float:
+    """Everyday spending there / here: each category's price ratio, weighted by what
+    you spend on it now. 1.0 when the two areas match or nothing is known."""
+    total = sum(max(0.0, float(w)) for w in weights.values())
+    if total <= 0:
+        return 1.0
+    return sum(max(0.0, float(w)) * pc.ratio(place_area, home, c) for c, w in weights.items()) / total
 
-    The simulation can move only the living part of ``core`` (the rest is housing
-    and children, which stay as the plan has them), so the factor cannot take
-    spending below ``core - living``. Health costs are not scaled."""
-    core = max(0.0, core)
-    floor = 0.0 if living is None else max(0.0, core - max(0.0, living))
-    return max(core * max(0.0, factor), floor) + max(0.0, health)
+
+def _loan_payment(loan: float, rate: float, years: int) -> float:
+    """Monthly principal + interest (the engine's level payment)."""
+    if loan <= 0 or years <= 0:
+        return 0.0
+    r = max(0.0, rate) / 12.0
+    n = int(years) * 12
+    return loan / n if r <= 0 else loan * r / (1.0 - (1.0 + r) ** -n)
+
+
+def place_cost(inp: "Inputs", place: Place, age: int) -> PlaceCost:
+    """Spending in ``place`` and the money side of moving there at ``age``."""
+    cb = inp.cost
+    area = place.area_code(cb.home)
+    living = max(0.0, float(inp.living_base))
+    housing_now = max(0.0, float(cb.housing_now))
+    other = max(0.0, float(inp.spend_core) - living - housing_now)
+    weights = {c: max(0.0, float(w)) for c, w in cb.weights.items() if c in pc.CATEGORIES}
+    total_w = sum(weights.values())
+    adj = max(0.0, float(place.adjust))
+    scale = living / total_w if total_w > 0 else 0.0
+    cats = tuple((c, w * scale, w * scale * pc.ratio(area, cb.home, c) * adj) for c, w in weights.items())
+    ratio = everyday_ratio(weights, area, cb.home)
+    living_there = living * ratio * adj
+    health = max(0.0, float(inp.health))
+    if cb.pre_medicare:
+        health *= pc.ratio(area, cb.home, pc.CAT_HEALTH)
+    proceeds = price = loan = down = costs = rent = 0.0
+    carry = place.carry(cb.home)
+    if place.housing == HOUSING_KEEP or place.here:
+        housing = housing_now if cb.housing_plan is None else max(0.0, float(cb.housing_plan))
+    else:
+        proceeds = max(0.0, float(cb.proceeds.get(int(age), 0.0)))
+        costs = max(0.0, float(cb.moving_costs))
+        if place.housing == HOUSING_RENT:
+            rent = float(place.monthly_rent(cb.home))
+            housing = rent * 12.0
+        else:
+            price = float(place.home_price(cb.home))
+            loan = max(0.0, price - proceeds)
+            down = price - loan
+            payment = _loan_payment(loan, cb.mortgage_rate, cb.loan_years) * 12.0
+            if loan > 0:
+                housing = payment + price * carry
+            else:
+                housing = price * carry if cb.carry_after_payoff else 0.0
+    spend = living_there + housing + other + health
+    return PlaceCost(categories=cats, living=living_there, housing=housing, other=other, health=health,
+                     spend=spend, proceeds=proceeds, price=price, loan=loan, down=down, costs=costs,
+                     rent=rent, carry=carry, ratio=ratio)
 
 
 def fire_number(spend: float, rate: float) -> float:
@@ -214,26 +318,64 @@ def coast_need(fire: float, age: int, retire_age: int, real_return: float) -> fl
     return fire / ((1.0 + real_return) ** years)
 
 
-def place_overrides(place: Place, spend_core: float, living_base: float) -> dict:
-    """Engine settings that test retiring in ``place`` with the real simulation.
+def place_overrides(inp: "Inputs", place: Place, health_knobs: Optional[Mapping] = None) -> dict:
+    """Engine settings (besides housing) that test retiring in ``place``.
 
-    Spending: the retirement living base moves by (factor - 1) x everyday
-    spending, so year-one spending there is factor x everyday spending, the same
-    as the quick rule (``place_spend``). It cannot go below your housing and
-    children's costs. Health costs and your plan's other rules stay as they are.
-    A factor of 1 leaves spending alone. Tax: ``RETIREMENT_STATE_CHOICE`` applies
-    the place's state to retirement-phase tax only; your working years keep the
-    state you live in now. A place that changes nothing returns {}.
+    Spending: ``RETIREMENT_SPENDING_ABSOLUTE`` is set to the everyday spending
+    there (``place_cost(...).living``), so the engine's retirement living base is
+    the quick rule's. Children, housing and the plan's other rules stay as they
+    are. Health: the pre-Medicare marketplace prices (``health_knobs``: the plan's
+    ACA_BENCHMARK_MONTHLY_AT_40, ACA_CHILD_MONTHLY and HEALTHCARE_COSTS_BY_AGE)
+    are scaled by the place's health price level; Medicare stays as planned.
+    Tax: ``RETIREMENT_STATE_CHOICE`` applies the place's state to retirement-phase
+    tax only. A place that changes nothing returns {}. Housing is a HOME_EVENTS
+    entry at the move age: see ``place_home_events``.
     """
     out: dict = {}
-    if abs(place.factor - 1.0) > 1e-9:
+    pcost = place_cost(inp, place, inp.retire_age)
+    if abs(pcost.living - float(inp.living_base)) > 0.5:
         out["RETIREMENT_SPENDING_MODE"] = "Absolute amount ($/yr)"
-        out["RETIREMENT_SPENDING_ABSOLUTE"] = round(
-            max(0.0, float(living_base) + (place.factor - 1.0) * float(spend_core)), 2)
+        out["RETIREMENT_SPENDING_ABSOLUTE"] = round(max(0.0, pcost.living), 2)
+    h = pc.ratio(place.area_code(inp.cost.home), inp.cost.home, pc.CAT_HEALTH)
+    if health_knobs and abs(h - 1.0) > 1e-9:
+        for key in ("ACA_BENCHMARK_MONTHLY_AT_40", "ACA_CHILD_MONTHLY"):
+            if health_knobs.get(key) is not None:
+                out[key] = round(float(health_knobs[key]) * h, 2)
+        bands = health_knobs.get("HEALTHCARE_COSTS_BY_AGE")
+        if isinstance(bands, Mapping) and bands.get("early_retirement") is not None:
+            new = dict(bands)
+            new["early_retirement"] = round(float(bands["early_retirement"]) * h, 2)
+            out["HEALTHCARE_COSTS_BY_AGE"] = new
     state = engine_state(place.tax)
     if state is not None:
         out["RETIREMENT_STATE_CHOICE"] = state
     return out
+
+
+def moves(place: Place) -> bool:
+    """Does testing this place sell your home and buy or rent there?"""
+    return not place.here and place.housing in (HOUSING_BUY, HOUSING_RENT)
+
+
+def place_home_events(inp: "Inputs", place: Place, age: int, plan_events: Sequence[dict] = ()) -> Optional[list]:
+    """``HOME_EVENTS`` that test moving to ``place`` at ``age``, or None when it keeps
+    your home. The plan's own moves before ``age`` stay; any at or after it are
+    replaced by this one (you live there from then on). The event is what
+    ``place_cost`` assumed: the same price, loan for the shortfall, rate, moving
+    costs and carrying rate, or the same rent."""
+    if not moves(place):
+        return None
+    pcost = place_cost(inp, place, age)
+    kept = [dict(e) for e in plan_events if int(e.get("age", 0)) < int(age)]
+    if place.housing == HOUSING_RENT:
+        ev = {"age": int(age), "action": "sell_rent", "rent": round(pcost.rent, 2),
+              "costs": round(pcost.costs, 2)}
+    else:
+        ev = {"age": int(age), "action": "sell_buy", "price": round(pcost.price, 2),
+              "loan": round(pcost.loan, 2), "rate": float(inp.cost.mortgage_rate),
+              "years": int(inp.cost.loan_years) if pcost.loan > 0 else 0,
+              "costs": round(pcost.costs, 2), "carrying_pct": float(pcost.carry)}
+    return kept + [ev]
 
 
 # --------------------------------------------------------------------------- the report
@@ -253,21 +395,40 @@ def _ladder(inp: Inputs, kind: str, values: Sequence[float], word: str):
 
 
 def _place_result(inp: Inputs, place: Place) -> PlaceResult:
-    spend = place_spend(inp.spend_core, inp.health, place.factor, inp.living_base)
-    fire = fire_number(spend, inp.rate)
-    current = float(inp.invested[0]) if len(inp.invested) else 0.0
     ret = inp.retire_age
     r = inp.real_return
+    at = {a: place_cost(inp, place, a) for a in set(int(x) for x in inp.ages) | {int(ret)}}
+
+    def cost_at(a: int) -> PlaceCost:
+        a = int(a)
+        if a not in at:
+            at[a] = place_cost(inp, place, a)
+        return at[a]
+
+    here = cost_at(ret)
+    fire = fire_number(here.spend, inp.rate)
+    rate_txt = f"{inp.rate * 100:.4g}%"
+    # FIRE at age a: invested + what the move frees at a covers spending there at the rate.
+    values = [float(v) + cost_at(a).release for a, v in zip(inp.ages, inp.invested)]
+    current = values[0] if values else 0.0
+    fire_m = _tracked(
+        inp, f"fire:{place.id}", KIND_FIRE, f"FIRE in {place.name}", values,
+        lambda a: fire_number(cost_at(a).spend, inp.rate), current, fire,
+        f"Covers {short_money(here.spend)} a year at {rate_txt}.", place.id)
+
+    # Coast FIRE: invested alone grows to (FIRE number - what the move frees) by retirement.
+    def coast_at(a: int) -> float:
+        m = max(int(a), int(ret))
+        c = cost_at(m)
+        return coast_need(max(0.0, fire_number(c.spend, inp.rate) - c.release), a, ret, r)
+
+    first_age = inp.ages[0] if len(inp.ages) else inp.your_age
     coast = _tracked(
         inp, f"coast:{place.id}", KIND_COAST, f"Coast FIRE in {place.name}", inp.invested,
-        lambda a, _f=fire: coast_need(_f, a, ret, r), current,
-        coast_need(fire, inp.ages[0] if len(inp.ages) else inp.your_age, ret, r),
+        coast_at, float(inp.invested[0]) if len(inp.invested) else 0.0, coast_at(first_age),
         f"Stop saving. Growth alone gets you to {short_money(fire)} by {max(ret, inp.your_age)}.",
         place.id)
-    fire_m = _tracked(
-        inp, f"fire:{place.id}", KIND_FIRE, f"FIRE in {place.name}", inp.invested, fire, current, fire,
-        f"Covers {short_money(spend)} a year at {inp.rate * 100:.4g}%.", place.id)
-    return PlaceResult(place, spend, fire, coast, fire_m)
+    return PlaceResult(place, here.spend, fire, coast, fire_m, here)
 
 
 def _markers(inp: Inputs, spending_known: bool) -> List[Milestone]:
