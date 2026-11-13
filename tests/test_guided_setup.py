@@ -354,9 +354,9 @@ def test_retirement_age_slider_has_a_typed_box(wizard):
     at.slider(key="gs_target").set_value(58).run()
     assert at.number_input(key="gs_target__box").value == 58
     at.number_input(key="gs_target__box").set_value(200).run()          # clamped to the range
-    assert at.slider(key="gs_target").value == 75
+    assert at.slider(key="gs_target").value == 99
     _next(at)
-    assert at.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] == 75
+    assert at.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] == 99
 
 
 def test_checkup_debts_carry_into_the_planner_and_the_review(wizard):

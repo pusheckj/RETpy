@@ -95,6 +95,12 @@ def _sample(**changes):
     return overrides
 
 
+# The sample household has no debts; the extreme-value tests add some so the Debts section's rows draw.
+_DEBTS = {"DEBTS": [{"name": "Visa", "kind": "credit_card", "balance": 6500.0, "apr": 0.24, "min_payment": 160.0},
+                    {"name": "Car", "kind": "car", "balance": 18000.0, "apr": 0.065, "min_payment": 380.0}],
+          "DEBT_EXTRA_MONTHLY": 150, "DEBT_STRATEGY": "snowball"}
+
+
 # ---------------------------------------------------------------------------
 # The guard itself
 # ---------------------------------------------------------------------------
@@ -247,6 +253,11 @@ def _saved(**damage):
     {"YOUR_COMPENSATION_BY_AGE": {"34": {"base": "lots"}}}, {"YOUR_COMPENSATION_BY_AGE": [1, 2]},
     {"MS_PLACES": {"hidden": [[1]], "custom": "x", "edits": [1]}},
     {"TARGET_RETIREMENT_AGE": "soon"}, {"YOUR_AGE": float("nan")}, {"YOUR_401K": float("inf")},
+    {"DEBTS": "lots"}, {"DEBTS": None}, {"DEBTS": {"Visa": 6500}},
+    {"DEBTS": ["x", 3, None, [1], {"balance": "lots", "apr": "high", "min_payment": None}]},
+    {"DEBTS": [{"name": [], "kind": {"a": 1}, "balance": float("inf"), "apr": 9, "min_payment": -5}]},
+    {"DEBTS": [{"name": "x" * 500, "kind": "yacht", "balance": 1e30, "apr": 99, "min_payment": 1e30}] * 40},
+    {"DEBT_EXTRA_MONTHLY": "x"}, {"DEBT_STRATEGY": 5},
 ])
 def test_a_damaged_value_loads_on_the_default_and_the_planner_still_draws(bad):
     loaded = profile_io.deserialize_overrides(_saved(**bad))
@@ -256,11 +267,24 @@ def test_a_damaged_value_loads_on_the_default_and_the_planner_still_draws(bad):
     assert not _lost(at), _lost(at)
 
 
+@pytest.mark.parametrize("changes", [
+    {"DEBT_EXTRA_MONTHLY": -50}, {"DEBT_EXTRA_MONTHLY": 10 ** 9}, {"DEBT_STRATEGY": "bonfire"},
+    {"DEBTS": [{"name": "Visa", "balance": -5, "apr": 4.5, "min_payment": 1e12}]},
+])
+def test_well_typed_but_out_of_range_debt_values_draw(changes):
+    at = _planner(profile_io.deserialize_overrides(_saved(**changes)))
+    assert not _lost(at), _lost(at)
+
+
 def test_a_guardrail_dict_with_one_bad_entry_keeps_the_good_ones():
     loaded = _load({"SPENDING_GUARDRAILS": {"floor_trigger": "x", "floor_reduction": 0.4}})
-    assert loaded["SPENDING_GUARDRAILS"]["floor_reduction"] == 0.4
-    assert isinstance(loaded["SPENDING_GUARDRAILS"]["floor_trigger"], float)
-    assert set(loaded["SPENDING_GUARDRAILS"]) >= {"ceiling_trigger", "ceiling_increase"}
+    assert loaded["SPENDING_GUARDRAILS"] == {"floor_trigger": cfg_default("floor_trigger"),
+                                             "floor_reduction": 0.4}
+
+
+def cfg_default(name):
+    from retirement_sim import config as cfg
+    return cfg.SPENDING_GUARDRAILS[name]
 
 
 def test_numbers_written_as_text_are_read_as_numbers():
@@ -346,25 +370,26 @@ def _widget_values(widgets, mode, rng):
 
 @pytest.fixture
 def _widgets():
-    return _sidebar_widgets(_planner(_sample()))
+    return _sidebar_widgets(_planner(_sample(**_DEBTS)))
 
 
 def test_the_planner_exposes_a_meaningful_set_of_widgets(_widgets):
     kinds = {k for _, k, _, _ in _widgets}
     assert len(_widgets) > 80 and kinds == {"number", "choice"}
+    assert any(k.startswith("debt_") for k, _, _, _ in _widgets)       # the Debts rows are in the set
 
 
 @pytest.mark.parametrize("mode", ["min", "max", "over", "under", "junk"])
 def test_every_sidebar_widget_at_an_extreme(_widgets, mode):
     values = _widget_values(_widgets, mode, random.Random(SEED))
-    at = _planner(_sample(), widgets=values)
+    at = _planner(_sample(**_DEBTS), widgets=values)
     assert not _lost(at), (mode, _lost(at))
 
 
 @pytest.mark.parametrize("seed", range(6))
 def test_random_mixtures_of_extreme_widget_values(_widgets, seed):
     values = _widget_values(_widgets, "mixed", random.Random(SEED + seed))
-    at = _planner(_sample(), widgets=values)
+    at = _planner(_sample(**_DEBTS), widgets=values)
     assert not _lost(at), (seed, _lost(at))
 
 

@@ -348,10 +348,10 @@ class _FakeSt:
 def test_widget_sync_clamps_out_of_range_age():
     # A hand-edited / uploaded profile with an absurd age must not propagate
     # an out-of-range value into the widget's session_state slot (which would
-    # crash st.number_input(min_value=18, max_value=100) on next render).
+    # crash st.number_input(min_value=18, max_value=99) on next render).
     st = _FakeSt({"YOUR_AGE": 99999})
     ws.sync_widgets_from_overrides(st)
-    assert st.session_state["ay_your_age"] == 100  # clamped to max_value
+    assert st.session_state["ay_your_age"] == 99  # clamped to max_value
 
 
 def test_widget_sync_clamps_negative_savings_contribution():
@@ -372,7 +372,7 @@ def test_widget_sync_clamps_full_bad_profile_without_crashing():
     }
     st = _FakeSt(bad_profile)
     ws.sync_widgets_from_overrides(st)  # must not raise
-    assert st.session_state["ay_your_age"] == 100
+    assert st.session_state["ay_your_age"] == 99
     assert st.session_state["ay_partner_age"] == 0
     assert st.session_state["sr_your_401k"] == 0
     assert st.session_state["ay_target_age"] == 25

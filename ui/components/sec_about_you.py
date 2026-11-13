@@ -35,8 +35,10 @@ except ImportError:  # pragma: no cover
 
 try:
     from utils.slider_input import slider_with_box
+    from utils.widget_guard import fit_number
 except ImportError:  # pragma: no cover
     from ui.utils.slider_input import slider_with_box  # type: ignore
+    from ui.utils.widget_guard import fit_number  # type: ignore
 
 
 def render_body(st) -> None:
@@ -80,7 +82,9 @@ def render_body(st) -> None:
     # Their widget values are already current, so apply the target age now:
     # sections drawn before Retirement then see this run's value, not last run's.
     if "ay_target_age" in st.session_state:
-        set_override(st, "TARGET_RETIREMENT_AGE", safe_int(st.session_state["ay_target_age"]))
+        # (Read before the slider draws, so keep it inside the slider's range here too.)
+        set_override(st, "TARGET_RETIREMENT_AGE", safe_int(
+            fit_number(st.session_state["ay_target_age"], TARGET_MIN, TARGET_MAX, 1), 60))
 
     # Plan-until age: each person's own. The plan runs until the later of the
     # two, so a younger partner is covered to their own plan-until age.

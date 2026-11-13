@@ -8,7 +8,7 @@ saved profile from an older version, a hand-edited file, another widget with a
 wider range, a default computed from your age. ``_safe_render`` then replaces the
 whole section with "couldn't be displayed".
 
-``install(st)`` wraps the bounded widgets once. Before each call it checks the
+``install(st)`` wraps the bounded widgets once (the module's and every DeltaGenerator's). Before each call it checks the
 widget's own key in ``st.session_state`` and, only when the value does not fit,
 moves it to the nearest value that does (numbers) or to the widget's default
 choice (options). A value that fits is never touched. Nothing else changes.
@@ -75,8 +75,8 @@ def _fit_numeric(st, args, kwargs, ranged=False) -> None:
     start = _arg(args, kwargs, 3, "value", "min")
     step = _arg(args, kwargs, 4, "step")
     current = ss[key]
-    if current is None and start is None:
-        return                                                   # value=None: an empty box is valid
+    if current is None and (start is None or kwargs.get("placeholder") is not None):
+        return                                                   # an empty box (value=None, or a placeholder) is valid
     if ranged and isinstance(current, (tuple, list)) and len(current) == 2:
         fixed = type(current)(fit_number(v, lo, hi, step) for v in current)
     else:
@@ -141,22 +141,36 @@ _FITTERS = {
 }
 
 
-def _wrap(st, name, original, fit):
-    @functools.wraps(original)
-    def guarded(*args, **kwargs):
-        try:
-            fit(st, args, kwargs)
-        except Exception:                                        # a guard must never be the crash
-            pass
-        return original(*args, **kwargs)
+def _wrap(st, original, fit, method=False):
+    """``original`` with ``fit`` run first. ``method``: a DeltaGenerator method (it gets ``self``)."""
+    if method:
+        @functools.wraps(original)
+        def guarded(self, *args, **kwargs):
+            try:
+                fit(st, args, kwargs)
+            except Exception:                                    # a guard must never be the crash
+                pass
+            return original(self, *args, **kwargs)
+    else:
+        @functools.wraps(original)
+        def guarded(*args, **kwargs):
+            try:
+                fit(st, args, kwargs)
+            except Exception:
+                pass
+            return original(*args, **kwargs)
     setattr(guarded, _MARK, True)
     return guarded
 
 
 def install(st) -> None:
-    """Wrap the bounded widgets on the ``streamlit`` module. Safe to call every run."""
+    """Wrap the bounded widgets on the ``streamlit`` module AND on ``DeltaGenerator``
+    (``col.number_input``, ``st.sidebar.slider``, ``container.radio``). Safe to call every run."""
+    from streamlit.delta_generator import DeltaGenerator
     for name, fit in _FITTERS.items():
         original = getattr(st, name, None)
-        if original is None or getattr(original, _MARK, False):
-            continue
-        setattr(st, name, _wrap(st, name, original, fit))
+        if original is not None and not getattr(original, _MARK, False):
+            setattr(st, name, _wrap(st, original, fit))
+        method = getattr(DeltaGenerator, name, None)
+        if method is not None and not getattr(method, _MARK, False):
+            setattr(DeltaGenerator, name, _wrap(st, method, fit, method=True))

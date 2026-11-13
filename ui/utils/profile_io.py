@@ -23,6 +23,7 @@ from datetime import datetime
 from typing import Any
 
 from retirement_sim import config as cfg
+from retirement_sim import debts
 
 SCHEMA_VERSION = "1.0"
 _MISSING = object()
@@ -131,31 +132,25 @@ def _fit_dict(value, default):
         isinstance(v, (dict, list, tuple)) for v in default.values())
     if not flat:
         return True, value
-    out = dict(default)                                  # a missing or bad entry keeps its default
+    out = dict(value)                                    # what was saved stays; a bad entry gets its default
     for k in default:
         if k in value:
             ok, fixed = _fit(value[k], default[k])
-            if ok:
-                out[k] = fixed
+            out[k] = fixed if ok else default[k]
     return True, out
 
 
 def _fit_comp_table(table, default):
-    """YOUR_COMPENSATION_BY_AGE: {age: {base, bonus, ...}}. A row that is incomplete is dropped."""
+    """YOUR_COMPENSATION_BY_AGE: {age: {base, bonus, ...}}. Only int ages and dict rows stay;
+    inside a row, a number that is not a number goes (the row's other entries stay)."""
     if not isinstance(table, dict):
         return None
     row0 = next(iter(default.values()))
     rows = {}
     for age, row in table.items():
         if isinstance(age, int) and isinstance(row, dict):
-            fixed = {}
-            for k, d in row0.items():
-                ok, v = _fit(row.get(k), d)
-                if not ok:
-                    break
-                fixed[k] = v
-            else:
-                rows[age] = {**row, **fixed}
+            rows[age] = {k: v for k, v in row.items()
+                         if k not in row0 or _fit(v, row0[k])[0]}
     return rows or None
 
 
@@ -196,6 +191,9 @@ def sanitize_overrides(overrides: dict) -> dict:
             ok, rows = _fit(value, [])
             if ok:
                 out[key] = _fit_rows(rows, cfg.CHILD_DEFAULTS, lambda r: True)
+        elif key == "DEBTS":
+            if isinstance(value, list):                  # the debts module's own cleaner never raises
+                out[key] = debts.normalize_debts(value)
         elif key == "HOME_EVENTS":
             ok, rows = _fit(value, [])
             if ok:
