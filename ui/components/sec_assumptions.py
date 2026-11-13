@@ -27,6 +27,12 @@ except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
 
 
+try:
+    from utils.slider_input import slider_with_box
+except ImportError:  # pragma: no cover
+    from ui.utils.slider_input import slider_with_box  # type: ignore
+
+
 def _section_label(st, txt):
     st.markdown(f'<div style="font-size: 13px; color: #64748b; text-transform: uppercase; '
                 f'letter-spacing: 0.05em; margin: 14px 0 6px 0;">{txt}</div>',
@@ -47,28 +53,21 @@ def render_investing_body(st) -> None:
                          "Historical is the default and the most optimistic; Conservative is closer to typical planner assumptions.")
     set_override(st, "ACTIVE_RETURN_SCENARIO", scen.lower())
 
-    c1, c2 = st.columns(2)
-    with c1:
-        cur_stock_pct = max(0.0, min(100.0, as_fraction(get_override(st, "STOCK_ALLOCATION", 0.80), 0.80) * 100))
-        ensure_default(st, "sa_stock_alloc", cur_stock_pct)
-        v = st.slider("Stock allocation (%)", min_value=0, max_value=100, step=5,
-                      key="sa_stock_alloc")
-        set_override(st, "STOCK_ALLOCATION", v / 100)
-    with c2:
-        bond_pct = 100 - st.session_state.get("sa_stock_alloc", 80)
-        # Derived (100 - stocks), so it is drawn as a read-only readout, not
-        # something that looks like an input: same label weight as the sidebar
-        # labels, muted value, and the rule beneath.
-        st.markdown(f'<div style="font-size:15px;font-weight:600;line-height:1.4;margin-bottom:6px;">Bond allocation (%)</div>'
-                    f'<div style="font-size:22px;font-weight:700;padding-top:4px;color:var(--mc-muted);">{bond_pct:.0f}</div>'
-                    f'<div style="font-size:12px;color:var(--mc-muted);margin-bottom:14px;">= 100 &minus; stocks</div>',
-                    unsafe_allow_html=True)
+    cur_stock_pct = max(0.0, min(100.0, as_fraction(get_override(st, "STOCK_ALLOCATION", 0.80), 0.80) * 100))
+    ensure_default(st, "sa_stock_alloc", cur_stock_pct)
+    v = slider_with_box(st, "Stock allocation (%)", 0, 100, 5, key="sa_stock_alloc", unit="%",
+                        help="The share of your investments held in stocks. The rest is bonds. "
+                             "More stock means higher expected returns and bigger swings.")
+    set_override(st, "STOCK_ALLOCATION", v / 100)
+    # Bonds are derived (100 - stocks), so they are a read-only line, not an input.
+    st.caption(f"Bond allocation: **{100 - st.session_state.get('sa_stock_alloc', 80):.0f}%** "
+               "(100 minus stocks)")
 
     # Interpret INVESTMENT_FEE_RATE as fraction. bps = fee_rate * 10_000.
     cur_fee_bps = max(0, min(100, int(round(safe_float(get_override(st, "INVESTMENT_FEE_RATE", 0.0), 0.0) * 10_000))))
     ensure_default(st, "sa_fee_bps", cur_fee_bps)
-    v = st.slider("Investment fee (bps)", min_value=0, max_value=100,
-                  step=5, key="sa_fee_bps",
+    v = slider_with_box(st, "Investment fee (bps)", 0, 100,
+                  5, key="sa_fee_bps", unit=" bps",
                   help="What your funds charge each year. 100 basis points (bps) = 1%. "
                        "Index ETFs run about 3-15 bps, active funds 50-100.")
     set_override(st, "INVESTMENT_FEE_RATE", v / 10_000)
@@ -85,8 +84,8 @@ def render_investing_body(st) -> None:
     _section_label(st, "Inflation")
     cur_infl = max(0.0, min(10.0, as_fraction(get_override(st, "EXPECTED_INFLATION", 0.0275), 0.0275) * 100))
     ensure_default(st, "sa_inflation", cur_infl)
-    v = st.slider("Expected inflation (%/yr)", min_value=0.0, max_value=10.0,
-                  step=0.25, key="sa_inflation",
+    v = slider_with_box(st, "Expected inflation (%/yr)", 0.0, 10.0,
+                  0.25, key="sa_inflation", unit="%",
                   help="Long-term US CPI averages 2.5-3%; the Fed targets 2%.")
     set_override(st, "EXPECTED_INFLATION", v / 100)
 
@@ -99,19 +98,17 @@ def render_investing_body(st) -> None:
                     key="sa_glide_enable")
     set_override(st, "GLIDE_PATH_ENABLED", bool(v))
     if st.session_state.get("sa_glide_enable", True):
-        c3, c4 = st.columns(2)
-        with c3:
-            cur_start = max(50.0, min(100.0, as_fraction(get_override(st, "GLIDE_PATH_START_STOCK_PCT", 0.90), 0.90) * 100))
-            ensure_default(st, "sa_glide_start", cur_start)
-            v = st.slider("Stock % at retirement", min_value=50, max_value=100,
-                          step=5, key="sa_glide_start")
-            set_override(st, "GLIDE_PATH_START_STOCK_PCT", v / 100)
-        with c4:
-            cur_end = max(20.0, min(80.0, as_fraction(get_override(st, "GLIDE_PATH_END_STOCK_PCT", 0.60), 0.60) * 100))
-            ensure_default(st, "sa_glide_end", cur_end)
-            v = st.slider("Stock % at age 75", min_value=20, max_value=80,
-                          step=5, key="sa_glide_end")
-            set_override(st, "GLIDE_PATH_END_STOCK_PCT", v / 100)
+        cur_start = max(50.0, min(100.0, as_fraction(get_override(st, "GLIDE_PATH_START_STOCK_PCT", 0.90), 0.90) * 100))
+        ensure_default(st, "sa_glide_start", cur_start)
+        v = slider_with_box(st, "Stock % at retirement", 50, 100, 5, key="sa_glide_start", unit="%",
+                            help="Your stock share on the day you retire.")
+        set_override(st, "GLIDE_PATH_START_STOCK_PCT", v / 100)
+        cur_end = max(20.0, min(80.0, as_fraction(get_override(st, "GLIDE_PATH_END_STOCK_PCT", 0.60), 0.60) * 100))
+        ensure_default(st, "sa_glide_end", cur_end)
+        v = slider_with_box(st, "Stock % at age 75", 20, 80, 5, key="sa_glide_end", unit="%",
+                            help="Your stock share at age 75. It slides from the retirement "
+                                 "share to this one as you age.")
+        set_override(st, "GLIDE_PATH_END_STOCK_PCT", v / 100)
 
     st.divider()
 
@@ -169,8 +166,8 @@ def render_investing_body(st) -> None:
             set_override(st, "ROTH_CONVERSION_MAX_ANNUAL", safe_int(v))
         ensure_default(st, "sa_roth_stop",
                        safe_int(get_override(st, "ROTH_CONVERSION_STOP_AGE", 67), 67))
-        v = st.slider("Stop conversions at age", min_value=62, max_value=75,
-                      step=1, key="sa_roth_stop")
+        v = slider_with_box(st, "Stop conversions at age", 62, 75, 1, key="sa_roth_stop",
+                            help="No Roth conversions after this age.")
         set_override(st, "ROTH_CONVERSION_STOP_AGE", safe_int(v))
 
 

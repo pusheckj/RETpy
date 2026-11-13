@@ -3569,6 +3569,45 @@ html:root .st-key-mc-tile-freedom table.ms-break tr.ms-total td { font-weight: 6
 /* -- end Collapsible section tiles -- */
 
 /* ==========================================================================
+   Sliders with a typed box (utils/slider_input.py). The row is a keyed
+   container ("sbx-<slider key>"): the slider takes the free width and a narrow
+   box sits at its right, level with the track. Colours, height and radius of the
+   box come from the shared input rules above (QA round A R3 tokens, dark values
+   included), so this block only places things. The -/+ steppers are hidden: the
+   point of the box is typing, and on a phone they would cost 88px of a ~180px row.
+   A row narrower than ~215px wraps, so the box drops under the slider.
+   ========================================================================== */
+[class*="st-key-sbx-"] {
+    flex-wrap: wrap !important;
+    align-items: flex-end !important;
+    gap: 0 10px !important;
+    width: 100%;
+}
+[class*="st-key-sbx-"] > [data-testid="stElementContainer"]:first-child {
+    flex: 1 1 120px !important;
+    min-width: 0 !important;
+}
+[class*="st-key-sbx-"] > [data-testid="stElementContainer"]:last-child {
+    flex: 0 0 76px !important;
+    width: 76px !important;
+    min-width: 0 !important;
+    margin-bottom: 10px;                 /* the slider's tick labels sit below its track */
+}
+[class*="st-key-sbx-"] [data-testid="stNumberInputStepUp"],
+[class*="st-key-sbx-"] [data-testid="stNumberInputStepDown"] { display: none !important; }
+[class*="st-key-sbx-"] .stNumberInput input {
+    text-align: center;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    font-variant-numeric: tabular-nums;
+}
+/* The range ends ("0%" and "100%") are always shown, so the box is not the only clue to the scale. */
+[class*="st-key-sbx-"] [data-testid="stSliderTickBar"] { opacity: 1 !important; }
+[class*="st-key-sbx-"] .stSlider { padding-bottom: 10px; }
+section[data-testid="stMain"] [class*="st-key-sbx-"] { margin-bottom: 6px; }
+/* -- end Sliders with a typed box -- */
+
+/* ==========================================================================
    Top card layout. The card (.st-key-mc-topbar) holds two keyed rows built by
    app._topbar_head, each a wrapping flex row:
      mc-topbar-head: the title (left), then Run / simulations / Settings (right);

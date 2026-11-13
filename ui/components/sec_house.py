@@ -33,6 +33,12 @@ except ImportError:  # pragma: no cover
     from ui.components.sec_expenses import _money_input  # type: ignore
 
 # Plain-language choices for a move, by what you have just before it.
+try:
+    from utils.slider_input import slider_with_box
+except ImportError:  # pragma: no cover
+    from ui.utils.slider_input import slider_with_box  # type: ignore
+
+
 _RENTING_CHOICES = ("Buy a home", "Move to another rental")
 _OWNING_CHOICES = ("Sell, buy another", "Sell and rent")
 _MEDIAN_HOME_PRICE = 420_000      # US median existing-home price, a starting point
@@ -60,16 +66,14 @@ def _housing(st) -> None:
         with c2:
             _money_input(st, "Monthly mortgage payment", "se_mortgage_monthly",
                          "MORTGAGE_MONTHLY", 3_000, 20_000, 100)
-        c1, c2 = st.columns(2, vertical_alignment="bottom")
-        with c1:
-            _money_input(st, "Mortgage balance", "se_mortgage_balance",
-                         "MORTGAGE_BALANCE", 500_000, 5_000_000, 10_000)
-        with c2:
-            yrs_default = max(0, min(40, safe_int(get_override(st, "MORTGAGE_YEARS_REMAINING", 28), 28)))
-            ensure_default(st, "se_mortgage_years", yrs_default)
-            v = st.slider("Years left on mortgage", min_value=0, max_value=40,
-                          step=1, key="se_mortgage_years")
-            set_override(st, "MORTGAGE_YEARS_REMAINING", safe_int(v))
+        _money_input(st, "Mortgage balance", "se_mortgage_balance",
+                     "MORTGAGE_BALANCE", 500_000, 5_000_000, 10_000)
+        yrs_default = max(0, min(40, safe_int(get_override(st, "MORTGAGE_YEARS_REMAINING", 28), 28)))
+        ensure_default(st, "se_mortgage_years", yrs_default)
+        v = slider_with_box(st, "Years left on mortgage", 0, 40, 1, key="se_mortgage_years",
+                            unit=" yr",
+                            help="How many more years of payments you have on the loan.")
+        set_override(st, "MORTGAGE_YEARS_REMAINING", safe_int(v))
         if safe_int(get_override(st, "MORTGAGE_BALANCE", 0), 0) > 0:
             ensure_default(st, "se_mortgage_rate",
                            safe_float(get_override(st, "MORTGAGE_RATE_FOR_PAYOFF", 0.065), 0.065) * 100)

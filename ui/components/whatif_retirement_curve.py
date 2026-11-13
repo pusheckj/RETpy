@@ -23,6 +23,12 @@ except ImportError:  # pragma: no cover
     from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
     from ui.utils.coerce import safe_int, safe_float  # type: ignore
 
+try:
+    from utils.slider_input import slider_with_box
+except ImportError:  # pragma: no cover
+    from ui.utils.slider_input import slider_with_box  # type: ignore
+
+
 _SCENARIOS = ["conservative", "historical", "pessimistic"]
 _SCAN_RANGE = (25, 76, 1)
 
@@ -110,23 +116,23 @@ def render(st, results: dict = None) -> None:
         st.selectbox("Return scenario", _SCENARIOS, key="wifc_scenario",
                      format_func=lambda s: s.capitalize(),
                      help="Market returns used in the alternate scenario.")
-        st.slider("Stock allocation (%)", 0, 100, key="wifc_stock", step=5,
-                  help="More stock means higher expected returns and bigger swings.")
-        st.slider("Retirement spending (% of today's)", 40, 150, key="wifc_spend", step=5,
-                  help="Retirement living costs compared with today. 100% means the same.")
+        slider_with_box(st, "Stock allocation (%)", 0, 100, 5, key="wifc_stock", unit="%",
+                        help="More stock means higher expected returns and bigger swings.")
+        slider_with_box(st, "Retirement spending (% of today's)", 40, 150, 5, key="wifc_spend",
+                        unit="%", help="Retirement living costs compared with today. 100% means the same.")
         st.number_input("Extra annual savings ($/yr)", min_value=0, max_value=200_000,
                         step=1_000, key="wifc_savings",
                         help="Extra yearly savings, added to your taxable brokerage.")
     with c2:
-        st.slider("Investment fees (bps)", 0, 150, key="wifc_fee", step=5,
-                  help="Yearly fund fees. 100 bps is 1% of your balance.")
-        st.slider("Expected inflation (%)", 0.0, 6.0, key="wifc_infl", step=0.25,
-                  help="Long-run inflation used in the alternate scenario.")
+        slider_with_box(st, "Investment fees (bps)", 0, 150, 5, key="wifc_fee", unit=" bps",
+                        help="Yearly fund fees. 100 bps is 1% of your balance.")
+        slider_with_box(st, "Expected inflation (%)", 0.0, 6.0, 0.25, key="wifc_infl", unit="%",
+                        help="Long-run inflation used in the alternate scenario.")
         st.toggle("Include Social Security", key="wifc_ss",
                   help="Count Social Security income in the alternate scenario.")
         if st.session_state.get("wifc_ss", True):
-            st.slider("Claim age", 62, 70, key="wifc_ss_claim", step=1,
-                      help="Age Social Security starts in the alternate scenario.")
+            slider_with_box(st, "Claim age", 62, 70, 1, key="wifc_ss_claim",
+                            help="Age Social Security starts in the alternate scenario.")
 
     n_sims = int(st.session_state.get("n_simulations", 1000))
     target = int(overrides.get("TARGET_RETIREMENT_AGE", 55))

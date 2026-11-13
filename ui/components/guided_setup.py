@@ -45,6 +45,12 @@ except ImportError:  # pragma: no cover
     from ui.utils import planner_max as pm  # type: ignore
 
 STATE = "setup"
+try:
+    from utils.slider_input import slider_with_box
+except ImportError:  # pragma: no cover
+    from ui.utils.slider_input import slider_with_box  # type: ignore
+
+
 _DOLLAR = ":material/attach_money:"
 _PCT = ":material/percent:"
 # Required questions start blank (with this hint); optional amounts start at 0.
@@ -687,8 +693,7 @@ def draw_retire(st) -> None:
     _seed(st, "gs_target", max(lo, min(target, 75)), max(lo, min(target, 75)))
     if st.session_state["gs_target"] < lo:
         st.session_state["gs_target"] = lo
-    st.slider("At what age would you like to retire?", min_value=lo, max_value=75, step=1,
-              key="gs_target")
+    slider_with_box(st, "At what age would you like to retire?", lo, 75, 1, key="gs_target")
     _cue(st, "A guess is fine. Your results show the earliest age that works, and you can "
              "adjust from there.")
     ss = _choice(st, "gs_ss", "Count on Social Security?", [SS_YES, SS_NO],
