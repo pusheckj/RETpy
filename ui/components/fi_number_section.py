@@ -11,12 +11,12 @@ from __future__ import annotations
 import plotly.graph_objects as go
 
 try:
-    from utils.formatting import money, money_md
+    from utils.formatting import money, money_md, pct
     from utils.household import has_partner, plan_end_text
     from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, add_target_line
     from utils.sim_runner import run_networth_analysis, _hashable
 except ImportError:  # pragma: no cover
-    from ui.utils.formatting import money, money_md  # type: ignore
+    from ui.utils.formatting import money, money_md, pct  # type: ignore
     from ui.utils.household import has_partner, plan_end_text  # type: ignore
     from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, add_target_line  # type: ignore
     from ui.utils.sim_runner import run_networth_analysis, _hashable  # type: ignore
@@ -35,22 +35,40 @@ def _inputs_hash(overrides: dict, n_sims):
 _FRESH_HELP = ("Up to date. Change an input or the simulation count to recalculate.")
 
 
+def _retired(overrides: dict) -> bool:
+    """The plan has no working years left (target retirement age <= your age)."""
+    try:
+        return int(overrides.get("TARGET_RETIREMENT_AGE", 99)) <= int(overrides.get("YOUR_AGE", 0))
+    except (TypeError, ValueError):
+        return False
+
+
 def render(st, results: dict = None) -> None:
     st.markdown('<div class="mc-section">Portfolio needed to retire</div>', unsafe_allow_html=True)
     overrides = st.session_state.get("user_overrides", {}) or {}
 
     # Household size as the simulation sees it (cfg.has_partner for these inputs).
     couple = has_partner(overrides)
-    st.caption(
-        "Instead of asking *when* you can retire, this finds the **investable portfolio** you "
-        "need to stop working. "
-        + ("You both keep" if couple else "You keep")
-        + " working and saving until the balance first hits a target, then retire "
-        "that year. Your **number** is the smallest target balance that still meets your success "
-        "target. It leaves out home equity and 529 college funds"
-        + (". It assumes you both work until the target and retire together, so your "
-           "partner's own retirement age isn't used here." if couple else ".")
-    )
+    retired = _retired(overrides)
+    if retired:
+        # Nothing to wait for: the plan has no working years, so there is no
+        # "keep working until the balance hits a target".
+        st.caption(
+            "You're already retired in this plan, so there is no balance to wait for. This section "
+            "checks whether the **investable portfolio** you have today meets your success target. "
+            "It leaves out home equity and 529 college funds."
+        )
+    else:
+        st.caption(
+            "Instead of asking *when* you can retire, this finds the **investable portfolio** you "
+            "need to stop working. "
+            + ("You both keep" if couple else "You keep")
+            + " working and saving until the balance first hits a target, then retire "
+            "that year. Your **number** is the smallest target balance that still meets your success "
+            "target. It leaves out home equity and 529 college funds"
+            + (". It assumes you both work until the target and retire together, so your "
+               "partner's own retirement age isn't used here." if couple else ".")
+        )
     # Orient the reader: three tiles answer the same question three ways, and a
     # first-time user otherwise can't tell which number to trust.
     st.caption(
@@ -118,6 +136,7 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
     cur = float(fi.get("current_investable", 0.0))
     target = float(fi.get("target_success", 0.80))
     already = bool(fi.get("already_fi"))
+    retired = bool(fi.get("already_retired"))
     curve = fi.get("success_by_networth", []) or []
     cap = int(fi.get("max_work_age", 70))
 
@@ -131,10 +150,12 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
     cols = st.columns(3)
     with cols[0]:
         if already:
-            st.metric("Portfolio needed to retire", money(cur, shorten=True),
-                      help=f"Your current investable portfolio ({money(cur, shorten=True)}) "
-                           f"already clears the {target:.0%} target. You're at or past "
-                           "your number.")
+            # The sweep starts at today's balance, so it can't say how far BELOW it your
+            # number sits. Say so, instead of echoing the balance as if it were the need.
+            st.metric("Portfolio needed to retire", f"At most {money(cur, shorten=True)}",
+                      help=f"Your current investable portfolio ({money(cur, shorten=True)}) already "
+                           f"clears the {target:.0%} target. Your exact number is lower, but this check "
+                           "only tests balances from today's up.")
         elif not_reached:
             st.metric("Portfolio needed to retire", f"Over {money(top, shorten=True)}",
                       help=f"No target up to {money(top, shorten=True)} "
@@ -145,10 +166,10 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
                            "if you retire the moment you reach it.")
     with cols[1]:
         if already:
-            st.metric("When you could stop", "Now",
+            st.metric("When you could stop", "Already retired" if retired else "Now",
                       help="Retiring today already meets your target.")
         elif not_reached:
-            st.metric("Best success found", f"{best:.0%}",
+            st.metric("Best success found", pct(best, 0),
                       help="The best chance of success any target reached.")
         else:
             st.metric(
@@ -173,13 +194,20 @@ def _render_result(st, fi: dict, couple: bool = False) -> None:
                 money(gap, shorten=True) if gap > 0 else "You're there",
                 help=f"Current investable portfolio: {money(cur, shorten=True)}",
             )
+    if already:
+        now_ok = pct(curve[0]["success"], 0) if curve else "enough"
+        st.caption(
+            (f"Retiring today succeeds in {now_ok} of simulations. Your number is somewhere below "
+             "today's balance. The curve below starts at today's balance, so it can't say how far below.")
+            if not retired else
+            f"Your portfolio today succeeds in {now_ok} of simulations, so it meets your target.")
     if not_reached:
         # Why a bigger target stops helping: the largest targets aren't reached
         # before the work cap, so those runs retire at the cap with less.
         capped = bool(curve) and (curve[-1].get("median_retire_age") or 0) >= cap
         st.info(
             f"No target up to {money_md(top, shorten=True)} reached your {target:.0%} success target. The "
-            f"best was {best:.0%}. "
+            f"best was {pct(best, 0)}. "
             + (f"The biggest targets usually aren't reached before age {cap}, the latest "
                "this check lets you work, so those runs retire then with less. "
                if capped else "")

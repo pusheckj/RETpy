@@ -11,13 +11,13 @@ import plotly.graph_objects as go
 
 try:
     from utils.coerce import safe_int
-    from utils.formatting import metric_row
+    from utils.formatting import metric_row, pct
     from utils.household import plan_end_ages
     from utils.mortality import life_distribution, RISK_FACTORS, CONDITIONS
     from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
-    from ui.utils.formatting import metric_row  # type: ignore
+    from ui.utils.formatting import metric_row, pct  # type: ignore
     from ui.utils.household import plan_end_ages  # type: ignore
     from ui.utils.mortality import life_distribution, RISK_FACTORS, CONDITIONS  # type: ignore
     from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark  # type: ignore
@@ -149,7 +149,18 @@ def render(st, show_header: bool = True) -> None:
         lead += (f"That's a real risk of outliving your plan. Consider extending it toward your "
                  f"1-in-10 age (**{dist['p90']}**) so the money lasts as long as you do.")
     elif plan_until > current_age and plan_until >= dist["p90"]:
-        lead += "Your plan already covers a long life, which gives you a good buffer."
+        # The plan's HORIZON covers a long life. Whether the MONEY lasts that
+        # long is the last simulation's success rate, so don't reassure on a failing plan.
+        primary = ((st.session_state.get("results") or {}).get("primary_result") or {})
+        succ = primary.get("success_rate")
+        goal = float(((st.session_state.get("results") or {}).get("config_snapshot") or {})
+                     .get("TARGET_SUCCESS_RATE", 0.80))
+        if succ is None or float(succ) >= goal:
+            lead += "Your plan runs to a long life, which gives you a good buffer."
+        else:
+            lead += (f"Your plan runs to a long life, but the money lasts that long in only "
+                     f"**{pct(float(succ), 0)}** of simulations. Your chance of success is below "
+                     f"your {pct(goal, 0)} target.")
     else:
         lead += f"About **{reach90:.0%}** of people with your profile reach age 90."
     st.markdown(lead)

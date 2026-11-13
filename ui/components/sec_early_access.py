@@ -211,5 +211,5 @@ def render_body(st) -> None:
         else:
             st.caption(f"Saving stops at {coast_age}. You cover your own expenses until "
                        f"{retire_age}, so your portfolio grows by compounding alone "
-                       f"for {retire_age - coast_age} years.")
+                       f"for {retire_age - coast_age} {'year' if retire_age - coast_age == 1 else 'years'}.")
 

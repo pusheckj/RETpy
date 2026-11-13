@@ -96,7 +96,11 @@ def render_body(st) -> None:
                                  "expenses. With either option below, the plan "
                                  "saves all of it; your employer match comes on top.")
 
-    if disposable <= 0:
+    # No working years left (retired): there is no pay to save from, so "nothing is
+    # left to save" is no news and reads as a problem.
+    working = (safe_int(overrides.get("YOUR_AGE", 0), 0)
+               < safe_int(overrides.get("TARGET_RETIREMENT_AGE", 55), 55))
+    if disposable <= 0 and working:
         st.warning(
             f"Nothing is left to save "
             f"({money_md(income)} − {money_md(taxes)} − {money_md(expenses)}). "
@@ -370,8 +374,9 @@ def _max_out_all(st) -> None:
     if pm.max_out_updates(overrides):
         st.button("Max out all tax-advantaged accounts", key="sv_max_all",
                   on_click=_apply_max_out, args=(st, pm.MAX_OUT_ORDER), width="stretch",
-                  help="Sets your 401(k), HSA and Roth IRA, and your partner's 401(k) and "
-                       "Roth IRA, to their limits. Taxable brokerage has no limit.")
+                  help="Sets your 401(k), HSA and Roth IRA"
+                       + (", and your partner's 401(k) and Roth IRA," if _has_partner(overrides) else "")
+                       + " to their limits. Taxable brokerage has no limit.")
 
 
 def _manual_amount(st, widget_key: str, cfg_key: str, label: str,

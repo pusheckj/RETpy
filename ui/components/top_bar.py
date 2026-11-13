@@ -21,10 +21,10 @@ from typing import Any, Dict, Optional
 # Dual-import shim so the module works whether imported as `components.top_bar`
 # (ui/ on sys.path) or `ui.components.top_bar`.
 try:
-    from utils.formatting import money, money_precise
+    from utils.formatting import money, money_precise, pct
 except Exception:  # pragma: no cover
     try:
-        from ui.utils.formatting import money, money_precise  # type: ignore
+        from ui.utils.formatting import money, money_precise, pct  # type: ignore
     except Exception:  # pragma: no cover
         def money(value, precision: int = 0, shorten: bool = False) -> str:
             try:
@@ -143,7 +143,7 @@ def _resolve_success(results: Optional[dict]):
             pr = results.get("primary_result") or {}
             rate = pr.get("success_rate")
             if rate is not None:
-                return f"{float(rate) * 100:.0f}%", ""
+                return pct(float(rate), 0), ""
     except Exception:
         pass
     return "—", "run to see"
