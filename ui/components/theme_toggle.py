@@ -569,6 +569,23 @@ label[data-baseweb="radio"]:has(input:checked) > div:first-child > div { backgro
 }
 /* -- end Freedom milestones -- */
 
+/* ---- Debt payoff (dark values of the --debt-* tokens in theme.css) ---- */
+:root {
+    --debt-surface: rgba(255, 255, 255, 0.04);
+    --debt-high-bg: rgba(251, 191, 36, 0.14);
+    --debt-high-ink: #fbbf24;
+    --debt-mod-bg: rgba(255, 255, 255, 0.10);
+    --debt-mod-ink: #cbd5e1;
+    --debt-low-bg: rgba(45, 212, 191, 0.12);
+    --debt-low-ink: #5eead4;
+    --debt-good-bg: rgba(45, 212, 191, 0.12);
+    --debt-good-ink: #5eead4;
+    --debt-plan-bg: #2dd4bf;
+    --debt-plan-ink: #0f172a;
+    --debt-current-border: rgba(45, 212, 191, 0.55);
+}
+/* -- end Debt payoff -- */
+
 /* ---- QA round A R2 (dark) ---- */
 /* Slider end labels and gray caption text kept the light theme's dark-grey (1.1-1.2:1). */
 [data-testid="stSliderTickBar"], [data-testid="stSliderTickBar"] * { color: var(--mc-muted) !important; }

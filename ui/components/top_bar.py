@@ -110,7 +110,8 @@ def _resolve_net_worth(results: Optional[dict], overrides: Optional[dict]) -> Op
         ov = overrides or {}
         total = sum(_num(ov.get(k, 0)) for k in _NET_WORTH_KEYS)
         home_equity = _num(ov.get("HOME_VALUE", 0)) - _num(ov.get("MORTGAGE_BALANCE", 0))
-        return total + home_equity
+        from retirement_sim import debts as _debts
+        return total + home_equity - _debts.total_owed(ov.get("DEBTS"))
     except Exception:
         return None
 

@@ -67,7 +67,7 @@ print(f"Median end value: ${result['median_ending_balance']:,.0f}")
 
 ## Try the interactive UI
 
-A polished Streamlit UI ships with the package: a welcome screen (Money check-up or Retirement planner), a short guided setup, a linear sidebar of input sections (About you, Family, Income, Taxes, House, Expenses, Accounts, Investments, Retirement, Assumptions), and a results page that updates as you edit. It includes Plotly charts for Monte Carlo fan projections, success-by-age curves, allocation glide paths and tax flow, a **Freedom milestones** section (net worth rungs, Coast FIRE and FIRE in places you can edit, and other markers of freedom, each with a *Confirm with simulation* button), plus a What-if section for scenario comparisons.
+A polished Streamlit UI ships with the package: a welcome screen (Money check-up or Retirement planner), a short guided setup, a linear sidebar of input sections (About you, Family, Income, Taxes, House, Expenses, Debts, Accounts, Investments, Retirement, Assumptions), and a results page that updates as you edit. It includes Plotly charts for Monte Carlo fan projections, success-by-age curves, allocation glide paths and tax flow, a **Freedom milestones** section (net worth rungs, Coast FIRE and FIRE in places you can edit, and other markers of freedom, each with a *Confirm with simulation* button), a **Debt payoff** section (debt-free date, avalanche vs snowball, a pay-more what-if and plain-language *Things to know*), plus a What-if section for scenario comparisons.
 
 ```bash
 pip install -r ui/requirements-ui.txt
@@ -148,6 +148,7 @@ At minimum, users typically edit:
 - Child expense modeling: any number of children (daycare, K-12, extracurriculars), with each child's college saved in their own 529
 - Long-term care shock modeling with duration and cost distributions
 - Housing transitions (mortgage payoff, downsize events)
+- Consumer debts (credit cards, student, car and personal loans) paid month by month, avalanche or snowball, until each is gone; fixed nominal payments valued in today's dollars
 
 ### Returns
 

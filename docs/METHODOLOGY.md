@@ -186,6 +186,20 @@ phases: the travel boom's +50% discretionary covers the go-go years, its −20%
 and the conservative preset's −30% start with the later years, and empty-nest
 spending (−25%) starts once the last child has left home.
 
+### 6.3 Debts
+
+Consumer debts (`DEBTS`: credit cards, student, car, personal and medical loans; not the mortgage) are paid month by month with one fixed total payment: every minimum plus `DEBT_EXTRA_MONTHLY`. Each month interest accrues on each balance at `APR / 12`, each debt gets its minimum, and the rest goes to one target debt: the highest APR first (*avalanche*) or the smallest balance first (*snowball*, `DEBT_STRATEGY`). A paid-off debt's minimum rolls into the next target, so the total payment stays the same until the last debt is gone; then it stops and the money is saved again. A debt whose minimum doesn't cover its monthly interest is flagged; a plan that isn't paid off in 50 years is reported as such.
+
+**Today's dollars.** Balances, minimums and APRs are nominal, as on a statement, and the payments are fixed in nominal dollars. The engine works in today's dollars by whole years and values each plan year's flows at the start of that year, so the payments made in plan year *y* (months 12*y*+1 to 12*y*+12) count as
+
+  real payments(*y*) = nominal payments(*y*) / (1 + π)^*y*,
+
+with π the expected general inflation (`EXPECTED_INFLATION`). This is the same as charging a real rate of about (1 + APR) / (1 + π) − 1 on a real balance while the real payment falls by 1 / (1 + π) a year. Payoff dates don't depend on the frame. Year-one payments are not deflated, so the first year matches the statements. The deflator is the expected inflation rather than each path's own inflation draw (general inflation is pinned at its expectation in this engine, Section 4).
+
+**Where the money comes from.** The payments are spending. In working years they are added to that year's living expenses, so they come out of the brokerage sweep (the extra payment is money that would otherwise be saved); in the *Manual amounts* savings mode, as with all spending, they only matter when spending passes take-home. In retirement they are added after the spending guardrails (a loan payment can't be trimmed in a bad year) and withdrawn like other spending. The schedule doesn't depend on the retirement age. With no debts nothing changes.
+
+**One calculation.** `retirement_sim/debts.py` holds the payoff math. The engine, the planner's Debts section and Debt payoff tile, and the Money check-up all use it, so they show the same months and interest. Not modeled: the student-loan interest deduction, variable rates, promotional rates and fees, income-driven repayment and forgiveness, and new borrowing. Debts are not subtracted from net worth.
+
 ---
 
 ## 7. Withdrawal order
