@@ -304,3 +304,36 @@ def test_renter_place_card_does_not_say_keeps_your_home(monkeypatch):
     text = _text(_at(_ms_script, monkeypatch, {"user_overrides": ov, "n_simulations": 100}))
     assert "Keeps your home" not in text and "Your plan&#x27;s housing" in "\n".join(
         m.value for m in _at(_ms_script, monkeypatch, {"user_overrides": ov, "n_simulations": 100}).markdown)
+
+
+def _swr_script():
+    import os
+    import sys
+    sys.path[:0] = [os.environ["T_UI"], os.path.dirname(os.environ["T_UI"])]
+    import streamlit as st
+    from components import swr_curve_section
+    swr_curve_section._render_result(st, st.session_state["swr"], None)
+
+
+def _swr(rate, lower, top_success):
+    curve = [{"realized_rate": r, "success": s, "spending": 0.0}
+             for r, s in ((0.003, 1.0), (0.05, 1.0), (0.10, top_success))]
+    return {"success_by_rate": curve, "swr_rate": rate, "swr_is_lower_bound": lower, "actual_rate": 0.003,
+            "target_success": 0.8, "investable_at_retirement": 1_400_000.0, "retirement_age": 68}
+
+
+def test_swr_tile_says_above_not_none_when_the_top_of_the_sweep_passes(monkeypatch):
+    text = _text(_at(_swr_script, monkeypatch, {"swr": _swr(0.10, True, 1.0)}))
+    assert "Above 10.0%" in text and "None found" not in text
+    assert "not limited by how fast you draw" in text
+    found = _text(_at(_swr_script, monkeypatch, {"swr": _swr(0.06, False, 0.3)}))
+    assert "6.0%" in found and "Above" not in found
+    none = _text(_at(_swr_script, monkeypatch, {"swr": _swr(None, False, 0.0) | {"success_by_rate": [
+        {"realized_rate": 0.01, "success": 0.1, "spending": 0.0}]}}))
+    assert "None found" in none and "even the lowest, 1.0%" in none
+
+
+def test_short_money_picks_the_unit_after_rounding():
+    assert ms.short_money(999_600) == "$1M"
+    assert ms.short_money(999_999_999) == "$1B"
+    assert ms.short_money(1_500_000) == "$1.5M"

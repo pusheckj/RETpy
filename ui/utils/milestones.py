@@ -175,10 +175,12 @@ def short_money(value: float) -> str:
     """$250K, $1M, $1.5M, $12.5K, $850."""
     v = abs(float(value))
     sign = "-" if value < 0 else ""
-    for size, suffix in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+    for size, suffix, up in ((1e9, "B", None), (1e6, "M", "B"), (1e3, "K", "M")):
         if v >= size:
             n = v / size
             text = f"{n:.1f}".rstrip("0").rstrip(".") if n < 100 else f"{n:.0f}"
+            if up and float(text) >= 1000:   # $999.96K rounds to "1000K": say $1M
+                return f"{sign}$1{up}"
             return f"{sign}${text}{suffix}"
     return f"{sign}${v:,.0f}"
 
