@@ -101,33 +101,84 @@ def test_rate_setting_is_saved_with_the_profile(monkeypatch):
     assert pl.KEY not in at.session_state["user_overrides"]
 
 
+def _cards(at):
+    """The markdown of every place card (its head and facts)."""
+    return [m.value for m in at.markdown if 'class="ms-place-head"' in m.value]
+
+
+def _fire_number(at, name):
+    for v in _cards(at):
+        if f"<b>{name}</b>" in v:
+            return v.split("FIRE number</dt><dd>")[1].split("</dd>")[0]
+    raise AssertionError(name)
+
+
+def test_cards_show_the_pieces_and_a_breakdown(monkeypatch):
+    at = _draw(monkeypatch, load_sample_household())
+    text = _md(at)
+    assert "Spending there" in text and "Home sale frees" in text and "Home there costs" in text
+    assert "Rent there" in text and "FIRE number" in text and "Everyday" in text
+    assert 'class="ms-break"' in text and "Food &amp; groceries" in text and "Housing" in text
+    assert at.selectbox(key="ms_home_area").value == "CA"            # the plan's state
+    assert not at.error
+
+
 def test_editing_a_place_changes_its_fire_number_and_is_saved(monkeypatch):
     at = _draw(monkeypatch, load_sample_household())
-    before = _md(at)
-    at.selectbox(key="ms_edit_pick").select("midwest").run()
-    at.number_input(key="ms_edit_factor_midwest").set_value(0.5)
-    at.button(key="FormSubmitter:ms_edit_form_midwest-Save place").click().run()
+    before = _fire_number(at, "Midwest")
+    at.number_input(key="ms_adjust_midwest").set_value(0.5).run()
     assert not at.exception
     ov = at.session_state["user_overrides"]
-    assert pl.get_state(ov)["edits"]["midwest"]["factor"] == 0.5
-    assert "0.50&times; costs" in _md(at) and "0.50&times; costs" not in before
+    assert pl.get_state(ov)["edits"]["midwest"]["adjust"] == 0.5
+    assert _fire_number(at, "Midwest") != before
     assert [b for b in at.button if b.key == "ms_reset_midwest"]        # reset appears once edited
     at.button(key="ms_reset_midwest").click().run()
+    assert pl.KEY not in at.session_state["user_overrides"]
+    assert _fire_number(at, "Midwest") == before
+
+
+def test_buy_or_rent_switch_changes_the_numbers(monkeypatch):
+    at = _draw(monkeypatch, load_sample_household())
+    before = _fire_number(at, "Midwest")
+    at.radio(key="ms_housing_midwest").set_value("rent").run()
+    assert not at.exception
+    assert pl.get_state(at.session_state["user_overrides"])["edits"]["midwest"]["housing"] == "rent"
+    assert _fire_number(at, "Midwest") != before
+    assert [n for n in at.number_input if n.key == "ms_rent_midwest"]
+    at.number_input(key="ms_rent_midwest").set_value(900).run()
+    assert pl.get_state(at.session_state["user_overrides"])["edits"]["midwest"]["rent"] == 900
+    at.radio(key="ms_housing_midwest").set_value("buy").run()
+    at.number_input(key="ms_price_midwest").set_value(150_000).run()
+    assert pl.get_place(pl.get_state(at.session_state["user_overrides"]), "midwest").price == 150_000
+
+
+def test_home_area_changes_the_places_and_is_saved(monkeypatch):
+    at = _draw(monkeypatch, load_sample_household())
+    mid, here = _fire_number(at, "Midwest"), _fire_number(at, "Where you live now")
+    at.selectbox(key="ms_home_area").select("M_SFB").run()
+    assert not at.exception
+    state = pl.get_state(at.session_state["user_overrides"])
+    assert state["settings"]["home"] == "M_SFB"
+    assert _fire_number(at, "Midwest") != mid                           # cheaper against San Francisco
+    assert _fire_number(at, "Where you live now") == here                # your plan is still your plan
+    at.selectbox(key="ms_home_area").select("CA").run()
     assert pl.KEY not in at.session_state["user_overrides"]
 
 
 def test_add_and_remove_a_custom_place(monkeypatch):
     at = _draw(monkeypatch, load_sample_household())
     at.text_input(key="ms_new_name").set_value("Lisbon <b>")
-    at.number_input(key="ms_new_factor").set_value(0.7)
-    at.selectbox(key="ms_new_tax").select(pl.TAX_NONE)
+    at.selectbox(key="ms_new_area").select("X_PT")
     at.button(key="FormSubmitter:ms_new_form-Add place").click().run()
     assert not at.exception
     state = pl.get_state(at.session_state["user_overrides"])
-    assert [c["name"] for c in state["custom"]] == ["Lisbon <b>"]
+    assert [(c["name"], c["area"], c["housing"], c["tax"]) for c in state["custom"]] == [
+        ("Lisbon <b>", "X_PT", "rent", "none")]
     assert any(b.key == "ms_confirm_c1" for b in at.button)
     text = _md(at)
     assert "Lisbon &lt;b&gt;" in text and "Lisbon <b>" not in text       # names are escaped
+    at.selectbox(key="ms_area_c1").select("X_MX").run()                 # base it on another area
+    assert pl.get_place(pl.get_state(at.session_state["user_overrides"]), "c1").area == "X_MX"
     at.button(key="ms_remove_c1").click().run()
     assert pl.get_state(at.session_state["user_overrides"])["custom"] == []
 
@@ -142,11 +193,24 @@ def test_adding_with_no_name_asks_for_one(monkeypatch):
 
 def test_removed_built_in_place_disappears_and_comes_back(monkeypatch):
     at = _draw(monkeypatch, load_sample_household())
-    at.selectbox(key="ms_edit_pick").select("thailand").run()
     at.button(key="ms_remove_thailand").click().run()
     assert not any(b.key == "ms_confirm_thailand" for b in at.button)
     at.button(key="ms_restore").click().run()
     assert any(b.key == "ms_confirm_thailand" for b in at.button)
+
+
+def test_old_saved_places_load(monkeypatch):
+    ov = {**load_sample_household(),
+          pl.KEY: {"edits": {"midwest": {"factor": 0.7}},
+                   "custom": [{"id": "c1", "name": "Old place", "factor": 0.8, "tax": "US:TX"}],
+                   "hidden": ["italy"], "settings": {"rate": 0.035}}}
+    at = _draw(monkeypatch, ov)
+    assert not at.exception and not at.error
+    assert any(b.key == "ms_confirm_c1" for b in at.button)
+    assert not any(b.key == "ms_confirm_italy" for b in at.button)
+    assert at.number_input(key="ms_adjust_midwest").value == pytest.approx(round(0.7 / 0.88, 3))
+    assert at.number_input(key="ms_adjust_c1").value == pytest.approx(0.8)
+    assert at.radio(key="ms_housing_c1").value == "keep"
 
 
 def test_confirm_runs_the_simulation_and_goes_stale_when_the_place_changes(monkeypatch):
@@ -159,9 +223,7 @@ def test_confirm_runs_the_simulation_and_goes_stale_when_the_place_changes(monke
     btn = at.button(key="ms_confirm_here")
     assert btn.disabled and "Confirmed" in btn.label
     # Change the place: the old check no longer matches.
-    at.selectbox(key="ms_edit_pick").select("here").run()
-    at.number_input(key="ms_edit_factor_here").set_value(0.5)
-    at.button(key="FormSubmitter:ms_edit_form_here-Save place").click().run()
+    at.number_input(key="ms_adjust_here").set_value(0.5).run()
     assert "Out of date" in _md(at)
     assert not at.button(key="ms_confirm_here").disabled
 
@@ -170,9 +232,8 @@ def test_editing_a_place_does_not_make_the_main_run_look_stale(monkeypatch):
     from utils import sim_runner as sr
     at = _draw(monkeypatch, load_sample_household())
     before = sr._hashable(at.session_state["user_overrides"])
-    at.selectbox(key="ms_edit_pick").select("texas").run()
-    at.number_input(key="ms_edit_factor_texas").set_value(0.6)
-    at.button(key="FormSubmitter:ms_edit_form_texas-Save place").click().run()
+    at.number_input(key="ms_adjust_texas").set_value(0.6).run()
+    at.selectbox(key="ms_home_area").select("M_SEA").run()
     assert sr._hashable(at.session_state["user_overrides"]) == before
 
 
@@ -180,7 +241,8 @@ def test_loading_another_profile_clears_the_section_widgets():
     from utils.widget_sync import reset_input_widget_state
 
     class _St:
-        session_state = {"ms_rate": 3.0, "ms_res_here": {}, "ms_edit_pick": "texas", "keep_me": 1}
+        session_state = {"ms_rate": 3.0, "ms_res_here": {}, "ms_adjust_texas": 0.9, "ms_home_area": "OH",
+                         "keep_me": 1}
 
     reset_input_widget_state(_St)
     assert _St.session_state == {"keep_me": 1}
@@ -206,5 +268,8 @@ def test_confirm_goes_to_the_browser_when_its_workers_are_ready(monkeypatch):
     assert sent["kind"] == "place:midwest"
     assert {c[0] for c in sent["plan"].job["calls"]} == {"scan", "batch"}
     assert sent["plan"].job["base"]["RETIREMENT_STATE_CHOICE"] == "OH"
+    # The move to the Midwest rides along as one patch per age the scan tries.
+    patches = sent["plan"].job["patches"]
+    assert patches and all(p["HOME_EVENTS"][-1]["action"] == "sell_buy" for p in patches)
     assert "ms_res_midwest" in at.session_state
     assert "Simulation check" in _md(at)

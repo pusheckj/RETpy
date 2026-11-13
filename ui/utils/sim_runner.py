@@ -808,11 +808,30 @@ def retirement_spending_basis(user_overrides: dict, retirement_age: int) -> dict
     the retirement-spending knob replaces (``retirement_living_base``), and
     ``today`` is what the household spends now. Taxes and one-off items are left
     out; the simulation adds them.
+
+    For pricing places (utils/milestones.place_cost): ``weights`` is today's
+    yearly amount per everyday category (place_costs categories; the legacy
+    YOUR_OTHER / UTILITIES bundle when no SPEND_* category is set), in the same
+    terms as the living base. ``housing`` is the config housing term at that age
+    (``cfg.housing_annual``), ``pre_medicare`` whether that age is before
+    Medicare, and ``health_knobs`` the pre-Medicare price inputs a place scales.
     """
+    try:
+        from utils import place_costs as pc
+    except ImportError:  # pragma: no cover
+        from ui.utils import place_costs as pc  # type: ignore
     original = _apply_overrides(build_config_overrides(user_overrides))
     try:
         age = max(int(retirement_age), int(getattr(cfg, "YOUR_AGE", 25)))
         adults = 2 if cfg.has_partner() else 1
+        if cfg.granular_nonhousing_annual() is not None:
+            weights = {cat: float(getattr(cfg, key, 0) or 0) * 12.0
+                       for key, cat in pc.CONFIG_KEYS.items()}
+        else:
+            weights = {pc.CAT_UTILITIES: float(getattr(cfg, "UTILITIES_MONTHLY", 0) or 0) * 12.0,
+                       pc.CAT_FUN: float(getattr(cfg, "YOUR_OTHER_MONTHLY", 0) or 0) * 12.0,
+                       pc.CAT_PARTNER: float(getattr(cfg, "PARTNER_OTHER_MONTHLY", 0) or 0) * 12.0}
+        bands = getattr(cfg, "HEALTHCARE_COSTS_BY_AGE", None)
         return {
             "core": float(cfg.calculate_annual_expenses(age, 1.0, 1.0, retirement=True,
                                                         retirement_age=age)),
@@ -821,23 +840,144 @@ def retirement_spending_basis(user_overrides: dict, retirement_age: int) -> dict
             "today": float(getattr(cfg, "CURRENT_ANNUAL_EXPENSES", 0.0) or 0.0),
             "discretionary_ratio": float(getattr(cfg, "DISCRETIONARY_EXPENSE_RATIO", 0.30)),
             "retirement_age": age,
+            "weights": {c: w for c, w in weights.items() if w > 0},
+            "housing": float(cfg.housing_annual(age)),
+            "pre_medicare": age < int(getattr(cfg, "MEDICARE_AGE", 65)),
+            "health_knobs": {
+                "ACA_BENCHMARK_MONTHLY_AT_40": getattr(cfg, "ACA_BENCHMARK_MONTHLY_AT_40", None),
+                "ACA_CHILD_MONTHLY": getattr(cfg, "ACA_CHILD_MONTHLY", None),
+                "HEALTHCARE_COSTS_BY_AGE": dict(bands) if isinstance(bands, dict) else None,
+            },
+        }
+    finally:
+        _restore_overrides(original)
+
+
+#: Rough tax rate on the part of a home-sale gain above the exclusion, for the
+#: quick rule only (the engine taxes it exactly: federal LTCG, state, NIIT).
+ROUGH_HOME_GAIN_TAX = 0.20
+
+
+def home_sale_path(user_overrides: dict, last_age: int = None) -> dict:
+    """What selling your home would bring at each age, the engine's way, WITHOUT
+    simulating. For "sell, then buy or rent there" in Freedom milestones.
+
+    Follows ``AccountPortfolio``: the home's value is flat in today's dollars;
+    the loan amortizes a year per age at its own rate (extra principal
+    included); the plan's own moves (``cfg.housing_events``) switch the home and
+    loan at their ages. ``proceeds[age]`` is the cash a sale AT that age, before
+    that age's planned moves, leaves: value - loan - selling costs - a rough tax
+    on any gain above the exclusion (``ROUGH_HOME_GAIN_TAX``). 0 while renting.
+    ``housing[age]`` is what the plan itself pays for housing that year, its own
+    moves included (``AccountPortfolio.housing_expense_for_age``).
+
+    Also returns the plan's normalized ``events``, ``owner`` (owns today), the
+    move inputs (``moving_costs``, ``mortgage_rate`` for a new loan,
+    ``carry_after_payoff``) and ``legacy_move`` (the old single house move is on).
+    """
+    try:
+        from retirement_sim.account_simulation import _level_payment
+    except ImportError:  # pragma: no cover
+        from account_simulation import _level_payment  # type: ignore
+    original = _apply_overrides(build_config_overrides(user_overrides))
+    try:
+        start = int(cfg.YOUR_AGE)
+        end = max(start, int(cfg.plan_end_age() if last_age is None else last_age))
+        events = cfg.housing_events()
+        value = float(cfg.HOME_VALUE or 0)
+        owns = value > 0 or float(cfg.MORTGAGE_MONTHLY or 0) > 0
+        basis_raw = getattr(cfg, "HOME_COST_BASIS", None)
+        basis = None if basis_raw is None else float(basis_raw)
+        bal = float(cfg.MORTGAGE_BALANCE or 0)
+        rate = float(cfg.MORTGAGE_RATE_FOR_PAYOFF)
+        pi = _level_payment(bal, rate, int(cfg.MORTGAGE_YEARS_REMAINING or 0))
+        sell_pct = float(getattr(cfg, "HOME_SELLING_COST_PCT", 0.06))
+        exclusion = float(cfg.home_sale_exclusion())
+        extra_fn = getattr(cfg, "extra_mortgage_payment_for_age", None)
+        # Housing the plan itself pays at each age (its own moves included), the
+        # engine's AccountPortfolio.housing_expense_for_age. Without moves that is
+        # exactly the config term.
+        monthly = float(cfg.MORTGAGE_MONTHLY or 0)
+        payoff = start + int(cfg.MORTGAGE_YEARS_REMAINING or 0)
+        rent = float(getattr(cfg, "SPEND_RENT_MONTHLY", 0) or 0) if cfg.is_renter() else 0.0
+        carrying = None
+        proceeds, housing = {}, {}
+        for age in range(start, end + 1):
+            if owns and value > 0:
+                fees = value * sell_pct
+                net = max(0.0, value - max(0.0, bal) - fees)
+                gain = value - fees - (value if basis is None else basis) - exclusion
+                proceeds[age] = max(0.0, net - max(0.0, gain) * ROUGH_HOME_GAIN_TAX)
+            else:
+                proceeds[age] = 0.0
+            for e in (ev for ev in events if ev["age"] == age):
+                if e["action"] == cfg.HOME_SELL_RENT:
+                    value, bal, pi, owns, basis = 0.0, 0.0, 0.0, False, None
+                    monthly, payoff, rent, carrying = 0.0, age, float(e["rent"]), None
+                else:
+                    value, bal, rate = float(e["price"]), float(e["loan"]), float(e["rate"])
+                    pi = _level_payment(bal, rate, e["years"])
+                    owns, basis = True, value
+                    monthly, payoff, rent = float(e["monthly"]), age + int(e["years"]), 0.0
+                    carrying = e.get("carrying_pct")
+            if not events:
+                housing[age] = float(cfg.housing_annual(age))
+            elif not owns:
+                housing[age] = rent * 12.0
+            elif age < payoff:
+                housing[age] = monthly * 12.0
+            else:
+                housing[age] = float(cfg.home_carrying_cost_annual(value, carrying))
+            if bal > 0 and pi > 0:
+                extra = float(extra_fn(age)) if callable(extra_fn) else 0.0
+                r = max(0.0, rate) / 12.0
+                for _ in range(12):
+                    after = bal * (1.0 + r) - pi
+                    if after <= 0:
+                        bal = 0.0
+                        break
+                    bal = after - min(extra / 12.0, after)
+                    if bal < 0.01:
+                        bal = 0.0
+                        break
+        return {
+            "proceeds": proceeds,
+            "housing": housing,
+            "events": [dict(e) for e in events],
+            "owner": float(cfg.HOME_VALUE or 0) > 0 or float(cfg.MORTGAGE_MONTHLY or 0) > 0,
+            "moving_costs": float(getattr(cfg, "HOUSE_MOVING_COSTS", 10_000) or 0),
+            "mortgage_rate": float(cfg.new_mortgage_rate()),
+            "carry_after_payoff": bool(getattr(cfg, "MODEL_HOME_CARRYING_COST_AFTER_PAYOFF", True)),
+            "legacy_move": bool(getattr(cfg, "HOUSE_MOVE_ENABLED", False)),
         }
     finally:
         _restore_overrides(original)
 
 
 def plan_place_check(user_overrides: dict, place_overrides: dict, n_simulations: int = 1000,
-                     target_retirement_age: int = 55) -> Plan:
+                     target_retirement_age: int = 55, age_patch=None) -> Plan:
     """The success-by-age scan plus the target-age run for ONE place, as plain
     "scan" and "batch" calls (so the visitor's browser can run them).
 
     ``place_overrides`` are engine keys on top of the user's inputs (see
-    milestones.place_overrides). The scan uses the same seeds and run counts as
+    milestones.place_overrides). ``age_patch(age)`` optionally gives config keys
+    for retiring at that age (a move to the place AT that age:
+    milestones.place_home_events); each scanned age and the target age run under
+    their own patch. The scan uses the same seeds and run counts as
     ``plan_full_analysis``, so a place that changes nothing reproduces the plan's
     own earliest age."""
     merged = {**user_overrides, **place_overrides}
     n = max(1, int(n_simulations))
-    key = (_hashable(merged), n, int(target_retirement_age))
+    your_age0 = int(merged.get("YOUR_AGE", getattr(cfg, "YOUR_AGE", 25)) or 25)
+    scan_ages = list(range(max(25, your_age0), max(76, your_age0 + 5)))
+    target0 = max(int(target_retirement_age), your_age0)
+    patch_for = {}
+    if age_patch is not None:
+        for a in sorted(set(scan_ages) | {target0}):
+            p = age_patch(a)
+            if p:
+                patch_for[a] = dict(p)
+    key = (_hashable(merged), n, int(target_retirement_age), _freeze(patch_for))
     hit = _small_cache_lookup(_PLACE_CACHE, "place", key)
     if hit is not None:
         return Plan("place", key, merged, result=hit)
@@ -848,13 +988,18 @@ def plan_place_check(user_overrides: dict, place_overrides: dict, n_simulations:
         target_success = float(getattr(cfg, "TARGET_SUCCESS_RATE", 0.80))
         scan_sims = max(200, n // 4)
         ages = list(range(max(25, your_age), max(76, your_age + 5)))
-        calls = [["scan", -1, [age, scan_sims, 1000 + i, target_success]]
+        patches, index = [], {}
+        for a, p in patch_for.items():
+            index[a] = len(patches)
+            patches.append(p)
+        calls = [["scan", index.get(age, -1), [age, scan_sims, 1000 + i, target_success]]
                  for i, age in enumerate(ages)]
         # The target age runs as the main analysis does (same chunks and seeds, no
         # per-path detail), so a place that changes nothing gives the plan's own numbers.
         chunk_sizes = _split_count(min(n, 5000), _PRIMARY_CHUNKS)
-        calls += [["batch", -1, [target_age, size, 0, 2000 + j]] for j, size in enumerate(chunk_sizes)]
-        job = {"base": mc_jobs.snapshot(), "patches": [], "calls": calls}
+        calls += [["batch", index.get(target_age, -1), [target_age, size, 0, 2000 + j]]
+                  for j, size in enumerate(chunk_sizes)]
+        job = {"base": mc_jobs.snapshot(), "patches": patches, "calls": calls}
     finally:
         _restore_overrides(original)
     n_scans = len(ages)
@@ -875,10 +1020,11 @@ def plan_place_check(user_overrides: dict, place_overrides: dict, n_simulations:
 
 
 def run_place_check(user_overrides: dict, place_overrides: dict, n_simulations: int = 1000,
-                    target_retirement_age: int = 55, progress_callback=None) -> Dict[str, Any]:
+                    target_retirement_age: int = 55, progress_callback=None,
+                    age_patch=None) -> Dict[str, Any]:
     """Run ``plan_place_check`` here (the server)."""
     return execute_plan(plan_place_check(user_overrides, place_overrides, n_simulations,
-                                         target_retirement_age), progress_callback)
+                                         target_retirement_age, age_patch), progress_callback)
 
 
 #: Lifecycle toggle flags that gate one-off/recurring life events in the engine.

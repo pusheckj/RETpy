@@ -93,10 +93,12 @@ QUESTIONS: list[tuple[str, str]] = [
         "(stop saving and growth alone gets you to FIRE by your retirement age), "
         "**FIRE** (your investments pay for life at a withdrawal rate), and "
         "others such as the emergency fund. FIRE and Coast FIRE are shown for "
-        "places you can edit, like the Midwest or Portugal. The quick rule is an "
-        "estimate. Press *Confirm with simulation* on a place to test it with the "
-        "full model. The cost factors and abroad tax settings are rough "
-        "placeholders, so set your own.",
+        "places you can edit, like the Midwest or Portugal. Each place's spending is "
+        "built line by line: everyday costs are scaled against where you live now, "
+        "and moving sells your home, then buys or rents there at that place's prices. "
+        "The quick rule is an estimate. Press *Confirm with simulation* on a place to "
+        "test the same move with the full model. The prices and abroad tax settings "
+        "are rough estimates, so set your own.",
     ),
     (
         "How do I save my inputs?",
