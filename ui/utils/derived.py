@@ -65,7 +65,8 @@ def _working_tax_inputs(overrides: dict, pretax_savings: bool = True) -> dict:
         k401 = min(max(0, safe_int(overrides.get("YOUR_401K_CONTRIBUTION", 0), 0)),
                    cfg.get_401k_limit(your_age, year))
         hsa = min(max(0, safe_int(overrides.get("YOUR_HSA_CONTRIBUTION", 0), 0)),
-                  cfg.get_hsa_limit(your_age, year, is_family=True))
+                  cfg.get_hsa_limit(your_age, year,
+                                    is_family=partner or bool(cfg.children_in(overrides))))
         if partner:
             p401 = min(max(0, safe_int(overrides.get("PARTNER_401K_CONTRIBUTION", 0), 0)),
                        cfg.get_401k_limit(partner_age, year))
@@ -77,6 +78,8 @@ def _working_tax_inputs(overrides: dict, pretax_savings: bool = True) -> dict:
         your_age=your_age, partner_age=partner_age, status=status, partner=partner,
         state=overrides.get("STATE_CHOICE", "CA"),
         flat_rate=as_fraction(overrides.get("YOUR_MARGINAL_TAX_RATE", 0.05), 0.05),
+        # The child tax credit counts the children under 17 THIS plan has today.
+        children_under_17=cfg.children_under_17(0, cfg.children_in(overrides)),
     )
 
 
@@ -300,12 +303,19 @@ def savings_budget(overrides: dict, custom_pcts: Dict[str, float] = None) -> Dic
     mode = str(overrides.get("SAVINGS_MODE", AUTO_ALLOCATE_MODE))
     if mode == AUTO_ALLOCATE_MODE:
         def amounts_for(left: int) -> Dict[str, int]:
-            first = auto_allocate_savings(left, overrides)
-            extra = college + after_tax_401k_this_year(
-                overrides, first["YOUR_401K_CONTRIBUTION"])
-            # set_aside only trims the brokerage share; the 401(k)/HSA/IRA
-            # amounts (and so the tax) are the same as in ``first``.
-            return auto_allocate_savings(left, overrides, set_aside=extra)
+            # The set-aside comes off the budget before the accounts are filled, and
+            # the after-tax 401(k) depends on the 401(k) deferral that leaves: settle
+            # the two (a couple of passes; the deferral only falls as extra grows).
+            amounts = auto_allocate_savings(left, overrides)
+            for _ in range(4):
+                extra = college + after_tax_401k_this_year(
+                    overrides, amounts["YOUR_401K_CONTRIBUTION"])
+                again = auto_allocate_savings(left, overrides, set_aside=extra)
+                settled = again["YOUR_401K_CONTRIBUTION"] == amounts["YOUR_401K_CONTRIBUTION"]
+                amounts = again
+                if settled:
+                    break
+            return amounts
     elif mode == CUSTOM_PCT_MODE and custom_pcts is not None:
         def amounts_for(left: int) -> Dict[str, int]:
             return custom_pct_amounts(custom_pcts, left, overrides)
@@ -346,38 +356,26 @@ def savings_budget(overrides: dict, custom_pcts: Dict[str, float] = None) -> Dic
             "disposable": left, "amounts": amounts, "set_aside": set_aside}
 
 
-# IRS limits (2024)
-LIMITS_2024 = {
-    "401k_employee": 23_000,
-    "401k_catchup_50": 7_500,
-    "ira": 7_000,
-    "ira_catchup_50": 1_000,
-    "hsa_family": 8_300,
-    "hsa_individual": 4_150,
-    "hsa_catchup_55": 1_000,
-}
+def hsa_family(overrides: dict) -> bool:
+    """Family HSA coverage: a partner or at least one child in the plan (the
+    engine's rule, ``cfg.hsa_is_family``, for an overrides dict)."""
+    return (safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0
+            or bool(cfg.children_in(overrides)))
 
 
 def get_limit(name: str, age: int = 30, family: bool = True) -> int:
-    """Return 2024 IRS limit for a given contribution type."""
+    """Return the IRS limit (today's dollars) for a contribution type at ``age``.
+
+    The engine's own limits (cfg.get_401k_limit etc., 2026 base year with the
+    50+ / 60-63 / 55+ catch-ups), so the buttons and Auto-allocate can never
+    differ from what the simulation allows."""
+    year = cfg.CURRENT_YEAR
     if name == "401k":
-        v = LIMITS_2024["401k_employee"]
-        if age >= 50:
-            v += LIMITS_2024["401k_catchup_50"]
-        return v
+        return int(cfg.get_401k_limit(age, year))
     if name == "ira":
-        v = LIMITS_2024["ira"]
-        if age >= 50:
-            v += LIMITS_2024["ira_catchup_50"]
-        return v
+        return int(cfg.get_ira_limit(age, year))
     if name == "hsa":
-        v = LIMITS_2024["hsa_family"] if family else LIMITS_2024["hsa_individual"]
-        # HSA catch-up starts at 55 (not 50, unlike 401k/IRA). Without this the
-        # "max out tax-advantaged" preset and auto_allocate_savings under-filled
-        # a 55+ user's HSA by $1,000/yr and routed it to brokerage instead.
-        if age >= 55:
-            v += LIMITS_2024["hsa_catchup_55"]
-        return v
+        return int(cfg.get_hsa_limit(age, year, is_family=family))
     return 0
 
 
@@ -440,7 +438,7 @@ def custom_pct_amounts(pcts: Dict[str, float], disposable: int, overrides: dict)
     caps = {
         "YOUR_401K_CONTRIBUTION": get_limit("401k", your_age),
         "PARTNER_401K_CONTRIBUTION": get_limit("401k", partner_age) if partner_age > 0 else 0,
-        "YOUR_HSA_CONTRIBUTION": get_limit("hsa", your_age, family=True),
+        "YOUR_HSA_CONTRIBUTION": get_limit("hsa", your_age, family=hsa_family(overrides)),
         "YOUR_BACKDOOR_ROTH": get_limit("ira", your_age),
         "PARTNER_ROTH_CONTRIBUTION": get_limit("ira", partner_age) if partner_age > 0 else 0,
     }
@@ -487,21 +485,17 @@ def sidebar_savings_budget(state) -> Dict[str, object]:
 
 
 def partner_roth_allowed(overrides: dict, amounts: dict) -> float:
-    """Your partner's direct Roth IRA this year, as the simulation allows it
-    (account_simulation.working_year_cashflow): the IRA limit, reduced by the
-    Roth income phase-out of the return their income is on (MAGI after the
-    401(k)/HSA ``amounts``), and no more than the earned income behind it."""
+    """Your partner's Roth IRA this year, as the simulation allows it
+    (account_simulation.working_year_cashflow): the IRA limit, no more than the
+    earned income behind it. There is no income phase-out: above the direct-Roth
+    range it goes in as a backdoor Roth, as your own (YOUR_BACKDOOR_ROTH) does."""
     partner_age = safe_int(overrides.get("PARTNER_AGE", 0), 0)
     kw = _working_tax_inputs({**overrides, **amounts})
-    t = cfg.working_year_taxes(**kw)
-    two = t["two_returns"]
-    magi = t["partner"]["agi"] + (0.0 if two else t["you"]["agi"])
-    joint = (not two) and kw["status"] == cfg.normalize_filing_status("MFJ")
+    joint = (kw["status"] == cfg.normalize_filing_status("MFJ")
+             and not cfg.files_two_returns(kw["status"], kw["partner"]))
     your_roth = float(amounts.get("YOUR_BACKDOOR_ROTH", 0) or 0)
     earned = kw["partner_wages"] + (max(0.0, kw["your_wages"] - your_roth) if joint else 0.0)
-    allowed = cfg.roth_ira_allowed(get_limit("ira", partner_age), magi,
-                                   cfg.return_status("partner", kw["status"], kw["partner"]))
-    return max(0.0, min(allowed, earned))
+    return max(0.0, min(float(get_limit("ira", partner_age)), earned))
 
 
 def split_brokerage(remaining: int, overrides: dict, allocated: dict,
@@ -559,9 +553,10 @@ def split_brokerage(remaining: int, overrides: dict, allocated: dict,
 def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0) -> Dict[str, int]:
     """Default allocation rule: max tax-advantaged first, residual to brokerage.
 
-    ``set_aside`` is paid from what's left before the brokerage gets the rest:
-    this year's 529 saving and after-tax 401(k), which the simulation also
-    funds ahead of its brokerage sweep (see savings_budget).
+    ``set_aside`` is paid from the budget before any account is filled: this
+    year's 529 saving and after-tax 401(k), which the simulation funds from
+    take-home ahead of its brokerage sweep (see savings_budget). The accounts
+    below share what is left, so allocated + set aside = the disposable amount.
 
     Order:
       1. Your 401(k) → IRS limit
@@ -590,7 +585,11 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
         "YOUR_BROKERAGE_CONTRIBUTION": 0,
         "PARTNER_BROKERAGE_CONTRIBUTION": 0,
     }
-    remaining = max(0, int(disposable))
+    # ``set_aside`` (529, after-tax 401(k)) is funded from take-home before anything
+    # else is, so it comes off the budget FIRST. Taken only from the brokerage's
+    # share, the 401(k)s could use the whole budget and the simulation would pay the
+    # 529 out of cash ("Left to save" would then disagree with "Total allocated").
+    remaining = max(0, int(disposable) - int(round(set_aside)))
 
     # 1. Your 401k
     cap = get_limit("401k", your_age)
@@ -605,9 +604,9 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
         allocated["PARTNER_401K_CONTRIBUTION"] = fill
         remaining -= fill
 
-    # 3. HSA family (assume eligibility)
+    # 3. HSA (assume eligibility): the family limit with a partner or a child, else self-only
     if remaining > 0:
-        cap = get_limit("hsa", your_age, family=True)
+        cap = get_limit("hsa", your_age, family=hsa_family(overrides))
         fill = min(cap, remaining)
         allocated["YOUR_HSA_CONTRIBUTION"] = fill
         remaining -= fill
@@ -626,8 +625,6 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
         fill = min(cap, remaining)
         allocated["PARTNER_ROTH_CONTRIBUTION"] = fill
         remaining -= fill
-
-    remaining = max(0, remaining - int(round(set_aside)))
 
     # 6. Brokerage (residual), split between you as the simulation splits it.
     if remaining > 0:

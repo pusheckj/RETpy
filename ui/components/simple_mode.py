@@ -183,9 +183,7 @@ def _max_out(st, field: str, current: float, target: Any, tip: str) -> None:
     elif current + 1e-6 >= target:
         st.caption("✓ At the limit")
     else:
-        # These are this year's IRS limits in actual dollars. The planner works in 2024
-        # dollars, so its Max out amounts are lower; say so rather than leave a mismatch.
-        tip += " This is this year's limit. The planner uses 2024 dollars, so its limits are lower."
+        tip += " This is this year's limit."
         st.button("Max out", key=f"simple_max_{field}", help=tip, width="content",
                   on_click=_set_widget, args=(st.session_state, _W + field, target))
 

@@ -162,11 +162,11 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 
 | Parameter | Default | Description |
 |---|---|---|
-| `YOUR_401K_CONTRIBUTION` | `$23,000` | Your annual 401(k) deferral. Capped by `get_401k_limit()` and by your pay. |
+| `YOUR_401K_CONTRIBUTION` | `$24,500` | Your annual 401(k) deferral. Capped by `get_401k_limit()` and by your pay. |
 | `YOUR_401K_MATCH_PCT` | `0.06` | Employer match: dollar for dollar on your deferral, up to this fraction of base salary. The match is `min(your 401(k) contribution, pct x base)`, so contributing less than the match % earns less match. Set in the Savings section. |
 | `YOUR_HSA_CONTRIBUTION` | `$7,550` | Your HSA contribution. |
 | `YOUR_HSA_MATCH` | `$750` | Employer HSA contribution. |
-| `YOUR_BACKDOOR_ROTH` | `$7,000` | Annual backdoor Roth IRA conversion. |
+| `YOUR_BACKDOOR_ROTH` | `$7,500` | Annual backdoor Roth IRA conversion. |
 | `YOUR_ESPP_PCT` | `0.10` | Fraction of base salary routed through ESPP. |
 | `YOUR_ESPP_DISCOUNT` | `0.15` | ESPP purchase discount (15% is typical). |
 
@@ -174,9 +174,9 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 
 | Parameter | Default | Description |
 |---|---|---|
-| `PARTNER_401K_CONTRIBUTION` | `$23,000` | Partner 401(k) contribution. |
+| `PARTNER_401K_CONTRIBUTION` | `$24,500` | Partner 401(k) contribution. |
 | `PARTNER_401K_MATCH_PCT` | `0.0` | Partner's employer match, same rule as `YOUR_401K_MATCH_PCT`. (Replaces the never-used `PARTNER_401K_MATCH`.) |
-| `PARTNER_ROTH_CONTRIBUTION` | `$7,000` | Partner direct Roth IRA contribution, reduced by the 2024 Roth income phase-out of the return it's on (joint MAGI $230k–$240k; single/HOH $146k–$161k) and limited to earned income. Marriage alone no longer stops it. |
+| `PARTNER_ROTH_CONTRIBUTION` | `$7,500` | Partner Roth IRA contribution, limited to the IRA limit and earned income. No income phase-out: above the direct-Roth range it is a backdoor Roth, like `YOUR_BACKDOOR_ROTH`. |
 | `PARTNER_ANNUAL_SPENDING` | `$24,000` | Partner's personal spending — kept separate from household expenses. |
 
 ---
@@ -307,7 +307,7 @@ All returns are **real** (inflation-adjusted).
 | `EXPECTED_INFLATION` | `0.0275` | General inflation, per year. |
 | `INFLATION_VOLATILITY` | `0.015` | Std dev of annual inflation draws. |
 
-`INFLATION_RATES` provides category-specific rates. **The model runs in an all-real (today's-dollars) frame:** because investment returns are drawn real, general CPI does not grow any liability. The `general` rate is used only to define the *baseline* that other categories are measured against — the general factor itself stays flat at 1.0. Each other category grows only by its **real-excess** rate = (category rate − `general` rate). So `housing` (equal to `general`) is flat in real terms, `healthcare` grows at 1.75%/yr real, and `childcare` at 1.25%/yr real.
+`INFLATION_RATES` provides category-specific rates. **The model runs in an all-real (today's-dollars) frame:** because investment returns are drawn real, general CPI does not grow any liability. The `general` rate is used only to define the *baseline* that other categories are measured against — the general factor itself stays flat at 1.0. Each other category grows only by its **real-excess** rate = (category rate − `general` rate). So `housing` (equal to `general`) is flat in real terms, `healthcare` grows at 1.75%/yr real, and `childcare` at 1.25%/yr real. Those premiums are fixed at import (`INFLATION_REAL_EXCESS`), so the *Expected inflation* slider does not change them.
 
 | Key | Default | Real-excess (rate − general) | Used for |
 |---|---|---|---|
@@ -349,7 +349,7 @@ All tables are 2024 figures held flat in today's dollars (statutory thresholds t
 | `STANDARD_DEDUCTION_BY_STATUS` | $29,200 / $14,600 / $21,900 | Federal standard deduction. Age 65+ adds $1,550 per spouse (joint) or $1,950 (single/HOH). |
 | `LTCG_BRACKETS_BY_STATUS` | 0% to $94,050 / $47,025 / $63,000 | 15% to $583,750 / $518,900 / $551,350, then 20%. |
 | `SS_WAGE_BASE` | `$168,600` | Social Security wage base, per earner. With `SOCIAL_SECURITY_TAX_RATE` 6.2%, `MEDICARE_TAX_RATE` 1.45%, `ADDITIONAL_MEDICARE_TAX_RATE` 0.9% above `ADDITIONAL_MEDICARE_THRESHOLD_BY_STATUS` ($250k joint / $200k otherwise, per return). |
-| `ROTH_IRA_PHASEOUT_BY_STATUS` | $230k–$240k joint, $146k–$161k others | Direct Roth IRA phase-out (partner's Roth). |
+| `ROTH_IRA_PHASEOUT_BY_STATUS` | $230k–$240k joint, $146k–$161k others | Direct Roth IRA phase-out (used by `roth_ira_allowed`; the engine's partner Roth ignores it, see `PARTNER_ROTH_CONTRIBUTION`). |
 | `YOUR_MARGINAL_TAX_RATE` | `0.05` | Flat **state** rate for `STATE_CHOICE = "Other"` (the app's *Another state (flat rate)*), applied above the federal standard deduction, Social Security exempt. |
 | `RETIREMENT_STATE_CHOICE` | `None` | State whose income tax applies to retirement-year withdrawals, Roth conversions and RMDs. `None` means the same as `STATE_CHOICE`, so plans are unchanged. Working years always use `STATE_CHOICE`. Same value forms as `STATE_CHOICE`. The UI's Freedom milestones check sets it to test retiring in another place. |
 

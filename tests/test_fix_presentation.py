@@ -234,7 +234,7 @@ def test_manual_401k_max_clears_age50_catchup_limit():
     from utils.derived import get_limit
 
     # Auto mode writes get_limit("401k", age) straight into user_overrides.
-    assert get_limit("401k", 55) == 30_500, "limit table changed; re-check bound"
+    assert get_limit("401k", 55) == 32_500, "limit table changed; re-check bound"
     assert _MANUAL_401K_MAX >= get_limit("401k", 55), (
         "manual 401(k) max_value must clear the age-50+ catch-up limit, "
         "otherwise st.number_input raises StreamlitValueAboveMaxError"
@@ -259,14 +259,14 @@ def test_render_manual_does_not_raise_for_age_55_auto_allocation():
 
     overrides = {"YOUR_AGE": 55, "PARTNER_AGE": 53, "YOUR_HSA": 40_000}
     overrides.update(auto_allocate_savings(200_000, overrides))
-    assert overrides["YOUR_401K_CONTRIBUTION"] == 30_500
+    assert overrides["YOUR_401K_CONTRIBUTION"] == 32_500
 
     st = FakeSt(overrides=overrides)
     _render_manual(st, 200_000, overrides)  # must not raise
 
     seeded = {k: v for k, v in st.session_state.items() if k.startswith("sv_manual_")}
-    assert seeded["sv_manual_your_401k"] == 30_500
-    assert seeded["sv_manual_partner_401k"] == 30_500
+    assert seeded["sv_manual_your_401k"] == 32_500
+    assert seeded["sv_manual_partner_401k"] == 32_500
 
 
 # ==========================================================================

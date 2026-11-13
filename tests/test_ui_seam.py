@@ -485,9 +485,11 @@ def test_savings_contributions_brokerage_matches_engine_sweep_after_marriage():
             row = next(r for r in rows if r["age"] == age)
             assert row["your_brokerage"] == pytest.approx(engine_your, abs=0.01)
             assert row["partner_brokerage"] == pytest.approx(engine_partner, abs=0.01)
-            # Married -> partner direct Roth must read as $0, not the flat
-            # PARTNER_ROTH_CONTRIBUTION default (the pre-fix bug).
-            assert row["partner_roth"] == 0.0
+            # The partner's Roth is whatever the engine's cash flow makes it (the
+            # IRA limit, no income phase-out: a backdoor Roth above the range),
+            # never the flat PARTNER_ROTH_CONTRIBUTION default (the pre-fix bug).
+            assert row["partner_roth"] == pytest.approx(
+                sr.sim.working_year_cashflow(age)["partner_roth"])
     finally:
         sr._restore_overrides(original)
 

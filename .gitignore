@@ -81,3 +81,8 @@ design_mockups/
 
 # Persisted Monte Carlo result cache (regenerates itself; engine-fingerprinted)
 .sim_cache/
+
+# macOS/iCloud duplicate copies (e.g. "app 2.py")
+* [0-9].py
+* [0-9].md
+* [0-9].css

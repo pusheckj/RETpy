@@ -208,7 +208,14 @@ class TestLifecycleFeaturesDefaultOff:
         # same release, no longer matters here: its only effect was the
         # married => no partner Roth rule, which the phase-out replaced.)
         # Previously {45: 0.081, 50: 0.512}.
-        assert results == {45: 0.066, 50: 0.431}
+        # REBASELINED 2026-11-13: the child tax credit ($2,200 a child under 17, plus
+        # its refundable part) now lowers working-year federal tax. This low-income
+        # household has two children at home for ~20 working years, so its take-home
+        # rises by thousands a year. Measured with the same seed: credit off
+        # {45: 0.069, 50: 0.436}, credit on {45: 0.105, 50: 0.539}. The 2026
+        # contribution limits and the partner's backdoor Roth do not move this pin
+        # (its contributions are far below every limit). Previously {45: 0.066, 50: 0.431}.
+        assert results == {45: 0.105, 50: 0.539}
 
 
 # ==============================================================================

@@ -252,8 +252,6 @@ def _recompute_derived(original: dict) -> None:
     if callable(granular_fn):
         granular_base = granular_fn()
     if granular_base is not None:
-        if hasattr(cfg, "MORTGAGE_ANNUAL"):
-            cfg.CURRENT_ANNUAL_EXPENSES = cfg.MORTGAGE_ANNUAL + granular_base
         cfg.BASE_RETIREMENT_EXPENSES_NO_MORTGAGE = granular_base
     else:
         # CONSERVATION (#18d): the household EXPENSE totals must use
@@ -263,10 +261,13 @@ def _recompute_derived(original: dict) -> None:
         # knob). The two default to the same value today, but overriding only
         # PARTNER_OTHER_MONTHLY (the expense knob) previously left this legacy
         # fallback silently using the stale PARTNER_MONTHLY_SPENDING.
-        if hasattr(cfg, "MORTGAGE_ANNUAL") and hasattr(cfg, "UTILITIES_ANNUAL") and hasattr(cfg, "YOUR_OTHER_ANNUAL") and hasattr(cfg, "PARTNER_OTHER_MONTHLY"):
-            cfg.CURRENT_ANNUAL_EXPENSES = cfg.MORTGAGE_ANNUAL + cfg.UTILITIES_ANNUAL + cfg.YOUR_OTHER_ANNUAL + (cfg.PARTNER_OTHER_MONTHLY * 12)
         if hasattr(cfg, "YOUR_OTHER_ANNUAL") and hasattr(cfg, "UTILITIES_ANNUAL") and hasattr(cfg, "PARTNER_OTHER_MONTHLY"):
             cfg.BASE_RETIREMENT_EXPENSES_NO_MORTGAGE = cfg.YOUR_OTHER_ANNUAL + cfg.UTILITIES_ANNUAL + (cfg.PARTNER_OTHER_MONTHLY * 12)
+    # config.current_annual_expenses(): the living base just set + TODAY'S housing
+    # (cfg.housing_annual: mortgage, or rent for a renter), the engine's own term.
+    if hasattr(cfg, "BASE_RETIREMENT_EXPENSES_NO_MORTGAGE") and callable(getattr(cfg, "housing_annual", None)):
+        cfg.CURRENT_ANNUAL_EXPENSES = (cfg.BASE_RETIREMENT_EXPENSES_NO_MORTGAGE
+                                       + cfg.housing_annual(cfg.YOUR_AGE))
     # config.py:608 — RETIREMENT_ANNUAL_EXPENSES = BASE_RETIREMENT_EXPENSES_NO_MORTGAGE.
     # Route through cfg.retirement_living_base() so the RETIREMENT_SPENDING_MODE
     # (% of today / absolute / same) is reflected in this display constant too
@@ -1393,7 +1394,7 @@ def _run_calls(job: Dict[str, Any], indices: List[int], progress_callback=None) 
 # into discretionary + spent-RMD so ``traditional == chosen + rmd_spent`` holds).
 _WD_BUCKETS = ("cash", "taxable", "traditional_chosen", "rmd_spent", "roth", "hsa")
 # Fields summarized by their own per-age median.
-_WD_MEDIAN_FIELDS = ("portfolio_value", "total_taxes", "ss_tax", "niit", "penalties",
+_WD_MEDIAN_FIELDS = ("portfolio_value", "total_taxes", "ss_tax", "niit", "state_tax", "penalties",
                      "rmd_gross", "roth_conversion", "roth_conversion_tax")
 
 
@@ -1489,7 +1490,8 @@ def _spending_by_age(spending_logs, field: str = "living") -> Dict[int, List[flo
                 v = float(row.get(field, 0.0))
             except (TypeError, ValueError):
                 continue
-            by_age[a].append(v)
+            if v == v and abs(v) != float("inf"):    # a NaN would poison every percentile
+                by_age[a].append(v)
     return by_age
 
 
@@ -1554,7 +1556,8 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
         n += int(r.get("n", 0))
         details.extend(r.get("details", []))
         for age, vals in (r.get("spending_by_age") or {}).items():
-            spending_by_age.setdefault(int(age), []).extend(vals)
+            spending_by_age.setdefault(int(age), []).extend(
+                v for v in vals if v == v and abs(v) != float("inf"))
         for age, vals in (r.get("health_by_age") or {}).items():
             health_by_age.setdefault(int(age), []).extend(vals)
 
@@ -2235,23 +2238,25 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
     comp table's flat after_tax gap split 75/25 into "federal"/"state", which
     showed state tax even with no state income tax.
     Retirement-years: the engine's logged taxes, as the per-age median across
-    runs (see ``_median_withdrawal_log_from_data``). The log
-    only records a combined income-tax total (``total_taxes``, which already
-    nets out federal + state + LTCG + Roth-conversion + RMD + SS tax minus
-    penalties) plus the separable ``niit``; there is no per-year federal/state/
-    LTCG split available, so the combined amount minus niit (already included
-    in total_taxes — see finding #17) is reported under ``federal`` and
-    ``state``/``ltcg`` are left at 0 rather than invented via an arbitrary
-    ratio. The dollar total (federal+state+ltcg+niit) is real and counts NIIT
-    exactly once. Provides ``gross_income`` so downstream effective-rate
-    calcs work.
+    runs (see ``_median_withdrawal_log_from_data``). The log records the
+    combined income-tax total (``total_taxes``: federal + state + LTCG +
+    Roth-conversion + RMD + SS tax minus penalties) plus the separable ``niit``
+    and ``state_tax``. State is reported as its own band; federal (which here
+    also carries the LTCG, conversion and RMD tax) is the rest after NIIT and
+    state, so the total counts each dollar once. ``ltcg`` stays 0 (the log has
+    no separate LTCG figure). Provides ``gross_income`` so downstream
+    effective-rate calcs work.
+
+    The ages are the years the simulation runs: ``cfg.plan_end_age()`` is when
+    the plan ENDS, so the last year simulated is the one before it (a row for
+    the end age itself would be an empty year).
     """
     start_age = int(getattr(cfg, "YOUR_AGE", 25))
     end_age = int(cfg.plan_end_age())
     # Use configured age range so tax chart spans current age → plan end
     # regardless of how far any single simulation path advanced.
     if end_age > start_age:
-        ages = list(range(start_age, end_age + 1))
+        ages = list(range(start_age, end_age))
     else:
         ages = [int(row.get("age", 0)) for row in withdrawal_rows] if withdrawal_rows else []
 
@@ -2287,6 +2292,8 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
             if row is not None:
                 total_taxes = float(row.get("total_taxes", 0.0))
                 niit = float(row.get("niit", 0.0))
+                # Medians are taken per field, so keep the parts inside the total.
+                state_tax = min(float(row.get("state_tax", 0.0)), max(0.0, total_taxes - niit))
                 ss_income = 0.0
                 if bool(getattr(cfg, "INCLUDE_SOCIAL_SECURITY", False)):
                     ss_claim_age = int(getattr(cfg, "SS_CLAIM_AGE", 67))
@@ -2300,6 +2307,7 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
             else:
                 total_taxes = 0.0
                 niit = 0.0
+                state_tax = 0.0
                 gross_income = 0.0
             out.append({
                 "age": int(age),
@@ -2310,8 +2318,8 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
                 # (the chart's _total()) recovers the real total exactly once,
                 # instead of double-counting NIIT on top of an already-inclusive
                 # federal figure.
-                "federal": max(0.0, total_taxes - niit),
-                "state": 0.0,
+                "federal": max(0.0, total_taxes - niit - state_tax),
+                "state": state_tax,
                 "ltcg": 0.0,
                 "niit": niit,
                 "fica": 0.0,

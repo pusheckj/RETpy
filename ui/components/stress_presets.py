@@ -24,11 +24,11 @@ _N_SIMULATIONS = 500
 # be silently dropped if put in the overrides dict instead).
 #
 # "High inflation" (EXPECTED_INFLATION bump) was tried and DROPPED: in this
-# all-real-dollar engine, EXPECTED_INFLATION mainly drives nominal
-# contribution-limit growth (401k/HSA/IRA), which is a windfall here, not a
-# stress -- it moved the default profile's success rate UP (+5.4pp), the
-# opposite of what a "disaster button" should show. "Extended lifespan"
-# is an unambiguous stress with no such confound.
+# all-real-dollar engine inflation barely matters (it only speeds the decay of
+# the frozen-nominal tax thresholds), so it is not a stress. It used to MOVE the
+# success rate UP (healthcare and childcare real growth shrank as the slider
+# rose; fixed in cfg.INFLATION_REAL_EXCESS). "Extended lifespan" is an
+# unambiguous stress with no such confound.
 PRESETS = [
     ("Prolonged bad returns", {"ACTIVE_RETURN_SCENARIO": "pessimistic"}, 0),
     ("Forced early retirement (-6 yrs)", {}, -6),

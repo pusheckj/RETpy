@@ -53,8 +53,8 @@ TAX YEAR
 --------
 Federal contribution limits, standard deduction, IRMAA brackets, SS taxation
 thresholds, NIIT threshold, and state bracket values use **tax year 2024** as
-the reference. The simulator inflates limits forward from 2024 using the
-``CONTRIBUTION_LIMIT_INFLATION_RATE`` rate.
+the reference; contribution limits use 2026. The simulator inflates limits
+forward from 2026 using the ``CONTRIBUTION_LIMIT_INFLATION_RATE`` rate.
 
 NAMING CONVENTION
 -----------------
@@ -218,67 +218,79 @@ YOUR_ESPP_DISCOUNT = 0.00
 # -----------------------------------------------------------------------------
 # INFLATION-ADJUSTED CONTRIBUTION LIMITS
 # -----------------------------------------------------------------------------
-# Base year limits (2024) - these get adjusted for inflation over time.
-CONTRIBUTION_LIMITS_2024 = {
-    '401k': 23_000,
-    '401k_total': 69_000,   # 415(c) total additions limit: employee + employer + after-tax
-    '401k_catchup': 7_500,  # Additional for age 50+
-    'ira': 7_000,
-    'ira_catchup': 1_000,   # Additional for age 50+
-    'hsa_family': 8_300,
-    'hsa_individual': 4_150,
-    'hsa_catchup': 1_000,   # Additional for age 55+
+# Base year limits (2026, IRS Notice 2025-67 and Rev. Proc. 2025-19). In the
+# model's all-real frame they are held flat at these values (see below).
+LIMITS_BASE_YEAR = 2026
+CONTRIBUTION_LIMITS_2026 = {
+    '401k': 24_500,
+    '401k_total': 72_000,   # 415(c) total additions limit: employee + employer + after-tax
+    '401k_catchup': 8_000,  # Additional for age 50+
+    '401k_supercatchup': 11_250,  # Replaces the 50+ catch-up at ages 60-63 (SECURE 2.0)
+    'ira': 7_500,
+    'ira_catchup': 1_100,   # Additional for age 50+
+    'hsa_family': 8_750,
+    'hsa_individual': 4_400,
+    'hsa_catchup': 1_000,   # Additional for age 55+ (not indexed)
 }
 
 # IRS typically adjusts limits in ~$500 increments for inflation. In the model's
 # ALL-REAL (today's-dollars) frame, general inflation does not grow any nominal
 # quantity, and IRS limits are indexed to CPI -- so in real terms they are held
-# constant at their 2024 values (real-excess growth of contribution limits is ~0).
+# constant at their base-year values (real-excess growth of contribution limits is ~0).
 CONTRIBUTION_LIMIT_INFLATION_RATE = 0.0
 
-def get_inflation_adjusted_limit(limit_type: str, years_from_2024: int) -> float:
+def get_inflation_adjusted_limit(limit_type: str, years_from_base: int) -> float:
     """
     Calculate inflation-adjusted contribution limit.
 
     Args:
         limit_type: Type of limit ('401k', 'ira', 'hsa_family', etc.)
-        years_from_2024: Number of years from 2024
+        years_from_base: Number of years from LIMITS_BASE_YEAR
 
     Returns:
         Inflation-adjusted limit rounded to nearest $500 (like IRS does)
 
     """
-    if limit_type not in CONTRIBUTION_LIMITS_2024:
+    if limit_type not in CONTRIBUTION_LIMITS_2026:
         return 0
 
-    base_limit = CONTRIBUTION_LIMITS_2024[limit_type]
+    base_limit = CONTRIBUTION_LIMITS_2026[limit_type]
 
     # No adjustment to make -> return the statutory base UNROUNDED. Rounding an
-    # unadjusted limit corrupts the two that aren't $500 multiples (hsa_family
-    # 8,300 -> 8,500, letting a family HSA be funded $200/yr over the legal max;
-    # hsa_individual 4,150 -> 4,000, truncating a legal contribution).
-    if years_from_2024 == 0 or CONTRIBUTION_LIMIT_INFLATION_RATE == 0:
+    # unadjusted limit corrupts the limits that aren't $500 multiples (hsa_family
+    # 8,750 -> 9,000, letting a family HSA be funded $250/yr over the legal max;
+    # ira_catchup 1,100 -> 1,000, truncating a legal contribution).
+    if years_from_base == 0 or CONTRIBUTION_LIMIT_INFLATION_RATE == 0:
         return base_limit
 
-    adjusted = base_limit * ((1 + CONTRIBUTION_LIMIT_INFLATION_RATE) ** years_from_2024)
+    adjusted = base_limit * ((1 + CONTRIBUTION_LIMIT_INFLATION_RATE) ** years_from_base)
 
     # Round to nearest $500 (IRS convention)
     return round(adjusted / 500) * 500
 
+
+def _catchup_401k(your_age: int, years_from_base: int) -> float:
+    """401(k) catch-up for ``your_age``: the regular one from 50, the larger
+    "super" one instead of it at 60-63."""
+    if your_age < 50:
+        return 0
+    if 60 <= your_age <= 63:
+        return get_inflation_adjusted_limit('401k_supercatchup', years_from_base)
+    return get_inflation_adjusted_limit('401k_catchup', years_from_base)
+
+
 def get_401k_limit(your_age: int, year: int) -> float:
     """Get 401k contribution limit for a given year and age."""
-    years_from_2024 = year - 2024
-    base_limit = get_inflation_adjusted_limit('401k', years_from_2024)
-    if your_age >= 50:
-        base_limit += get_inflation_adjusted_limit('401k_catchup', years_from_2024)
-    return base_limit
+    years_from_base = year - LIMITS_BASE_YEAR
+    return (get_inflation_adjusted_limit('401k', years_from_base)
+            + _catchup_401k(your_age, years_from_base))
 
 def get_ira_limit(your_age: int, year: int) -> float:
     """Get IRA contribution limit for a given year and age."""
-    years_from_2024 = year - 2024
-    base_limit = get_inflation_adjusted_limit('ira', years_from_2024)
+    years_from_base = year - LIMITS_BASE_YEAR
+    base_limit = get_inflation_adjusted_limit('ira', years_from_base)
     if your_age >= 50:
-        base_limit += get_inflation_adjusted_limit('ira_catchup', years_from_2024)
+        base_limit += get_inflation_adjusted_limit('ira_catchup', years_from_base)
     return base_limit
 
 
@@ -286,20 +298,27 @@ def get_401k_total_limit(your_age: int, year: int) -> float:
     """415(c) total 401(k) additions limit (employee deferral + employer match +
     after-tax) for a given year/age. The 'mega backdoor Roth' after-tax room is
     this limit minus the employee deferral and the employer match."""
-    years_from_2024 = year - 2024
-    base_limit = get_inflation_adjusted_limit('401k_total', years_from_2024)
-    if your_age >= 50:
-        base_limit += get_inflation_adjusted_limit('401k_catchup', years_from_2024)
-    return base_limit
+    years_from_base = year - LIMITS_BASE_YEAR
+    return (get_inflation_adjusted_limit('401k_total', years_from_base)
+            + _catchup_401k(your_age, years_from_base))
 
 def get_hsa_limit(your_age: int, year: int, is_family: bool = True) -> float:
     """Get HSA contribution limit for a given year and age."""
-    years_from_2024 = year - 2024
+    years_from_base = year - LIMITS_BASE_YEAR
     limit_type = 'hsa_family' if is_family else 'hsa_individual'
-    base_limit = get_inflation_adjusted_limit(limit_type, years_from_2024)
+    base_limit = get_inflation_adjusted_limit(limit_type, years_from_base)
     if your_age >= 55:
-        base_limit += get_inflation_adjusted_limit('hsa_catchup', years_from_2024)
+        base_limit += get_inflation_adjusted_limit('hsa_catchup', years_from_base)
     return base_limit
+
+
+def hsa_is_family() -> bool:
+    """Family HSA coverage: a partner or at least one child in the plan.
+
+    A single filer with no children is self-only (half the family limit). This
+    is the one rule the engine, Auto-allocate and the Max out buttons share
+    (ui/utils/planner_max.hsa_family applies it to an overrides dict)."""
+    return has_partner() or bool(normalize_children(CHILDREN))
 
 # Flat STATE income tax rate for STATE_CHOICE "Other" (a state you'd rather
 # describe by one rate): applied to income above the federal standard
@@ -370,8 +389,8 @@ PARTNER_401K_CONTRIBUTION = 2_500  # ~6% of salary (median contribution)
 # Partner's employer match, same rule as YOUR_401K_MATCH_PCT: dollar for dollar
 # on the partner's deferral, up to this % of the partner's base pay.
 PARTNER_401K_MATCH_PCT = 0.0       # Many jobs have no match
-# Direct Roth IRA. Reduced by the Roth income phase-out (household income on a
-# joint return, the partner's own income otherwise) -- see roth_ira_allowed().
+# Roth IRA, limited by earned income and the IRA limit. No income phase-out: above
+# the direct-Roth range it is a backdoor Roth, as YOUR_BACKDOOR_ROTH is for you.
 PARTNER_ROTH_CONTRIBUTION = 2_000
 PARTNER_BROKERAGE_CONTRIBUTION = 0 # Annual partner after-tax savings to brokerage
 
@@ -429,10 +448,10 @@ def calculate_partner_total_savings(salary: float, years_from_now: int, married:
 
     status = _FILING_MFJ if married else _FILING_SINGLE
     taxes = working_year_taxes(partner_wages=salary, partner_401k=savings_401k,
-                               status=status, partner=True)
+                               status=status, partner=True, children_under_17=0)
     after_tax = taxes["partner"]["take_home"]
 
-    roth = roth_ira_allowed(PARTNER_ROTH_CONTRIBUTION, salary - savings_401k, status)
+    roth = max(0.0, min(float(PARTNER_ROTH_CONTRIBUTION), salary - savings_401k))
 
     # What goes to brokerage after spending
     to_brokerage = max(0, after_tax - roth - PARTNER_ANNUAL_SPENDING)
@@ -538,20 +557,8 @@ def granular_nonhousing_annual():
     return monthly * 12 + PARTNER_OTHER_MONTHLY * 12
 
 
-# Total current expenses (includes partner's personal spending so the
-# household total is complete). Prefers the granular SPEND_* categories when
-# present; falls back to the legacy YOUR_OTHER / UTILITIES bundle otherwise.
-_granular_current = granular_nonhousing_annual()
-CURRENT_ANNUAL_EXPENSES = (
-    MORTGAGE_ANNUAL + _granular_current
-    if _granular_current is not None
-    else (
-        MORTGAGE_ANNUAL
-        + UTILITIES_ANNUAL
-        + YOUR_OTHER_ANNUAL
-        + (PARTNER_OTHER_MONTHLY * 12)
-    )
-)
+# CURRENT_ANNUAL_EXPENSES (today's living + housing, ex-children) is set below,
+# right after housing_annual() it is built from.
 
 # -----------------------------------------------------------------------------
 # LIFE EVENTS - CHILDREN
@@ -810,6 +817,25 @@ def housing_annual(your_age: int) -> float:
     if has_mortgage(your_age):
         return MORTGAGE_ANNUAL
     return rent_annual(your_age) + home_carrying_cost_annual(globals().get("HOME_VALUE", 0))
+
+
+def current_annual_expenses() -> float:
+    """Today's household spending, excluding children: the non-housing living
+    base (granular SPEND_* categories when any are set, else the legacy
+    bundle, plus partner spending) plus today's housing -- the mortgage while it
+    is being paid, RENT for a renter, else the owner's carrying cost
+    (``housing_annual``). Leaving housing out for renters understated this by
+    the whole rent and sized the FI-number grid and emergency-fund months too
+    small. Consumer debts (DEBTS) are not part of it; the engine adds them."""
+    granular = granular_nonhousing_annual()
+    if granular is None:
+        granular = UTILITIES_ANNUAL + YOUR_OTHER_ANNUAL + PARTNER_OTHER_MONTHLY * 12
+    return granular + housing_annual(YOUR_AGE)
+
+
+# Total current expenses (includes partner's personal spending so the
+# household total is complete).
+CURRENT_ANNUAL_EXPENSES = current_annual_expenses()
 
 
 # -----------------------------------------------------------------------------
@@ -1312,22 +1338,32 @@ INFLATION_VOLATILITY = 0.015
 # Slider semantics: 'general' is the single source of truth for general CPI and is
 # derived from EXPECTED_INFLATION (the UI slider), so moving the slider moves it.
 # The engine is all-real: the general inflation factor is pinned to 1.0 for liability
-# growth, so the slider does NOT rescale liabilities directly. Instead it drives
-# (a) healthcare/childcare real-excess growth (= category nominal literal - general),
-# and (b) the historical-path single-year deflation. healthcare/childcare stay their
-# own nominal literals so raising the slider shrinks their real-excess, lowering it
-# widens the gap. Default EXPECTED_INFLATION (0.0275) equals the prior hardcoded
-# general rate, so defaults are preserved.
+# growth, so the slider does NOT rescale liabilities directly. It drives only
+# (a) the historical-path single-year deflation and (b) the NOMINAL-frozen tax
+# thresholds (real_frozen_threshold). healthcare/childcare are written as nominal
+# rates AT THE DEFAULT general rate, i.e. a fixed premium over CPI
+# (INFLATION_REAL_EXCESS, computed once below): their real growth does NOT move
+# with the slider. (They used to be nominal literals measured against whatever
+# the slider said, so 10% "inflation" turned healthcare and childcare into 5%/yr
+# REAL DEFLATION and made a plan look better the more inflation you assumed.)
 INFLATION_RATES = {
     'general': EXPECTED_INFLATION,  # Slider-driven general CPI (single source of truth)
     'healthcare': 0.045,  # Healthcare-specific inflation
     'childcare': 0.04,    # Childcare costs
+    # (INFLATION_REAL_EXCESS is derived just below.)
     # NOTE: 'housing' was removed. Its nominal rate equaled 'general' (2.75%), so its
     # real-excess rate is 0 and it never grows a liability in the all-real frame. It
     # was never wired into the engine's inflation_factors dicts either. If housing is
     # ever meant to outpace general CPI, add it back here AND thread a housing_factor
     # through calculate_annual_expenses to the base/mortgage component.
 }
+
+# Real-excess growth per year of each non-general category: its premium over general
+# CPI at this file's own rates (healthcare 4.5% - 2.75% = 1.75%, childcare 1.25%).
+# Fixed at import: the Expected inflation slider changes INFLATION_RATES['general']
+# but must not change these premiums. Edit INFLATION_RATES above to change them.
+INFLATION_REAL_EXCESS = {k: v - INFLATION_RATES['general']
+                         for k, v in INFLATION_RATES.items() if k != 'general'}
 
 # -----------------------------------------------------------------------------
 # SOCIAL SECURITY
@@ -1977,13 +2013,69 @@ def state_retirement_exclusion(rules: dict, age) -> float:
 # WORKING-YEAR TAKE-HOME (one function for the engine and the UI)
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# CHILD TAX CREDIT (working years)
+# -----------------------------------------------------------------------------
+# Federal credit per qualifying child under 17 (One Big Beautiful Bill Act: $2,200
+# from tax year 2025, indexed after that; the $1,700 refundable part is the
+# "additional" credit, limited to 15% of earned income over $2,500). It phases out
+# by $50 per $1,000 of MAGI over $200,000 (single / head of household) or $400,000
+# (joint) -- thresholds that are NOT indexed, so they decay in this real frame like
+# the other frozen-nominal thresholds. The credit amounts are indexed, hence flat
+# in real terms. Applied on the return you file (an unmarried couple's children
+# go on yours). Modeled in working years only: retirement-year taxes are computed
+# on withdrawals without credits. Set MODEL_CHILD_TAX_CREDIT False to leave it out.
+MODEL_CHILD_TAX_CREDIT = True
+CHILD_TAX_CREDIT_PER_CHILD = 2_200
+CHILD_TAX_CREDIT_REFUNDABLE_MAX = 1_700
+CHILD_TAX_CREDIT_AGE_LIMIT = 17          # a child must be younger than this
+CHILD_TAX_CREDIT_EARNED_INCOME_FLOOR = 2_500
+CHILD_TAX_CREDIT_REFUNDABLE_RATE = 0.15
+CHILD_TAX_CREDIT_PHASEOUT_PER_1000 = 50
+CHILD_TAX_CREDIT_PHASEOUT_START = {_FILING_MFJ: 400_000, _FILING_SINGLE: 200_000,
+                                   _FILING_HOH: 200_000}
+
+
+def children_under_17(years_from_start: float = 0.0, children=None) -> int:
+    """Children who count for the child tax credit ``years_from_start`` years from
+    now: born by then and still under 17. ``children`` is a CHILDREN-shaped list
+    (None = this config's)."""
+    kids = normalize_children(CHILDREN if children is None else children)
+    return sum(1 for c in kids
+               if 0 <= years_from_start - c["years_until_birth"] < CHILD_TAX_CREDIT_AGE_LIMIT)
+
+
+_count_children_under_17 = children_under_17      # working_year_taxes has a parameter of that name
+
+
+def child_tax_credit(n_children: int, income_tax: float, magi: float, earned_income: float,
+                     status=None, years_from_start: float = 0.0) -> float:
+    """Dollars the child tax credit takes off the federal income tax of a return:
+    the credit (phased out above the income threshold) first reduces the tax to
+    zero, then the refundable part pays out the rest, up to $1,700 a child and 15%
+    of earned income over $2,500. Can exceed ``income_tax`` (a refund)."""
+    if not MODEL_CHILD_TAX_CREDIT or n_children <= 0:
+        return 0.0
+    start = real_frozen_threshold(
+        CHILD_TAX_CREDIT_PHASEOUT_START[normalize_filing_status(status)], years_from_start)
+    over = max(0.0, magi - start)
+    # No module imports here: config's module globals are snapshotted as plain data.
+    reduction = CHILD_TAX_CREDIT_PHASEOUT_PER_1000 * int(-(-round(over, 6) // 1_000))
+    credit = max(0.0, n_children * CHILD_TAX_CREDIT_PER_CHILD - reduction)
+    used = min(credit, max(0.0, income_tax))
+    refundable = min(credit - used, n_children * CHILD_TAX_CREDIT_REFUNDABLE_MAX,
+                     CHILD_TAX_CREDIT_REFUNDABLE_RATE
+                     * max(0.0, earned_income - CHILD_TAX_CREDIT_EARNED_INCOME_FLOOR))
+    return used + max(0.0, refundable)
+
+
 def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
                        your_other: float = 0.0, partner_other: float = 0.0,
                        your_401k: float = 0.0, partner_401k: float = 0.0,
                        your_hsa: float = 0.0, partner_hsa: float = 0.0,
                        your_age=None, partner_age=None, status=None,
                        partner=None, state=None, flat_rate=None,
-                       years_from_start: float = 0.0) -> dict:
+                       years_from_start: float = 0.0, children_under_17=None) -> dict:
     """Income and payroll taxes on a working year's pay, and the take-home.
 
     The single source of the working-year tax: simulate_accumulation_year (via
@@ -1995,6 +2087,11 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
     income without FICA. 401(k) and HSA amounts are pre-tax payroll deferrals:
     they lower federal and (unless the state says otherwise) state taxable
     income; 401(k) deferrals still pay FICA, HSA payroll contributions don't.
+
+    ``children_under_17`` is the number of children the child tax credit counts
+    (None = this config's CHILDREN at ``years_from_start``); the credit lowers the
+    federal tax of the first return (yours), and may push it below zero (the
+    refundable part is paid out).
 
     Returns a married couple's joint return (or a single person's return) as
     one return; an unmarried couple (files_two_returns) as two, you on
@@ -2034,11 +2131,17 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
         ages = [your_age, partner_age] if (status == _FILING_MFJ and partner) else [your_age]
         returns = [(status, [you, them], ages)]
 
-    for ret_status, people, ages in returns:
+    kids = (_count_children_under_17(years_from_start) if children_under_17 is None
+            else int(children_under_17))
+    for ret_index, (ret_status, people, ages) in enumerate(returns):
         # Federal income tax
         agi = sum(p["agi"] for p in people)
         fed_taxable = max(0.0, agi - standard_deduction_for_return(ret_status, ages))
         federal = progressive_tax(get_federal_brackets(ret_status), fed_taxable)
+        if ret_index == 0:      # the children are on your return
+            federal -= child_tax_credit(kids, federal, agi,
+                                        sum(p["wages"] for p in people),
+                                        ret_status, years_from_start)
         # State income tax
         rules = state_tax_rules(state, ret_status, people=len(ages), flat_rate=flat_rate)
         state_income = {id(p): (p["wages"] + p["other"]
