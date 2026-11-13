@@ -574,7 +574,8 @@ class TestNormalize:
                                  "debts": [{"name": "Card", "balance": -1200, "apr_pct": -3,
                                             "min_payment": -50}]})
         assert d["take_home_monthly"] == 0 and d["cash_savings"] == 0
-        assert d["debts"] == [{"name": "Card", "balance": 0.0, "apr_pct": 0.0, "min_payment": 0.0}]
+        assert d["debts"] == [{"name": "Card", "balance": 0.0, "apr_pct": 0.0, "min_payment": 0.0,
+                               "kind": "credit_card"}]      # type guessed from the name
 
     def test_coercion_and_clamps(self):
         d = sf.normalize_inputs({"take_home_monthly": "$4,250.50", "retirement_contrib_pct": "6%",
@@ -662,7 +663,8 @@ class TestPage:
         assert not page.exception, page.exception
         assert _by_key(page.number_input, "simple_w_take_home_monthly").value == 6100.0
         assert _by_key(page.text_input, "simple_w_debt_0_name").value == "Only one"
-        assert page.session_state["simple_inputs"]["debts"] == [_debt("Only one", 999.0, 9.0, 50.0)]
+        assert page.session_state["simple_inputs"]["debts"] == [{**_debt("Only one", 999.0, 9.0, 50.0),
+                                                                 "kind": "other"}]
 
     def test_add_and_remove_debt(self, page):
         page.run()

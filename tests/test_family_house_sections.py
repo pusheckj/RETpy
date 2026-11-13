@@ -164,10 +164,12 @@ def test_planner_renders_the_sections_in_the_new_order():
     body = body[:body.index('_safe_render("components.faq")')]
     order = re.findall(r'_safe_render\("components\.(\w+)"\)', body)
     assert order == ["sec_about_you", "sec_family", "sec_income", "sec_taxes",
-                     "sec_house", "sec_expenses", "account_inputs",
+                     "sec_house", "sec_expenses", "sec_debts", "account_inputs",
                      "sec_investments", "sec_retirement_goals", "sec_assumptions"]
     # Expenses reads House's rent-or-own radio, so House must come first.
     assert order.index("sec_house") < order.index("sec_expenses")
+    # Debts before Investments, whose "Left to save" leaves the payments out.
+    assert order.index("sec_debts") < order.index("sec_investments")
 
 
 def test_section_labels_and_icons():

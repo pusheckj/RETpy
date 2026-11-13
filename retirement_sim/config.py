@@ -67,6 +67,8 @@ partner account, paycheck, contribution and Social Security benefit (see
 
 import datetime as _datetime
 
+from . import debts as _debts
+
 # -----------------------------------------------------------------------------
 # PERSONAL INFORMATION
 # -----------------------------------------------------------------------------
@@ -2928,6 +2930,39 @@ def calculate_car_purchase(age: int) -> float:
 
     return total
 
+# --- Consumer debts (credit cards, student / car / personal loans) ----------
+# Each debt is plain data (it travels to the browser in the config snapshot):
+#   {"name": "Visa", "kind": "credit_card", "balance": 6_500, "apr": 0.24,
+#    "min_payment": 160}
+# kind: credit_card / student_loan / car / personal / medical / other.
+# Balances and payments are nominal (as on a statement); apr is a fraction.
+# The mortgage is NOT a debt here (it lives in the housing inputs above).
+# Every month the plan pays all the minimums plus DEBT_EXTRA_MONTHLY; the extra
+# and any minimum freed by a paid-off debt go to the next debt in
+# DEBT_STRATEGY order ("avalanche": highest APR first; "snowball": smallest
+# balance first). Once every debt is gone the payments stop, so the money goes
+# back to savings. The payments are spending: in working years they come out
+# of what would otherwise be saved, in retirement they are withdrawn like any
+# other spending (never cut by the spending guardrails). The math, and how the
+# nominal payments become today's dollars, is in retirement_sim/debts.py.
+# Empty list = no debts (the simulation is exactly as before).
+DEBTS = []
+DEBT_EXTRA_MONTHLY = 0
+DEBT_STRATEGY = "avalanche"
+
+
+def debt_payment_for_age(age: int) -> float:
+    """What the debts cost in the plan year you are ``age``, in today's
+    dollars (0 once they are paid off, and 0 with no debts)."""
+    if not DEBTS:
+        return 0.0
+    year = int(age) - int(YOUR_AGE)
+    if year < 0:
+        return 0.0
+    by_year = _debts.real_payments_by_year(DEBTS, DEBT_EXTRA_MONTHLY, DEBT_STRATEGY,
+                                           EXPECTED_INFLATION)
+    return by_year[year] if year < len(by_year) else 0.0
+
 # --- Housing timeline: buy, move, downsize ----------------------------------
 # Today's home is described above: HOME_VALUE / MORTGAGE_* for an owner (rate:
 # MORTGAGE_RATE_FOR_PAYOFF), SPEND_RENT_MONTHLY for a renter. HOME_EVENTS lists
@@ -3302,7 +3337,8 @@ TOTAL_RETIREMENT_ACCOUNTS = (YOUR_401K + YOUR_ROTH_IRA + YOUR_TRADITIONAL_IRA +
 TOTAL_TAXABLE = YOUR_BROKERAGE + PARTNER_BROKERAGE
 TOTAL_CASH = YOUR_CASH + PARTNER_CASH
 TOTAL_INVESTMENTS = TOTAL_RETIREMENT_ACCOUNTS + TOTAL_TAXABLE + TOTAL_CASH
-TOTAL_NET_WORTH = TOTAL_INVESTMENTS + HOME_EQUITY
+# Net worth nets out the consumer debts (the mortgage is already out of HOME_EQUITY).
+TOTAL_NET_WORTH = TOTAL_INVESTMENTS + HOME_EQUITY - _debts.total_owed(DEBTS)
 
 if __name__ == "__main__":
     print("=" * 70)

@@ -10,7 +10,9 @@ instant. Four checks:
 
 ``analyze(inputs)`` runs all four on one inputs dict. Inputs are a flat,
 JSON-serialisable dict (``DEFAULT_INPUTS``); ``debts`` is the only nested
-value, a list of small ``{name, balance, apr_pct, min_payment}`` dicts.
+value, a list of small ``{name, balance, apr_pct, min_payment, kind}`` dicts
+(``kind``, the planner's debt type, is not asked here; it is guessed from the
+name when missing).
 ``normalize_inputs`` repairs anything (old, partial or garbage dicts restored
 from a browser) into that shape without raising.
 
@@ -25,6 +27,7 @@ from datetime import date
 from typing import Any, Dict, List, Optional
 
 from retirement_sim import config as cfg
+from retirement_sim import debts as debt_math
 
 try:
     from utils.formatting import money
@@ -41,11 +44,12 @@ EMERGENCY_MIN_MONTHS = 3
 EMERGENCY_MAX_MONTHS = 6
 DEFAULT_EMERGENCY_MONTHS = 4
 STARTER_EMERGENCY_FLOOR = 1_000.0
-HIGH_APR_PCT = 8.0             # APR >= 8%: pay off before investing past the match
-MODERATE_APR_PCT = 4.0         # 4% <= APR < 8%: judgment call; below 4%: no rush
-MAX_PAYOFF_MONTHS = 600        # 50 years; past this we report "won't pay off"
-MAX_DEBTS = 20
-DEBT_NAME_MAX_LEN = 40
+# The interest bands and payoff limits are the planner's too (retirement_sim/debts.py).
+HIGH_APR_PCT = debt_math.HIGH_APR * 100          # 8%+: pay off before investing past the match
+MODERATE_APR_PCT = debt_math.MODERATE_APR * 100  # 4-8%: judgment call; below 4%: no rush
+MAX_PAYOFF_MONTHS = debt_math.MAX_MONTHS         # 50 years; past this we report "won't pay off"
+MAX_DEBTS = debt_math.MAX_DEBTS
+DEBT_NAME_MAX_LEN = debt_math.NAME_MAX_LEN
 BUDGET_TARGETS = {"needs": 0.50, "wants": 0.30, "savings": 0.20}
 BUDGET_SLACK = 0.05            # within 5 points of a target counts as "close"
 _PAID_EPS = 0.005              # a balance under half a cent is paid off
@@ -55,7 +59,7 @@ MONTHLY_MAX = 1_000_000.0
 BALANCE_MAX = 100_000_000.0
 PCT_MAX = 100.0
 
-DEBT_FIELDS = ("name", "balance", "apr_pct", "min_payment")
+DEBT_FIELDS = ("name", "balance", "apr_pct", "min_payment")   # the page's inputs per debt
 
 # A generic young-professional example. Fictional; not anyone's real data.
 DEFAULT_INPUTS: Dict[str, Any] = {
@@ -74,9 +78,12 @@ DEFAULT_INPUTS: Dict[str, Any] = {
     "partner_salary_annual": 0.0,     # partner's yearly pay; only counts when married
     "emergency_target_months": DEFAULT_EMERGENCY_MONTHS,
     "debts": [
-        {"name": "Credit card", "balance": 6_500.0, "apr_pct": 24.0, "min_payment": 160.0},
-        {"name": "Car loan", "balance": 4_200.0, "apr_pct": 6.9, "min_payment": 250.0},
-        {"name": "Student loan", "balance": 18_000.0, "apr_pct": 4.5, "min_payment": 190.0},
+        {"name": "Credit card", "balance": 6_500.0, "apr_pct": 24.0, "min_payment": 160.0,
+         "kind": "credit_card"},
+        {"name": "Car loan", "balance": 4_200.0, "apr_pct": 6.9, "min_payment": 250.0,
+         "kind": "car"},
+        {"name": "Student loan", "balance": 18_000.0, "apr_pct": 4.5, "min_payment": 190.0,
+         "kind": "student_loan"},
     ],
     "extra_debt_payment_monthly": 150.0,
 }
@@ -148,11 +155,15 @@ def _normalize_debt(raw: Any, index: int) -> Optional[Dict[str, Any]]:
         v = _to_float(raw.get(key))
         return 0.0 if v is None else _clamp(v, 0.0, hi)
 
+    kind = raw.get("kind")
     return {
         "name": name,
         "balance": num("balance", BALANCE_MAX),
         "apr_pct": num("apr_pct", PCT_MAX),
         "min_payment": num("min_payment", MONTHLY_MAX),
+        # Not asked on this page (it has no type picker); kept so a debt brought
+        # over from the planner keeps its type on the way back.
+        "kind": kind if kind in debt_math.KINDS else debt_math.guess_kind(name),
     }
 
 
@@ -593,6 +604,17 @@ def underwater_debts(debts: List[Dict[str, Any]]) -> List[str]:
             and d["min_payment"] <= d["balance"] * d["apr_pct"] / 1200.0 + 1e-9]
 
 
+def to_engine_debts(debts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Check-up debt rows (``apr_pct``) as the planner's DEBTS rows (``apr``)."""
+    out = []
+    for n, d in enumerate(debts or []):
+        r = _normalize_debt(d, n)
+        if r is not None:
+            out.append({"name": r["name"], "kind": r["kind"], "balance": r["balance"],
+                        "apr": r["apr_pct"] / 100.0, "min_payment": r["min_payment"]})
+    return out
+
+
 def simulate_payoff(debts: List[Dict[str, Any]], extra_monthly: float = 0.0,
                     strategy: str = "avalanche", start: Optional[date] = None,
                     max_months: int = MAX_PAYOFF_MONTHS) -> PayoffResult:
@@ -601,66 +623,27 @@ def simulate_payoff(debts: List[Dict[str, Any]], extra_monthly: float = 0.0,
     Each month: interest accrues (APR/12), every debt gets its minimum, and the
     rest of the budget (extra + minimums freed by paid-off debts) goes to the
     target: highest APR first (avalanche) or smallest balance first (snowball).
+    The math is the planner's and the simulation's (retirement_sim/debts.py).
     """
     start = start or date.today()
-    rows = [_normalize_debt(d, n) for n, d in enumerate(debts or [])]
-    rows = [r for r in rows if r is not None and r["balance"] > _PAID_EPS]
     extra = max(0.0, _to_float(extra_monthly) or 0.0)
-    budget = sum(r["min_payment"] for r in rows) + extra
-    flagged = underwater_debts(rows)
+    p = debt_math.amortize(to_engine_debts(debts), extra, strategy, max_months)
+    rows = p.rows
     if not rows:
-        return PayoffResult(strategy, True, 0, None, 0.0, 0.0, budget, 0.0, [], [0.0], [], [])
-
-    if strategy == "snowball":
-        order = sorted(range(len(rows)), key=lambda k: (rows[k]["balance"], -rows[k]["apr_pct"], k))
-    else:
-        order = sorted(range(len(rows)), key=lambda k: (-rows[k]["apr_pct"], rows[k]["balance"], k))
-
-    bal = [r["balance"] for r in rows]
-    rate = [r["apr_pct"] / 1200.0 for r in rows]
-    payoff_month: List[Optional[int]] = [None] * len(rows)
-    balances = [sum(bal)]
-    interest = paid = 0.0
-    month = 0
-    while month < max_months and any(b > _PAID_EPS for b in bal):
-        month += 1
-        pool = budget
-        for k in range(len(rows)):
-            if bal[k] > _PAID_EPS:
-                charge = bal[k] * rate[k]
-                bal[k] += charge
-                interest += charge
-        for k in range(len(rows)):
-            if bal[k] > _PAID_EPS:
-                pay = min(rows[k]["min_payment"], bal[k], pool)
-                bal[k] -= pay
-                pool -= pay
-        for k in order:
-            if pool <= 0:
-                break
-            if bal[k] > _PAID_EPS:
-                pay = min(pool, bal[k])
-                bal[k] -= pay
-                pool -= pay
-        paid += budget - pool
-        for k in range(len(rows)):
-            if payoff_month[k] is None and bal[k] <= _PAID_EPS:
-                bal[k] = 0.0
-                payoff_month[k] = month
-        balances.append(sum(bal))
-
-    done = all(b <= _PAID_EPS for b in bal)
+        return PayoffResult(strategy, True, 0, None, 0.0, 0.0, p.monthly_budget, 0.0, [], [0.0], [], [])
+    order = p.focus_order
     payoff_rows = []
-    for k in sorted(range(len(rows)), key=lambda k: (payoff_month[k] is None, payoff_month[k] or 0, order.index(k))):
-        m = payoff_month[k]
+    for k in sorted(range(len(rows)), key=lambda k: (p.payoff_month[k] is None, p.payoff_month[k] or 0,
+                                                     order.index(k))):
+        m = p.payoff_month[k]
         payoff_rows.append({
-            "name": rows[k]["name"], "apr_pct": rows[k]["apr_pct"], "balance": rows[k]["balance"],
+            "name": rows[k]["name"], "apr_pct": rows[k]["apr"] * 100.0, "balance": rows[k]["balance"],
             "payoff_month": m, "payoff_date": month_label(start, m) if m is not None else None,
         })
     return PayoffResult(
-        strategy, done, month, month_label(start, month) if done else None,
-        interest, paid, budget, 0.0 if done else sum(bal), payoff_rows, balances, flagged,
-        [rows[k]["name"] for k in order])
+        strategy, p.paid_off, p.months, month_label(start, p.months) if p.paid_off else None,
+        p.total_interest, p.total_paid, p.monthly_budget, p.remaining, payoff_rows, p.balances,
+        [rows[k]["name"] for k in p.underwater], [rows[k]["name"] for k in order])
 
 
 def compare_payoff(debts: List[Dict[str, Any]], extra_monthly: float = 0.0,
