@@ -102,36 +102,37 @@ def render(st, results: dict = None) -> None:
     base_scen = str(_base_default(overrides, "ACTIVE_RETURN_SCENARIO", "historical")).lower()
     if base_scen not in _SCENARIOS:
         base_scen = "historical"
-    st.session_state.setdefault("wifc_scenario", base_scen)
-    st.session_state.setdefault("wifc_stock", float(_base_default(overrides, "STOCK_ALLOCATION", 0.80)) * 100)
-    st.session_state.setdefault("wifc_fee", float(_base_default(overrides, "INVESTMENT_FEE_RATE", 0.0)) * 10_000)
-    st.session_state.setdefault("wifc_infl", float(_base_default(overrides, "EXPECTED_INFLATION", 0.0275)) * 100)
-    st.session_state.setdefault("wifc_ss", bool(_base_default(overrides, "INCLUDE_SOCIAL_SECURITY", True)))
-    st.session_state.setdefault("wifc_ss_claim", int(_base_default(overrides, "SS_CLAIM_AGE", 67)))
-    st.session_state.setdefault("wifc_spend", 100.0)
-    st.session_state.setdefault("wifc_savings", 0)
+    # No setdefault here: a value written to session state reaches the browser only with the run
+    # that wrote it, and this section loads lazily (a rerun can replace that run), which left the
+    # boxes and sliders at their minimums. The starting values go in as the widgets' own defaults.
+    d_stock = float(_base_default(overrides, "STOCK_ALLOCATION", 0.80)) * 100
+    d_fee = float(_base_default(overrides, "INVESTMENT_FEE_RATE", 0.0)) * 10_000
+    d_infl = float(_base_default(overrides, "EXPECTED_INFLATION", 0.0275)) * 100
+    d_ss = bool(_base_default(overrides, "INCLUDE_SOCIAL_SECURITY", True))
+    d_claim = int(_base_default(overrides, "SS_CLAIM_AGE", 67))
 
     c1, c2 = st.columns(2)
     with c1:
         st.selectbox("Return scenario", _SCENARIOS, key="wifc_scenario",
+                     index=_SCENARIOS.index(base_scen),
                      format_func=lambda s: s.capitalize(),
                      help="Market returns used in the alternate scenario.")
-        slider_with_box(st, "Stock allocation (%)", 0, 100, 5, key="wifc_stock", unit="%",
+        slider_with_box(st, "Stock allocation (%)", 0, 100, 5, key="wifc_stock", unit="%", value=d_stock,
                         help="More stock means higher expected returns and bigger swings.")
         slider_with_box(st, "Retirement spending (% of today's)", 40, 150, 5, key="wifc_spend",
-                        unit="%", help="Retirement living costs compared with today. 100% means the same.")
+                        unit="%", value=100.0, help="Retirement living costs compared with today. 100% means the same.")
         st.number_input("Extra annual savings ($/yr)", min_value=0, max_value=200_000,
-                        step=1_000, key="wifc_savings",
+                        step=1_000, key="wifc_savings", value=0,
                         help="Extra yearly savings, added to your taxable brokerage.")
     with c2:
-        slider_with_box(st, "Investment fees (bps)", 0, 150, 5, key="wifc_fee", unit=" bps",
+        slider_with_box(st, "Investment fees (bps)", 0, 150, 5, key="wifc_fee", unit=" bps", value=d_fee,
                         help="Yearly fund fees. 100 bps is 1% of your balance.")
-        slider_with_box(st, "Expected inflation (%)", 0.0, 10.0, 0.25, key="wifc_infl", unit="%",
+        slider_with_box(st, "Expected inflation (%)", 0.0, 10.0, 0.25, key="wifc_infl", unit="%", value=d_infl,
                         help="Long-run inflation used in the alternate scenario.")
-        st.toggle("Include Social Security", key="wifc_ss",
+        st.toggle("Include Social Security", key="wifc_ss", value=d_ss,
                   help="Count Social Security income in the alternate scenario.")
         if st.session_state.get("wifc_ss", True):
-            slider_with_box(st, "Claim age", 62, 70, 1, key="wifc_ss_claim",
+            slider_with_box(st, "Claim age", 62, 70, 1, key="wifc_ss_claim", value=d_claim,
                             help="Age Social Security starts in the alternate scenario.")
 
     n_sims = int(st.session_state.get("n_simulations", 1000))

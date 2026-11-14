@@ -147,15 +147,20 @@ def slider_with_box(st, label: str, min_value, max_value, step=1, *, key: str,
 
     ``unit`` is shown on the slider ("%", " bps", " yr"); the box is the bare
     number (its label, read by screen readers, names the unit). ``value`` seeds
-    the slider only when ``key`` is not in session state yet (callers normally
-    seed it themselves with ``ensure_default``). Returns the slider's value.
+    the slider only when ``key`` is not in session state yet. A key that is absent
+    is NOT written to session state: the starting value goes to the widgets as their
+    own default, so the browser gets it with the widget. A value set through the
+    session state API reaches the browser only once, with the run that set it; if
+    that run is replaced before it finishes (a lazy section loading while another
+    rerun starts), the browser keeps the widget's own default (the range minimum)
+    while the server holds the real value. Returns the slider's value.
     """
     ss = st.session_state
     as_int = _is_int(min_value, max_value, step)
     decimals = 0 if as_int else _decimals(step)
 
-    if key not in ss:
-        ss[key] = value if value is not None else min_value
+    first = key not in ss                     # a first draw: the value rides in as the widgets' default
+    start = value if value is not None else min_value
     if max_value <= min_value:
         # Nothing to slide: st.slider raises when min and max are equal (a 99-year-old's
         # retirement age can only be 99). Show the one value as text.
@@ -163,22 +168,33 @@ def slider_with_box(st, label: str, min_value, max_value, step=1, *, key: str,
         shown = f"{_fmt(min_value, decimals)}{unit}"
         st.markdown(f"{label}: **{shown}**")
         return min_value
+    cur = start if first else ss[key]
+    if first and _is_number_value(cur):     # st.slider wants the value in the bounds' own type
+        cur = int(round(cur)) if as_int else float(cur)
     try:
-        inside = min_value <= ss[key] <= max_value
+        inside = min_value <= cur <= max_value
     except TypeError:
         inside = False
     moved_in = None
     if not inside:                          # a value past the ends (a saved plan, another widget) moves in
-        was = ss[key]
+        was = cur
         fitted, _ = snap(was, min_value, max_value, step, as_int)
-        ss[key] = min_value if fitted is None else fitted
-        if _is_number_value(was) and not _loaded_note_for(ss, key, was):
-            moved_in = (was, ss[key])
+        cur = min_value if fitted is None else fitted
+        if not first:
+            ss[key] = cur
+            if _is_number_value(was) and not _loaded_note_for(ss, key, was):
+                moved_in = (was, cur)
     bkey = key + BOX
     ss.pop(key + MOVED, None)
-    if bkey not in ss or ss.get(key + SEEN) != ss[key]:
-        ss[bkey] = _to_box(ss[key], as_int, decimals)     # changed from outside: follow it
-        ss[key + SEEN] = ss[key]
+    box_default = None
+    if bkey not in ss or ss.get(key + SEEN) != cur:
+        box_default = _to_box(cur, as_int, decimals)
+        if first and bkey not in ss:
+            pass                            # the box's default carries it (below)
+        else:
+            ss[bkey] = box_default          # changed from outside: follow it
+            box_default = None
+        ss[key + SEEN] = cur
         ss.pop(key + NOTE, None)
     if moved_in:                            # the range moved under the value (e.g. your age): say so
         ss[key + NOTE] = (f"Your {moved_in[0]:g} is outside {min_value:g} to {max_value:g}, "
@@ -190,10 +206,12 @@ def slider_with_box(st, label: str, min_value, max_value, step=1, *, key: str,
     with st.container(key=f"sbx-{key}", horizontal=True, vertical_alignment="bottom"):
         out = st.slider(label, min_value=min_value, max_value=max_value, step=step,
                         key=key, help=help, format=fmt,
-                        on_change=_on_slider, args=(st, key, as_int, decimals))
+                        on_change=_on_slider, args=(st, key, as_int, decimals),
+                        **({"value": cur} if first else {}))
         st.number_input(f"{label}: type a value", step=step, key=bkey, format=base,
                         label_visibility="collapsed", width=BOX_WIDTH,
-                        on_change=_on_box, args=(st, key, min_value, max_value, step, as_int))
+                        on_change=_on_box, args=(st, key, min_value, max_value, step, as_int),
+                        **({"value": box_default} if box_default is not None else {}))
     note = ss.get(key + NOTE)
     loaded = _loaded_note(ss, key)
     if note:

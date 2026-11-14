@@ -116,12 +116,46 @@ def test_what_if_and_deep_dives_stay_lazy_and_load(planner):
     assert not list(tiles["deepdives"].tabs)
     at.button(key="_lzb_deepdives").click().run()
     at.button(key="_lzb_whatif").click().run()
-    at.run()                        # the load button's fragment rerun is not redrawn by AppTest
-    assert not at.exception, at.exception
-    tiles = _tiles(at)
+    # The load button's fragment rerun is not redrawn by AppTest, so rerun until both tiles have
+    # drawn. A loaded machine can leave a run unfinished, so one extra run is not always enough.
+    for _ in range(6):
+        at.run()
+        assert not at.exception, at.exception
+        tiles = _tiles(at)
+        if [t.label for t in tiles["deepdives"].tabs] == DEEP_DIVE_TABS and \
+                "What-if: when can you retire?" in " ".join(m.value for m in tiles["whatif"].markdown):
+            break
     assert [t.label for t in tiles["deepdives"].tabs] == DEEP_DIVE_TABS
     md = " ".join(m.value for m in tiles["whatif"].markdown)
     assert "What-if: when can you retire?" in md and "Scenario comparison" in md
+
+
+def test_what_if_levers_start_at_their_values_not_their_minimums(planner):
+    """The What if tile loads lazily; its sliders and boxes must carry their starting values as the
+    widgets' own defaults, never pushed through session state (a pushed value can be lost when the
+    first run is replaced, leaving 0 / 40 / 0.00 beside sliders at 80 / 100 / 2.75; the helper's own
+    test checks the defaults on a first draw)."""
+    at = planner
+    if any(b.key == "_lzb_whatif" for b in at.button):         # an earlier test may have loaded it already
+        at.button(key="_lzb_whatif").click().run()
+    for _ in range(6):
+        at.run()
+        if any(s.key == "wifc_stock" for s in at.slider):
+            break
+    assert not at.exception, at.exception
+    from retirement_sim import config as cfg
+    base = at.session_state["user_overrides"]
+    want_of = {"wifc_stock": 100 * float(base.get("STOCK_ALLOCATION", cfg.STOCK_ALLOCATION)),
+               "wifc_spend": 100, "wifc_fee": 10_000 * float(base.get("INVESTMENT_FEE_RATE", cfg.INVESTMENT_FEE_RATE)),
+               "wifc_infl": 100 * float(base.get("EXPECTED_INFLATION", cfg.EXPECTED_INFLATION))}
+    for key, want in want_of.items():
+        sl = at.slider(key=key)
+        box = at.number_input(key=key + "__box")
+        assert sl.value == pytest.approx(want, abs=0.13) and box.value == pytest.approx(sl.value), key
+        assert not sl.proto.set_value and not box.proto.set_value, key       # never pushed through the API
+    src = open(os.path.join(_ROOT, "ui", "components", "whatif_retirement_curve.py"), encoding="utf-8").read()
+    assert 'setdefault("wifc_' not in src   # starting values are widget defaults
+    assert at.toggle(key="wifc_ss").value is True and not at.toggle(key="wifc_ss").proto.set_value
 
 
 def test_pre_run_captions_are_kept():

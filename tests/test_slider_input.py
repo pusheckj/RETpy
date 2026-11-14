@@ -75,6 +75,26 @@ def test_slider_keeps_its_key_and_the_box_has_a_derived_one(lone):
     assert lone.session_state["got"] == 80 and lone.session_state["got_f"] == pytest.approx(2.75)
 
 
+def test_first_draw_hands_the_start_value_over_as_the_widgets_default(lone):
+    """A value written to session state reaches the browser only with the run that wrote it. A lazy
+    section whose first run is replaced showed both widgets at their minimums (0, 0, 40, ...) while
+    the server held the real value. So a first draw must not write the key: the start value is the
+    widget's own default, which travels with the widget every time."""
+    for key, want in (("stock", 80), ("infl", 2.75)):
+        sl = lone.slider(key=key).proto
+        assert list(sl.default) == [pytest.approx(want)] and not sl.set_value, key
+        box = lone.number_input(key=key + "__box").proto
+        assert box.default == pytest.approx(want) and not box.set_value, key
+
+
+def test_a_later_draw_after_an_outside_change_still_sets_the_value(lone):
+    """The other direction (a profile load rewrites the slider): that path still writes."""
+    lone.session_state["stock"] = 35
+    lone.run()
+    assert not lone.exception
+    assert lone.slider(key="stock").value == 35 and lone.number_input(key="stock__box").value == 35
+
+
 def test_dragging_the_slider_updates_the_box_on_the_same_run(lone):
     lone.slider(key="stock").set_value(40).run()
     assert not lone.exception
