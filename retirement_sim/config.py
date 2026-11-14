@@ -285,6 +285,30 @@ def get_401k_limit(your_age: int, year: int) -> float:
     return (get_inflation_adjusted_limit('401k', years_from_base)
             + _catchup_401k(your_age, years_from_base))
 
+# SECURE 2.0 Roth catch-up (from 2026): someone whose FICA wages from the
+# employer in the PRIOR year passed this threshold must make any 401(k)
+# catch-up (50+, and the 60-63 super catch-up) as Roth, after tax. $150,000 is
+# the IRS figure for 2026 (2025 wages; $145,000 indexed). Indexed, so flat in
+# today's dollars. The engine has no separate Roth 401(k) account: those dollars
+# go to the Roth account (``your_roth_ira`` / ``partner_roth_ira``), which is
+# taxed the same way (tax-free growth, Roth withdrawal order). False = the
+# catch-up stays pre-tax for everyone (the earlier results).
+MODEL_ROTH_CATCHUP_RULE = True
+ROTH_CATCHUP_WAGE_THRESHOLD = 150_000
+
+
+def roth_catchup_amount(deferral: float, age: int, year: int, prior_year_wages: float) -> float:
+    """The part of a year's 401(k) deferral that must go in as Roth: the
+    amount above the regular limit (the catch-up), when the prior year's FICA
+    wages passed ROTH_CATCHUP_WAGE_THRESHOLD. 0 otherwise."""
+    if not MODEL_ROTH_CATCHUP_RULE or age < 50:
+        return 0.0
+    if float(prior_year_wages or 0.0) <= ROTH_CATCHUP_WAGE_THRESHOLD:
+        return 0.0
+    regular = get_inflation_adjusted_limit('401k', year - LIMITS_BASE_YEAR)
+    return max(0.0, float(deferral or 0.0) - regular)
+
+
 def get_ira_limit(your_age: int, year: int) -> float:
     """Get IRA contribution limit for a given year and age."""
     years_from_base = year - LIMITS_BASE_YEAR
@@ -978,6 +1002,26 @@ def late_retirement_start_age(retirement_age=None) -> int:
         start = max(start, int(retirement_age) + int(LATE_RETIREMENT_MIN_YEARS))
     return start
 
+
+def late_retirement_factor(your_age: int, retirement_age=None) -> float:
+    """What the later-years reduction leaves of non-housing living spending at
+    ``your_age``: 1 - LATE_RETIREMENT_LEISURE_DECREASE from
+    late_retirement_start_age, else 1. The engine
+    (account_simulation.calculate_retirement_expenses) and the spending chart
+    both apply it."""
+    if your_age >= late_retirement_start_age(retirement_age):
+        return 1 - LATE_RETIREMENT_LEISURE_DECREASE
+    return 1.0
+
+
+def expected_cost_growth(category: str, years: float) -> float:
+    """Expected real growth of a category that outpaces general prices
+    ('healthcare', 'childcare') after ``years`` plan years:
+    (1 + INFLATION_REAL_EXCESS[category]) ** years. The engine draws the yearly
+    rate around this mean (account_simulation.update_inflation_factors); a
+    deterministic chart uses the mean."""
+    return (1.0 + INFLATION_REAL_EXCESS.get(category, 0.0)) ** max(0.0, float(years))
+
 # -----------------------------------------------------------------------------
 # DYNAMIC SPENDING ADJUSTMENT (Guardrails)
 # -----------------------------------------------------------------------------
@@ -1485,6 +1529,41 @@ def ss_spousal_factor(start_age: float) -> float:
     return 1 - min(months_early, 36) * (25/36) * 0.01 - max(0.0, months_early - 36) * (5/12) * 0.01
 
 
+def social_security_by_person(your_age: int, claim_age: int = 67) -> dict:
+    """Each person's Social Security this year, in today's dollars, before the
+    earnings test: ``{"you": ..., "partner": ...}``. A spousal top-up is counted
+    with the spouse who receives it. calculate_social_security is the sum."""
+    out = {"you": 0.0, "partner": 0.0}
+
+    # Primary user's SS
+    if your_age >= claim_age:
+        out["you"] += YOUR_SS_MONTHLY_FRA * ss_claim_factor(claim_age) * 12
+
+    if not has_partner():
+        return out
+
+    # Partner's SS (accounting for age difference), at their own claim age
+    age_gap = YOUR_AGE - PARTNER_AGE
+    partner_age = your_age - age_gap
+    partner_claim_age = globals().get("PARTNER_SS_CLAIM_AGE") or claim_age
+    partner_monthly_fra = globals().get("PARTNER_SS_MONTHLY_FRA", 0) or 0
+    if partner_monthly_fra > 0 and partner_age >= partner_claim_age:
+        out["partner"] += partner_monthly_fra * ss_claim_factor(partner_claim_age) * 12
+
+    # Spousal top-up: married couples only, once BOTH have claimed. It starts
+    # when the second of the two files, at the receiving spouse's age then.
+    if (globals().get("MODEL_SPOUSAL_SS_BENEFIT", False)
+            and normalize_filing_status() == _FILING_MFJ
+            and your_age >= claim_age and partner_age >= partner_claim_age):
+        partner_top_up = max(0.0, 0.5 * YOUR_SS_MONTHLY_FRA - partner_monthly_fra)
+        your_top_up = max(0.0, 0.5 * partner_monthly_fra - YOUR_SS_MONTHLY_FRA)
+        out["partner"] += 12 * partner_top_up * ss_spousal_factor(
+            max(partner_claim_age, claim_age - age_gap))
+        out["you"] += 12 * your_top_up * ss_spousal_factor(
+            max(claim_age, partner_claim_age + age_gap))
+    return out
+
+
 def calculate_social_security(your_age: int, claim_age: int = 67) -> float:
     """
     Calculate annual Social Security income in today's dollars.
@@ -1501,41 +1580,56 @@ def calculate_social_security(your_age: int, claim_age: int = 67) -> float:
         benefit is under half of the other's gets the difference once both
         have claimed (ss_spousal_factor; no delayed credit on it).
 
+    Before the earnings test: the engine pays
+    account_simulation.social_security_for_year, which withholds benefits
+    from an early claimant who still works and credits them back after full
+    retirement age.
+
     LIMITATION: both spouses are assumed alive for the full planning horizon
     (see PLAN_UNTIL_AGE). This function does not model survivor benefits
     (the higher of the two SS benefits continuing alone after a spouse's
     death) because there is no stochastic mortality in this model. Benefits
     are the FRA amounts you enter; they do not change with when you stop work.
     """
-    annual_income = 0
+    return sum(social_security_by_person(your_age, claim_age).values())
 
-    # Primary user's SS
-    if your_age >= claim_age:
-        annual_income += YOUR_SS_MONTHLY_FRA * ss_claim_factor(claim_age) * 12
 
-    if not has_partner():
-        return annual_income
+# -----------------------------------------------------------------------------
+# RETIREMENT EARNINGS TEST
+# -----------------------------------------------------------------------------
+# A claimant under full retirement age who still earns wages has benefits
+# withheld: $1 for every $2 of wages above SS_EARNINGS_TEST_LIMIT in the years
+# before the year they reach full retirement age, and $1 for every $3 above
+# SS_EARNINGS_TEST_LIMIT_FRA_YEAR in that year. At full retirement age the
+# benefit is recomputed as if it had started later by the months withheld, so
+# withheld benefits come back as a higher benefit for life. Limits are SSA's
+# 2026 figures ($2,040 / $5,430 a month); they rise with average wages, so they
+# stay flat in today's dollars. Each person is tested on their own wages.
+# Set SS_EARNINGS_TEST_ENABLED False to pay the full benefit while working.
+SS_EARNINGS_TEST_ENABLED = True
+SS_EARNINGS_TEST_LIMIT = 24_480
+SS_EARNINGS_TEST_LIMIT_FRA_YEAR = 65_160
 
-    # Partner's SS (accounting for age difference), at their own claim age
-    age_gap = YOUR_AGE - PARTNER_AGE
-    partner_age = your_age - age_gap
-    partner_claim_age = globals().get("PARTNER_SS_CLAIM_AGE") or claim_age
-    partner_monthly_fra = globals().get("PARTNER_SS_MONTHLY_FRA", 0) or 0
-    if partner_monthly_fra > 0 and partner_age >= partner_claim_age:
-        annual_income += partner_monthly_fra * ss_claim_factor(partner_claim_age) * 12
 
-    # Spousal top-up: married couples only, once BOTH have claimed. It starts
-    # when the second of the two files, at the receiving spouse's age then.
-    if (globals().get("MODEL_SPOUSAL_SS_BENEFIT", False)
-            and normalize_filing_status() == _FILING_MFJ
-            and your_age >= claim_age and partner_age >= partner_claim_age):
-        partner_top_up = max(0.0, 0.5 * YOUR_SS_MONTHLY_FRA - partner_monthly_fra)
-        your_top_up = max(0.0, 0.5 * partner_monthly_fra - YOUR_SS_MONTHLY_FRA)
-        annual_income += 12 * (
-            partner_top_up * ss_spousal_factor(max(partner_claim_age, claim_age - age_gap))
-            + your_top_up * ss_spousal_factor(max(claim_age, partner_claim_age + age_gap)))
+def ss_earnings_test_withholding(benefit: float, wages: float, person_age: float) -> float:
+    """Benefits withheld this year from one person (today's dollars).
 
-    return annual_income
+    ``benefit`` is their benefit for the year, ``wages`` their earnings (wages,
+    not investment or other income), ``person_age`` their own age. The year at
+    age SOCIAL_SECURITY_START_AGE - 1 counts as the year they reach full
+    retirement age (approximation: the higher limit and $1-in-$3 apply to the
+    whole year, not only the months before the birthday). Nothing is withheld
+    from full retirement age on."""
+    benefit = max(0.0, float(benefit or 0.0))
+    if not SS_EARNINGS_TEST_ENABLED or benefit <= 0 or person_age >= SOCIAL_SECURITY_START_AGE:
+        return 0.0
+    wages = max(0.0, float(wages or 0.0))
+    if person_age >= SOCIAL_SECURITY_START_AGE - 1:
+        excess = max(0.0, wages - SS_EARNINGS_TEST_LIMIT_FRA_YEAR) / 3.0
+    else:
+        excess = max(0.0, wages - SS_EARNINGS_TEST_LIMIT) / 2.0
+    return min(benefit, excess)
+
 
 # Toggle Social Security on/off for scenario comparison
 INCLUDE_SOCIAL_SECURITY = True
@@ -1906,14 +2000,15 @@ LTCG_BRACKETS_BY_STATUS = {
 }
 
 # -----------------------------------------------------------------------------
-# PAYROLL (FICA) TAXES ON WAGES (2024)
+# PAYROLL (FICA) TAXES ON WAGES (2026 wage base)
 # -----------------------------------------------------------------------------
-# Per earner: Social Security 6.2% up to the wage base, Medicare 1.45% on all
+# Per earner: Social Security 6.2% up to the wage base (2026: $184,500, SSA's
+# October 2025 announcement; indexed, so flat in real terms), Medicare 1.45% on all
 # wages. The 0.9% Additional Medicare Tax applies per RETURN above $250k (joint)
 # / $200k (others); that threshold is not indexed, so like NIIT it decays in
 # this real-dollar frame (real_frozen_threshold). 401(k) deferrals are FICA
 # wages; HSA contributions made through payroll are not.
-SS_WAGE_BASE = 168_600
+SS_WAGE_BASE = 184_500
 SOCIAL_SECURITY_TAX_RATE = 0.062
 MEDICARE_TAX_RATE = 0.0145
 ADDITIONAL_MEDICARE_TAX_RATE = 0.009
@@ -1922,12 +2017,14 @@ ADDITIONAL_MEDICARE_THRESHOLD_BY_STATUS = {
 }
 
 # -----------------------------------------------------------------------------
-# ROTH IRA INCOME PHASE-OUT (2024 MAGI ranges, indexed -> flat in real terms)
+# ROTH IRA INCOME PHASE-OUT (2026 MAGI ranges, IRS Notice 2025-67; indexed ->
+# flat in real terms). The Money check-up reads this same table
+# (ui/utils/simple_finance.roth_phaseout).
 # -----------------------------------------------------------------------------
 ROTH_IRA_PHASEOUT_BY_STATUS = {
-    _FILING_MFJ: (230_000, 240_000),
-    _FILING_SINGLE: (146_000, 161_000),
-    _FILING_HOH: (146_000, 161_000),
+    _FILING_MFJ: (242_000, 252_000),
+    _FILING_SINGLE: (153_000, 168_000),
+    _FILING_HOH: (153_000, 168_000),
 }
 
 
@@ -2141,7 +2238,8 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
                        your_hsa: float = 0.0, partner_hsa: float = 0.0,
                        your_age=None, partner_age=None, status=None,
                        partner=None, state=None, flat_rate=None,
-                       years_from_start: float = 0.0, children_under_17=None) -> dict:
+                       years_from_start: float = 0.0, children_under_17=None,
+                       your_deduction: float = 0.0) -> dict:
     """Income and payroll taxes on a working year's pay, and the take-home.
 
     The single source of the working-year tax: simulate_accumulation_year (via
@@ -2153,6 +2251,10 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
     income without FICA. 401(k) and HSA amounts are pre-tax payroll deferrals:
     they lower federal and (unless the state says otherwise) state taxable
     income; 401(k) deferrals still pay FICA, HSA payroll contributions don't.
+
+    ``your_deduction`` is an above-the-line deduction on your return (the
+    student loan interest deduction): it lowers your AGI, federal and state
+    taxable income, but not FICA.
 
     ``children_under_17`` is the number of children the child tax credit counts
     (None = this config's CHILDREN at ``years_from_start``); the credit lowers the
@@ -2190,6 +2292,9 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
 
     you = _person(your_wages, your_other, your_401k, your_hsa, your_age)
     them = _person(partner_wages, partner_other, partner_401k, partner_hsa, partner_age)
+    adj = min(max(0.0, float(your_deduction or 0.0)), max(0.0, you["agi"]))
+    you["agi"] -= adj
+    you["adj"] = adj
 
     if two:
         returns = [(status, [you], [your_age]), (_FILING_SINGLE, [them], [partner_age])]
@@ -2212,7 +2317,8 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
         rules = state_tax_rules(state, ret_status, people=len(ages), flat_rate=flat_rate)
         state_income = {id(p): (p["wages"] + p["other"]
                                 - (0.0 if rules["pretax_401k_taxed"] else p["k401"])
-                                - (0.0 if rules["hsa_taxed"] else p["hsa"]))
+                                - (0.0 if rules["hsa_taxed"] else p["hsa"])
+                                - p.get("adj", 0.0))
                         for p in people}
         st_total = sum(state_income.values())
         state_tax = progressive_tax(rules["brackets"], max(0.0, st_total - rules["deduction"]))
@@ -2679,6 +2785,74 @@ def healthcare_cost_per_adult(age: int, inflation_factor: float = 1.0) -> float:
     """One retired adult's share of the couple band for their own ``age``."""
     return calculate_healthcare_cost(age, True, inflation_factor) / HEALTHCARE_BAND_ADULTS
 
+
+def pre_medicare_health_quote(modified_agi: float, adult_ages, kid_ages=(),
+                              inflation_factor: float = 1.0, price_scale: float = 1.0,
+                              source=None) -> float:
+    """Marketplace cost of the pre-Medicare members in one retirement year: the
+    marketplace branch of AccountPortfolio.quote_health_insurance_cost (premium
+    after subsidy, plus out-of-pocket when MODEL_ACA_AGE_RATED), side-effect free.
+
+    ``price_scale`` multiplies the marketplace prices (ACA_BENCHMARK_MONTHLY_AT_40,
+    ACA_CHILD_MONTHLY, the 'early_retirement' band), as a place's health price
+    level does in the Freedom milestones check; the subsidy cap does not scale.
+    ``source`` is an optional mapping read before this module's globals, so a
+    caller can price a plan after its overrides are gone. A working partner's
+    employer plan (no marketplace premium) is the caller's to apply.
+    """
+    if source is None:
+        get = globals().get
+    else:
+        def get(key, default=None):
+            value = source.get(key)
+            return globals().get(key, default) if value is None else value
+    if not get("ACA_ENABLED", True):
+        return 0.0
+    adult_ages = list(adult_ages)
+    kids = list(kid_ages or ())
+    medicare_age = get("MEDICARE_AGE", 65)
+    pre = [a for a in adult_ages if a < medicare_age]
+    magi = float(modified_agi)
+    if get("MODEL_ACA_AGE_RATED", False):
+        members = pre + kids
+        if not members:
+            return 0.0
+        household = len(adult_ages) + len(kids)
+        bench = float(get("ACA_BENCHMARK_MONTHLY_AT_40"))
+        child = float(get("ACA_CHILD_MONTHLY"))
+        full = 12.0 * price_scale * sum(
+            child if a < ACA_CHILD_RATE_UNDER_AGE
+            else bench * ACA_AGE_CURVE[min(int(a), 64)] / ACA_AGE_CURVE[40] for a in members)
+        ratio = magi / aca_fpl(household)
+        premium = (full if ratio >= ACA_SUBSIDY_CLIFF_PCT
+                   else min(max(0.0, magi) * aca_applicable_pct(ratio), full))
+        oop = max(0.0, float(get("ACA_OOP_PER_PERSON_ANNUAL")) * len(members) * inflation_factor
+                  - float(get("SPEND_HEALTH_MONTHLY", 0) or 0) * 12.0 * len(members) / household)
+        return premium * inflation_factor + oop
+    if not pre:
+        return 0.0
+    # Legacy flat band (calculate_aca_premium): family-of-4 FPL, band ceiling.
+    band = (get("HEALTHCARE_COSTS_BY_AGE", None) or {}).get('early_retirement')
+    try:
+        band = float(band)
+    except (TypeError, ValueError):
+        band = 0.0
+    full = (band if band > 0 else float(get("ACA_BASE_ANNUAL_PREMIUM"))) * price_scale
+    fpl_pct = magi / FPL_FAMILY_OF_4
+    if fpl_pct >= ACA_SUBSIDY_CLIFF_PCT:
+        household_aca = full
+    else:
+        if fpl_pct <= 1.5:
+            max_pct = 0.04
+        elif fpl_pct <= 2.0:
+            max_pct = 0.04 + (fpl_pct - 1.5) / 0.5 * (0.065 - 0.04)
+        elif fpl_pct <= 3.0:
+            max_pct = 0.065 + (fpl_pct - 2.0) / 1.0 * (0.095 - 0.065)
+        else:
+            max_pct = 0.095
+        household_aca = min(magi * max_pct, full)
+    return household_aca * inflation_factor * len(pre) / len(adult_ages)
+
 # =============================================================================
 # LONG-TERM CARE (LTC) MODELING
 # =============================================================================
@@ -3113,6 +3287,63 @@ def debt_payment_for_age(age: int) -> float:
                                            EXPECTED_INFLATION)
     return by_year[year] if year < len(by_year) else 0.0
 
+# Student loan interest deduction (working years): up to $2,500 a year of the
+# interest paid on DEBTS of kind "student_loan" comes off income before tax
+# ("above the line", no itemizing needed). It phases out by modified AGI over
+# the ranges below (2026 values, Rev. Proc. 2025-32; indexed, so flat in today's
+# dollars). The $2,500 cap has never been indexed, so it shrinks in today's
+# dollars (real_frozen_threshold). The debts belong to the household: on an
+# unmarried couple's two returns the deduction goes on yours. Retirement years
+# get none (the engine's retirement tax has no above-the-line deductions).
+# Set the cap to 0 to turn it off.
+STUDENT_LOAN_INTEREST_DEDUCTION_MAX = 2_500
+STUDENT_LOAN_INTEREST_PHASEOUT_BY_STATUS = {
+    _FILING_MFJ: (175_000, 205_000),
+    _FILING_SINGLE: (85_000, 100_000),
+    _FILING_HOH: (85_000, 100_000),
+}
+
+
+def student_loan_interest_for_age(age: int) -> float:
+    """Student-loan interest paid in the plan year you are ``age``, in today's
+    dollars (0 with no student loans or once they are paid off)."""
+    if not DEBTS:
+        return 0.0
+    year = int(age) - int(YOUR_AGE)
+    if year < 0:
+        return 0.0
+    by_year = _debts.student_interest_by_year(DEBTS, DEBT_EXTRA_MONTHLY, DEBT_STRATEGY)
+    if year >= len(by_year):
+        return 0.0
+    return by_year[year] / ((1.0 + EXPECTED_INFLATION) ** year)
+
+
+def student_loan_interest_deduction(age: int, magi: float, status=None) -> float:
+    """The deduction for the plan year you are ``age`` (today's dollars): the
+    interest paid, capped at STUDENT_LOAN_INTEREST_DEDUCTION_MAX (worth less
+    each year in today's dollars), reduced in a straight line over the return's
+    MAGI range (``magi``: AGI before this deduction)."""
+    return student_loan_deduction_amount(student_loan_interest_for_age(age), magi, status,
+                                         int(age) - int(YOUR_AGE))
+
+
+def student_loan_deduction_amount(interest: float, magi: float, status=None,
+                                  years_from_start: float = 0.0) -> float:
+    """The deduction for ``interest`` paid (today's dollars) at ``magi``: the
+    rule of student_loan_interest_deduction, for callers that know the interest
+    (the sidebar's Taxes panel)."""
+    if interest <= 0 or STUDENT_LOAN_INTEREST_DEDUCTION_MAX <= 0:
+        return 0.0
+    cap = real_frozen_threshold(STUDENT_LOAN_INTEREST_DEDUCTION_MAX, years_from_start)
+    amount = min(interest, cap)
+    lo, hi = STUDENT_LOAN_INTEREST_PHASEOUT_BY_STATUS[normalize_filing_status(status)]
+    if magi >= hi:
+        return 0.0
+    if magi > lo:
+        amount *= (hi - magi) / (hi - lo)
+    return max(0.0, amount)
+
+
 # --- Housing timeline: buy, move, downsize ----------------------------------
 # Today's home is described above: HOME_VALUE / MORTGAGE_* for an owner (rate:
 # MORTGAGE_RATE_FOR_PAYOFF), SPEND_RENT_MONTHLY for a renter. HOME_EVENTS lists
@@ -3321,20 +3552,25 @@ def extra_mortgage_payment_enabled() -> bool:
         return False
 
 
-def extra_mortgage_payment_for_age(your_age: float) -> float:
-    """Extra principal owed at ``your_age`` (today's dollars, 0 outside the window)."""
-    if not extra_mortgage_payment_enabled():
-        return 0.0
+def extra_mortgage_payment_in_window(your_age: float) -> bool:
+    """Is ``your_age`` inside the extra payment's window: from
+    EXTRA_MORTGAGE_PAYMENT_START_AGE (None = now) up to, not including,
+    EXTRA_MORTGAGE_PAYMENT_STOP_AGE (None = until the loan is gone)?"""
     try:
         age = float(your_age)
     except (TypeError, ValueError):
-        return 0.0
+        return False
     start = globals().get("EXTRA_MORTGAGE_PAYMENT_START_AGE")
     start = float(YOUR_AGE) if start is None else float(start)
     if age < start:
-        return 0.0
+        return False
     stop = globals().get("EXTRA_MORTGAGE_PAYMENT_STOP_AGE")
-    if stop is not None and age >= float(stop):
+    return not (stop is not None and age >= float(stop))
+
+
+def extra_mortgage_payment_for_age(your_age: float) -> float:
+    """Extra principal owed at ``your_age`` (today's dollars, 0 outside the window)."""
+    if not extra_mortgage_payment_enabled() or not extra_mortgage_payment_in_window(your_age):
         return 0.0
     return float(globals().get("EXTRA_MORTGAGE_PAYMENT_ANNUAL", 0.0) or 0.0)
 

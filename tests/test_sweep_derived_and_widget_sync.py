@@ -133,7 +133,7 @@ class TestComputeTaxes:
 
     def test_fica_caps_ss_per_earner_not_per_household(self):
         """Two earners get two Social Security wage bases."""
-        base = 168_600
+        base = 184_500     # 2026 Social Security wage base
         solo = derived.compute_taxes({"YOUR_BASE_SALARY": 2 * base})["fica"]
         couple = derived.compute_taxes({"YOUR_BASE_SALARY": base,
                                         "PARTNER_BASE_SALARY": base})["fica"]

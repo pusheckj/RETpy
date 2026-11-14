@@ -237,8 +237,8 @@ class TestRothLimits:
         assert sf.roth_phaseout(True, TODAY) == (242_000, 252_000)
         assert sf.roth_phaseout(True, date(2031, 1, 1)) == (242_000, 252_000)   # latest known year
 
-    def test_earlier_years_fall_back_to_the_engines_2024_ranges(self):
-        d = date(2024, 5, 1)
+    def test_one_source_with_the_engine(self):
+        d = date(2024, 5, 1)          # any year: the engine's (2026) table
         assert sf.roth_phaseout(False, d) == cfg.ROTH_IRA_PHASEOUT_BY_STATUS["S"]
         assert sf.roth_phaseout(True, d) == cfg.ROTH_IRA_PHASEOUT_BY_STATUS["MFJ"]
 
@@ -249,7 +249,7 @@ class TestRothLimits:
             expected = 7_500 if magi <= lo else 0 if magi >= hi else math.floor(7_500 * (hi - magi) / (hi - lo))
             assert sf.roth_direct_limit(magi, married, TODAY) == expected
 
-    def test_formula_shape_matches_the_engine_on_the_fallback_years(self):
+    def test_formula_shape_matches_the_engine(self):
         d = date(2024, 5, 1)
         for married, status in ((False, "Single"), (True, "Married filing jointly")):
             lo, hi = sf.roth_phaseout(married, d)

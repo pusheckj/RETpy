@@ -190,9 +190,14 @@ def test_this_years_spending_and_savings_include_the_payments():
     assert derived.debt_payments_this_year(WITH_DEBTS) == pay
     assert derived.compute_expenses_today(WITH_DEBTS) - derived.compute_expenses_today(BASE) == pay
     full = {**BASE, "YOUR_BASE_SALARY": 120_000}
+    with_debts = {**full, **{k: WITH_DEBTS[k] for k in ("DEBTS", "DEBT_EXTRA_MONTHLY")}}
+    # The payments come out of savings; the student loan's interest is deductible,
+    # so the tax falls by a little and gives some back.
+    tax_saved = (derived.savings_budget(full)["taxes"]["total"]
+                 - derived.savings_budget(with_debts)["taxes"]["total"])
+    assert 0 < tax_saved < 0.25 * 1_000          # ~$950 of interest, 22% bracket
     assert (derived.savings_budget(full)["disposable"]
-            - derived.savings_budget({**full, **{k: WITH_DEBTS[k] for k in
-                                                ("DEBTS", "DEBT_EXTRA_MONTHLY")}})["disposable"]) == pay
+            - derived.savings_budget(with_debts)["disposable"]) == pytest.approx(pay - tax_saved, abs=1)
 
 
 def test_spending_chart_and_projection_show_the_debts():

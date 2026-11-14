@@ -119,7 +119,7 @@ Each real-excess category follows an **independent random walk**: each year's dr
 
   escrow + (all-in − escrow) × cpi_index(loan start) / cpi_index(age)
 
-today's dollars (`config.mortgage_real_annual`), so year *k* of a loan costs escrow + P&I / (1 + π)^*k*. The term and payoff age don't change. After payoff the home costs its escrow, flat. A purchase in a later year sets its loan in that year's dollars (price and loan × `cpi_index` at that age), so its first year costs exactly the today's-dollar payment you see. The housing chart, net-worth projection, mortgage paydown tab, House section and Freedom milestones read the same schedule. With `EXPECTED_INFLATION = 0` every index is 1 and results are exactly what they were before this conversion.
+today's dollars (`config.mortgage_real_annual`), so year *k* of a loan costs escrow + P&I / (1 + π)^*k*. The term and payoff age don't change. After payoff the home costs its escrow, flat. A purchase in a later year sets its loan in that year's dollars (price and loan × `cpi_index` at that age), so its first year costs exactly the today's-dollar payment you see. The housing chart, net-worth projection, mortgage paydown tab, House section and Freedom milestones read the same schedule. Extra principal is paid only inside its window, from `EXTRA_MORTGAGE_PAYMENT_START_AGE` up to `EXTRA_MORTGAGE_PAYMENT_STOP_AGE` (`config.extra_mortgage_payment_in_window`), in the engine and in the deterministic payoff projection (`account_simulation.mortgage_payoff_projection`) behind the House section's payoff line and the Mortgage paydown tab. With `EXPECTED_INFLATION = 0` every index is 1 and results are exactly what they were before this conversion.
 
 > **Limitation — frozen-nominal statutory thresholds.** A handful of tax thresholds are specified in *nominal* dollars by statute and are **not** inflation-indexed in reality (or are indexed on a lag we do not model). In an all-real frame these are held at their nominal 2024 values, so over a multi-decade horizon they effectively *tighten* in real terms and bite harder each year — a conservative, realistic bias. This applies to: the **NIIT** $250k MFJ MAGI threshold, the **IRMAA** Medicare surcharge brackets, and the **Social Security taxation** provisional-income thresholds ($32k–$44k MFJ). Statutory items that *are* CPI-indexed in reality (federal ordinary/LTCG brackets, the standard deduction, contribution limits) are correctly held flat in real terms.
 
@@ -134,9 +134,10 @@ Each accumulation year proceeds in the order **returns → contributions** (the 
 Each working year's pay, pre-tax savings and taxes come from one deterministic function, `account_simulation.working_year_cashflow`, which the sidebar's Taxes panel and the tax/savings charts read too:
 
 - **Pay**: your comp-table wages (base + bonus + RSU) plus `YOUR_OTHER_INCOME`; the partner's base + bonus + RSU (grown at their growth rate) plus `PARTNER_OTHER_INCOME`.
-- **Pre-tax deferrals**: 401(k) and HSA, capped at the IRS limits and at the pay itself.
-- **Taxes** (`config.working_year_taxes`): 2024 federal brackets and standard deduction for the filing status; the state's table; FICA per earner (Social Security to the wage base, Medicare, Additional Medicare above $200k/$250k per return). A married couple files one joint return, an unmarried couple two (each taxed on their own pay), and a joint return's income tax is shared between the two in proportion to their taxable income.
-- **Take-home** = pay − deferrals − taxes. A comp row that sets `after_tax` overrides your computed take-home (advanced; the app never sets it).
+- **Pre-tax deferrals**: 401(k) and HSA, capped at the IRS limits and at the pay itself. **Roth catch-up (SECURE 2.0):** someone whose FICA wages the year before passed $150,000 (`ROTH_CATCHUP_WAGE_THRESHOLD`, the 2026 figure) makes the 401(k) catch-up (50+, and the 60-63 super catch-up) as Roth: it is paid from after-tax pay and goes to the Roth account (the engine has no separate Roth 401(k); the tax treatment is the same). The prior year's wages are the comp table's row for the year before. `MODEL_ROTH_CATCHUP_RULE = False` keeps it pre-tax.
+- **Student loan interest deduction**: up to $2,500 of the interest paid on `DEBTS` of kind `student_loan` comes off your AGI (above the line), phased out over $85k-$100k MAGI (single / head of household) or $175k-$205k (joint). The interest is the payoff math's own (`debts.student_interest_by_year`). The cap is not indexed, so it shrinks in today's dollars; the ranges are. On an unmarried couple's two returns it goes on yours. Working years only.
+- **Taxes** (`config.working_year_taxes`): 2024 federal brackets and standard deduction for the filing status; the state's table; FICA per earner (Social Security to the 2026 wage base of $184,500, Medicare, Additional Medicare above $200k/$250k per return). A married couple files one joint return, an unmarried couple two (each taxed on their own pay), and a joint return's income tax is shared between the two in proportion to their taxable income.
+- **Take-home** = pay − deferrals (a Roth catch-up included) − taxes. A comp row that sets `after_tax` overrides your computed take-home (advanced; the app never sets it).
 
 The year's taxable pay is also the base that any same-year portfolio draw (a car, a house down payment) stacks on.
 
@@ -165,7 +166,7 @@ Each retirement year proceeds in this order:
 1. **Compute gross annual expenses** — sum of housing, food, transport, healthcare (age-banded), child costs (each child in `CHILDREN` costs their own monthly amount from birth until their own leave-home age), college (paid first from that child's own 529), leisure, and discretionary (see 6.1 and 6.2 for housing and the retirement lifestyle phases).
 2. **Apply dynamic spending adjustments** (Section 8) if enabled.
 3. **Apply return-based spending adjustments** (Section 9) if enabled.
-4. **Subtract Social Security** income for both spouses, if each has reached their claim age. Benefits start at the claim age even while still working (the working-year cash flow adds them, with the taxable part taxed as ordinary income). The earnings test (benefits withheld above about $24k of wages before full retirement age) is not modeled, so an early claimant who keeps working is shown the full reduced benefit.
+4. **Subtract Social Security** income for both spouses, if each has reached their claim age. Benefits start at the claim age even while still working (the working-year cash flow adds them, with the taxable part taxed as ordinary income). The earnings test applies to anyone who claims before full retirement age and still earns wages (Section 12.4).
 5. **Subtract RMD** income (Section 13) — RMDs must be withdrawn regardless of need.
 6. **Compute net withdrawal** needed from the portfolio = expenses + taxes − SS − RMD surplus.
 7. **Withdraw from accounts** in the tax-efficient order described in Section 7.
@@ -208,7 +209,18 @@ Spending is higher in the first years of retirement and lower later:
   person, since shared costs like lodging don't halve) from retirement until 70,
   or for 5 years when retiring after 65.
 - **Later years:** living spending 15% lower from 75, or from 10 years after
-  retiring when that is later. Housing is not reduced.
+  retiring when that is later (`config.late_retirement_factor`). Housing,
+  college, the vacation add-on and debt payments are not reduced.
+
+The Spending chart draws the same rules year by year (retirement spending
+mode, lifecycle preset, travel extra, later-years cut, children's costs and
+long-term care growing with the childcare and healthcare factors, the college
+bill), so before the guardrails its bars equal the engine's spending at every
+age. What still differs: the guardrails are path-dependent, so after a run the
+chart adds a line for the median the simulation really spent; long-term care is
+drawn as its expected value (chance × cost); in working years the chart shows
+the whole college bill, while the engine's logged working-year spending nets out
+the part the 529 pays.
 
 All of these are inputs (Retirement). The lifecycle presets use the same
 phases: the travel boom's +50% discretionary covers the go-go years, its −20%
@@ -227,7 +239,7 @@ with π the expected general inflation (`EXPECTED_INFLATION`). This is the same 
 
 **Where the money comes from.** The payments are spending. In working years they are added to that year's living expenses, so they come out of the brokerage sweep (the extra payment is money that would otherwise be saved); in the *Manual amounts* savings mode, as with all spending, they only matter when spending passes take-home. In retirement they are added after the spending guardrails (a loan payment can't be trimmed in a bad year) and withdrawn like other spending. The schedule doesn't depend on the retirement age. With no debts nothing changes.
 
-**One calculation.** `retirement_sim/debts.py` holds the payoff math. The engine, the planner's Debts section and Debt payoff tile, and the Money check-up all use it, so they show the same months and interest. Not modeled: the student-loan interest deduction, variable rates, promotional rates and fees, income-driven repayment and forgiveness, and new borrowing. Debts are not subtracted from net worth.
+**One calculation.** `retirement_sim/debts.py` holds the payoff math. The engine, the planner's Debts section and Debt payoff tile, and the Money check-up all use it, so they show the same months and interest. Student-loan interest paid in working years is deductible (Section 5.0). Not modeled: variable rates, promotional rates and fees, income-driven repayment and forgiveness, and new borrowing. Debts are not subtracted from net worth.
 
 ---
 
@@ -340,6 +352,16 @@ Up to **85%** of Social Security benefits are includable in federal taxable inco
 
 `INCLUDE_SOCIAL_SECURITY` and `SS_CLAIM_AGE` toggle and parameterize this module.
 
+### 12.4 Earnings test
+
+A claimant under full retirement age who still earns wages has benefits withheld (`config.ss_earnings_test_withholding`, `account_simulation.social_security_for_year`):
+
+- **Before the year of full retirement age:** $1 for every $2 of wages above **$24,480** (`SS_EARNINGS_TEST_LIMIT`).
+- **In that year** (the year at age 66): $1 for every $3 above **$65,160** (`SS_EARNINGS_TEST_LIMIT_FRA_YEAR`). Approximation: the whole year counts, not only the months before the birthday.
+- **From full retirement age** nothing is withheld, and the benefit is recomputed as if it had started later by the months withheld: it is scaled by `ss_claim_factor(claim age + months withheld / 12) / ss_claim_factor(claim age)`, never past the full benefit. Months are fractional (withheld dollars ÷ the monthly benefit), where SSA counts whole months.
+
+The limits are SSA's 2026 figures; they rise with average wages, so they are flat in today's dollars. Each person is tested on their own wages (comp-table wages for you, salary + bonus + RSU for your partner; other income doesn't count) against their own benefit plus any spousal top-up they receive. In reality a worker's excess earnings also withhold a spouse's benefit on their record; that is not modeled. The working-year cash flow, the retirement years (a partner still working) and the income chart all use this one function. `SS_EARNINGS_TEST_ENABLED = False` pays the full benefit while working.
+
 ---
 
 ## 13. Required Minimum Distributions
@@ -399,7 +421,7 @@ The planner's **Freedom milestones** section (`ui/utils/milestones.py`, `ui/util
   - each everyday category (`SPEND_UTILITIES/FOOD/TRANSPORT/HEALTH/DISCRETIONARY/OTHER_MONTHLY`, `PARTNER_OTHER_MONTHLY`) = the plan's retirement amount × place index ÷ home-area index × the place's adjustment (default 1.00). The plan's retirement-spending mode (same / % of today / absolute) scales the categories as a group, as `retirement_living_base` does. A category's index mixes four price levels per area: goods, services other than housing, utilities and health insurance (food 70/30 goods/services, transport 80/20, fun and partner 50/50, other = services, utilities = utilities, healthcare premiums = health);
   - **housing there:** "Where you live now" keeps the plan's housing at that age (its own planned moves included). Any other place sells the home you own at the move age: value − remaining loan − selling costs (`HOME_SELLING_COST_PCT`) − a rough 20% tax on any gain above the exclusion (the engine taxes it exactly). Then it either **buys** a typical home there (the place's price; the proceeds pay for it and a 30-year loan at the plan's new-loan rate covers any shortfall; housing = the loan payment + price × the place's property-tax-and-insurance rate) or **rents** there (rent × 12). Moving costs are `HOUSE_MOVING_COSTS`. Defaults: buy in the US, rent abroad; each place can switch, or keep your home;
   - **children's costs** (childcare, college) and the lifecycle preset's food/fun change stay as planned: there is no clean per-place figure for them;
-  - **health:** `healthcare_cost_per_adult` × adults; before Medicare it is scaled by the place's health index ÷ the home area's. Medicare years are not scaled.
+  - **health:** priced with the engine's formula at the retirement age (`config.pre_medicare_health_quote`, `milestones.health_cost`): before Medicare the age-rated marketplace premium for the covered adults and children at home, less the subsidy, plus out-of-pocket, with the place's health index ÷ the home area's scaling the prices (not the subsidy cap), grown by the expected healthcare factor since today. The subsidy needs an income: the quick rule uses half the year's spending there (the engine's own first-pass estimate) plus that year's Roth conversion and a still-working partner's pay; the simulation uses the income its withdrawals and conversions really create. If a working partner's employer plan covers the household at that age, health is priced from the partner's first retired year. Medicare years use the engine's IRMAA and floor, not scaled by place.
 - **FIRE in a place at age a:** invested(a) + net sale proceeds(a) − home purchase cash(a) − moving costs ≥ spending there ÷ withdrawal rate (default 4%).
 - **Coast FIRE:** invested(a) × (1 + r)^(retirement age − a) ≥ the FIRE number − the cash the move frees at retirement, with r the expected real return of the return scenario (as in the net-worth projection chart).
 - **Confirm with simulation** gives the engine the same assumptions: `RETIREMENT_SPENDING_MODE = "Absolute amount ($/yr)"` with `RETIREMENT_SPENDING_ABSOLUTE` = the place's everyday spending; `ACA_BENCHMARK_MONTHLY_AT_40`, `ACA_CHILD_MONTHLY` and `HEALTHCARE_COSTS_BY_AGE['early_retirement']` × the health ratio; `RETIREMENT_STATE_CHOICE` for the place's state tax; and, for every retirement age the scan tries, a `HOME_EVENTS` patch that moves you at that age (`sell_buy` with the place's price, `loan` = the shortfall, `years` = 30 (0 when paid in cash), `carrying_pct` = the place's rate; or `sell_rent` with its rent). The plan's own home moves before that age stay; moves at or after it are replaced, and the legacy single house move is folded into the list. A purchase's `carrying_pct` is a new optional `HOME_EVENTS` field: the engine uses it for that home's escrow and for its property tax and insurance after payoff; without it nothing changes. `RETIREMENT_STATE_CHOICE` (default `None`, meaning `STATE_CHOICE`) applies only to retirement-phase tax (withdrawals, conversions, RMDs); working years keep `STATE_CHOICE`. The check reuses the main analysis's seeds and run counts, so "Where you live now" reproduces the plan's own earliest age.

@@ -259,22 +259,19 @@ def contribution_limits(hsa_family: bool = False, today: Optional[date] = None,
 # Roth IRA income phase-out (modified AGI), IRS Notice 2025-67, same notice as
 # the limits above: (low, high) for "single" (also head of household) and
 # "joint" (married filing jointly). Direct contributions shrink from the full
-# IRA limit at ``low`` to zero at ``high``. Years before the table fall back to
-# the engine's 2024 ranges (retirement_sim.config.ROTH_IRA_PHASEOUT_BY_STATUS).
+# IRA limit at ``low`` to zero at ``high``. One source: the engine's table
+# (retirement_sim.config.ROTH_IRA_PHASEOUT_BY_STATUS), so the check-up and the
+# planner can't drift apart.
 ROTH_PHASEOUT = {
-    2026: {"single": (153_000, 168_000), "joint": (242_000, 252_000)},
+    2026: {"single": cfg.ROTH_IRA_PHASEOUT_BY_STATUS[cfg._FILING_SINGLE],
+           "joint": cfg.ROTH_IRA_PHASEOUT_BY_STATUS[cfg._FILING_MFJ]},
 }
 
 
 def roth_phaseout(married: bool = False, today: Optional[date] = None) -> tuple:
-    """``(low, high)`` MAGI range for the year shown to the visitor."""
-    year = (today or date.today()).year
-    known = [y for y in ROTH_PHASEOUT if y <= year]
-    if known:
-        lo, hi = ROTH_PHASEOUT[max(known)]["joint" if married else "single"]
-        return float(lo), float(hi)
-    lo, hi = cfg.ROTH_IRA_PHASEOUT_BY_STATUS[
-        cfg.normalize_filing_status("Married filing jointly" if married else "Single")]
+    """``(low, high)`` MAGI range: the engine's 2026 table (``today`` is kept
+    for callers; every year uses the same, latest known, range)."""
+    lo, hi = cfg.ROTH_IRA_PHASEOUT_BY_STATUS[cfg._FILING_MFJ if married else cfg._FILING_SINGLE]
     return float(lo), float(hi)
 
 

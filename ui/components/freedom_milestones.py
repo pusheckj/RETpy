@@ -298,7 +298,8 @@ def build_inputs(overrides: dict, results, state: dict, rate: float, barista: fl
         housing_plan=(sale.get("housing") or {}).get(ret_age), pre_medicare=bool(basis.get("pre_medicare", True)),
         proceeds=dict(sale.get("proceeds") or {}), moving_costs=float(sale.get("moving_costs", 10_000.0)),
         mortgage_rate=float(sale.get("mortgage_rate", 0.065)),
-        carry_after_payoff=bool(sale.get("carry_after_payoff", True)))
+        carry_after_payoff=bool(sale.get("carry_after_payoff", True)),
+        health=dict(basis.get("health_params") or {}))
     inp = ms.Inputs(
         your_age=ages[0], retire_age=ret_age, year=date.today().year, ages=ages, invested=invested,
         home=home, spend_core=basis["core"], living_base=basis["living"], health=basis["health"], today_spend=basis["today"],
@@ -603,8 +604,15 @@ def _how_it_works(st, inp, rate: float, basis: dict, source: str, end_age) -> No
             f"- **Spending in a place** is built line by line at age {inp.retire_age}. Each everyday "
             f"category (utilities, food, transport, healthcare premiums, fun, other, partner) is your plan's "
             f"amount times that place's price level divided by the price level where you live now "
-            f"(**{_md(home)}**), times the place's adjustment. Health insurance before Medicare scales the "
-            "same way. Medicare years and children's costs stay as planned.\n"
+            f"(**{_md(home)}**), times the place's adjustment. Children's costs stay as planned.\n"
+            "- **Health in a place** is priced like the simulation prices it at that age. Before Medicare, "
+            "you pay the marketplace premium for your ages and children, less any subsidy, plus out-of-pocket "
+            "costs. Premiums scale by the place's health price level. The subsidy depends on income. "
+            "The quick rule takes income as half of the year's spending there, plus any Roth "
+            "conversion your plan makes that year. The simulation uses the income your withdrawals "
+            "and conversions really create. If your partner "
+            "still works on an employer plan, health is priced from the year they stop. Medicare years "
+            "stay as planned. Health costs grow a little faster than prices, as in the simulation.\n"
             "- **Housing in a place.** Moving sells the home you own at that age. You get its value less "
             "the loan, selling costs and tax on any gain above the exclusion. Then you buy a typical home "
             "there with that money (a loan covers any shortfall, at your plan's new-loan rate) and pay its "

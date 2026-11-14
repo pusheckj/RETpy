@@ -27,8 +27,11 @@ is the projection) and BEYOND if it never does within the plan.
     - housing there: rent x 12, or the new loan's payment plus property tax and
       insurance at that place's rate ("Where you live now" keeps your housing);
     - children's costs as planned (not scaled);
-    - health insurance and care: pre-Medicare costs scaled by the place's health
-      price level, Medicare years as planned.
+    - health insurance and care: the engine's own pricing at the retirement age
+      (health_cost): before Medicare the age-rated marketplace premium after
+      subsidy plus out-of-pocket, at the place's health price level, with MAGI
+      = half the year's spending there (the engine's first estimate) plus the
+      plan's Roth conversion that year; the Medicare part as planned.
 * Coast FIRE in a place: the balance, left alone with no more saving, grows at the
   real return to (FIRE number - cash the move frees) by the planned retirement age.
 * Other markers: emergency fund (cash covers 6 / 12 months), investments cover
@@ -96,6 +99,7 @@ class CostBasis:
     mortgage_rate: float = 0.065                 # a new loan's rate
     loan_years: int = 30
     carry_after_payoff: bool = True              # property tax + insurance once a home is paid off
+    health: Mapping = field(default_factory=dict)  # sim_runner._health_params; empty = scale Inputs.health
 
 
 @dataclass(frozen=True)
@@ -289,9 +293,6 @@ def place_cost(inp: "Inputs", place: Place, age: int) -> PlaceCost:
     cats = tuple((c, w * scale, w * scale * pc.ratio(area, cb.home, c) * adj) for c, w in weights.items())
     ratio = everyday_ratio(weights, area, cb.home)
     living_there = living * ratio * adj
-    health = max(0.0, float(inp.health))
-    if cb.pre_medicare:
-        health *= pc.ratio(area, cb.home, pc.CAT_HEALTH)
     proceeds = price = loan = down = costs = rent = 0.0
     carry = place.carry(cb.home)
     if place.housing == HOUSING_KEEP or place.here:
@@ -311,10 +312,40 @@ def place_cost(inp: "Inputs", place: Place, age: int) -> PlaceCost:
                 housing = payment + price * carry
             else:
                 housing = price * carry if cb.carry_after_payoff else 0.0
+    health = max(0.0, float(inp.health))
+    if cb.health:
+        # The engine's pricing, re-run for this place: its spending sets MAGI,
+        # its health price level the marketplace prices (the subsidy cap does not
+        # move with prices).
+        health = health_cost(cb.health, 0.5 * (living_there + housing + other),
+                             pc.ratio(area, cb.home, pc.CAT_HEALTH))
+    elif cb.pre_medicare:
+        health *= pc.ratio(area, cb.home, pc.CAT_HEALTH)
     spend = living_there + housing + other + health
     return PlaceCost(categories=cats, living=living_there, housing=housing, other=other, health=health,
                      spend=spend, proceeds=proceeds, price=price, loan=loan, down=down, costs=costs,
                      rent=rent, carry=carry, ratio=ratio)
+
+
+def health_cost(params: Mapping, spend_magi: float, price_scale: float = 1.0) -> float:
+    """Yearly health insurance and care, the engine's way (sim_runner._health_params
+    holds the plan's pricing as plain data): the Medicare part as planned plus the
+    pre-Medicare marketplace cost (config.pre_medicare_health_quote) at
+    ``price_scale``, unless a working partner's employer plan covers you. MAGI =
+    ``spend_magi`` (half the year's spending, the engine's first estimate) plus a
+    still-working partner's pay and the year's Roth conversion."""
+    try:
+        from retirement_sim import config as cfg
+    except ImportError:  # pragma: no cover
+        import config as cfg  # type: ignore
+    market = 0.0
+    if not params.get("employer"):
+        market = cfg.pre_medicare_health_quote(
+            float(spend_magi) + float(params.get("income", 0.0)) + float(params.get("conversion", 0.0)),
+            params.get("adult_ages") or (),
+            params.get("kid_ages") or (), float(params.get("factor", 1.0)), float(price_scale),
+            source=params.get("source"))
+    return max(0.0, float(params.get("medicare", 0.0)) + float(market))
 
 
 def fire_number(spend: float, rate: float) -> float:

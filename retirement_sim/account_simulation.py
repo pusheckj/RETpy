@@ -1987,6 +1987,105 @@ def _your_comp_for_age(your_age: int) -> Dict[str, Optional[float]]:
             "after_tax": None if after_tax is None else float(after_tax) * growth}
 
 
+def _partner_wages_for_age(your_age: int) -> Tuple[float, float]:
+    """The partner's (base, wages) in the year you are ``your_age``:
+    PARTNER_SALARY (+ bonus + RSU for wages) grown at PARTNER_SALARY_GROWTH_RATE."""
+    growth = (1 + cfg.PARTNER_SALARY_GROWTH_RATE) ** (your_age - cfg.YOUR_AGE)
+    base = float(cfg.PARTNER_SALARY) * growth
+    wages = (float(cfg.PARTNER_SALARY)
+             + float(getattr(cfg, "PARTNER_BONUS_AMOUNT", 0.0) or 0.0)
+             + float(getattr(cfg, "PARTNER_RSU_AMOUNT", 0.0) or 0.0)) * growth
+    return base, wages
+
+
+def _partner_works_at(your_age: int, retirement_age=None) -> bool:
+    """Does the partner earn in the year you are ``your_age``? Their own
+    PARTNER_RETIREMENT_AGE when set, else they stop with you
+    (``retirement_age``; None = you still work). The rule of
+    run_detailed_simulation's _partner_working_at."""
+    if not cfg.has_partner():
+        return False
+    pra = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
+    if pra is None:
+        return retirement_age is None or your_age < retirement_age
+    return (your_age - (cfg.YOUR_AGE - cfg.PARTNER_AGE)) < int(pra)
+
+
+def _ss_wages(person: str, your_age: int, retirement_age=None) -> float:
+    """Wages the earnings test counts for ``person`` in the year you are
+    ``your_age`` (0 once they have stopped work)."""
+    if person == "you":
+        if retirement_age is not None and your_age >= retirement_age:
+            return 0.0
+        return _your_comp_for_age(your_age)["wages"]
+    return _partner_wages_for_age(your_age)[1] if _partner_works_at(your_age, retirement_age) else 0.0
+
+
+def social_security_for_year(your_age: int, retirement_age=None,
+                             partner_working: Optional[bool] = None,
+                             cache: Optional[dict] = None) -> Dict[str, float]:
+    """The household's Social Security this year after the earnings test
+    (today's dollars): ``{"total", "withheld", "you", "partner"}``.
+
+    Before full retirement age (cfg.SOCIAL_SECURITY_START_AGE) a claimant who
+    still earns wages has part or all of the benefit withheld
+    (cfg.ss_earnings_test_withholding, each person on their own wages and their
+    own benefit plus any spousal top-up they receive). From full retirement age
+    the benefit is recomputed as if it had started later by the months
+    withheld (SSA's adjustment of the reduction factor): the person's benefit
+    is scaled by ss_claim_factor(claim age + months withheld / 12) /
+    ss_claim_factor(claim age). Months are fractional (withheld dollars over
+    the monthly benefit), an approximation of SSA's whole months.
+
+    ``retirement_age`` is the age you stop work (None = you work this year and
+    every year before). The partner works by ``_partner_works_at``;
+    ``partner_working`` overrides that for this year only. ``cache`` (a dict
+    kept for one simulated path) remembers each person's months withheld, which
+    no longer change once they reach full retirement age.
+    """
+    claim = cfg.SS_CLAIM_AGE
+    parts = cfg.social_security_by_person(your_age, claim)
+    out = {"you": float(parts["you"]), "partner": float(parts["partner"]), "withheld": 0.0}
+    if getattr(cfg, "SS_EARNINGS_TEST_ENABLED", False) and (out["you"] > 0 or out["partner"] > 0):
+        fra = cfg.SOCIAL_SECURITY_START_AGE
+        gap = cfg.YOUR_AGE - cfg.PARTNER_AGE
+        claims = {"you": claim, "partner": getattr(cfg, "PARTNER_SS_CLAIM_AGE", None) or claim}
+        for person, offset in (("you", 0), ("partner", gap)):
+            benefit = out[person]
+            person_age = your_age - offset
+            person_claim = claims[person]
+            if benefit <= 0 or person_claim >= fra:
+                continue
+            if person_age < fra:
+                if person == "partner" and partner_working is not None:
+                    wages = _partner_wages_for_age(your_age)[1] if partner_working else 0.0
+                else:
+                    wages = _ss_wages(person, your_age, retirement_age)
+                withheld = cfg.ss_earnings_test_withholding(benefit, wages, person_age)
+                out[person] -= withheld
+                out["withheld"] += withheld
+                continue
+            # From full retirement age: credit back the months withheld before it.
+            key = (person, retirement_age)
+            months = None if cache is None else cache.get(key)
+            if months is None:
+                months = 0.0
+                for age_then in range(int(person_claim) + offset, int(fra) + offset):
+                    then = cfg.social_security_by_person(age_then, claim)[person]
+                    if then <= 0:
+                        continue
+                    held = cfg.ss_earnings_test_withholding(
+                        then, _ss_wages(person, age_then, retirement_age), age_then - offset)
+                    months += 12.0 * held / then
+                if cache is not None:
+                    cache[key] = months
+            if months > 0:
+                credited = min(float(fra), person_claim + months / 12.0)
+                out[person] = benefit * cfg.ss_claim_factor(credited) / cfg.ss_claim_factor(person_claim)
+    out["total"] = out["you"] + out["partner"]
+    return out
+
+
 def _contribution_for_year(desired: float, limit_now: float, limit_year: float) -> float:
     """This year's contribution for an account whose set amount is ``desired``
     (an amount in today's dollars, set against today's age limit ``limit_now``).
@@ -2040,12 +2139,16 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
     your_wages = comp["wages"]
     your_other = float(getattr(cfg, "YOUR_OTHER_INCOME", 0.0) or 0.0) if you_working else 0.0
     your_401k = your_match = your_after_tax_401k = your_hsa = your_roth = 0.0
+    your_401k_roth = partner_401k_roth = 0.0
     if you_working:
         limit_401k = cfg.get_401k_limit(your_age, current_year)
         desired = float(getattr(cfg, "YOUR_401K_CONTRIBUTION", limit_401k))
         your_401k = max(0.0, min(_contribution_for_year(
             desired, cfg.get_401k_limit(cfg.YOUR_AGE, cfg.CURRENT_YEAR), limit_401k), your_wages))
         your_match = min(your_401k, base_salary * cfg.YOUR_401K_MATCH_PCT)
+        # SECURE 2.0: a high earner's catch-up goes in as Roth (after tax).
+        your_401k_roth = cfg.roth_catchup_amount(
+            your_401k, your_age, current_year, _your_comp_for_age(your_age - 1)["wages"])
         # Mega backdoor Roth: after-tax 401(k) up to the 415(c) total-additions
         # room left after the deferral and the match (see simulate_accumulation_year).
         after_tax_pct = float(getattr(cfg, "YOUR_AFTER_TAX_401K_PCT", 0.0) or 0.0)
@@ -2067,11 +2170,7 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
     partner_base = partner_wages = partner_other = 0.0
     partner_401k = partner_match = 0.0
     if partner_working:
-        growth = (1 + cfg.PARTNER_SALARY_GROWTH_RATE) ** years_from_start
-        partner_base = float(cfg.PARTNER_SALARY) * growth
-        partner_wages = (float(cfg.PARTNER_SALARY)
-                         + float(getattr(cfg, "PARTNER_BONUS_AMOUNT", 0.0) or 0.0)
-                         + float(getattr(cfg, "PARTNER_RSU_AMOUNT", 0.0) or 0.0)) * growth
+        partner_base, partner_wages = _partner_wages_for_age(your_age)
         partner_other = float(getattr(cfg, "PARTNER_OTHER_INCOME", 0.0) or 0.0)
         limit_401k = cfg.get_401k_limit(partner_age, current_year)
         desired = float(getattr(cfg, "PARTNER_401K_CONTRIBUTION", limit_401k))
@@ -2079,33 +2178,52 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
             desired, cfg.get_401k_limit(cfg.PARTNER_AGE, cfg.CURRENT_YEAR), limit_401k), partner_wages))
         partner_match = min(partner_401k, partner_base
                             * float(getattr(cfg, "PARTNER_401K_MATCH_PCT", 0.0) or 0.0))
+        partner_401k_roth = cfg.roth_catchup_amount(
+            partner_401k, partner_age, current_year, _partner_wages_for_age(your_age - 1)[1])
 
     # Social Security claimed while you still work. Benefits start at the claim
     # age whether or not you have retired (the retirement path only adds them in
     # retirement years, so an early claim used to pay the reduced amount from
-    # retirement on, never before). The taxable part (provisional-income rule) is
-    # taxed as ordinary income without FICA; the rest is tax-free cash. LIMITATION:
-    # the earnings test (benefits withheld above ~$24k of wages before full
-    # retirement age, repaid later) is not modeled, so an early claimant who keeps
-    # working is shown the full reduced benefit.
-    ss_total = ss_taxable = 0.0
+    # retirement on, never before). The earnings test applies: before full
+    # retirement age part of each earner's benefit is withheld, and it comes
+    # back as a higher benefit after (social_security_for_year). The taxable part
+    # (provisional-income rule) is taxed as ordinary income without FICA; the
+    # rest is tax-free cash.
+    ss_total = ss_taxable = ss_withheld = 0.0
     if you_working and getattr(cfg, "INCLUDE_SOCIAL_SECURITY", False):
-        ss_total = float(cfg.calculate_social_security(your_age, cfg.SS_CLAIM_AGE))
+        ss_year = social_security_for_year(your_age, None, partner_working=partner_working)
+        ss_total, ss_withheld = float(ss_year["total"]), float(ss_year["withheld"])
         if ss_total > 0:
             if cfg.files_two_returns():     # unmarried couple: on your own return
-                other_agi = your_wages - your_401k - your_hsa + your_other
+                other_agi = your_wages - (your_401k - your_401k_roth) - your_hsa + your_other
                 ss_status = cfg.return_status("you")
             else:
                 other_agi = (your_wages + partner_wages + your_other + partner_other
-                             - your_401k - partner_401k - your_hsa)
+                             - (your_401k - your_401k_roth) - (partner_401k - partner_401k_roth)
+                             - your_hsa)
                 ss_status = cfg.normalize_filing_status()
             ss_taxable = cfg.calculate_taxable_social_security(
                 ss_total, other_agi, years_from_start=years_from_start, status=ss_status)
 
+    # Student loan interest deduction (DEBTS of kind "student_loan"): above the
+    # line on your return, phased out by that return's AGI before it.
+    if cfg.files_two_returns():
+        sl_status = cfg.return_status("you")
+        sl_magi = your_wages - (your_401k - your_401k_roth) - your_hsa + your_other + ss_taxable
+    else:
+        sl_status = cfg.normalize_filing_status()
+        sl_magi = (your_wages + partner_wages + your_other + partner_other + ss_taxable
+                   - (your_401k - your_401k_roth) - (partner_401k - partner_401k_roth) - your_hsa)
+    student_loan_deduction = cfg.student_loan_interest_deduction(your_age, sl_magi, sl_status)
+
     taxes = cfg.working_year_taxes(
         your_wages, partner_wages,
+        your_deduction=student_loan_deduction,
         your_other=your_other + ss_taxable, partner_other=partner_other,
-        your_401k=your_401k, partner_401k=partner_401k, your_hsa=your_hsa,
+        # Only the pre-tax part of each deferral lowers taxable pay; a Roth
+        # catch-up is paid from after-tax pay (it is still FICA wages).
+        your_401k=your_401k - your_401k_roth, partner_401k=partner_401k - partner_401k_roth,
+        your_hsa=your_hsa,
         your_age=your_age, partner_age=partner_age, years_from_start=years_from_start,
     )
     two = taxes["two_returns"]
@@ -2124,13 +2242,16 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
         earned = partner_wages + (max(0.0, your_wages - your_roth) if joint else 0.0)
         partner_roth = min(desired, earned)
 
-    your_take_home = taxes["you"]["take_home"]
+    # Take-home is after every payroll deferral, the Roth catch-up included.
+    your_take_home = taxes["you"]["take_home"] - your_401k_roth
+    partner_take_home = taxes["partner"]["take_home"] - partner_401k_roth
     federal, state, fica = taxes["federal"], taxes["state"], taxes["fica"]
     if comp["after_tax"] is not None:
         # Explicit take-home override: report the tax it implies, split like
         # the rule-based tax.
         your_take_home = comp["after_tax"]
-        implied = max(0.0, taxes["you"]["gross"] - taxes["you"]["deferrals"] - your_take_home)
+        implied = max(0.0, taxes["you"]["gross"] - taxes["you"]["deferrals"] - your_401k_roth
+                      - your_take_home)
         rule = taxes["you"]["total"]
         if rule > 0:
             k = implied / rule
@@ -2145,18 +2266,20 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
     return {
         "years_from_start": years_from_start, "current_year": current_year,
         "partner_age": partner_age, "two_returns": two,
-        "social_security": ss_total,
+        "social_security": ss_total, "social_security_withheld": ss_withheld,
+        "student_loan_deduction": student_loan_deduction,
         "base_salary": base_salary, "your_wages": your_wages, "your_other": your_other,
         "saved": comp["saved"],
-        "your_401k": your_401k, "your_match": your_match,
+        "your_401k": your_401k, "your_401k_roth": your_401k_roth, "your_match": your_match,
         "your_after_tax_401k": your_after_tax_401k, "your_hsa": your_hsa,
         "your_roth": your_roth,
         "partner_base": partner_base, "partner_wages": partner_wages,
         "partner_other": partner_other, "partner_401k": partner_401k,
+        "partner_401k_roth": partner_401k_roth,
         "partner_match": partner_match, "partner_roth": partner_roth,
         "your_agi": taxes["you"]["agi"], "partner_agi": taxes["partner"]["agi"],
         "your_take_home": your_take_home,
-        "partner_take_home": taxes["partner"]["take_home"],
+        "partner_take_home": partner_take_home,
         "federal": federal, "state": state, "fica": fica,
         "total_tax": federal + state + fica,
         "gross_income": your_wages + your_other + partner_wages + partner_other + ss_total,
@@ -2180,7 +2303,10 @@ def _simulate_partner_working_year(
     follows income); it stays in the signature for existing callers.
     """
     cf = working_year_cashflow(your_age, partner_working=True, you_working=False)
-    portfolio.contribute("partner_401k", cf["partner_401k"] + cf["partner_match"])
+    portfolio.contribute("partner_401k",
+                         cf["partner_401k"] - cf["partner_401k_roth"] + cf["partner_match"])
+    if cf["partner_401k_roth"] > 0:     # Roth catch-up (no Roth 401(k) account: the Roth IRA)
+        portfolio.contribute("partner_roth_ira", cf["partner_401k_roth"])
     if cf["partner_roth"] > 0:
         portfolio.contribute("partner_roth_ira", cf["partner_roth"])
     return cf["partner_take_home"], cf["partner_agi"], cf["partner_roth"]
@@ -2227,9 +2353,15 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
 
     # Your 401(k) deferral (capped at the IRS limit and your pay) plus the
     # employer match, which only matches what you actually defer.
+    # A high earner's catch-up is Roth (SECURE 2.0): it was paid from take-home
+    # in working_year_cashflow and lands in the Roth account (the engine has no
+    # separate Roth 401(k); the tax treatment is the same).
     your_401k_contribution = cf["your_401k"]
     your_401k_match = cf["your_match"]
-    portfolio.contribute("your_401k", your_401k_contribution + your_401k_match)
+    portfolio.contribute("your_401k", your_401k_contribution - cf["your_401k_roth"]
+                         + your_401k_match)
+    if cf["your_401k_roth"] > 0:
+        portfolio.contribute("your_roth_ira", cf["your_401k_roth"])
 
     # Mega backdoor Roth: after-tax 401(k) contributions up to the 415(c) total-
     # additions limit (after the employee deferral + employer match), converted
@@ -2258,7 +2390,10 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     # zero and the residual sweep naturally routes everything to the primary.
     # ------------------------------------------------------------------
     if partner_working:
-        portfolio.contribute("partner_401k", cf["partner_401k"] + cf["partner_match"])
+        portfolio.contribute("partner_401k",
+                             cf["partner_401k"] - cf["partner_401k_roth"] + cf["partner_match"])
+        if cf["partner_401k_roth"] > 0:
+            portfolio.contribute("partner_roth_ira", cf["partner_401k_roth"])
         if cf["partner_roth"] > 0:
             portfolio.contribute("partner_roth_ira", cf["partner_roth"])
     partner_after_tax = cf["partner_take_home"]
@@ -2641,9 +2776,10 @@ def calculate_retirement_expenses(
     # Later years (75, or 10 years after a late retirement): living spending
     # drops. Housing is held out -- the payment or rent doesn't shrink -- and
     # mirrored in _retirement_housing_expense.
-    if current_age >= cfg.late_retirement_start_age(retirement_age):
+    late = cfg.late_retirement_factor(current_age, retirement_age)
+    if late != 1.0:
         housing = _retirement_housing_expense(current_age, inflation_factors['general'], portfolio)
-        base_expenses = housing + (base_expenses - housing) * (1 - cfg.LATE_RETIREMENT_LEISURE_DECREASE)
+        base_expenses = housing + (base_expenses - housing) * late
 
     # Add college expenses (from COLLEGE_START_AGE, for each child)
     college_costs = cfg.calculate_college_expenses(current_age)
@@ -2865,7 +3001,12 @@ def _collect_social_security(
     ss_income = 0
     ss_tax = 0
     if cfg.INCLUDE_SOCIAL_SECURITY:
-        ss_income = cfg.calculate_social_security(your_age, cfg.SS_CLAIM_AGE) * inflation_factor
+        # After the earnings test: a partner who still works may have part of
+        # their benefit withheld, and benefits withheld before full retirement
+        # age come back as a higher benefit after it.
+        cache = portfolio.__dict__.setdefault("_ss_credit_months", {})
+        ss_income = social_security_for_year(
+            your_age, portfolio.separation_age, cache=cache)["total"] * inflation_factor
 
         # Calculate taxable portion of Social Security (up to 85% taxable).
         if ss_income > 0:
@@ -4075,6 +4216,10 @@ def mortgage_payoff_projection(extra_annual: float = 0.0,
     rent ends it. Kept next to ``_amortize_mortgage_year`` so the two stay
     consistent.
 
+    ``extra_annual`` is paid only in the years inside the configured window
+    (EXTRA_MORTGAGE_PAYMENT_START_AGE / _STOP_AGE, cfg.extra_mortgage_payment_in_window),
+    exactly as the engine charges it.
+
     Like the engine, the loan is nominal: ``extra_annual`` is today's dollars
     (paid as ``extra_annual * cfg.cpi_index(age)`` dollars of the year), a
     purchase's loan is set in dollars of its year, and ``total_interest`` adds
@@ -4115,7 +4260,8 @@ def mortgage_payoff_projection(extra_annual: float = 0.0,
                 break
         else:
             cpi = cfg.cpi_index(age)
-            extra_monthly = extra_annual * cpi / 12.0
+            in_window = cfg.extra_mortgage_payment_in_window(age)
+            extra_monthly = (extra_annual * cpi / 12.0) if in_window else 0.0
             for _ in range(12):
                 if bal <= 0:
                     break

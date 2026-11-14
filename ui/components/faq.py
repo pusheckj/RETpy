@@ -73,6 +73,14 @@ QUESTIONS: list[tuple[str, str]] = [
         "number at [ssa.gov/myaccount](https://www.ssa.gov/myaccount).",
     ),
     (
+        "What if I claim Social Security while I still work?",
+        "Before full retirement age (67), Social Security holds back \\$1 of benefits for "
+        "every \\$2 you earn above \\$24,480 a year. In the year you turn 67 it holds back "
+        "\\$1 for every \\$3 above \\$65,160 (2026 limits). The plan does the same, for "
+        "you and your partner. The money is not lost: from 67 your benefit goes up as if "
+        "you had claimed later.",
+    ),
+    (
         "Does the plan include survivor benefits or a widow's situation?",
         "No. The model assumes both of you live to the end of the plan. It pays no "
         "survivor benefit, and your filing status and costs do not change if one of you "
@@ -117,8 +125,9 @@ QUESTIONS: list[tuple[str, str]] = [
         "next one, and once all are gone the money is saved instead. While you work, "
         "the payments come out of what you'd otherwise save; in retirement they're "
         "withdrawn like other spending. Payments are fixed in dollars, so inflation "
-        "makes later ones a little cheaper in today's dollars. The Debt payoff "
-        "section shows the dates, the interest, and what paying more saves.",
+        "makes later ones a little cheaper in today's dollars. Student loan interest "
+        "lowers your tax while you work (up to \\$2,500 a year, less at higher incomes). "
+        "The Debt payoff section shows the dates, the interest, and what paying more saves.",
     ),
     (
         "How do I save my inputs?",

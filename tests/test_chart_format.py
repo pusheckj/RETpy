@@ -154,9 +154,13 @@ def test_housing_label_fits_the_home():
                 "SPEND_FOOD_MONTHLY": 500}
     series, _ = sc.build_category_series(ages, paid_off, {}, 68)
     assert series[0][0] == "Housing (property tax, insurance)"
-    loan = {**paid_off, "MORTGAGE_BALANCE": 200_000, "MORTGAGE_MONTHLY": 2_000, "MORTGAGE_YEARS_REMAINING": 10}
+    loan = {**paid_off, "MORTGAGE_BALANCE": 200_000, "MORTGAGE_MONTHLY": 2_000, "MORTGAGE_YEARS_REMAINING": 12}
     series, _ = sc.build_category_series(ages, loan, {}, 68)
     assert series[0][0] == "Housing (mortgage)"
+    # Paid off inside the chart: the later bars are tax and insurance, not a mortgage.
+    loan = {**loan, "MORTGAGE_YEARS_REMAINING": 10}
+    series, _ = sc.build_category_series(ages, loan, {}, 68)
+    assert series[0][0] == "Housing (mortgage, then tax + insurance)"
 
 
 def test_retired_extra_is_not_called_early():
