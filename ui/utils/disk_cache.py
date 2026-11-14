@@ -61,7 +61,7 @@ def cache_dir() -> str:
 
 
 def engine_fingerprint() -> str:
-    """sha256 over the engine's source so any model edit invalidates the cache.
+    """sha256 over the engine's and ui/utils' source so any model edit invalidates the cache.
 
     Computed once per process (the source cannot change under a running
     interpreter without a reload, which creates a new process anyway).
@@ -73,15 +73,19 @@ def engine_fingerprint() -> str:
     # The engine reads the current year from the clock (config.CURRENT_YEAR),
     # so a new year must not serve last year's results.
     h.update(str(datetime.date.today().year).encode("utf-8"))
-    engine = os.path.join(_project_root(), "retirement_sim")
+    # The engine AND the UI helpers that build its inputs and shape its results
+    # (sim_runner, config_builder, ...): an edit to either must not serve old
+    # results. Hashing all of ui/utils over-invalidates a little, which is safe.
+    root = _project_root()
     try:
-        for name in sorted(os.listdir(engine)):
-            if not name.endswith(".py"):
-                continue
-            path = os.path.join(engine, name)
-            h.update(name.encode("utf-8"))
-            with open(path, "rb") as fh:
-                h.update(fh.read())
+        for folder in ("retirement_sim", os.path.join("ui", "utils")):
+            src = os.path.join(root, folder)
+            for name in sorted(os.listdir(src)):
+                if not name.endswith(".py"):
+                    continue
+                h.update(folder.encode("utf-8") + b"/" + name.encode("utf-8"))
+                with open(os.path.join(src, name), "rb") as fh:
+                    h.update(fh.read())
     except Exception:
         # Can't read the engine -> use a random-ish salt so we simply don't
         # serve stale results (degrades to always-miss rather than wrong-hit).

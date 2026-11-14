@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (saved results after a ui/utils change)
+- The on-disk results cache now also fingerprints `ui/utils/*.py` (sim_runner, config_builder and the other helpers that build the engine's inputs and shape its results). Before, only `retirement_sim/` was hashed, so an edit under `ui/utils` alone could serve results saved by the old code.
+
 ### Changed (one random seed per simulated path)
 - Every Monte Carlo path now restarts its own random stream: path `i` of a run is seeded `mc_jobs.PATH_SEED + i` (`account_simulation.path_seed`). Before, the target-age run used one stream per chunk (seed 2000 + chunk), so an input change that altered one path's draw count moved every later path in its chunk onto new numbers. Applies to the target-age run (`mc_parallel.sim_task`), the place check and mortgage paydown sweeps that reuse it, the FI number sweep, the safe-withdrawal sweep (its `mc`, `w1` and investable-balance calls), `run_monte_carlo_detailed` / `_networth` / `_with_scenario` when given `random_seed`, and the legacy fallback. Sensitivity, stress presets and the what-if baseline run through the full analysis, so they follow
 - The FI and safe-withdrawal sweeps used a different seed per grid point (3000 + i, 5000 + i); every point now replays the same paths, like the age scan. The target-age run and the age scan share their paths too
