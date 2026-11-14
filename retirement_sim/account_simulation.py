@@ -3663,6 +3663,28 @@ def _run_retirement_phase(portfolio, retirement_age, inflation_factors,
     return True
 
 
+def _seed_rngs(seed: Optional[int]) -> None:
+    """Seed both random sources the engine draws from (numpy and ``random``).
+    ``None`` leaves them as they are."""
+    if seed is not None:
+        np.random.seed(int(seed))
+        import random as random_module
+        random_module.seed(int(seed))
+
+
+def path_seed(seed: Optional[int], i: int) -> Optional[int]:
+    """Seed of path ``i`` in a seeded Monte Carlo batch: ``seed + i``.
+
+    Every path restarts its own random stream, so a path's market draws don't
+    depend on how many numbers the paths before it used. With one stream per
+    batch, a small input change that alters one path's draw count (it fails a
+    year sooner, or an event fires) shifted every later path onto different
+    numbers, and the success rate jumped by points instead of moving smoothly.
+    It also makes a run split into chunks (seed of a chunk = seed + its first
+    path's index) give exactly the paths of one unsplit run."""
+    return None if seed is None else int(seed) + int(i)
+
+
 def run_detailed_simulation(
     retirement_age: int,
     verbose: bool = False,
@@ -3678,10 +3700,7 @@ def run_detailed_simulation(
         historical_sequence: Use historical returns sequence (e.g., 'dot_com_crisis')
         random_seed: Optional seed for reproducible results
     """
-    if random_seed is not None:
-        np.random.seed(random_seed)
-        import random as random_module
-        random_module.seed(random_seed)
+    _seed_rngs(random_seed)
 
     # Guard: if retirement_age is less than current age, clamp to current age
     # (treat as "retire right now") so the simulation doesn't rewind time.
@@ -3790,10 +3809,7 @@ def run_detailed_simulation_networth(
     Returns ``(success, portfolio, retire_age)``. Parametric returns only (no
     historical sequence) — this drives the net-worth sweep.
     """
-    if random_seed is not None:
-        np.random.seed(random_seed)
-        import random as random_module
-        random_module.seed(random_seed)
+    _seed_rngs(random_seed)
 
     portfolio = create_initial_portfolio()
     inflation_factors = {'general': 1.0, 'healthcare': 1.0, 'childcare': 1.0}
@@ -3836,16 +3852,14 @@ def run_monte_carlo_networth(
     max_work_age: int = 70, random_seed: Optional[int] = None,
 ) -> Dict:
     """Monte Carlo of the net-worth-trigger sim: success rate + the distribution
-    of the age at which the household reaches ``networth_target`` and retires."""
-    if random_seed is not None:
-        np.random.seed(random_seed)
-        import random as random_module
-        random_module.seed(random_seed)
-
+    of the age at which the household reaches ``networth_target`` and retires.
+    With ``random_seed``, path ``i`` is seeded ``random_seed + i`` (see
+    ``path_seed``)."""
     successes = 0
     retire_ages: List[int] = []
-    for _ in range(int(n_simulations)):
-        ok, _p, rage = run_detailed_simulation_networth(networth_target, max_work_age=max_work_age)
+    for i in range(int(n_simulations)):
+        ok, _p, rage = run_detailed_simulation_networth(
+            networth_target, max_work_age=max_work_age, random_seed=path_seed(random_seed, i))
         if ok:
             successes += 1
         retire_ages.append(rage)
@@ -3868,13 +3882,9 @@ def run_monte_carlo_detailed(retirement_age: int, n_simulations: int = 1000, ran
     Args:
         retirement_age: Age to retire at
         n_simulations: Number of simulations to run
-        random_seed: Optional seed for reproducible results
+        random_seed: Optional seed for reproducible results. Path ``i`` is
+            seeded ``random_seed + i`` (see ``path_seed``).
     """
-    if random_seed is not None:
-        np.random.seed(random_seed)
-        import random as random_module
-        random_module.seed(random_seed)
-
     successes = 0
     final_balances = []
     total_taxes = []
@@ -3886,7 +3896,8 @@ def run_monte_carlo_detailed(retirement_age: int, n_simulations: int = 1000, ran
     ltc_costs = []
 
     for i in range(n_simulations):
-        success, portfolio = run_detailed_simulation(retirement_age)
+        success, portfolio = run_detailed_simulation(retirement_age,
+                                                     random_seed=path_seed(random_seed, i))
         if success:
             successes += 1
         final_balances.append(portfolio.get_total_balance())
@@ -4025,11 +4036,8 @@ def run_monte_carlo_with_scenario(
     n_simulations: int = 1000,
     random_seed: Optional[int] = None
 ) -> Dict:
-    """Run Monte Carlo simulation with a specific return scenario."""
-    if random_seed is not None:
-        np.random.seed(random_seed)
-        import random as random_module
-        random_module.seed(random_seed)
+    """Run Monte Carlo simulation with a specific return scenario. With
+    ``random_seed``, path ``i`` is seeded ``random_seed + i`` (see ``path_seed``)."""
 
     successes = 0
     final_balances = []
@@ -4053,7 +4061,8 @@ def run_monte_carlo_with_scenario(
             return your_age_now < retirement_age
         return (your_age_now - _age_gap) < int(_partner_ret_age)
 
-    for _ in range(n_simulations):
+    for i in range(n_simulations):
+        _seed_rngs(path_seed(random_seed, i))
         portfolio = create_initial_portfolio()
         inflation_factors = {'general': 1.0, 'healthcare': 1.0, 'childcare': 1.0}
         portfolio.record_year(cfg.CURRENT_YEAR, cfg.YOUR_AGE)

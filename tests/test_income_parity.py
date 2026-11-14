@@ -22,8 +22,12 @@ income** (or raises ``TypeError`` on ``age - last_known_age``) with no error,
 while ``income_over_time`` — which handles both key types via ``_comp_lookup``
 — keeps showing the right numbers. That divergence is exactly what these pin.
 """
+import copy
 import os
 import sys
+from types import SimpleNamespace
+
+import pytest
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _UI = os.path.join(_ROOT, "ui")
@@ -150,3 +154,131 @@ def test_sim_runner_projection_factor_matches_tile():
         "income tile and sim_runner disagree on the post-table projection; "
         "they are hand-synced, so a change to one needs the same change in the other"
     )
+
+
+# --------------------------------------------------------------------------
+# Overrides that never went through the side panel (a preset, a test, a tool)
+# get the pay their salary inputs say, not the config's sample table.
+# --------------------------------------------------------------------------
+
+# What the engine reads for working-years pay.
+_PAY_KEYS = ("YOUR_COMPENSATION_BY_AGE", "YOUR_SALARY_GROWTH_RATE", "YOUR_OTHER_INCOME",
+             "PARTNER_SALARY", "PARTNER_SALARY_GROWTH_RATE", "PARTNER_BONUS_AMOUNT",
+             "PARTNER_RSU_AMOUNT", "PARTNER_OTHER_INCOME")
+# What the Income section writes for the engine (besides echoing its inputs).
+_INCOME_SECTION_OUTPUTS = ("YOUR_COMPENSATION_BY_AGE", "HOUSEHOLD_INCOME_QUICK", "PARTNER_SALARY")
+
+
+def _side_panel():
+    import importlib
+    import os
+    import sys
+    sys.path[:0] = [os.environ["SEAM_TEST_UI"], os.path.dirname(os.environ["SEAM_TEST_UI"])]
+    import streamlit as st
+    for name in ("sec_about_you", "sec_family", "sec_income", "sec_taxes", "sec_house",
+                 "sec_expenses", "sec_debts", "account_inputs", "sec_investments",
+                 "sec_retirement_goals", "sec_assumptions"):        # app.py's order
+        importlib.import_module("components." + name).render(st)
+
+
+@pytest.fixture(scope="module")
+def after_side_panel():
+    """{preset name: (preset, its overrides after the planner's side panel drew it)},
+    for every built-in preset, picked the way profile_picker picks one."""
+    from streamlit.testing.v1 import AppTest
+    from components.profile_picker import PROFILES, PRESET_NAMES
+    os.environ["SEAM_TEST_UI"] = _UI
+    out = {}
+    for name in [n for n in PROFILES if n in PRESET_NAMES and PROFILES[n]]:
+        at = AppTest.from_function(_side_panel, default_timeout=120)
+        at.session_state["user_overrides"] = dict(PROFILES[name])
+        at.session_state["si_comp_customized"] = "YOUR_COMPENSATION_BY_AGE" in PROFILES[name]
+        at.run()
+        assert not at.exception, at.exception
+        out[name] = (dict(PROFILES[name]), dict(at.session_state["user_overrides"]))
+    assert len(out) == 4
+    return out
+
+
+def _engine(overrides, keys=(), paths=0):
+    """The config values ``keys`` and the final balances of ``paths`` seeded
+    runs at the target age, with ``overrides`` applied the way the planner does."""
+    from retirement_sim import config as cfg
+    from retirement_sim import mc_parallel
+    from utils import sim_runner as sr
+    original = sr._apply_overrides(sr.build_config_overrides(overrides))
+    try:
+        values = {k: copy.deepcopy(getattr(cfg, k)) for k in keys}
+        if paths:
+            values["finals"] = mc_parallel.sim_task(
+                (int(overrides["TARGET_RETIREMENT_AGE"]), paths, 0, 1000))["finals"]
+        return values
+    finally:
+        sr._restore_overrides(original)
+
+
+def test_a_preset_run_directly_gets_the_pay_the_side_panel_gives_it(after_side_panel):
+    """A preset carries YOUR_BASE_SALARY etc., not the year-by-year table the
+    Income section builds from them. Run directly it used to simulate the
+    config's sample pay (about $70k at 40)."""
+    for name, (preset, panel) in after_side_panel.items():
+        direct, drawn = _engine(preset, _PAY_KEYS), _engine(panel, _PAY_KEYS)
+        assert direct == drawn, name
+        assert drawn["YOUR_COMPENSATION_BY_AGE"][preset["YOUR_AGE"]]["base"] == preset["YOUR_BASE_SALARY"]
+
+
+def test_without_the_income_sections_outputs_the_plan_simulates_the_same(after_side_panel):
+    """The same overrides give the same simulation whether or not the Income
+    section ran: drop what it writes for the engine and every path ends with
+    the same balance."""
+    for name, (_preset, panel) in after_side_panel.items():
+        bare = {k: v for k, v in panel.items() if k not in _INCOME_SECTION_OUTPUTS}
+        assert _engine(bare, paths=12) == _engine(panel, paths=12), name
+
+
+def test_a_pay_table_already_there_is_kept(sample_household):
+    """A saved profile's table (built, hand-edited or imported) is never rebuilt
+    from the salary inputs, even when they disagree with it."""
+    from utils.config_builder import _strip_auto_after_tax, build_config_overrides
+    table = _strip_auto_after_tax(sample_household["YOUR_COMPENSATION_BY_AGE"])
+    for ov in (sample_household, {**sample_household, "YOUR_BASE_SALARY": 1, "YOUR_AGE": 20}):
+        assert build_config_overrides(ov)["YOUR_COMPENSATION_BY_AGE"] == table
+
+
+def test_the_built_table_is_the_income_sections_table():
+    """One builder: the editor's rows are the table the engine gets."""
+    from components.sec_income import _build_comp_table
+    from utils.config_builder import build_config_overrides
+    ov = {"YOUR_AGE": 40, "TARGET_RETIREMENT_AGE": 52, "YOUR_BASE_SALARY": 150_000,
+          "YOUR_BONUS_AMOUNT": 15_000, "YOUR_RSU_AMOUNT": 30_000, "YOUR_SALARY_GROWTH_RATE": 0.03}
+    table = build_config_overrides(ov)["YOUR_COMPENSATION_BY_AGE"]
+    rows = _build_comp_table(40, 52, 150_000, 15_000, 30_000, 0.03)
+    assert list(table) == list(range(40, 53)) == rows["age"].tolist()
+    assert [r["base"] + r["bonus"] + r["rsu_gross"] for r in table.values()] == \
+        [r["total_comp"] for r in table.values()] == (rows["base"] + rows["bonus"] + rows["rsu_gross"]).tolist()
+
+
+def test_quick_income_still_fills_in_without_the_detailed_inputs():
+    from utils.config_builder import build_config_overrides
+    out = build_config_overrides({"YOUR_AGE": 30, "HOUSEHOLD_INCOME_QUICK": 100_000})
+    assert out["YOUR_COMPENSATION_BY_AGE"][30]["base"] == 55_000 and out["PARTNER_SALARY"] == 45_000
+    # with the detailed inputs, they win (the side panel writes both)
+    out = build_config_overrides({"YOUR_AGE": 30, "HOUSEHOLD_INCOME_QUICK": 100_000,
+                                  "YOUR_BASE_SALARY": 70_000, "PARTNER_BASE_SALARY": 30_000})
+    assert out["YOUR_COMPENSATION_BY_AGE"][30]["base"] == 70_000 and out["PARTNER_SALARY"] == 30_000
+
+
+def test_the_guided_setup_drops_an_old_pay_table():
+    """A new salary from the guided setup replaces the pay table (the planner
+    rebuilds it), so a run before that uses the new salary, not the old table."""
+    from components import guided_setup
+    from utils.config_builder import build_config_overrides
+    st = SimpleNamespace(session_state={
+        "gs_salary": 120_000, "gs_bonus": 0,
+        "user_overrides": {"YOUR_AGE": 35, "PARTNER_AGE": 0, "YOUR_BASE_SALARY": 60_000,
+                           "YOUR_COMPENSATION_BY_AGE": {35: {"base": 60_000, "bonus": 0, "rsu_gross": 0,
+                                                             "total_comp": 60_000, "saved": 0}}}})
+    guided_setup.commit_income(st)
+    ov = st.session_state["user_overrides"]
+    assert "YOUR_COMPENSATION_BY_AGE" not in ov
+    assert build_config_overrides(ov)["YOUR_COMPENSATION_BY_AGE"][35]["base"] == 120_000

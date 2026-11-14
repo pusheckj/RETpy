@@ -63,8 +63,7 @@ def test_swr_rate_excludes_the_still_working_partners_pay():
     ov.update(TARGET_RETIREMENT_AGE=45, PARTNER_RETIREMENT_AGE=50)
     with applied(ov):
         w1 = mc_jobs.median_year1_withdrawal(45, n=1)
-        mc_jobs._seed(13579)
-        _ok, pf = asim.run_detailed_simulation(45)
+        _ok, pf = asim.run_detailed_simulation(45, random_seed=13579)    # its path 0
         by_age = {r["age"]: r["total"] for r in pf.withdrawal_log}
     assert w1 == pytest.approx(by_age[51])
     assert by_age[51] > 1.5 * by_age[45], "the working partner's pay should cut the year-1 draw"

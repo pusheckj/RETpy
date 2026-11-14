@@ -178,11 +178,10 @@ YOUR_COMPENSATION_BY_AGE = {
 Each call to `run_monte_carlo_detailed` runs N full-lifetime simulations. While iterating on config, drop to `n_simulations=1000` (fast, ~1% noise on success rate) and only re-run at `n_simulations=10000` for a final number. For age sweeps, cache results to a dict instead of re-running.
 
 **Results change every run**
-Expected. Monte Carlo is stochastic. If you need reproducibility, set a NumPy seed before calling the simulator:
+Expected. Monte Carlo is stochastic. If you need reproducibility, pass a seed (path `i` then uses `seed + i`):
 
 ```python
-import numpy as np
-np.random.seed(42)
+result = run_monte_carlo_detailed(retirement_age=50, n_simulations=1000, random_seed=42)
 ```
 
 ---

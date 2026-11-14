@@ -611,8 +611,9 @@ def plan_networth_analysis(user_overrides: dict, n_simulations: int = 1000,
         # main selector is set high (e.g. 25k) -- precision past ~1k/point is
         # dwarfed by the grid spacing anyway.
         scan_sims = max(300, min(int(n_simulations), 3000) // 3)
-        calls = [["networth", -1, [N, scan_sims, int(max_work_age), 3000 + i]]
-                 for i, N in enumerate(grid)]
+        # One seed for every target: the targets replay the same market paths.
+        calls = [["networth", -1, [N, scan_sims, int(max_work_age), mc_jobs.PATH_SEED]]
+                 for N in grid]
         job = {"base": mc_jobs.snapshot(), "patches": [], "calls": calls}
     finally:
         _restore_overrides(original)
@@ -782,7 +783,8 @@ def plan_swr_analysis(user_overrides: dict, n_simulations: int = 1000,
                     "RETIREMENT_SPENDING_ABSOLUTE": living} for living in living_grid]
         calls = []
         for i in range(len(r_grid)):
-            calls += [["w1", i, [ra]], ["mc", i, [ra, scan_sims, 5000 + i]]]
+            # One seed for every spending level: the levels replay the same paths.
+            calls += [["w1", i, [ra]], ["mc", i, [ra, scan_sims, mc_jobs.PATH_SEED]]]
         job = {"base": mc_jobs.snapshot(), "patches": patches, "calls": calls}
     finally:
         _restore_overrides(original)
@@ -1111,13 +1113,11 @@ def plan_place_check(user_overrides: dict, place_overrides: dict, n_simulations:
         for a, p in patch_for.items():
             index[a] = len(patches)
             patches.append(p)
-        calls = [["scan", index.get(age, -1), [age, scan_sims, 1000, target_success]]
-                 for i, age in enumerate(ages)]
-        # The target age runs as the main analysis does (same chunks and seeds, no
-        # per-path detail), so a place that changes nothing gives the plan's own numbers.
-        chunk_sizes = _split_count(min(n, 5000), _PRIMARY_CHUNKS)
-        calls += [["batch", index.get(target_age, -1), [target_age, size, 0, 2000 + j]]
-                  for j, size in enumerate(chunk_sizes)]
+        calls = [["scan", index.get(age, -1), [age, scan_sims, mc_jobs.PATH_SEED, target_success]]
+                 for age in ages]
+        # The target age runs as the main analysis does (same paths, no per-path
+        # detail), so a place that changes nothing gives the plan's own numbers.
+        calls += _batch_calls(target_age, min(n, 5000), 0, index.get(target_age, -1))
         job = {"base": mc_jobs.snapshot(), "patches": patches, "calls": calls}
     finally:
         _restore_overrides(original)
@@ -1338,12 +1338,9 @@ def sweep_break_even(
 
 _PARALLEL_MIN_TASKS = 4  # not worth spinning up a pool for trivially small work
 
-# Fixed number of chunks the target-age Monte Carlo is split into. Deliberately
-# NOT os.cpu_count(): each chunk j is seeded 2000+j, so the seed set — and thus
-# the headline success_rate / median / percentiles — must not depend on the
-# machine's core count (that made a saved profile report different numbers on a
-# laptop vs a server). The parallel pool still sizes from os.cpu_count() in
-# _run_sim_tasks; only this seed partition is pinned.
+# Number of chunks the target-age Monte Carlo is split into (the unit of work
+# handed to a pool worker or a browser worker). The numbers don't depend on it:
+# every path carries its own seed (see _batch_calls).
 _PRIMARY_CHUNKS = 8
 
 
@@ -1354,6 +1351,21 @@ def _split_count(total: int, parts: int) -> List[int]:
     parts = max(1, min(parts, total))
     base, rem = divmod(total, parts)
     return [base + (1 if i < rem else 0) for i in range(parts)]
+
+
+def _batch_calls(age: int, n: int, detail: int, patch: int = -1) -> List[list]:
+    """``n`` simulations at ``age`` as "batch" calls of up to _PRIMARY_CHUNKS
+    chunks. Path ``k`` of the run is seeded ``mc_jobs.PATH_SEED + k`` (a chunk's
+    seed is the base plus the index of its first path), so the paths -- and the
+    results -- are the same however the run is split, and the same as the
+    success-by-age scan's at that age. The first ``detail`` paths keep their
+    trajectories and logs for the charts."""
+    calls, start = [], 0
+    for size in _split_count(n, max(1, min(_PRIMARY_CHUNKS, n))):
+        keep = max(0, min(size, detail - start))
+        calls.append(["batch", patch, [age, size, keep, mc_jobs.PATH_SEED + start]])
+        start += size
+    return calls
 
 
 def _emit_progress(progress_callback, done: int, total: int) -> None:
@@ -1734,12 +1746,10 @@ def plan_full_analysis(
         scan_ages = list(range(start, stop, scan_age_range[2]))
         target_success = float(getattr(cfg, "TARGET_SUCCESS_RATE", 0.80))
         detail_cap = min(300, max(50, n_simulations // 3))
-        chunk_sizes = _split_count(n_simulations, max(1, min(_PRIMARY_CHUNKS, n_simulations)))
-        detail_per = max(1, -(-detail_cap // max(1, len(chunk_sizes))))  # ceil-divide
-        calls = [["batch", -1, [target_retirement_age, size, detail_per, 2000 + j]]
-                 for j, size in enumerate(chunk_sizes)]
+        calls = _batch_calls(target_retirement_age, n_simulations, detail_cap)
+        n_primary = len(calls)
         # One seed for every age: the ages replay the same market paths (mc_jobs.scan_age).
-        calls += [["scan", -1, [age, scan_sims, 1000, target_success]]
+        calls += [["scan", -1, [age, scan_sims, mc_jobs.PATH_SEED, target_success]]
                   for age in scan_ages]
         job = {"base": mc_jobs.snapshot(), "patches": [], "calls": calls}
         # Record the count ACTUALLY run (the UI's n_simulations), not cfg's
@@ -1749,7 +1759,6 @@ def plan_full_analysis(
         snap["NUM_SIMULATIONS"] = int(n_simulations)
     finally:
         _restore_overrides(original)
-    n_primary = len(chunk_sizes)
 
     def finish(results: List[Any]) -> Dict[str, Any]:
         primary = _assemble_primary_from_chunks(target_retirement_age, results[:n_primary])
@@ -1792,13 +1801,9 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
     # Collect per-year trajectories by running N individual sims and reading
     # portfolio.yearly_history. This is the ACTUAL model output — no fallback
     # needed because run_detailed_simulation returns (success, portfolio).
-    # Seed numpy+random so this legacy/degraded fallback path is reproducible
-    # run-to-run (matching the seeded parallel/serial task path).
-    import random as _random
-    np.random.seed(7001)
-    _random.seed(7001)
+    # Seeded per path so this legacy/degraded fallback is reproducible run-to-run.
     n_paths = min(300, max(50, n_simulations // 3))
-    paths, portfolios, successes = _collect_trajectories(retirement_age, n_paths=n_paths)
+    paths, portfolios, successes = _collect_trajectories(retirement_age, n_paths=n_paths, seed=7001)
     median_traj, p10_traj, p90_traj = _percentile_trajectories(paths)
     sample_paths = paths[: min(20, len(paths))]
 
@@ -1845,8 +1850,9 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
     }
 
 
-def _collect_trajectories(retirement_age: int, n_paths: int):
+def _collect_trajectories(retirement_age: int, n_paths: int, seed: Optional[int] = None):
     """Run N individual sims; return (trajectories, portfolios, successes).
+    With ``seed``, path ``i`` is seeded ``seed + i``.
 
     Returns three parallel lists so callers that need per-portfolio state
     (e.g. withdrawal_log) or per-path survival (whether the path lasted the
@@ -1855,9 +1861,10 @@ def _collect_trajectories(retirement_age: int, n_paths: int):
     paths: List[List[Tuple[int, float]]] = []
     portfolios: list = []
     successes: List[bool] = []
-    for _ in range(n_paths):
+    for i in range(n_paths):
         try:
-            success, portfolio = sim.run_detailed_simulation(retirement_age, verbose=False)
+            success, portfolio = sim.run_detailed_simulation(
+                retirement_age, verbose=False, random_seed=sim.path_seed(seed, i))
         except Exception:
             continue
         traj = _trajectory_from_portfolio(portfolio)
@@ -2587,11 +2594,9 @@ def plan_mortgage_paydown(
             patches.append(mc_jobs.diff(base, mc_jobs.snapshot()))
         finally:
             _restore_overrides(o)
-    chunk_sizes = _split_count(n, max(1, min(_PRIMARY_CHUNKS, n)))
-    calls = [["batch", g, [target_age, size, 0, 2000 + j]]
-             for g in range(len(grid)) for j, size in enumerate(chunk_sizes)]
+    calls = [c for g in range(len(grid)) for c in _batch_calls(target_age, n, 0, g)]
     job = {"base": base, "patches": patches, "calls": calls}
-    per = len(chunk_sizes)
+    per = len(calls) // len(grid)
 
     def finish(results: List[Any]) -> Dict[str, Any]:
         curve: List[Dict[str, Any]] = []

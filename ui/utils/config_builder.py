@@ -94,13 +94,36 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
     if out.get("ROTH_CONVERSION_TARGET_BRACKET") in LEGACY_ROTH_TARGETS:
         out["ROTH_CONVERSION_TARGET_BRACKET"] = None
 
-    # 2. Translate HOUSEHOLD_INCOME_QUICK -> PARTNER_SALARY + default comp table
-    #    (only if the user hasn't explicitly set a compensation table)
+    # 2. The pay table from the Income inputs. The engine reads your pay only from
+    #    YOUR_COMPENSATION_BY_AGE, which the Income section builds from base, bonus,
+    #    RSU and raise. Overrides that never went through the side panel (a preset,
+    #    a test, a tool) would otherwise run on the config's sample table. A table
+    #    that is there (built, hand-edited or saved) is kept as it is.
+    has_comp_table = bool(user_overrides.get("YOUR_COMPENSATION_BY_AGE"))
+    if not has_comp_table and "YOUR_BASE_SALARY" in user_overrides:
+        from retirement_sim import config as cfg
+        out["YOUR_COMPENSATION_BY_AGE"] = comp_table_from_salary(
+            start_age=_whole(user_overrides.get("YOUR_AGE", cfg.YOUR_AGE)),
+            target_age=_whole(user_overrides.get("TARGET_RETIREMENT_AGE", 60)),
+            base=_whole(user_overrides["YOUR_BASE_SALARY"]),
+            bonus=_whole(user_overrides.get("YOUR_BONUS_AMOUNT", 0)),
+            rsu=_whole(user_overrides.get("YOUR_RSU_AMOUNT", 0)),
+            growth=float(user_overrides.get("YOUR_SALARY_GROWTH_RATE",
+                                            cfg.YOUR_SALARY_GROWTH_RATE) or 0.0),
+        )
+        has_comp_table = True
+    # The engine reads the partner's base pay as PARTNER_SALARY; the Income
+    # section copies it from PARTNER_BASE_SALARY.
+    has_partner_salary = "PARTNER_SALARY" in user_overrides
+    if not has_partner_salary and "PARTNER_BASE_SALARY" in user_overrides:
+        out["PARTNER_SALARY"] = _whole(user_overrides["PARTNER_BASE_SALARY"])
+        has_partner_salary = True
+
+    # 3. Translate HOUSEHOLD_INCOME_QUICK -> PARTNER_SALARY + default comp table
+    #    (only for the lines the detailed income inputs above didn't set)
     income = user_overrides.get("HOUSEHOLD_INCOME_QUICK")
     if income is not None:
         income = max(0, income)
-        has_comp_table = "YOUR_COMPENSATION_BY_AGE" in user_overrides and user_overrides["YOUR_COMPENSATION_BY_AGE"]
-        has_partner_salary = "PARTNER_SALARY" in user_overrides
         # Split 50/50 if neither has been manually edited
         # The quick figure is the WHOLE household income, so the split rows
         # stand in for every income line: zero the separate other/bonus/RSU
@@ -119,7 +142,7 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
             for k in ("PARTNER_BONUS_AMOUNT", "PARTNER_RSU_AMOUNT", "PARTNER_OTHER_INCOME"):
                 out[k] = 0
 
-    # 3. Translate TOTAL_SAVINGS_QUICK -> allocation across accounts
+    # 4. Translate TOTAL_SAVINGS_QUICK -> allocation across accounts
     #    (only if none of the individual account keys were set by the user)
     total_savings = user_overrides.get("TOTAL_SAVINGS_QUICK")
     if total_savings is not None:
@@ -129,7 +152,7 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
             for key, pct in _DEFAULT_SAVINGS_ALLOCATION.items():
                 out[key] = int(total_savings * pct)
 
-    # 4. NEW_HOME_ESCROW_PCT (UI-only) also drives the engine's post-payoff
+    # 5. NEW_HOME_ESCROW_PCT (UI-only) also drives the engine's post-payoff
     #    property tax + insurance rate, so one input sets both (unless the user
     #    set HOME_CARRYING_COST_PCT directly).
     escrow_pct = user_overrides.get("NEW_HOME_ESCROW_PCT")
@@ -137,6 +160,36 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
         out["HOME_CARRYING_COST_PCT"] = escrow_pct
 
     return out
+
+
+def comp_row(base: int, bonus: int, rsu: int) -> dict:
+    """One YOUR_COMPENSATION_BY_AGE row. No after_tax: the engine computes
+    take-home from the tax rules."""
+    total = base + bonus + rsu
+    return {"base": base, "bonus": bonus, "rsu_gross": rsu,
+            "total_comp": total, "saved": int(total * QUICK_INCOME_SAVINGS_RATE)}
+
+
+def comp_table_from_salary(start_age: int, target_age: int, base: int, bonus: int,
+                           rsu: int, growth: float) -> dict:
+    """The pay table the Income section builds from your inputs: one row a year
+    from ``start_age`` (today's pay) to at least ``target_age`` and 10 rows, each
+    line grown by ``growth`` a year. The engine carries the last row on at the
+    same growth rate."""
+    table = {}
+    for offset in range(max(start_age + 9, target_age) - start_age + 1):
+        scale = (1 + growth) ** offset
+        table[start_age + offset] = comp_row(int(round(base * scale)), int(round(bonus * scale)),
+                                             int(round(rsu * scale)))
+    return table
+
+
+def _whole(value: Any) -> int:
+    """A whole number from an override value (an int, a float or a numeric string)."""
+    try:
+        return int(float(value or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _synthesize_comp_table(primary_salary: int, start_age: int, n_rows: int, growth: float) -> dict:

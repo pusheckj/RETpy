@@ -8,6 +8,7 @@ household. Every path has the same small deficit, so a quarter of all paths
 failed at once: success fell from 61.7% to 37.3% for $200 more spending a year,
 then came back at the next $200.
 """
+import copy
 import os
 import sys
 from contextlib import contextmanager
@@ -48,10 +49,13 @@ def test_small_needs_allow_the_solvers_slack_but_not_a_real_shortfall():
 
 
 def _bare_preset(extra_spending: int) -> dict:
-    """The Mid-career preset as a plain dict, before the side panel adds the pay
-    table: the engine pays the default $70k, so every working year until about
-    50 is short by the same deterministic amount and the last ones are tiny."""
+    """The Mid-career preset on the config's sample pay table (about $70k at 40):
+    every working year until about 50 is short by the same deterministic amount
+    and the last ones are tiny. This is what the preset used to simulate as a
+    plain dict; its own salary now builds its table (config_builder), so the
+    sample table is set explicitly to keep the case."""
     ov = dict(PROFILES["Mid-career couple (40, kids)"])
+    ov["YOUR_COMPENSATION_BY_AGE"] = copy.deepcopy(asim.cfg.YOUR_COMPENSATION_BY_AGE)
     ov["SPEND_OTHER_MONTHLY"] = ov["SPEND_OTHER_MONTHLY"] + extra_spending / 12.0
     return ov
 

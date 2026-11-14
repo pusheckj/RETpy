@@ -414,6 +414,9 @@ def commit_income(st) -> None:
         ov["YOUR_BONUS_AMOUNT"] = int(_val(st, "gs_bonus"))
     if _partner(st) and _val(st, "gs_partner_salary") is not None:
         ov["PARTNER_BASE_SALARY"] = ov["PARTNER_SALARY"] = int(_val(st, "gs_partner_salary"))
+    # The pay table follows the new salary (_sync_planner): drop an old one, so a
+    # run before the Income section rebuilds it uses this salary too (config_builder).
+    ov.pop("YOUR_COMPENSATION_BY_AGE", None)
 
 
 def check_income(st) -> Optional[str]:

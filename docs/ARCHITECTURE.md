@@ -113,7 +113,12 @@ Every heavy analysis in `utils/sim_runner.py` (`plan_full_analysis`,
   `{"base": config snapshot, "patches": [config diffs], "calls": [[fn, patch, args]]}`,
   carried as JSON (`dumps`/`loads` tag tuples, int-keyed dicts and inf/nan).
 - Each call seeds its own RNG, so any mix of executors gives identical results:
-  this process, its fork pool (`_run_calls`), or the visitor's browser.
+  this process, its fork pool (`_run_calls`), or the visitor's browser. Inside
+  a call every simulated path restarts its own stream: path `i` of a run is
+  seeded `mc_jobs.PATH_SEED + i` (`account_simulation.path_seed`). So how a run
+  is split into chunks doesn't matter, a small input change only moves the paths
+  it really tips, and the target-age run, the age scan and the FI / SWR sweep
+  points all replay the same market paths (common random numbers).
 - `retirement_sim.mc_jobs.scan_age` stops early at ages far from the target, so
   the success-by-age curve costs about half as much. The ages near the target,
   which decide the earliest age, always get every run.

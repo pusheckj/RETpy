@@ -14,8 +14,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-import numpy as np
-
 from retirement_sim import account_simulation as sim
 from retirement_sim import config as cfg
 
@@ -79,6 +77,11 @@ def sim_task(args) -> Dict[str, Any]:
     sims plus full per-path detail (trajectory + withdrawal_log as plain dicts)
     for up to ``detail_k`` of them — everything picklable, no portfolio objects.
 
+    Path ``i`` is seeded ``seed + i`` (``account_simulation.path_seed``), so
+    a run split into batches -- each seeded with the base seed plus the index
+    of its first path -- simulates exactly the paths of one unsplit batch, and
+    no path's draws depend on the paths before it.
+
     ``spending_by_age`` is every sim's guardrail-adjusted living spending by age
     (``{age: [dollars, ...]}``), so the spending-range chart covers the same
     runs as the success rate rather than only the ``detail_k`` sample.
@@ -93,10 +96,6 @@ def sim_task(args) -> Dict[str, Any]:
     surface a warning instead of quietly reporting a biased rate.
     """
     age, n_sims, detail_k, seed = args
-    import random as _random
-    np.random.seed(int(seed))
-    _random.seed(int(seed))
-
     successes = 0
     errors = 0
     first_error = None
@@ -104,9 +103,10 @@ def sim_task(args) -> Dict[str, Any]:
     details: List[dict] = []
     spending_by_age: Dict[int, List[float]] = {}
     health_by_age: Dict[int, List[float]] = {}
-    for _ in range(int(n_sims)):
+    for i in range(int(n_sims)):
         try:
-            success, portfolio = sim.run_detailed_simulation(age, verbose=False)
+            success, portfolio = sim.run_detailed_simulation(
+                age, verbose=False, random_seed=sim.path_seed(seed, i))
         except Exception as exc:  # noqa: BLE001 - a crashed path must not kill the batch
             errors += 1
             if first_error is None:

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import math
-import random as _random
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
@@ -32,6 +31,13 @@ from retirement_sim import config as cfg
 from retirement_sim import mc_parallel
 
 _MISSING = object()
+
+# Seed of path 0 in every Monte Carlo batch the planner runs; path ``i`` is
+# seeded ``PATH_SEED + i`` (account_simulation.path_seed). One base for all of
+# them gives COMMON RANDOM NUMBERS: the target-age run, every age of the
+# success-by-age scan, every point of the FI and safe-withdrawal sweeps replay
+# the same market paths, so their results move with the inputs, not with noise.
+PATH_SEED = 1000
 
 
 # ---------------------------------------------------------------------------
@@ -126,11 +132,6 @@ def config_state(values: Optional[Dict[str, Any]]) -> Iterator[None]:
 # The calls
 # ---------------------------------------------------------------------------
 
-def _seed(seed: int) -> None:
-    np.random.seed(int(seed))
-    _random.seed(int(seed))
-
-
 def _wilson(successes: int, n: int, z: float):
     if n <= 0:
         return 0.0, 1.0
@@ -154,12 +155,12 @@ def scan_age(age: int, max_n: int, seed: int, target: float,
     market paths, and the success curve moves with the retirement age instead of
     with sampling noise (otherwise it zigzags by several points at 500 runs).
     """
-    _seed(seed)
     successes = n = errors = 0
     first_error = None
     for i in range(int(max_n)):
         try:
-            ok, _pf = sim.run_detailed_simulation(age, verbose=False, random_seed=int(seed) + i)
+            ok, _pf = sim.run_detailed_simulation(age, verbose=False,
+                                                  random_seed=sim.path_seed(seed, i))
         except Exception as exc:  # noqa: BLE001 - one bad path must not kill the batch
             errors += 1
             first_error = first_error or repr(exc)
@@ -190,12 +191,13 @@ def networth(target: float, n: int, max_work_age: int, seed: int) -> Dict[str, A
 
 def investable_at_retirement(age: int, n: int = 40, seed: int = 98765) -> float:
     """Median investable balance AT the retirement year across n detailed sims
-    (accumulation-only, independent of retirement spending). Excludes 529."""
-    _seed(seed)
+    (accumulation-only, independent of retirement spending). Excludes 529.
+    Path ``i`` is seeded ``seed + i``."""
     vals = []
-    for _ in range(int(n)):
+    for i in range(int(n)):
         try:
-            _ok, pf = sim.run_detailed_simulation(int(age), verbose=False)
+            _ok, pf = sim.run_detailed_simulation(int(age), verbose=False,
+                                                  random_seed=sim.path_seed(seed, i))
         except Exception:  # noqa: BLE001
             continue
         rec = next((r for r in (getattr(pf, "yearly_history", None) or [])
@@ -222,13 +224,13 @@ def first_full_retirement_age(age: int) -> int:
 def median_year1_withdrawal(age: int, n: int = 20, seed: int = 13579) -> float:
     """Median portfolio withdrawal in the first FULL retirement year (the first
     year both of you have stopped working) across n sims at the current spending
-    settings. Seeded, so an SWR grid reuses the same paths."""
-    _seed(seed)
+    settings. Path ``i`` is seeded ``seed + i``, so an SWR grid reuses the same paths."""
     target_age = first_full_retirement_age(age)
     vals = []
-    for _ in range(int(n)):
+    for i in range(int(n)):
         try:
-            _ok, pf = sim.run_detailed_simulation(int(age), verbose=False)
+            _ok, pf = sim.run_detailed_simulation(int(age), verbose=False,
+                                                  random_seed=sim.path_seed(seed, i))
         except Exception:  # noqa: BLE001
             continue
         log = getattr(pf, "withdrawal_log", None) or []
