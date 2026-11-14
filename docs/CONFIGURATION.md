@@ -135,7 +135,7 @@ YOUR_COMPENSATION_BY_AGE = {
 
 Keys per age: `base`, `bonus`, `rsu_gross`, `total_comp` (the wages that are taxed) and `saved` (the brokerage contribution in *Manual* savings mode only; *Auto* modes invest whatever is left after spending).
 
-Take-home is **computed**, not entered: `working_year_taxes()` applies the 2024 federal brackets and standard deduction for your filing status, your state's table, FICA per earner (6.2% up to the $168,600 wage base, 1.45% Medicare, 0.9% above $200k/$250k), after your pre-tax 401(k) and HSA contributions. A row may still carry an `after_tax` value to force a known take-home (pay after taxes **and** after 401(k)/HSA deferrals); older profiles whose rows hold the app's old automatic 70% figure have it removed on load so the computed value is used.
+Take-home is **computed**, not entered: `working_year_taxes()` applies the 2026 federal brackets and standard deduction for your filing status, your state's table, FICA per earner (6.2% up to the $184,500 wage base, 1.45% Medicare, 0.9% above $200k/$250k), after your pre-tax 401(k) and HSA contributions. A row may still carry an `after_tax` value to force a known take-home (pay after taxes **and** after 401(k)/HSA deferrals); older profiles whose rows hold the app's old automatic 70% figure have it removed on load so the computed value is used.
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -264,7 +264,7 @@ is covered whenever there is one (`PARTNER_AGE > 0`), married or not.
 |---|---|---|
 | `pre_retirement` | `$6,000` | Ages pre-retirement — employer-subsidized premiums + OOP. |
 | `early_retirement` | `$24,000` | From retirement until age 65 — ACA marketplace. Used only when `MODEL_ACA_AGE_RATED = False`; otherwise the age-rated model below prices these years. |
-| `medicare_base` | `$8,000` | Ages 65–74 — Medicare Part B/D + Medigap + OOP. |
+| `medicare_base` | `$8,000` | Ages 65–74 — Medicare Part B/D + Medigap + OOP. An all-in floor: 2026 premiums alone ($4,835 a person, see Medicare below) now exceed its per-person half. |
 | `medicare_mid` | `$12,000` | Ages 75–84 — higher utilization. |
 | `medicare_late` | `$18,000` | Ages 85+ — significant medical needs (LTC handled separately). |
 
@@ -316,7 +316,7 @@ All returns are **real** (inflation-adjusted).
 | `housing` | `0.0275` | 0.00% (flat) | Utilities, home value growth. |
 | `childcare` | `0.04` | 1.25% | Child expenses while kids are home. |
 
-> **Frozen-nominal thresholds (limitation).** Statutory thresholds specified in nominal dollars that are not CPI-indexed in reality are held at their 2024 values in this real frame, so they tighten over time: **NIIT** ($250k MFJ), **IRMAA** brackets, and the **Social Security taxation** provisional-income thresholds ($32k–$44k MFJ). This is a conservative, realistic bias. See `METHODOLOGY.md` §4.
+> **Frozen-nominal thresholds (limitation).** Statutory amounts specified in nominal dollars that are not CPI-indexed in reality decay in this real frame, so they tighten over time: **NIIT** and the **Additional Medicare Tax** ($250k MFJ), the **Social Security taxation** provisional-income thresholds ($32k–$44k MFJ), the child-tax-credit phase-out, the $2,500 student-loan cap and the 2025–2028 **senior deduction**. IRMAA tiers are indexed and held flat. This is a conservative, realistic bias. See `METHODOLOGY.md` §4.
 
 ---
 
@@ -344,13 +344,15 @@ Social Security benefits are entered in today's dollars. Because SS is COLA-inde
 
 ## 9. Tax configuration
 
-All tables are 2024 figures held flat in today's dollars (statutory thresholds that are never indexed decay; see METHODOLOGY §4). Every filing-status-dependent table follows `FILING_STATUS` ("Married filing jointly" / "Single" / "Head of household").
+Federal tables, IRMAA, ACA and California are 2026 figures; the other states are 2024. All are held flat in today's dollars (statutory amounts that are never indexed decay; see METHODOLOGY §4). Sources: [`data_sources/2026_verification.md`](data_sources/2026_verification.md). Every filing-status-dependent table follows `FILING_STATUS` ("Married filing jointly" / "Single" / "Head of household").
 
 | Parameter | Default | Description |
 |---|---|---|
 | `FILING_STATUS` | MFJ | Selects the federal and state brackets, standard deductions, LTCG brackets, Social Security taxability thresholds, NIIT and Additional Medicare thresholds, IRMAA tiers, the Roth IRA phase-out and the Roth conversion target. |
-| `STANDARD_DEDUCTION_BY_STATUS` | $29,200 / $14,600 / $21,900 | Federal standard deduction. Age 65+ adds $1,550 per spouse (joint) or $1,950 (single/HOH). |
-| `LTCG_BRACKETS_BY_STATUS` | 0% to $94,050 / $47,025 / $63,000 | 15% to $583,750 / $518,900 / $551,350, then 20%. |
+| `FEDERAL_BRACKETS_BY_STATUS` | 2026 (Rev. Proc. 2025-32) | 10% to $24,800 / $12,400 / $17,700 (joint / single / HOH) ... 37% above $768,700 / $640,600 / $640,600. See `TAX_MODEL.md` §2.1. |
+| `STANDARD_DEDUCTION_BY_STATUS` | $32,200 / $16,100 / $24,150 | Federal standard deduction (2026). Age 65+ adds $1,650 per spouse (joint) or $2,050 (single/HOH). |
+| `MODEL_SENIOR_DEDUCTION` | `True` | OBBBA senior deduction: `SENIOR_DEDUCTION_PER_PERSON` $6,000 per person 65+, cut by 6% of MAGI above `SENIOR_DEDUCTION_PHASEOUT_START` ($150k joint / $75k others), tax years 2025 to `SENIOR_DEDUCTION_LAST_YEAR` (2028). Not indexed, so it shrinks in today's dollars. |
+| `LTCG_BRACKETS_BY_STATUS` | 0% to $98,900 / $49,450 / $66,200 | 15% to $613,700 / $545,500 / $579,600, then 20% (2026). |
 | `SS_WAGE_BASE` | `$184,500` | Social Security wage base (2026), per earner. With `SOCIAL_SECURITY_TAX_RATE` 6.2%, `MEDICARE_TAX_RATE` 1.45%, `ADDITIONAL_MEDICARE_TAX_RATE` 0.9% above `ADDITIONAL_MEDICARE_THRESHOLD_BY_STATUS` ($250k joint / $200k otherwise, per return). |
 | `ROTH_IRA_PHASEOUT_BY_STATUS` | $242k–$252k joint, $153k–$168k others (2026) | Direct Roth IRA phase-out (used by `roth_ira_allowed` and the Money check-up's Roth card; the engine's partner Roth ignores it, see `PARTNER_ROTH_CONTRIBUTION`). |
 | `MODEL_ROTH_CATCHUP_RULE` | `True` | SECURE 2.0: a 401(k) catch-up by someone whose prior-year FICA wages passed `ROTH_CATCHUP_WAGE_THRESHOLD` is Roth (after tax, into the Roth account). `False` = pre-tax for everyone. |
@@ -364,7 +366,7 @@ All tables are 2024 figures held flat in today's dollars (statutory thresholds t
 
 ### State tax
 
-`STATE_CHOICE` is a two-letter code for any state or `"DC"`, read from `retirement_sim/state_tax_data.py`: brackets by filing status, standard deduction, personal exemptions, whether Social Security is taxed (exempt, taxed, or exempt below an income limit), retirement-income exclusions by age, state capital-gains exclusions, and quirks (Pennsylvania taxes 401(k) deferrals; California and New Jersey tax HSA contributions; California SDI 1.1% of wages). Each row carries its tax year and a confidence level (`high`, `medium`, or `approx`, which the app labels as approximate). City/county income taxes, credits and itemized deductions are not modeled. To verify or refresh the table, see [`state_tax_research_prompt.md`](state_tax_research_prompt.md).
+`STATE_CHOICE` is a two-letter code for any state or `"DC"`, read from `retirement_sim/state_tax_data.py`: brackets by filing status, standard deduction, personal exemptions, whether Social Security is taxed (exempt, taxed, or exempt below an income limit), retirement-income exclusions by age, state capital-gains exclusions, and quirks (Pennsylvania taxes 401(k) deferrals; California and New Jersey tax HSA contributions; California SDI 1.1% of wages). Optional `exemption_credits` and `surtax` fields add nonrefundable credits and a surtax (California 2026: personal $158, senior $158, dependent $491, phased out above estimated AGI thresholds; 1% Behavioral Health Services Tax above $1M). Each row carries its tax year (2024; California 2026) and a confidence level (`high`, `medium`, or `approx`, which the app labels as approximate). City/county income taxes, credits and itemized deductions are not modeled. To verify or refresh the table, see [`state_tax_research_prompt.md`](state_tax_research_prompt.md).
 
 Legacy values still work: `"CA"`, `"No state tax"` (zero) and `"Other"` (flat rate). Unknown values fall back to CA. `MODEL_CA_EXEMPTS_SOCIAL_SECURITY` (historical name) switches every state's Social Security exemption off when set `False`.
 
@@ -375,13 +377,13 @@ Legacy values still work: `"CA"`, `"No state tax"` (zero) and `"Other"` (flat ra
 | `NIIT_THRESHOLD_MFJ` / `NIIT_THRESHOLD_SINGLE` | `$250,000` / `$200,000` | MAGI threshold of the return. |
 | `NIIT_RATE` | `0.038` | 3.8% surtax on investment income above the threshold. |
 
-### Medicare IRMAA
+### Medicare premiums and IRMAA
 
-`MEDICARE_IRMAA_BRACKETS_MFJ` and `MEDICARE_IRMAA_BRACKETS_SINGLE` (2025 CMS tiers: $212k / $106k first surcharge). An unmarried couple's household MAGI is split evenly and each person is tested on the individual tiers.
+`MEDICARE_IRMAA_BRACKETS_MFJ` and `MEDICARE_IRMAA_BRACKETS_SINGLE` (2026 CMS tiers: standard Part B $202.90; first surcharge above $218k joint / $109k individual). Each enrollee also pays `MEDICARE_SUPPLEMENTAL_MONTHLY_PER_PERSON` ($200, an estimate of a Part D plan plus Medigap). The tier uses the current year's MAGI (the law uses MAGI from two years earlier). An unmarried couple's household MAGI is split evenly and each person is tested on the individual tiers. `MEDICARE_MONTHLY_PREMIUM` ($805.80, a couple at the standard tier) is a reference figure only.
 
 ### Roth conversion target
 
-`ROTH_CONVERSION_TARGET_BRACKET` defaults to `None`: fill ordinary income up to the top of the 12% bracket for the filing status ($94,300 joint, $47,150 single, $63,100 head of household; `ROTH_CONVERSION_TARGET_BY_STATUS`). A number applies to every return. A saved $94,300 under a non-joint status is treated as the old default and follows the status.
+`ROTH_CONVERSION_TARGET_BRACKET` defaults to `None`: fill ordinary income up to the top of the 12% bracket for the filing status ($100,800 joint, $50,400 single, $67,450 head of household in 2026; `ROTH_CONVERSION_TARGET_BY_STATUS`, read from the bracket table). A number applies to every return. A saved 2024 default ($94,300, $47,150 or $63,100) is treated as the old default and follows the status.
 
 ### Early withdrawal
 
@@ -437,7 +439,7 @@ Applied in addition to guardrails.
 | Parameter | Default | Description |
 |---|---|---|
 | `ENABLE_ROTH_CONVERSION` | `True` | Convert traditional → Roth during low-income retirement years. |
-| `ROTH_CONVERSION_TARGET_BRACKET` | `$94,300` | Convert enough to fill up to the top of this bracket (12% bracket). |
+| `ROTH_CONVERSION_TARGET_BRACKET` | `None` | Convert enough to fill up to this income; `None` = the top of the 12% bracket for the filing status. |
 | `ROTH_CONVERSION_MAX_ANNUAL` | `$100,000` | Hard cap per year. |
 | `ROTH_CONVERSION_STOP_AGE` | `67` | Stop once SS starts pushing up ordinary income. |
 
@@ -446,8 +448,8 @@ Applied in addition to guardrails.
 | Parameter | Default | Description |
 |---|---|---|
 | `ACA_ENABLED` | `True` | Model pre-65 ACA marketplace costs. |
-| `MODEL_ACA_AGE_RATED` | `True` | Price each marketplace member by age (federal 3:1 curve) plus children at home; subsidy from household-size FPL with the 400% cliff. `False` = legacy flat household premium. |
-| `ACA_BENCHMARK_MONTHLY_AT_40` | `$650` | Benchmark (second-lowest) Silver premium for a 40-year-old, before subsidy (2026 San Diego, close to the US average of about $625). An input in the app's Assumptions panel: look yours up by ZIP code at healthcare.gov. |
+| `MODEL_ACA_AGE_RATED` | `True` | Price each marketplace member by age (federal 3:1 curve) plus children at home; subsidy from household-size FPL with the 400% cliff and the 2026 applicable percentages (`ACA_APPLICABLE_PCT_BANDS`: 2.10% below 133% FPL, rising linearly to 9.96% at 300–400%). The enhanced credits expired at the end of 2025 (an extension had passed the House, not the Senate, as of November 2026). `False` = legacy flat household premium. |
+| `ACA_BENCHMARK_MONTHLY_AT_40` | `$625` | Benchmark (second-lowest) Silver premium for a 40-year-old, before subsidy (2026 US average, KFF; San Diego is about $650). An input in the app's Assumptions panel: look yours up by ZIP code at healthcare.gov. |
 | `ACA_CHILD_MONTHLY` | `$390` | Benchmark premium per child at home (also an input). |
 | `ACA_OOP_PER_PERSON_ANNUAL` | `$1,500` | Out-of-pocket per marketplace member, net of `SPEND_HEALTH_MONTHLY` so it isn't counted twice. |
 | `PARTNER_EMPLOYER_HEALTH_COVERAGE` | `True` | While a partner keeps working after you retire, their employer plan covers the household: no marketplace cost. Put the payroll premium in the living-expense base. |

@@ -275,7 +275,12 @@ class TestInflationSliderIsNotAFreeLunch:
             with applied(ov):
                 np.random.seed(11)
                 rates.append(sim.run_monte_carlo_detailed(45, 300, random_seed=11)["success_rate"])
-        assert max(rates) - min(rates) < 0.08, rates
+        # 2026 tables: 0.837 / 0.853 / 0.937 (was 0.843 / 0.873 / 0.917). The
+        # higher 2026 Medicare premium costs more where success is lower (0%),
+        # and inflation shrinking a fixed-rate mortgage helps most at 10%. The
+        # same seed with Texas taxes spread 0.10 on the 2024 tables, so 0.08 was
+        # path-dependent; 0.12 still catches the old 0.49 free lunch.
+        assert max(rates) - min(rates) < 0.12, rates
 
 
 # ---------------------------------------------------------------- 7 and 8. last year, state tax
@@ -469,8 +474,11 @@ class TestChildTaxCredit:
         two = cfg.working_year_taxes(150_000, 0, partner=False, status="Single",
                                      children_under_17=2)
         assert base["federal"] - two["federal"] == pytest.approx(4_400)
-        assert two["take_home"] - base["take_home"] == pytest.approx(4_400)
-        assert two["fica"] == base["fica"] and two["state"] == base["state"]
+        # The default state is California, whose 2026 return also takes a $491
+        # dependent exemption credit per child off the state tax.
+        assert base["state"] - two["state"] == pytest.approx(2 * 491)
+        assert two["take_home"] - base["take_home"] == pytest.approx(4_400 + 2 * 491)
+        assert two["fica"] == base["fica"]
 
     def test_a_single_parent_on_a_low_income_gets_a_refund(self):
         t = cfg.working_year_taxes(35_000, 0, partner=False, status="HOH", children_under_17=2,

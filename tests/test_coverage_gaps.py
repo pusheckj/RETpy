@@ -60,14 +60,17 @@ class TestStandardDeductionOrdering:
         tax = portfolio.calculate_federal_tax_with_deduction(deduction + 1.0)
         assert abs(tax - 0.10) < 0.01, f"Expected ~$0.10 tax on $1 above deduction, got ${tax:.4f}"
 
-    def test_standard_deduction_increases_at_65(self):
-        """At age 65+ each spouse gets an additional $1,550 deduction."""
+    def test_standard_deduction_increases_at_65(self, monkeypatch):
+        """At age 65+ each spouse gets an additional $1,650 deduction (2026).
+        The 2025-2028 senior deduction is tested in test_tax_2026."""
+        monkeypatch.setattr(cfg, "MODEL_SENIOR_DEDUCTION", False)
         deduction_under_65 = cfg.get_standard_deduction(64, 59)
         deduction_at_65 = cfg.get_standard_deduction(65, 60)
         assert deduction_at_65 == deduction_under_65 + cfg.ADDITIONAL_STD_DEDUCTION_65_PLUS
 
-    def test_both_spouses_65_adds_two_extra_deductions(self):
+    def test_both_spouses_65_adds_two_extra_deductions(self, monkeypatch):
         """When both spouses are 65+, two additional deductions apply."""
+        monkeypatch.setattr(cfg, "MODEL_SENIOR_DEDUCTION", False)
         base = cfg.STANDARD_DEDUCTION_MFJ_2024
         both_65 = cfg.get_standard_deduction(65, 65)
         assert both_65 == base + 2 * cfg.ADDITIONAL_STD_DEDUCTION_65_PLUS
@@ -228,7 +231,7 @@ class TestACASubsidyCliff:
     """ACA subsidies cut off sharply at 400% of FPL (~$124,800 for family of 4)."""
 
     def test_just_below_cliff_gets_subsidy(self):
-        """At 399% FPL, premium is capped at ~9.5% of income (subsidized)."""
+        """At 399% FPL, premium is capped at 9.96% of income (2026 table)."""
         cliff = cfg.ACA_SUBSIDY_CLIFF  # ~$124,800
         income_just_below = cliff - 100
         premium = cfg.calculate_aca_premium(income_just_below)
@@ -236,7 +239,7 @@ class TestACASubsidyCliff:
         assert premium < cfg.ACA_BASE_ANNUAL_PREMIUM, (
             f"Expected subsidy below cliff, got full premium ${premium:,.0f}"
         )
-        assert premium <= income_just_below * 0.095 + 1  # small float tolerance
+        assert premium <= income_just_below * 0.0996 + 1  # small float tolerance
 
     def test_at_cliff_pays_full_premium(self):
         """At exactly 400% FPL, no subsidy — pay full $18,000/year."""
@@ -252,10 +255,10 @@ class TestACASubsidyCliff:
         assert premium == cfg.ACA_BASE_ANNUAL_PREMIUM
 
     def test_very_low_income_gets_maximum_subsidy(self):
-        """At 150% FPL, premium is capped at ~4% of income."""
+        """At 150% FPL, premium is capped at 4.19% of income (2026 table)."""
         income_150pct = cfg.FPL_FAMILY_OF_4 * 1.5
         premium = cfg.calculate_aca_premium(income_150pct)
-        max_allowed = income_150pct * 0.04
+        max_allowed = income_150pct * 0.0419
         assert premium <= max_allowed + 1
 
 

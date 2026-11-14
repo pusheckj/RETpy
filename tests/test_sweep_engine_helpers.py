@@ -63,8 +63,8 @@ class TestProgressiveTax:
 
     def test_matches_federal_brackets_hand_calc(self):
         brackets = cfg.get_federal_brackets("MFJ")
-        # $100k taxable MFJ: 23,200@10% + (94,300-23,200)@12% + (100,000-94,300)@22%
-        expected = 23_200 * 0.10 + (94_300 - 23_200) * 0.12 + (100_000 - 94_300) * 0.22
+        # $100k taxable MFJ (2026): 24,800@10% + (100,000-24,800)@12%
+        expected = 24_800 * 0.10 + (100_000 - 24_800) * 0.12
         assert asim._progressive_tax(brackets, 100_000) == pytest.approx(expected)
 
     def test_single_pays_more_than_mfj_at_the_same_income(self):
@@ -78,8 +78,10 @@ class TestProgressiveTax:
         for income in (0, 25_000, 250_000, 2_000_000):
             assert fed.calculate_tax(income) == pytest.approx(
                 asim._progressive_tax(fed.brackets, income))
+            # The CA joint return adds its exemption credits and the 1% tax above
+            # $1M (2026) on top of the brackets: cfg.state_income_tax.
             assert ca.calculate_tax(income) == pytest.approx(
-                asim._progressive_tax(ca.brackets, income))
+                cfg.state_income_tax(cfg.state_tax_rules("CA", "MFJ", people=2), income))
 
 
 # ---------------------------------------------------------------------------

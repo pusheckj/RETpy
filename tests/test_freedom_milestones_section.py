@@ -106,6 +106,13 @@ def _cards(at):
     return [m.value for m in at.markdown if 'class="ms-place-head"' in m.value]
 
 
+def _card(at, name):
+    for v in _cards(at):
+        if f"<b>{name}</b>" in v:
+            return v
+    raise AssertionError(name)
+
+
 def _fire_number(at, name):
     for v in _cards(at):
         if f"<b>{name}</b>" in v:
@@ -154,12 +161,14 @@ def test_buy_or_rent_switch_changes_the_numbers(monkeypatch):
 
 def test_home_area_changes_the_places_and_is_saved(monkeypatch):
     at = _draw(monkeypatch, load_sample_household())
-    mid, here = _fire_number(at, "Midwest"), _fire_number(at, "Where you live now")
+    # The whole card, not just the FIRE number: that is rounded to $0.1M, and with
+    # the 2026 $625 benchmark both homes give Midwest $3.5M (spending $142K vs $141K).
+    mid, here = _card(at, "Midwest"), _fire_number(at, "Where you live now")
     at.selectbox(key="ms_home_area").select("M_SFB").run()
     assert not at.exception
     state = pl.get_state(at.session_state["user_overrides"])
     assert state["settings"]["home"] == "M_SFB"
-    assert _fire_number(at, "Midwest") != mid                           # cheaper against San Francisco
+    assert _card(at, "Midwest") != mid                                  # cheaper against San Francisco
     assert _fire_number(at, "Where you live now") == here                # your plan is still your plan
     at.selectbox(key="ms_home_area").select("CA").run()
     assert pl.KEY not in at.session_state["user_overrides"]

@@ -212,7 +212,7 @@ def normalize_inputs(d: Any) -> Dict[str, Any]:
 # Contribution limits (single source of truth: retirement_sim.config)
 # ---------------------------------------------------------------------------
 # IRS limits in actual dollars for the year shown to the visitor. (The retirement
-# engine keeps its limits in constant 2024 dollars, which is right for its
+# engine holds its 2026 limits flat in today's dollars, which is right for its
 # all-real projection but reads as out of date on a "what to do this year" page.)
 # 2026: IRS Notice 2025-67 (401(k) $24,500, IRA $7,500); Rev. Proc. 2025-19
 # (HSA $4,400 self-only / $8,750 family). Later years use the latest known year.
@@ -232,7 +232,7 @@ def contribution_limits(hsa_family: bool = False, today: Optional[date] = None,
 
     ``age`` (0 = unknown) adds the catch-ups: 401(k) and IRA from 50, HSA from 55,
     and the larger 401(k) amount at 60-63. Years before the table fall back to
-    ``retirement_sim.config``'s 2024 base (and its catch-ups)."""
+    ``retirement_sim.config``'s base (and its catch-ups)."""
     year = (today or date.today()).year
     known = [y for y in IRS_LIMITS if y <= year]
     hsa_key = "hsa_family" if hsa_family else "hsa_individual"

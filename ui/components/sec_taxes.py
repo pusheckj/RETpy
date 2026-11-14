@@ -105,12 +105,15 @@ def render_body(st) -> None:
     # What's modeled
     with st.expander("What's modeled", expanded=False):
         st.markdown(
-            "- **Federal**: 2024 tax tables (brackets and standard deduction, held flat "
+            "- **Federal**: 2026 tax tables (brackets and standard deduction, held flat "
             "in today's dollars) for your filing "
-            "status (\\$29,200 married / \\$14,600 single / \\$21,900 head of household). "
+            "status (\\$32,200 married / \\$16,100 single / \\$24,150 head of household). "
+            "From 65 the deduction is larger, and through 2028 each person 65+ gets up to "
+            "\\$6,000 more (less at higher incomes). "
             "Contribution limits use 2026 values. "
             "An unmarried couple files two returns.\n"
-            "- **State**: your state's 2024 brackets, deductions and exemptions, "
+            "- **State**: your state's brackets, deductions and exemptions (2024 tables; "
+            "California 2026, with its exemption credits and 1% tax above \\$1 million), "
             "including whether it taxes Social Security and retirement income. "
             "City and county income taxes are not included.\n"
             "- **FICA**: Social Security tax of 6.2% on pay up to \\$184,500 per person (2026), "

@@ -193,8 +193,12 @@ def test_payments_stop_and_return_to_savings_after_payoff(applied):
 
 
 def test_retirement_year_withdraws_the_payment_untrimmed(applied):
+    # Roth conversions off: with the 2026 single 12% top ($50,400) a conversion
+    # fills the room the payment's withdrawal would use, and its tax (a transfer,
+    # not spending) blurs the balance comparison below.
     applied({"YOUR_AGE": 60, "PARTNER_AGE": 0, "FILING_STATUS": "Single", "YOUR_401K": 2_000_000,
-             "DYNAMIC_SPENDING_ENABLED": True, "RETURN_BASED_SPENDING_ENABLED": True})
+             "DYNAMIC_SPENDING_ENABLED": True, "RETURN_BASED_SPENDING_ENABLED": True,
+             "ENABLE_ROTH_CONVERSION": False})
 
     def year(debts):
         cfg.DEBTS = debts

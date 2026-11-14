@@ -249,8 +249,9 @@ class TestStudentLoanDeduction:
             without = sim.working_year_cashflow(27)
         assert with_loan["student_loan_deduction"] == 2_500
         assert without["student_loan_deduction"] == 0.0
-        # 22% bracket at $67.3k of AGI (Single, 2024 table).
-        assert without["federal"] - with_loan["federal"] == pytest.approx(0.22 * 2_500)
+        # $67.3k of AGI (Single, 2026 table): taxable $51,200 is $800 into the 22%
+        # bracket (top of 12%: $50,400), so the $2,500 saves 800 x 22% + 1,700 x 12%.
+        assert without["federal"] - with_loan["federal"] == pytest.approx(0.22 * 800 + 0.12 * 1_700)
         assert with_loan["your_agi"] == pytest.approx(without["your_agi"] - 2_500)
         assert with_loan["fica"] == pytest.approx(without["fica"])
 

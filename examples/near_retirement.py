@@ -273,7 +273,7 @@ RMD_START_AGE = get_rmd_start_age(YOUR_BIRTH_YEAR)
 # Especially valuable: big traditional balances plus a 7-year low-income
 # window (retire at 60, SS at 67) to convert at 12%.
 ENABLE_ROTH_CONVERSION = True
-ROTH_CONVERSION_TARGET_BRACKET = 94_300
+ROTH_CONVERSION_TARGET_BRACKET = 100_800   # top of the 2026 joint 12% bracket
 ROTH_CONVERSION_MAX_ANNUAL = 100_000
 ROTH_CONVERSION_STOP_AGE = 67
 

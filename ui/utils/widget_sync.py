@@ -292,13 +292,13 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sa_glide_start":     ("GLIDE_PATH_START_STOCK_PCT", _as_pct(90.0, 50.0, 100.0)),
     "sa_glide_end":       ("GLIDE_PATH_END_STOCK_PCT", _as_pct(60.0, 20.0, 80.0)),
     "sa_roth_enable":     ("ENABLE_ROTH_CONVERSION", lambda v: bool(v)),
-    "sa_roth_target":     ("ROTH_CONVERSION_TARGET_BRACKET", _as_int(94_300, 0, 750_000)),
+    "sa_roth_target":     ("ROTH_CONVERSION_TARGET_BRACKET", _as_int(100_800, 0, 750_000)),
     "sa_roth_max":        ("ROTH_CONVERSION_MAX_ANNUAL", _as_int(100_000, 0, 500_000)),
     "sa_roth_stop":       ("ROTH_CONVERSION_STOP_AGE", _as_int(67, 50, 80)),
     "sa_dyn_enable":      ("DYNAMIC_SPENDING_ENABLED", lambda v: bool(v)),
     "sa_ret_spend":       ("RETURN_BASED_SPENDING_ENABLED", lambda v: bool(v)),
     "sa_aca":             ("ACA_ENABLED", lambda v: bool(v)),
-    "sa_aca_benchmark":   ("ACA_BENCHMARK_MONTHLY_AT_40", _as_int(650, 0, 5_000)),
+    "sa_aca_benchmark":   ("ACA_BENCHMARK_MONTHLY_AT_40", _as_int(625, 0, 5_000)),
     "sa_aca_child":       ("ACA_CHILD_MONTHLY", _as_int(390, 0, 3_000)),
     # Long-term care widgets live in sec_retirement_goals (rg_ltc_*). The
     # probability is stored as a fraction (0-1) but the slider shows a percent.

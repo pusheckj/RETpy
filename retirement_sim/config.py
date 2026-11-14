@@ -51,10 +51,12 @@ near-retirement, young high-earning professional).
 
 TAX YEAR
 --------
-Federal contribution limits, standard deduction, IRMAA brackets, SS taxation
-thresholds, NIIT threshold, and state bracket values use **tax year 2024** as
-the reference; contribution limits use 2026. The simulator inflates limits
-forward from 2026 using the ``CONTRIBUTION_LIMIT_INFLATION_RATE`` rate.
+Federal brackets, standard deductions, capital-gains thresholds, the OBBBA
+senior deduction, IRMAA tiers, ACA credits, contribution limits and the
+California table use **tax year 2026** (verified November 2026; sources in
+docs/data_sources/2026_verification.md). The other states' tables are still
+2024. The simulator inflates limits forward from 2026 using the
+``CONTRIBUTION_LIMIT_INFLATION_RATE`` rate.
 
 NAMING CONVENTION
 -----------------
@@ -1645,7 +1647,7 @@ MODEL_SPOUSAL_SS_BENEFIT = True
 # Up to 85% of Social Security benefits are taxable based on "provisional income"
 # Provisional Income = AGI + 50% of SS benefits + tax-exempt interest
 #
-# Thresholds (2024): MFJ $32,000 / $44,000; Single and head of household
+# Thresholds (statutory, unchanged for 2026): MFJ $32,000 / $44,000; Single and head of household
 # $25,000 / $34,000. Below the first: 0% taxable; between: up to 50%; above the
 # second: up to 85%.
 
@@ -1694,7 +1696,8 @@ def real_frozen_threshold(nominal_threshold: float, years_from_start: float) -> 
 MODEL_CA_EXEMPTS_SOCIAL_SECURITY = True
 
 
-# Provisional-income thresholds (2024, never indexed): 50% of benefits become
+# Provisional-income thresholds (26 U.S.C. 86(c), never indexed; confirmed for
+# 2026): 50% of benefits become
 # taxable above the first, up to 85% above the second.
 SS_TAX_THRESHOLD_1_MFJ = 32_000     # Below this: 0% taxable
 SS_TAX_THRESHOLD_2_MFJ = 44_000     # Above this: up to 85% taxable
@@ -1771,7 +1774,7 @@ def calculate_taxable_social_security(ss_benefits: float, other_agi: float,
         return min(combined, max_taxable)
 
 # -----------------------------------------------------------------------------
-# FEDERAL TAX CONFIGURATION (2024, by filing status)
+# FEDERAL TAX CONFIGURATION (2026, by filing status)
 # -----------------------------------------------------------------------------
 # Federal ordinary and capital-gains brackets, standard deductions, NIIT,
 # IRMAA, FICA and the Roth phase-out live below, each keyed by filing status.
@@ -1889,65 +1892,119 @@ def return_status(owner: str = "you", status=None, partner=None) -> str:
     return status
 
 
-# 2024 federal ordinary-income brackets as (upper_threshold, marginal_rate).
-# MFJ mirrors the TaxBrackets dataclass default in account_simulation.py;
-# Single and HOH are the official 2024 IRS schedules.
+# 2026 federal ordinary-income brackets as (upper_threshold, marginal_rate).
+# Source: Rev. Proc. 2025-32 section 4.01, Tables 1-3 (IR-2025-103). HOH is
+# its own schedule: its 24% band ends at 201,750 and its 32% band at 256,200,
+# not the single figures. Indexed in law, so held flat in today's dollars.
 FEDERAL_BRACKETS_BY_STATUS = {
     _FILING_MFJ: [
-        (23_200, 0.10), (94_300, 0.12), (201_050, 0.22),
-        (383_900, 0.24), (487_450, 0.32), (731_200, 0.35),
+        (24_800, 0.10), (100_800, 0.12), (211_400, 0.22),
+        (403_550, 0.24), (512_450, 0.32), (768_700, 0.35),
         (float('inf'), 0.37),
     ],
     _FILING_SINGLE: [
-        (11_600, 0.10), (47_150, 0.12), (100_525, 0.22),
-        (191_950, 0.24), (243_725, 0.32), (609_350, 0.35),
+        (12_400, 0.10), (50_400, 0.12), (105_700, 0.22),
+        (201_775, 0.24), (256_225, 0.32), (640_600, 0.35),
         (float('inf'), 0.37),
     ],
     _FILING_HOH: [
-        (16_550, 0.10), (63_100, 0.12), (100_500, 0.22),
-        (191_950, 0.24), (243_700, 0.32), (609_350, 0.35),
+        (17_700, 0.10), (67_450, 0.12), (105_700, 0.22),
+        (201_750, 0.24), (256_200, 0.32), (640_600, 0.35),
         (float('inf'), 0.37),
     ],
 }
 
 
 def get_federal_brackets(status=None):
-    """Return the 2024 federal bracket list for the given (or active) filing status."""
+    """Return the 2026 federal bracket list for the given (or active) filing status."""
     return FEDERAL_BRACKETS_BY_STATUS[normalize_filing_status(status)]
 
 
-# Standard deduction for Married Filing Jointly (2024).
-# Applied before calculating federal income tax.
-STANDARD_DEDUCTION_MFJ_2024 = 29_200
-# 2024 federal standard deduction for Single and Head of household filers.
-STANDARD_DEDUCTION_SINGLE_2024 = 14_600
-STANDARD_DEDUCTION_HOH_2024 = 21_900
+# 2026 federal standard deduction (Rev. Proc. 2025-32 section 4.14; the OBBBA
+# 2025 base, indexed). Indexed in law, so held flat in today's dollars.
+STANDARD_DEDUCTION_MFJ = 32_200
+STANDARD_DEDUCTION_SINGLE = 16_100
+STANDARD_DEDUCTION_HOH = 24_150
+# The old *_2024 names, kept so nothing that imports them breaks. They now hold
+# the 2026 figures.
+STANDARD_DEDUCTION_MFJ_2024 = STANDARD_DEDUCTION_MFJ
+STANDARD_DEDUCTION_SINGLE_2024 = STANDARD_DEDUCTION_SINGLE
+STANDARD_DEDUCTION_HOH_2024 = STANDARD_DEDUCTION_HOH
 
 STANDARD_DEDUCTION_BY_STATUS = {
-    _FILING_MFJ: STANDARD_DEDUCTION_MFJ_2024,
-    _FILING_SINGLE: STANDARD_DEDUCTION_SINGLE_2024,
-    _FILING_HOH: STANDARD_DEDUCTION_HOH_2024,
+    _FILING_MFJ: STANDARD_DEDUCTION_MFJ,
+    _FILING_SINGLE: STANDARD_DEDUCTION_SINGLE,
+    _FILING_HOH: STANDARD_DEDUCTION_HOH,
 }
 
-# Additional standard deduction for age 65+ (each spouse).
-ADDITIONAL_STD_DEDUCTION_65_PLUS = 1_550
-# For Single/HOH the age-65+ additional deduction is larger (per-filer, 2024).
-ADDITIONAL_STD_DEDUCTION_65_PLUS_SINGLE = 1_950
+# Additional standard deduction for age 65+ (2026, Rev. Proc. 2025-32 section
+# 4.14): $1,650 per spouse 65+ on a joint return, $2,050 for a Single/HOH filer.
+# Indexed, so flat in today's dollars. (These two figures are not in the
+# verification report; they come from the Rev. Proc. itself.)
+ADDITIONAL_STD_DEDUCTION_65_PLUS = 1_650
+ADDITIONAL_STD_DEDUCTION_65_PLUS_SINGLE = 2_050
 
-# California standard deduction for Married Filing Jointly (2024 tax year).
-# Source: CA Franchise Tax Board, 2024 California Standard Deduction Worksheet
-# (FTB Form 540 instructions, 2024), published 2024. The full CA table (every
-# filing status) is state_tax_data.STATES["CA"]; this constant is kept for
-# callers that quote the joint figure.
-CA_STANDARD_DEDUCTION_MFJ_2024 = 11_080
+# OBBBA senior deduction (26 U.S.C. 151(d)(5)(C)): $6,000 for each person on the
+# return who is 65+ by year end, on top of the 65+ standard deduction and
+# whether or not the return itemizes. Each person's $6,000 shrinks by 6% of
+# MAGI above $75,000 (single / HOH) or $150,000 (joint), so it is gone at
+# $175,000 / $250,000. Tax years 2025-2028 only; married couples must file
+# jointly (an unmarried couple's two Single returns each qualify on their own).
+# The amounts are NOT indexed, so in this real-dollar frame they shrink like the
+# other frozen-nominal thresholds (real_frozen_threshold). Plan year 0 is
+# CURRENT_YEAR; the deduction applies while CURRENT_YEAR + years_from_start <=
+# SENIOR_DEDUCTION_LAST_YEAR. Set MODEL_SENIOR_DEDUCTION False to leave it out.
+MODEL_SENIOR_DEDUCTION = True
+SENIOR_DEDUCTION_PER_PERSON = 6_000
+SENIOR_DEDUCTION_PHASEOUT_RATE = 0.06
+SENIOR_DEDUCTION_PHASEOUT_START = {_FILING_MFJ: 150_000, _FILING_SINGLE: 75_000,
+                                   _FILING_HOH: 75_000}
+SENIOR_DEDUCTION_FIRST_YEAR = 2025
+SENIOR_DEDUCTION_LAST_YEAR = 2028
+
+# California standard deduction for Married Filing Jointly (2026 tax year, FTB
+# Tax News October 2026). The full CA table (every filing status) is
+# state_tax_data.STATES["CA"]; this constant is kept for callers that quote the
+# joint figure (and as the engine's fallback for a state model without one).
+CA_STANDARD_DEDUCTION_MFJ = 11_800
+CA_STANDARD_DEDUCTION_MFJ_2024 = CA_STANDARD_DEDUCTION_MFJ   # old name, 2026 value
 
 
-def standard_deduction_for_return(status, ages) -> float:
-    """FEDERAL standard deduction of one return.
+def senior_deduction(status, ages, magi=None, years_from_start: float = 0.0) -> float:
+    """OBBBA senior deduction of one return (see SENIOR_DEDUCTION_PER_PERSON).
 
-    ``ages`` are the people on it (both spouses on a joint return). Base 2024
-    deduction by status, plus the age-65+ add-on: $1,550 per spouse 65+ on a
-    joint return, $1,950 for a 65+ Single/HOH filer.
+    ``ages`` are the people on the return; ``magi`` is the return's modified
+    AGI (None = no phase-out). Zero outside tax years 2025-2028.
+    """
+    if not MODEL_SENIOR_DEDUCTION:
+        return 0.0
+    try:
+        yrs = float(years_from_start or 0.0)
+    except (TypeError, ValueError):
+        yrs = 0.0
+    year = int(CURRENT_YEAR) + int(yrs)
+    if not SENIOR_DEDUCTION_FIRST_YEAR <= year <= SENIOR_DEDUCTION_LAST_YEAR:
+        return 0.0
+    qualified = sum(1 for age in ages if age is not None and age >= 65)
+    if not qualified:
+        return 0.0
+    amount = real_frozen_threshold(SENIOR_DEDUCTION_PER_PERSON, yrs)
+    if magi is not None:
+        start = real_frozen_threshold(
+            SENIOR_DEDUCTION_PHASEOUT_START[normalize_filing_status(status)], yrs)
+        amount = max(0.0, amount - SENIOR_DEDUCTION_PHASEOUT_RATE * max(0.0, float(magi) - start))
+    return qualified * amount
+
+
+def standard_deduction_for_return(status, ages, magi=None,
+                                  years_from_start: float = 0.0) -> float:
+    """FEDERAL deduction of one return (the engine never itemizes).
+
+    ``ages`` are the people on it (both spouses on a joint return). 2026 base
+    deduction by status, plus the age-65+ add-on ($1,650 per spouse 65+ on a
+    joint return, $2,050 for a 65+ Single/HOH filer), plus the OBBBA senior
+    deduction (senior_deduction: $6,000 per person 65+, phased out by ``magi``,
+    tax years 2025-2028 only).
     """
     status = normalize_filing_status(status)
     deduction = STANDARD_DEDUCTION_BY_STATUS[status]
@@ -1956,21 +2013,23 @@ def standard_deduction_for_return(status, ages) -> float:
     for age in ages:
         if age is not None and age >= 65:
             deduction += add_on
-    return deduction
+    return deduction + senior_deduction(status, ages, magi, years_from_start)
 
 
-def get_standard_deduction(your_age: int, partner_age: int) -> float:
+def get_standard_deduction(your_age: int, partner_age: int, magi=None,
+                           years_from_start: float = 0.0) -> float:
     """
-    Calculate the FEDERAL standard deduction based on ages and FILING_STATUS.
+    Calculate the FEDERAL deduction based on ages and FILING_STATUS.
 
-    2024 base deduction: MFJ $29,200 / Single $14,600 / HOH $21,900.
-    Age-65+ add-on: $1,550 per spouse for MFJ; $1,950 for Single/HOH (per filer).
+    2026 base deduction: MFJ $32,200 / Single $16,100 / HOH $24,150.
+    Age-65+ add-on: $1,650 per spouse for MFJ; $2,050 for Single/HOH (per filer).
+    Plus the OBBBA senior deduction (senior_deduction) through tax year 2028.
     For non-MFJ filers only the primary filer's age is considered (there is no
     second filer on the return), matching the single-return schedule.
     """
     status = normalize_filing_status()
     ages = [your_age, partner_age] if status == _FILING_MFJ else [your_age]
-    return standard_deduction_for_return(status, ages)
+    return standard_deduction_for_return(status, ages, magi, years_from_start)
 
 
 def progressive_tax(brackets, taxable_income: float) -> float:
@@ -1990,13 +2049,14 @@ def progressive_tax(brackets, taxable_income: float) -> float:
     return tax
 
 
-# 2024 federal long-term capital gains brackets by filing status, as
-# (upper limit of taxable income, rate). Gains stack on top of ordinary taxable
-# income (account_simulation.calculate_ltcg_tax).
+# 2026 federal long-term capital gains brackets by filing status, as
+# (upper limit of taxable income, rate) -- Rev. Proc. 2025-32 section 4.03.
+# Gains stack on top of ordinary taxable income
+# (account_simulation.calculate_ltcg_tax). Indexed, so flat in today's dollars.
 LTCG_BRACKETS_BY_STATUS = {
-    _FILING_MFJ: [(94_050, 0.0), (583_750, 0.15), (float('inf'), 0.20)],
-    _FILING_SINGLE: [(47_025, 0.0), (518_900, 0.15), (float('inf'), 0.20)],
-    _FILING_HOH: [(63_000, 0.0), (551_350, 0.15), (float('inf'), 0.20)],
+    _FILING_MFJ: [(98_900, 0.0), (613_700, 0.15), (float('inf'), 0.20)],
+    _FILING_SINGLE: [(49_450, 0.0), (545_500, 0.15), (float('inf'), 0.20)],
+    _FILING_HOH: [(66_200, 0.0), (579_600, 0.15), (float('inf'), 0.20)],
 }
 
 # -----------------------------------------------------------------------------
@@ -2120,7 +2180,8 @@ def state_tax_rules(choice=None, status=None, people=None, flat_rate=None) -> di
         "brackets": [(float('inf'), 0.0)], "deduction": 0.0,
         "social_security": "exempt", "retirement_exclusion": None,
         "ltcg_exclusion": 0.0, "pretax_401k_taxed": False, "hsa_taxed": False,
-        "payroll": None,
+        "payroll": None, "people": int(people), "exemption_credits": None,
+        "surtax": None,
     }
     if code == STATE_NONE:
         return rules
@@ -2146,8 +2207,39 @@ def state_tax_rules(choice=None, status=None, people=None, flat_rate=None) -> di
         pretax_401k_taxed=bool(row.get("pretax_401k_taxed", False)),
         hsa_taxed=bool(row.get("hsa_taxed", False)),
         payroll=row.get("payroll"),
+        exemption_credits=row.get("exemption_credits"),
+        surtax=row.get("surtax"),
     )
     return rules
+
+
+def state_income_tax(rules: dict, taxable_income: float, seniors: int = 0,
+                     dependents: int = 0, agi=None) -> float:
+    """State income tax of one return on ``taxable_income`` (after the
+    deduction): the bracket tax, less the state's nonrefundable exemption
+    credits (one personal credit per person on the return, one per
+    ``seniors`` person 65+, one per ``dependents`` child), plus any surtax.
+
+    Each credit is cut by ``phaseout_per_step`` per ``phaseout_step`` (or part)
+    of ``agi`` above the threshold; ``agi`` None = taxable income + deduction.
+    """
+    tax = progressive_tax(rules["brackets"], taxable_income)
+    credits = rules.get("exemption_credits")
+    if credits and tax > 0:
+        amounts = ([credits["personal"]] * int(rules.get("people", 1))
+                   + [credits["senior"]] * int(seniors)
+                   + [credits["dependent"]] * int(dependents))
+        if agi is None:
+            agi = max(0.0, taxable_income) + float(rules["deduction"])
+        over = agi - credits["phaseout_agi"][rules["status"]]
+        # No module imports here: config's module globals are snapshotted as plain data.
+        cut = (credits["phaseout_per_step"] * int(-(-round(over, 6) // credits["phaseout_step"]))
+               if over > 0 else 0)
+        tax = max(0.0, tax - sum(max(0, a - cut) for a in amounts))
+    surtax = rules.get("surtax")
+    if surtax:
+        tax += surtax["rate"] * max(0.0, taxable_income - surtax["threshold"])
+    return tax
 
 
 def state_exempts_social_security(rules: dict, return_income: float) -> bool:
@@ -2307,7 +2399,8 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
     for ret_index, (ret_status, people, ages) in enumerate(returns):
         # Federal income tax
         agi = sum(p["agi"] for p in people)
-        fed_taxable = max(0.0, agi - standard_deduction_for_return(ret_status, ages))
+        fed_taxable = max(0.0, agi - standard_deduction_for_return(ret_status, ages, agi,
+                                                                   years_from_start))
         federal = progressive_tax(get_federal_brackets(ret_status), fed_taxable)
         if ret_index == 0:      # the children are on your return
             federal -= child_tax_credit(kids, federal, agi,
@@ -2321,7 +2414,10 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
                                 - p.get("adj", 0.0))
                         for p in people}
         st_total = sum(state_income.values())
-        state_tax = progressive_tax(rules["brackets"], max(0.0, st_total - rules["deduction"]))
+        state_tax = state_income_tax(
+            rules, max(0.0, st_total - rules["deduction"]),
+            seniors=sum(1 for a in ages if a is not None and a >= 65),
+            dependents=kids if ret_index == 0 else 0, agi=agi)
         # Additional Medicare Tax is a per-return amount on combined wages.
         med_wages = sum(p["wages"] - p["hsa"] for p in people)
         threshold = real_frozen_threshold(
@@ -2462,39 +2558,72 @@ def calculate_niit(magi: float, net_investment_income: float,
 # MEDICARE IRMAA (Income-Related Monthly Adjustment Amount)
 # -----------------------------------------------------------------------------
 # Higher-income beneficiaries pay more for Medicare Parts B and D.
-# Based on MAGI from 2 years prior (e.g., 2024 income affects 2026 premiums).
-
-# 2025 IRMAA thresholds and monthly surcharges, per official CMS figures.
+#
+# 2026 figures, CMS fact sheet "2026 Medicare Parts B Premiums and Deductibles"
+# (November 14, 2025): standard Part B premium $202.90 a month per person;
+# tier boundaries and the Part B / Part D monthly surcharges below. In law the
+# tier is set by MAGI from TWO years earlier (2024 income sets 2026 premiums).
+# The engine keeps its convention of testing the CURRENT year's MAGI instead
+# (no two-year lag is tracked): close for a steady retirement, early by two
+# years around a big income change (a Roth conversion, the last working year).
 # IRMAA IS indexed to inflation, so holding its thresholds flat in this
 # all-real frame is consistent (they are deliberately not decayed).
-# Format: (income_threshold, monthly_part_b_premium, monthly_part_d_surcharge)
+MEDICARE_PART_B_STANDARD_MONTHLY = 202.90
+# What each Medicare member pays on top of Part B: a Part D drug plan and a
+# Medigap (supplement) policy. An ESTIMATE, not a CMS figure and not from the
+# verification report: about $40 for Part D (the 2026 base beneficiary premium
+# is $38.99) plus about $160 for a Medigap Plan G at 65. Both vary a lot by
+# plan, state and age. The Part D IRMAA surcharge is added on top.
+MEDICARE_SUPPLEMENTAL_MONTHLY_PER_PERSON = 200
+# Format: (MAGI above which the tier starts, monthly Part B premium,
+# monthly Part D surcharge), per person. Tier 0 starts at 0; the top tier
+# starts AT its boundary ($750k joint / $500k single), every other tier just
+# above it.
 MEDICARE_IRMAA_BRACKETS_MFJ = [
-    (0,        185.00,  0.00),      # Base premium (no surcharge)
-    (212_000,  259.00,  13.70),     # First surcharge tier
-    (266_000,  370.00,  35.30),
-    (334_000,  480.90,  57.00),
-    (400_000,  591.90,  78.60),
-    (750_000,  628.90,  85.80),     # Maximum tier
+    (0,        202.90,  0.00),      # Standard premium (no surcharge)
+    (218_000,  284.10,  14.50),     # First surcharge tier
+    (274_000,  405.80,  37.50),
+    (342_000,  527.50,  60.40),
+    (410_000,  649.20,  83.30),
+    (750_000,  689.90,  91.00),     # Maximum tier
 ]
 # Single, head of household (and any other individual return).
 MEDICARE_IRMAA_BRACKETS_SINGLE = [
-    (0,        185.00,  0.00),
-    (106_000,  259.00,  13.70),
-    (133_000,  370.00,  35.30),
-    (167_000,  480.90,  57.00),
-    (200_000,  591.90,  78.60),
-    (500_000,  628.90,  85.80),
+    (0,        202.90,  0.00),
+    (109_000,  284.10,  14.50),
+    (137_000,  405.80,  37.50),
+    (171_000,  527.50,  60.40),
+    (205_000,  649.20,  83.30),
+    (500_000,  689.90,  91.00),
 ]
+
+
+def medicare_irmaa_tier(magi: float, status=None) -> int:
+    """IRMAA tier (0 = standard premium .. 5 = top) for ``magi`` on a return of
+    ``status``: above a boundary for tiers 1-4, at or above it for the top."""
+    brackets = (MEDICARE_IRMAA_BRACKETS_MFJ if normalize_filing_status(status) == _FILING_MFJ
+                else MEDICARE_IRMAA_BRACKETS_SINGLE)
+    top = len(brackets) - 1
+    tier = 0
+    for i, (threshold, _b, _d) in enumerate(brackets[1:], start=1):
+        if magi > threshold or (i == top and magi >= threshold):
+            tier = i
+        else:
+            break
+    return tier
+
 
 def calculate_medicare_irmaa(magi: float, inflation_factor: float = 1.0,
                              enrollees: int = 2, status=None) -> float:
     """
     Calculate annual Medicare premiums including IRMAA surcharges.
 
-    Uses MAGI from 2 years prior to determine premium tier.
+    Per enrollee: the Part B premium of the MAGI tier, the Part D surcharge of
+    that tier, and MEDICARE_SUPPLEMENTAL_MONTHLY_PER_PERSON (Part D plan +
+    Medigap estimate). Uses this year's MAGI in place of the two-year lookback.
 
     Args:
-        magi: Modified AGI (typically from 2 years prior)
+        magi: Modified AGI (the engine passes the current year's)
         inflation_factor: Inflation adjustment for future years
         enrollees: How many people are actually enrolled in Medicare. Defaults to
             2 (a couple, both age 65+) which is the historical behavior. Pass 1
@@ -2506,7 +2635,7 @@ def calculate_medicare_irmaa(magi: float, inflation_factor: float = 1.0,
             each person is tested on half of it against the individual tiers.
 
     Returns:
-        Annual Medicare premium (Part B + Part D) for ``enrollees`` people
+        Annual Medicare premiums (Part B + Part D + supplement) for ``enrollees`` people
     """
     if status is None:
         status = normalize_filing_status()
@@ -2514,21 +2643,9 @@ def calculate_medicare_irmaa(magi: float, inflation_factor: float = 1.0,
             magi = magi / 2.0
     brackets = (MEDICARE_IRMAA_BRACKETS_MFJ if normalize_filing_status(status) == _FILING_MFJ
                 else MEDICARE_IRMAA_BRACKETS_SINGLE)
-    # Find the applicable bracket
-    part_b_monthly = brackets[0][1]  # Base
-    part_d_monthly = brackets[0][2]  # Base
-
-    for threshold, part_b, part_d in brackets:
-        if magi >= threshold:
-            part_b_monthly = part_b
-            part_d_monthly = part_d
-        else:
-            break
-
-    # Calculate annual premium, one Part B + Part D per enrolled person
-    annual_premium = (part_b_monthly + part_d_monthly) * 12 * max(0, int(enrollees))
-
-    # Apply inflation adjustment
+    _threshold, part_b_monthly, part_d_monthly = brackets[medicare_irmaa_tier(magi, status)]
+    monthly = part_b_monthly + part_d_monthly + float(MEDICARE_SUPPLEMENTAL_MONTHLY_PER_PERSON or 0)
+    annual_premium = monthly * 12 * max(0, int(enrollees))
     return annual_premium * inflation_factor
 
 # -----------------------------------------------------------------------------
@@ -2614,14 +2731,15 @@ def calculate_rmd(account_balance: float, age: int, start_age: int = RMD_START_A
 ENABLE_ROTH_CONVERSION = True  # Toggle Roth conversion strategy on/off
 
 # Fill each year's ordinary income up to this amount with conversions. None
-# (default) = the top of the 12% bracket for the return's filing status (2024:
-# $94,300 joint, $47,150 single, $63,100 head of household); a number applies
-# to every return. Compared against the year's ordinary income (before the
-# standard deduction), so the fill stops short of the bracket top by the
-# deduction -- a deliberately conservative reading.
+# (default) = the top of the 12% bracket for the return's filing status (2026:
+# $100,800 joint, $50,400 single, $67,450 head of household -- read from
+# FEDERAL_BRACKETS_BY_STATUS); a number applies to every return. Compared
+# against the year's ordinary income (before the standard deduction), so the
+# fill stops short of the bracket top by the deduction -- a deliberately
+# conservative reading.
 ROTH_CONVERSION_TARGET_BRACKET = None
 ROTH_CONVERSION_TARGET_BY_STATUS = {
-    _FILING_MFJ: 94_300, _FILING_SINGLE: 47_150, _FILING_HOH: 63_100,
+    status: brackets[1][0] for status, brackets in FEDERAL_BRACKETS_BY_STATUS.items()
 }
 
 
@@ -2657,29 +2775,55 @@ ACA_ENABLED = True  # Enable ACA health insurance modeling
 ACA_BASE_MONTHLY_PREMIUM = 2_000
 ACA_BASE_ANNUAL_PREMIUM = ACA_BASE_MONTHLY_PREMIUM * 12
 
-# Federal Poverty Level (FPL) for family of 4 (2024).
-FPL_FAMILY_OF_4 = 31_200
+# Federal Poverty Level (FPL) for a family of 4, legacy flat-band path only:
+# the 2025 HHS guideline ($15,650 + 3 x $5,500), which sets 2026 marketplace
+# credits (the age-rated path sizes it by household with aca_fpl).
+FPL_FAMILY_OF_4 = 32_150
 
-# ACA subsidy cliff - subsidies phase out above 400% FPL.
-# Note: American Rescue Plan temporarily removed the cliff through 2025.
-# This models the permanent structure where subsidies phase out.
+# ACA subsidy cliff: no premium tax credit at or above 400% FPL. The American
+# Rescue Plan / Inflation Reduction Act enhanced credits (no cliff, lower
+# percentages) expired December 31, 2025. Legislative watch (November 2026):
+# the House passed a 3-year extension in January 2026; the Senate has not, so
+# current law (expired) is modeled. Recheck before relying on 2027 figures.
 ACA_SUBSIDY_CLIFF_PCT = 4.0
 ACA_SUBSIDY_CLIFF = FPL_FAMILY_OF_4 * ACA_SUBSIDY_CLIFF_PCT
 
-# Below 400% FPL, max premium is capped at % of income (sliding scale):
-# At 150% FPL: ~4% of income
-# At 200% FPL: ~6.5% of income
-# At 300% FPL: ~9.5% of income
-# At 400% FPL: ~9.5% of income (then cliff)
-ACA_MAX_PREMIUM_PCT_BY_FPL = {
-    1.5: 0.04,   # 150% FPL: max 4% of income
-    2.0: 0.065,  # 200% FPL: max 6.5% of income
-    3.0: 0.095,  # 300% FPL: max 9.5% of income
-    4.0: 0.095,  # 400% FPL: max 9.5% of income
-}
+# 2026 applicable percentage table (Rev. Proc. 2025-25 section 3.01): the share
+# of MAGI a household is expected to pay toward the benchmark Silver plan. Each
+# row is (FPL ratio low, FPL ratio high, initial %, final %); the percentage
+# rises linearly from initial to final across the band. Note the step at 133%:
+# 2.10% just below it, 3.14% at it. Above 400% FPL there is no credit (cliff).
+# Below 100% FPL there is generally no credit either (Medicaid territory); that
+# is not modeled, the 2.10% band runs down to zero.
+ACA_APPLICABLE_PCT_BANDS = (
+    (0.00, 1.33, 0.0210, 0.0210),
+    (1.33, 1.50, 0.0314, 0.0419),
+    (1.50, 2.00, 0.0419, 0.0660),
+    (2.00, 2.50, 0.0660, 0.0844),
+    (2.50, 3.00, 0.0844, 0.0996),
+    (3.00, 4.00, 0.0996, 0.0996),
+)
 
-# Medicare (age 65+)
-MEDICARE_MONTHLY_PREMIUM = 400  # Combined Part B + supplemental for couple
+
+def aca_applicable_pct(fpl_ratio: float) -> float:
+    """2026 applicable percentage at ``fpl_ratio`` (1.5 = 150% FPL), linear
+    inside each band of ACA_APPLICABLE_PCT_BANDS. Callers apply the 400% cliff;
+    at or above it this returns the last band's final percentage."""
+    bands = ACA_APPLICABLE_PCT_BANDS
+    for lo, hi, initial, final in bands:
+        if fpl_ratio < hi:
+            if fpl_ratio <= lo:
+                return initial
+            return initial + (fpl_ratio - lo) / (hi - lo) * (final - initial)
+    return bands[-1][3]
+
+
+# Medicare (age 65+), for a couple at the standard (no-IRMAA) tier: two Part B
+# premiums plus two Part D + Medigap estimates, $805.80 a month in 2026 (it was
+# a flat $400, below even two Part B premiums). Reference figure only: the
+# engine prices Medicare per person with calculate_medicare_irmaa.
+MEDICARE_MONTHLY_PREMIUM = 2 * (MEDICARE_PART_B_STANDARD_MONTHLY
+                                + MEDICARE_SUPPLEMENTAL_MONTHLY_PER_PERSON)
 MEDICARE_ANNUAL_PREMIUM = MEDICARE_MONTHLY_PREMIUM * 12
 
 
@@ -2842,15 +2986,7 @@ def pre_medicare_health_quote(modified_agi: float, adult_ages, kid_ages=(),
     if fpl_pct >= ACA_SUBSIDY_CLIFF_PCT:
         household_aca = full
     else:
-        if fpl_pct <= 1.5:
-            max_pct = 0.04
-        elif fpl_pct <= 2.0:
-            max_pct = 0.04 + (fpl_pct - 1.5) / 0.5 * (0.065 - 0.04)
-        elif fpl_pct <= 3.0:
-            max_pct = 0.065 + (fpl_pct - 2.0) / 1.0 * (0.095 - 0.065)
-        else:
-            max_pct = 0.095
-        household_aca = min(magi * max_pct, full)
+        household_aca = min(max(0.0, magi) * aca_applicable_pct(fpl_pct), full)
     return household_aca * inflation_factor * len(pre) / len(adult_ages)
 
 # =============================================================================
@@ -2929,19 +3065,9 @@ def calculate_aca_premium(modified_agi: float, family_size: int = 4) -> float:
     if fpl_pct >= ACA_SUBSIDY_CLIFF_PCT:
         return full_price_aca_annual()
 
-    # Below 400% FPL, premium is capped at a percentage of income.
-    # Interpolate the max premium percentage.
-    if fpl_pct <= 1.5:
-        max_pct = 0.04
-    elif fpl_pct <= 2.0:
-        max_pct = 0.04 + (fpl_pct - 1.5) / 0.5 * (0.065 - 0.04)
-    elif fpl_pct <= 3.0:
-        max_pct = 0.065 + (fpl_pct - 2.0) / 1.0 * (0.095 - 0.065)
-    else:  # 3.0 to 4.0
-        max_pct = 0.095
-
-    # Calculate subsidized premium
-    max_premium = modified_agi * max_pct
+    # Below 400% FPL, premium is capped at a percentage of income (the 2026
+    # applicable percentage table).
+    max_premium = max(0.0, modified_agi) * aca_applicable_pct(fpl_pct)
 
     # Return the lesser of subsidized premium or base premium
     return min(max_premium, full_price_aca_annual())
@@ -2977,10 +3103,11 @@ def calculate_aca_premium(modified_agi: float, family_size: int = 4) -> float:
 MODEL_ACA_AGE_RATED = True
 
 # Benchmark (second-lowest-cost Silver) premiums before subsidy, today's $/mo.
-# The app's Assumptions panel sets both. 650 is the 2026 figure for San Diego,
-# close to the 2026 US average for a 40-year-old (about $625); prices vary a lot
-# by region, so look yours up by ZIP code at healthcare.gov.
-ACA_BENCHMARK_MONTHLY_AT_40 = 650   # one 40-year-old; other ages via ACA_AGE_CURVE
+# The app's Assumptions panel sets both. 625 is the 2026 US average for a
+# 40-year-old (KFF analysis of CMS plan data -- a secondary source; CMS
+# publishes no national figure). It was 650, the San Diego figure. Prices vary
+# a lot by region, so look yours up by ZIP code at healthcare.gov.
+ACA_BENCHMARK_MONTHLY_AT_40 = 625   # one 40-year-old; other ages via ACA_AGE_CURVE
 ACA_CHILD_MONTHLY = 390             # per child under ACA_CHILD_RATE_UNDER_AGE
 ACA_CHILD_RATE_UNDER_AGE = 21       # federal curve rates members under 21 at the child rate
 ACA_OOP_PER_PERSON_ANNUAL = 1_500   # deductibles/copays per marketplace member, today's $
@@ -3002,18 +3129,6 @@ ACA_AGE_CURVE = {
     63: 2.952, 64: 3.000,
 }
 
-# 2026 applicable percentage (share of MAGI expected toward the benchmark),
-# linear between points; flat 2.10% at/below 133% and 9.96% from 300-400% FPL.
-ACA_APPLICABLE_PCT_POINTS = (
-    (1.33, 0.0210),
-    (1.50, 0.0419),
-    (2.00, 0.0660),
-    (2.50, 0.0844),
-    (3.00, 0.0996),
-    (4.00, 0.0996),
-)
-
-
 def aca_member_full_price_annual(age: int) -> float:
     """Unsubsidized benchmark-silver premium for ONE member (today's $/yr)."""
     if age < ACA_CHILD_RATE_UNDER_AGE:
@@ -3026,17 +3141,6 @@ def aca_fpl(household_size: int) -> float:
     """Federal poverty level for a household of ``household_size`` people."""
     n = max(1, int(household_size))
     return float(ACA_FPL_FIRST_PERSON + ACA_FPL_PER_ADDITIONAL_PERSON * (n - 1))
-
-
-def aca_applicable_pct(fpl_ratio: float) -> float:
-    """2026 applicable percentage at ``fpl_ratio`` (1.5 = 150% FPL)."""
-    pts = ACA_APPLICABLE_PCT_POINTS
-    if fpl_ratio <= pts[0][0]:
-        return pts[0][1]
-    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
-        if fpl_ratio <= x1:
-            return y0 + (fpl_ratio - x0) / (x1 - x0) * (y1 - y0)
-    return pts[-1][1]
 
 
 def calculate_aca_premium_age_rated(modified_agi: float, member_ages,

@@ -212,27 +212,27 @@ class TestFilingStatus:
         mfj = cfg.get_federal_brackets("Married filing jointly")
         single = cfg.get_federal_brackets("Single")
         hoh = cfg.get_federal_brackets("Head of household")
-        # 12% bracket ceiling: MFJ $94,300 vs Single $47,150 vs HOH $63,100.
-        assert mfj[1][0] == 94_300
-        assert single[1][0] == 47_150
-        assert hoh[1][0] == 63_100
+        # 2026 12% bracket ceiling: MFJ $100,800 vs Single $50,400 vs HOH $67,450.
+        assert mfj[1][0] == 100_800
+        assert single[1][0] == 50_400
+        assert hoh[1][0] == 67_450
 
     def test_standard_deduction_branches(self):
         original = sr._apply_overrides({"FILING_STATUS": "Single"})
         try:
-            assert cfg.get_standard_deduction(40, 40) == 14_600
+            assert cfg.get_standard_deduction(40, 40) == 16_100   # 2026
         finally:
             sr._restore_overrides(original)
         # Default MFJ restored.
-        assert cfg.get_standard_deduction(40, 40) == 29_200
+        assert cfg.get_standard_deduction(40, 40) == 32_200
 
     def test_engine_portfolio_uses_filing_status_brackets(self):
         # A fresh AccountPortfolio must build federal brackets from FILING_STATUS.
         original = sr._apply_overrides({"FILING_STATUS": "Single"})
         try:
             pf = sim.AccountPortfolio()
-            # Single 12% bracket ceiling is $47,150 (MFJ would be $94,300).
-            assert pf.federal_tax_brackets.brackets[1][0] == 47_150
+            # Single 12% bracket ceiling is $50,400 (MFJ would be $100,800).
+            assert pf.federal_tax_brackets.brackets[1][0] == 50_400
             # A $150k single filer owes strictly more federal tax than MFJ.
             single_tax = pf.calculate_federal_tax_with_deduction(150_000)
         finally:

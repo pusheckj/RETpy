@@ -130,6 +130,8 @@ class TestNormalizeFilingStatus:
 class TestStandardDeduction:
     def test_age_65_boundary_mfj(self, monkeypatch):
         monkeypatch.setattr(cfg, "FILING_STATUS", "MFJ")
+        # The 65+ add-on only; the 2025-2028 senior deduction is in test_tax_2026.
+        monkeypatch.setattr(cfg, "MODEL_SENIOR_DEDUCTION", False)
         base = cfg.get_standard_deduction(64, 64)
         assert base == cfg.STANDARD_DEDUCTION_MFJ_2024
         one_old = cfg.get_standard_deduction(65, 64)
@@ -139,6 +141,7 @@ class TestStandardDeduction:
 
     def test_single_ignores_partner_age(self, monkeypatch):
         monkeypatch.setattr(cfg, "FILING_STATUS", "Single")
+        monkeypatch.setattr(cfg, "MODEL_SENIOR_DEDUCTION", False)
         assert (cfg.get_standard_deduction(40, 70)
                 == cfg.get_standard_deduction(40, 40)
                 == cfg.STANDARD_DEDUCTION_SINGLE_2024)

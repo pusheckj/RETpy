@@ -11,7 +11,8 @@ Pins the audit's taxes/income items:
   R13 the employer match is capped by what you actually defer
   R14 the current year comes from the clock
 
-Hand-computed figures use the official 2024 tables (the engine's frame).
+Hand-computed figures use the official 2026 tables (Rev. Proc. 2025-32; FTB
+2026 for California; the other states are 2024).
 """
 import datetime
 import os
@@ -61,32 +62,33 @@ def _comp(base, bonus=0, rsu=0, age=40, **extra):
 class TestTakeHomeByHand:
     def test_single_150k_texas(self):
         t = cfg.working_year_taxes(150_000, status="S", partner=False, state="TX")
-        # 150,000 - 14,600 = 135,400 taxable:
-        # 1,160 + 4,266 + 11,742.50 + 24% x 34,875 = 25,538.50
-        assert t["federal"] == pytest.approx(25_538.50)
+        # 2026: 150,000 - 16,100 = 133,900 taxable:
+        # 1,240 + 4,560 + 12,166 + 24% x 28,200 = 24,734
+        assert t["federal"] == pytest.approx(24_734.0)
         assert t["state"] == 0.0
         assert t["fica"] == pytest.approx(150_000 * 0.0765)
-        assert t["take_home"] == pytest.approx(150_000 - 25_538.50 - 11_475.0)
-        assert t["take_home"] / 150_000 == pytest.approx(0.753, abs=0.001)
+        assert t["take_home"] == pytest.approx(150_000 - 24_734.0 - 11_475.0)
+        assert t["take_home"] / 150_000 == pytest.approx(0.759, abs=0.001)
 
     def test_married_200k_california(self):
         t = cfg.working_year_taxes(120_000, 80_000, status="MFJ", partner=True, state="CA",
                                    your_age=40, partner_age=40)
-        # Federal: 200,000 - 29,200 = 170,800 -> 2,320 + 8,532 + 16,830
-        assert t["federal"] == pytest.approx(27_682.0)
-        # CA 2024 joint: 200,000 - 11,080 = 188,920 ->
-        # 215.12 + 589.72 + 1,179.68 + 1,874.52 + 2,358.40 + 9.3% x 47,708
-        ca_income = 215.12 + 589.72 + 1_179.68 + 1_874.52 + 2_358.40 + 0.093 * 47_708
+        # Federal 2026: 200,000 - 32,200 = 167,800 -> 2,480 + 9,120 + 14,740
+        assert t["federal"] == pytest.approx(26_340.0)
+        # CA 2026 joint: 200,000 - 11,800 = 188,200 ->
+        # 229.12 + 628.04 + 1,256.32 + 1,996.44 + 2,511.84 + 9.3% x 37,806,
+        # less two $158 personal exemption credits
+        ca_income = 229.12 + 628.04 + 1_256.32 + 1_996.44 + 2_511.84 + 0.093 * 37_806 - 316
         assert t["state"] == pytest.approx(ca_income + 0.011 * 200_000)   # + SDI
         assert t["state_payroll"] == pytest.approx(2_200.0)
         assert t["fica"] == pytest.approx(200_000 * 0.0765)
         # Joint income tax is shared pro-rata to each person's income.
-        assert t["you"]["federal"] == pytest.approx(27_682.0 * 0.6)
+        assert t["you"]["federal"] == pytest.approx(26_340.0 * 0.6)
 
     def test_head_of_household_60k_north_carolina(self):
         t = cfg.working_year_taxes(60_000, status="HOH", partner=False, state="NC")
-        # 60,000 - 21,900 = 38,100 -> 1,655 + 12% x 21,550
-        assert t["federal"] == pytest.approx(1_655 + 2_586)
+        # 2026: 60,000 - 24,150 = 35,850 -> 1,770 + 12% x 18,150
+        assert t["federal"] == pytest.approx(1_770 + 2_178)
         assert t["state"] == pytest.approx((60_000 - 19_125) * 0.045)
         assert t["fica"] == pytest.approx(4_590.0)
 
@@ -105,26 +107,26 @@ class TestTakeHomeByHand:
     def test_unmarried_couple_files_two_single_returns(self):
         t = cfg.working_year_taxes(90_000, 70_000, status="S", partner=True, state="TX")
         assert t["two_returns"]
-        you = cfg.progressive_tax(cfg.get_federal_brackets("S"), 90_000 - 14_600)
-        them = cfg.progressive_tax(cfg.get_federal_brackets("S"), 70_000 - 14_600)
+        you = cfg.progressive_tax(cfg.get_federal_brackets("S"), 90_000 - 16_100)
+        them = cfg.progressive_tax(cfg.get_federal_brackets("S"), 70_000 - 16_100)
         assert t["you"]["federal"] == pytest.approx(you)
         assert t["partner"]["federal"] == pytest.approx(them)
-        one_return = cfg.progressive_tax(cfg.get_federal_brackets("S"), 160_000 - 14_600)
+        one_return = cfg.progressive_tax(cfg.get_federal_brackets("S"), 160_000 - 16_100)
         assert t["federal"] < one_return - 8_000      # the audit's $35.1k vs $22.0k gap
 
     def test_unmarried_head_of_household_partner_is_single(self):
         t = cfg.working_year_taxes(60_000, 40_000, status="HOH", partner=True, state="TX")
         assert t["you"]["federal"] == pytest.approx(
-            cfg.progressive_tax(cfg.get_federal_brackets("HOH"), 60_000 - 21_900))
+            cfg.progressive_tax(cfg.get_federal_brackets("HOH"), 60_000 - 24_150))
         assert t["partner"]["federal"] == pytest.approx(
-            cfg.progressive_tax(cfg.get_federal_brackets("S"), 40_000 - 14_600))
+            cfg.progressive_tax(cfg.get_federal_brackets("S"), 40_000 - 16_100))
 
     def test_pretax_deferrals_lower_income_tax_but_401k_still_pays_fica(self):
         base = cfg.working_year_taxes(100_000, status="S", partner=False, state="TX")
         k = cfg.working_year_taxes(100_000, your_401k=20_000, status="S", partner=False, state="TX")
         h = cfg.working_year_taxes(100_000, your_hsa=4_000, status="S", partner=False, state="TX")
         assert k["federal"] == pytest.approx(
-            cfg.progressive_tax(cfg.get_federal_brackets("S"), 100_000 - 20_000 - 14_600))
+            cfg.progressive_tax(cfg.get_federal_brackets("S"), 100_000 - 20_000 - 16_100))
         assert k["fica"] == pytest.approx(base["fica"])                 # 401(k): FICA wages
         assert h["fica"] == pytest.approx(base["fica"] - 4_000 * 0.0765)  # payroll HSA: not
         assert k["take_home"] == pytest.approx(100_000 - 20_000 - k["total"])
@@ -140,7 +142,7 @@ class TestTakeHomeByHand:
         t = cfg.working_year_taxes(0, your_other=50_000, status="S", partner=False, state="TX")
         assert t["fica"] == 0.0
         assert t["federal"] == pytest.approx(
-            cfg.progressive_tax(cfg.get_federal_brackets("S"), 50_000 - 14_600))
+            cfg.progressive_tax(cfg.get_federal_brackets("S"), 50_000 - 16_100))
 
 
 class TestUiShowsWhatTheEngineSimulates:
@@ -176,11 +178,11 @@ class TestUiShowsWhatTheEngineSimulates:
 class TestFilingStatusTables:
     def test_ltcg_brackets(self):
         assert asim.calculate_ltcg_tax(10_000, 40_000, status="S") == pytest.approx(
-            (50_000 - 47_025) * 0.15)
+            (50_000 - 49_450) * 0.15)                     # 2026 0% top: 49,450
         assert asim.calculate_ltcg_tax(10_000, 40_000, status="MFJ") == 0.0
         # The audit's single filer: an $80k gain on top of $0 ordinary income.
         assert asim.calculate_ltcg_tax(80_000, 0, status="S") == pytest.approx(
-            (80_000 - 47_025) * 0.15)
+            (80_000 - 49_450) * 0.15)
 
     def test_social_security_thresholds(self):
         # Single, $40k other income, $20k benefits -> provisional $50k
@@ -205,9 +207,10 @@ class TestFilingStatusTables:
 
     def test_roth_conversion_target_follows_status(self, monkeypatch):
         monkeypatch.setattr(cfg, "ROTH_CONVERSION_TARGET_BRACKET", None)
-        assert cfg.roth_conversion_target("MFJ") == 94_300
-        assert cfg.roth_conversion_target("S") == 47_150
-        assert cfg.roth_conversion_target("HOH") == 63_100
+        # Top of the 2026 12% bracket for each status.
+        assert cfg.roth_conversion_target("MFJ") == 100_800
+        assert cfg.roth_conversion_target("S") == 50_400
+        assert cfg.roth_conversion_target("HOH") == 67_450
         monkeypatch.setattr(cfg, "ROTH_CONVERSION_TARGET_BRACKET", 80_000)
         assert cfg.roth_conversion_target("S") == 80_000
 
@@ -240,7 +243,7 @@ class TestTwoReturnsInTheEngine:
         assert p.two_returns
         p.year_ordinary_income = 80_000            # all yours
         tax = p.calculate_marginal_tax_on_income(20_000, owner="partner", retirement=True)
-        assert tax == pytest.approx(0.10 * (20_000 - 14_600))
+        assert tax == pytest.approx(0.10 * (20_000 - 16_100))   # 2026 single deduction
         assert p.year_partner_income == 20_000
         assert p._return_income("you") == 80_000
 
@@ -360,14 +363,17 @@ class TestStateTables:
             assert model.calculate_tax(income) == pytest.approx(
                 asim.CaliforniaTaxBrackets().calculate_tax(income))
 
-    def test_ca_2024_refresh_is_within_rounding_of_the_old_table(self):
-        old_2023 = [(20_824, .01), (49_368, .02), (77_918, .04), (108_162, .06),
-                    (136_700, .08), (698_274, .093), (837_922, .103),
-                    (1_396_542, .113), (INF, .123)]
+    def test_ca_2026_refresh_is_close_to_the_2024_table(self):
+        """2026 CA joint brackets (3.4% and 2025 indexing) tax a given taxable
+        income a little less than the 2024 ones, and the 2026 return also takes
+        two $158 credits off."""
+        old_2024 = [(21_512, .01), (50_998, .02), (80_490, .04), (111_732, .06),
+                    (141_212, .08), (721_318, .093), (865_574, .103),
+                    (1_000_000, .113), (1_442_628, .123), (INF, .133)]
         new = cfg.state_tax_rules("CA", "MFJ")["brackets"]
         for income in (60_000, 150_000, 400_000):
-            delta = cfg.progressive_tax(new, income) - cfg.progressive_tax(old_2023, income)
-            assert -250 < delta <= 0
+            delta = cfg.progressive_tax(new, income) - cfg.progressive_tax(old_2024, income)
+            assert -800 < delta <= 0
 
     @pytest.mark.parametrize("value,code", [
         ("CA", "CA"), ("ca", "CA"), ("California", "CA"), ("Texas", "TX"),
@@ -459,9 +465,14 @@ class TestYearAndLegacyProfiles:
         single = build_config_overrides({"FILING_STATUS": "Single",
                                          "ROTH_CONVERSION_TARGET_BRACKET": 94_300})
         assert single["ROTH_CONVERSION_TARGET_BRACKET"] is None
+        # The 2024 joint default is the old default for a joint return too: it now
+        # follows the 2026 table ($100,800) instead of pinning the 2024 figure.
         mfj = build_config_overrides({"FILING_STATUS": "Married filing jointly",
                                       "ROTH_CONVERSION_TARGET_BRACKET": 94_300})
-        assert mfj["ROTH_CONVERSION_TARGET_BRACKET"] == 94_300
+        assert mfj["ROTH_CONVERSION_TARGET_BRACKET"] is None
+        kept = build_config_overrides({"FILING_STATUS": "Married filing jointly",
+                                       "ROTH_CONVERSION_TARGET_BRACKET": 100_000})
+        assert kept["ROTH_CONVERSION_TARGET_BRACKET"] == 100_000
         custom = build_config_overrides({"FILING_STATUS": "Single",
                                          "ROTH_CONVERSION_TARGET_BRACKET": 60_000})
         assert custom["ROTH_CONVERSION_TARGET_BRACKET"] == 60_000
