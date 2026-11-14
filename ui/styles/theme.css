@@ -3757,6 +3757,75 @@ html:root [class*="st-key-mc-debt-name-"] > [class*="st-key-debt_rm_"] button { 
 /* -- end Round 2 text and visual fixes -- */
 
 /* ==========================================================================
+   Visual QA round 3. Only fixer VR3 edits this block (dark values: theme_toggle.py,
+   "Visual QA round 3 (dark)"). Found by tools/visual_audit.py: text and icons under
+   WCAG contrast, rows whose labels wrap, and notes with no gap above a button.
+   ========================================================================== */
+:root {
+    /* Muted grey on the tinted surfaces (stat cards, reached cards) was 4.2-4.45:1. */
+    --mc-muted: #5b6b7f;
+    /* The brand teal #0d9488 under white text is 3.7:1; this one is 5.5:1. Use it wherever
+       white text or a small teal glyph sits on teal. */
+    --mc-teal-strong: #0f766e;
+    --mc-primary-from: #0f766e;
+    --mc-primary-to: #15803d;
+    --mc-primary-from-hover: #115e59;
+    --mc-primary-to-hover: #166534;
+    --ms-dot-fill: #0f766e;
+}
+/* Primary buttons: white text on the old teal-to-bright-green gradient was 2.3-3.7:1. */
+.stButton > button[kind="primary"],
+.stButton > button[data-testid="baseButton-primary"] {
+    background: linear-gradient(90deg, var(--mc-primary-from) 0%, var(--mc-primary-to) 100%);
+    background-origin: border-box;
+    background-repeat: no-repeat;
+}
+@media (hover: hover) and (pointer: fine) {
+    .stButton > button[kind="primary"]:hover,
+    .stButton > button[data-testid="baseButton-primary"]:hover {
+        background: linear-gradient(90deg, var(--mc-primary-from-hover) 0%, var(--mc-primary-to-hover) 100%);
+        background-origin: border-box;
+        background-repeat: no-repeat;
+    }
+}
+/* White text on teal: the slider value bubble and the phone "Show results" bar. */
+.stSlider [data-testid="stSliderThumbValue"] { background: var(--mc-teal-strong); }
+.mc-show-results a { background: var(--mc-teal-strong); }
+/* Teal and green text on white. */
+.mc-good { color: #047857 !important; }
+.mc-teal { color: var(--mc-teal-strong) !important; }   /* stat cards also set the colour inline */
+/* Sidebar section icons: small teal glyphs on a pale teal chip. */
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary :is([data-testid="stExpanderIcon"], [data-testid="stIconMaterial"]),
+section[data-testid="stSidebar"] .mc-sec-ico { color: var(--mc-teal-strong) !important; }
+
+/* Rows of inputs whose labels wrap to different line counts (a help icon takes room at
+   1024px): line the fields up on their bottom edge instead of letting them stagger. */
+[class*="st-key-mc-tile-"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] :is([data-testid="stNumberInput"], [data-testid="stSelectbox"], [data-testid="stTextInput"])):not(:has(:is([data-testid="stSlider"], [data-testid="stMetric"], [data-testid="stPlotlyChart"], [class*="st-key-ms-place-"], .mc-stat-card))) {
+    align-items: flex-end;
+}
+
+/* Freedom milestones: a place card's note ran straight into its Confirm button when it was
+   the longest note in the row (the button's auto margin is 0 then). */
+.st-key-mc-tile-freedom [class*="st-key-ms_confirm_"] { padding-top: 10px; }
+/* Debt payoff: the verdict line under the two order cards touched their border. */
+.st-key-mc-tile-debts [data-testid="stElementContainer"]:has(.debt-plans) + [data-testid="stElementContainer"] { margin-top: 8px; }
+/* Phone top card: "Run simulation" shares a line with the simulations box and the gear, so the
+   button is only 140-155px wide at 360-390px, and its 28px side padding left 84-99px for 134px
+   of label ("Run simulati"). Less padding and a 14px label fit it down to 360px. */
+@media (max-width: 420px) {
+    html:root .st-key-mc-topbar .st-key-topbar_run_button button[data-testid^="stBaseButton"] {
+        padding-left: 8px !important; padding-right: 8px !important;
+    }
+    html:root .st-key-mc-topbar .st-key-topbar_run_button button[data-testid^="stBaseButton"] p { font-size: 14px !important; }
+}
+/* The "run to see" hint under the top card's success rate was #94a3b8 (2.6:1) on white. */
+.mc-topbar-metric-hint { color: var(--mc-muted); }
+/* Debt payoff: the current plan's 2px border made its card 2px smaller inside than its
+   neighbour's, so the headings and rows sat 1px apart. Same 1px border, ring drawn outside. */
+.st-key-mc-tile-debts .debt-plan--current { border: 1px solid var(--debt-current-border); box-shadow: 0 0 0 1px var(--debt-current-border); }
+/* -- end Visual QA round 3 -- */
+
+/* ==========================================================================
    Top card layout. The card (.st-key-mc-topbar) holds two keyed rows built by
    app._topbar_head, each a wrapping flex row:
      mc-topbar-head: the title (left), then Run / simulations / Settings (right);

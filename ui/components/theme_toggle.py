@@ -439,7 +439,7 @@ hr {
 .stButton > button[kind="primary"],
 [data-testid="stButton"] > button[kind="primary"],
 [data-testid="stFormSubmitButton"] > button {
-    background: linear-gradient(90deg, #0d9488 0%, #22c55e 100%) !important;
+    background: linear-gradient(90deg, var(--mc-primary-from, #0f766e) 0%, var(--mc-primary-to, #15803d) 100%) !important;
     border-color: transparent !important;
     box-shadow: none !important;
     filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
@@ -605,6 +605,14 @@ label[data-baseweb="radio"]:has(input:checked) > div:first-child > div { backgro
 [data-testid="stDataEditor"] [data-testid="stDataFrameResizable"] {
     filter: invert(0.9) hue-rotate(20deg) saturate(0.6) brightness(1.3);
 }
+
+/* ---- Visual QA round 3 (dark) ---- */
+:root { --mc-muted: #bdb4a9; }
+/* Sidebar section icons: dark teal on a dark teal chip was 2.6:1. */
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary :is([data-testid="stExpanderIcon"], [data-testid="stIconMaterial"]),
+section[data-testid="stSidebar"] .mc-sec-ico { color: #5eead4 !important; }
+.stMarkdown .mc-bad { color: #fca5a5 !important; }
+/* -- end Visual QA round 3 (dark) -- */
 </style>
 """
 

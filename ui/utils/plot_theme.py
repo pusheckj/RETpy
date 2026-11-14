@@ -324,6 +324,13 @@ def _lift_vline_labels(fig, compact: bool) -> None:
         a.update(yref="paper", y=1, yanchor="bottom", yshift=1 + 15 * level,
                  xanchor="right" if right else "left", xshift=-3 if right else 3,
                  showarrow=False)
+    # A caption already parked above the plot (the phone moves the right-hand notes
+    # there) sat on top of the level-0 label: give it the row above the labels.
+    notes = [a for a in (fig.layout.annotations or []) if a not in anns
+             and a.xref == "paper" and a.yref == "paper" and a.y in (1, 1.0) and a.yanchor == "bottom"]
+    for a in notes:
+        a.update(yshift=1 + 15 * (max_level + 1))
+    max_level += 1 if notes else 0
     m = fig.layout.margin
     _set_margin(fig, t=max((m.t or 0) + 15 * max_level, 28 + 15 * max_level))
 
@@ -398,6 +405,58 @@ def _billions_as_b(fig) -> None:
             continue
         ax.update(tickformat=None, exponentformat="B", showexponent="all",
                   **({"tickprefix": "$"} if "$" in fmt and not ax.tickprefix else {}))
+
+
+def _rgb(color):
+    """(r, g, b) of '#rrggbb', '#rgb' or 'rgb(r,g,b)', else None."""
+    c = str(color or "").strip().lower()
+    if c.startswith("#") and len(c) in (4, 7):
+        c = c[1:]
+        if len(c) == 3:
+            c = "".join(ch * 2 for ch in c)
+        try:
+            return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
+        except ValueError:
+            return None
+    if c.startswith("rgb") and "(" in c:
+        try:
+            parts = [float(x) for x in c[c.index("(") + 1:c.index(")")].replace("/", ",").split(",")[:3]]
+            return tuple(int(v) for v in parts) if len(parts) == 3 else None
+        except ValueError:
+            return None
+    return None
+
+
+def _luminance(rgb) -> float:
+    def f(v):
+        v /= 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = rgb
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+
+
+def _contrast(a, b) -> float:
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def readable_on(color, background, minimum: float = 4.5):
+    """``color`` moved toward black (light background) or white (dark background) until
+    it reaches ``minimum`` contrast against ``background`` (both '#rrggbb'). A colour
+    that already passes, or that can't be read, comes back unchanged."""
+    fg, bg = _rgb(color), _rgb(background)
+    if fg is None or bg is None or _contrast(fg, bg) >= minimum:
+        return color
+    target = (255, 255, 255) if _luminance(bg) < 0.4 else (0, 0, 0)
+    for step in range(1, 21):
+        t = step / 20
+        mixed = tuple(round(f + (g - f) * t) for f, g in zip(fg, target))
+        if _contrast(mixed, bg) >= minimum:
+            return "#%02x%02x%02x" % mixed
+    return "#%02x%02x%02x" % target
+
+
+_CARD_BG = {False: "#ffffff", True: "#37343f"}     # the tile a chart sits on (light, dark)
 
 
 def style_fig(fig, st, compact: bool = False):
@@ -577,6 +636,24 @@ def style_fig(fig, st, compact: bool = False):
         except Exception:
             pass
 
+    # Annotation labels and title sub-lines pick their own accent colours (teal, amber,
+    # slate grey). Several were 2.5-3.7:1 on the tile: nudge only the ones below 4.5:1.
+    card = _CARD_BG[dark]
+    try:
+        for ann in fig.layout.annotations:
+            c = getattr(ann.font, "color", None)
+            if c:
+                ann.font.color = readable_on(c, card)
+    except Exception:
+        pass
+    try:
+        t = fig.layout.title
+        if t is not None and t.text and "color" in t.text:
+            import re as _re
+            t.text = _re.sub(r"(color:\s*)(#[0-9a-fA-F]{3,6})",
+                             lambda m: m.group(1) + readable_on(m.group(2), card), t.text)
+    except Exception:
+        pass
     return fig
 
 
