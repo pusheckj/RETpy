@@ -12,9 +12,10 @@ AREA (a US state, a metro area or a city abroad, utils/place_costs.py) and has
 * an income-tax setting and a short note.
 
 Everyday spending is compared with WHERE YOU LIVE NOW, an area you pick (saved
-as the "home" setting; by default the plan's state). The data are ROUGH,
-ILLUSTRATIVE estimates, not facts. Edit any place, hide the ones you don't want
-and add your own.
+as the "home" setting; by default the plan's state). The data are sourced
+(BEA, KFF, Zillow, Insurance.com, Numbeo; November 2026, see utils/place_costs.py)
+but still typical-household figures for an area, not your own quote. Edit any
+place, hide the ones you don't want and add your own.
 
 Everything here is plain data with no Streamlit, so it is easy to test. Edits
 live in ONE saved key, ``MS_PLACES``, inside ``user_overrides``. That makes them
@@ -134,15 +135,15 @@ BUILT_IN: Tuple[Place, ...] = (
     Place("coastal", "High-cost coastal", GROUP_US, "M_LAX", HOUSING_BUY, "US:CA",
           "A big coastal city. Los Angeles numbers stand in."),
     Place("portugal", "Portugal", GROUP_ABROAD, "X_PT", HOUSING_RENT, TAX_NONE,
-          "Lisbon-area living. " + _ABROAD_NOTE),
+          "Lisbon-area living, priced for the city of Lisbon. " + _ABROAD_NOTE),
     Place("italy", "Italy", GROUP_ABROAD, "X_IT", HOUSING_RENT, TAX_NONE,
-          "A mid-size city, not Milan or Rome. " + _ABROAD_NOTE),
+          "Bologna numbers stand in: a mid-size city, not Milan or Rome. " + _ABROAD_NOTE),
     Place("spain", "Spain", GROUP_ABROAD, "X_ES", HOUSING_RENT, TAX_NONE,
-          "A mid-size coastal city. " + _ABROAD_NOTE),
+          "Valencia numbers stand in: a mid-size coastal city. " + _ABROAD_NOTE),
     Place("mexico", "Mexico", GROUP_ABROAD, "X_MX", HOUSING_RENT, TAX_NONE,
-          "A mid-size city. " + _ABROAD_NOTE),
+          "Mérida numbers stand in: a mid-size city. The home price is a house. " + _ABROAD_NOTE),
     Place("thailand", "Thailand", GROUP_ABROAD, "X_TH", HOUSING_RENT, TAX_NONE,
-          "A regional city such as Chiang Mai. " + _ABROAD_NOTE),
+          "Chiang Mai numbers stand in: a regional city. " + _ABROAD_NOTE),
 )
 _BUILT_IN_BY_ID: Dict[str, Place] = {p.id: p for p in BUILT_IN}
 
@@ -153,7 +154,8 @@ _V1_FACTORS = {"here": 1.00, "midwest": 0.88, "southeast": 0.92, "texas": 0.95, 
 
 ABROAD_CAVEAT = ("Places abroad use no state income tax as a placeholder. US federal tax still "
                  "applies. Foreign tax, tax treaties, visas and currency swings are not modeled. "
-                 "Health insurance there is a rough local price, and Medicare stays as planned.")
+                 "Health insurance there is a local private plan priced for about a 40-year-old, so it "
+                 "understates the cost at 60 and over. Medicare stays as planned.")
 
 
 # --------------------------------------------------------------------------- tax settings
