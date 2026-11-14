@@ -3792,8 +3792,8 @@ html:root [class*="st-key-mc-debt-name-"] > [class*="st-key-debt_rm_"] button { 
 .stSlider [data-testid="stSliderThumbValue"] { background: var(--mc-teal-strong); }
 .mc-show-results a { background: var(--mc-teal-strong); }
 /* Teal and green text on white. */
-.mc-good { color: #047857; }
-.mc-teal { color: var(--mc-teal-strong); }
+.mc-good { color: #047857 !important; }
+.mc-teal { color: var(--mc-teal-strong) !important; }   /* stat cards also set the colour inline */
 /* Sidebar section icons: small teal glyphs on a pale teal chip. */
 section[data-testid="stSidebar"] [data-testid="stExpander"] summary :is([data-testid="stExpanderIcon"], [data-testid="stIconMaterial"]),
 section[data-testid="stSidebar"] .mc-sec-ico { color: var(--mc-teal-strong) !important; }
@@ -3809,6 +3809,17 @@ section[data-testid="stSidebar"] .mc-sec-ico { color: var(--mc-teal-strong) !imp
 .st-key-mc-tile-freedom [class*="st-key-ms_confirm_"] { padding-top: 10px; }
 /* Debt payoff: the verdict line under the two order cards touched their border. */
 .st-key-mc-tile-debts [data-testid="stElementContainer"]:has(.debt-plans) + [data-testid="stElementContainer"] { margin-top: 8px; }
+/* Phone top card: "Run simulation" shares a line with the simulations box and the gear, so the
+   button is only 140-155px wide at 360-390px, and its 28px side padding left 84-99px for 134px
+   of label ("Run simulati"). Less padding and a 14px label fit it down to 360px. */
+@media (max-width: 420px) {
+    html:root .st-key-mc-topbar .st-key-topbar_run_button button[data-testid^="stBaseButton"] {
+        padding-left: 8px !important; padding-right: 8px !important;
+    }
+    html:root .st-key-mc-topbar .st-key-topbar_run_button button[data-testid^="stBaseButton"] p { font-size: 14px !important; }
+}
+/* The "run to see" hint under the top card's success rate was #94a3b8 (2.6:1) on white. */
+.mc-topbar-metric-hint { color: var(--mc-muted); }
 /* Debt payoff: the current plan's 2px border made its card 2px smaller inside than its
    neighbour's, so the headings and rows sat 1px apart. Same 1px border, ring drawn outside. */
 .st-key-mc-tile-debts .debt-plan--current { border: 1px solid var(--debt-current-border); box-shadow: 0 0 0 1px var(--debt-current-border); }

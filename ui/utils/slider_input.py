@@ -104,6 +104,8 @@ def _loaded_note_for(ss, key: str, was) -> bool:
 
 def _on_slider(st, key: str, as_int: bool, decimals: int) -> None:
     ss = st.session_state
+    if key not in ss:               # the slider left the page before its queued change arrived
+        return
     (ss.get("_sync_notes") or {}).pop(key, None)
     ss[key + BOX] = _to_box(ss[key], as_int, decimals)
     ss[key + SEEN] = ss[key]

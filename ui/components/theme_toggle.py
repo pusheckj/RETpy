@@ -439,7 +439,7 @@ hr {
 .stButton > button[kind="primary"],
 [data-testid="stButton"] > button[kind="primary"],
 [data-testid="stFormSubmitButton"] > button {
-    background: linear-gradient(90deg, #0d9488 0%, #22c55e 100%) !important;
+    background: linear-gradient(90deg, var(--mc-primary-from, #0f766e) 0%, var(--mc-primary-to, #15803d) 100%) !important;
     border-color: transparent !important;
     box-shadow: none !important;
     filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
