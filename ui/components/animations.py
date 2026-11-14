@@ -540,7 +540,9 @@ _ANIM_JS = """
       // stop only once the placeholder is actually gone from the DOM.
       var now = P.performance ? P.performance.now() : 0;
       if(ph.__lzAt && (now - ph.__lzAt) < 700) return;    // a click is still in flight
-      if(ph.__lzTries >= 12) return;                       // give up rather than spin forever
+      // After 12 quick tries (a busy server drops some), keep trying but only every 4s: giving up
+      // for good left the section shimmering forever.
+      if(ph.__lzTries >= 12 && ph.__lzAt && (now - ph.__lzAt) < 4000) return;
       ph.__lzTries = (ph.__lzTries || 0) + 1;
       ph.__lzAt = now;
       var btn = D.querySelector('.st-key-_lzb_' + key + ' button');

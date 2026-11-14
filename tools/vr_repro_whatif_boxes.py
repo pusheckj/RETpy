@@ -12,6 +12,10 @@ with sync_playwright() as p:
     pg.set_viewport_size({'width':1440,'height':1800}); pg.wait_for_timeout(1500)
     scroll_pass(pg)
     print('after scroll pass', pg.evaluate(Q))
-    pg.evaluate("document.querySelector('.st-key-mc-tile-whatif').scrollIntoView()"); pg.wait_for_timeout(2500)
+    pg.evaluate("document.querySelector('.st-key-mc-tile-whatif').scrollIntoView()")
+    for _ in range(30):                      # the lazy tile can take a while on a busy server
+        pg.wait_for_timeout(2000)
+        if pg.evaluate(Q):
+            break
     print('at tile', pg.evaluate(Q))
     b.close()
