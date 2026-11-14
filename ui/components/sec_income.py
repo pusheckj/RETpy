@@ -17,10 +17,10 @@ except ImportError:  # pragma: no cover
 
 try:
     from utils.overrides import get_override, set_override
-    from utils.config_builder import QUICK_INCOME_SAVINGS_RATE as _SAVED_SHARE
+    from utils.config_builder import comp_row, comp_table_from_salary
 except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
-    from ui.utils.config_builder import QUICK_INCOME_SAVINGS_RATE as _SAVED_SHARE  # type: ignore
+    from ui.utils.config_builder import comp_row, comp_table_from_salary  # type: ignore
 
 try:
     from utils.slider_input import slider_with_box
@@ -45,18 +45,12 @@ def _income_input(st, label: str, widget_key: str, override_key: str,
 
 
 def _build_comp_table(start_age, target_age, base, bonus, rsu, growth):
-    end_age = max(start_age + 9, target_age)
-    rows = []
-    for offset in range(end_age - start_age + 1):
-        age = start_age + offset
-        scale = (1 + growth) ** offset
-        rows.append({
-            "age": age,
-            "base": int(round(base * scale)),
-            "bonus": int(round(bonus * scale)),
-            "rsu_gross": int(round(rsu * scale)),
-        })
-    return pd.DataFrame(rows)
+    """The pay table built from the inputs (config_builder.comp_table_from_salary,
+    which also fills it in for overrides that never reach this section), as the
+    editor's rows."""
+    table = comp_table_from_salary(start_age, target_age, base, bonus, rsu, growth)
+    return pd.DataFrame([{"age": age, "base": r["base"], "bonus": r["bonus"],
+                          "rsu_gross": r["rsu_gross"]} for age, r in table.items()])
 
 
 def render_body(st) -> None:
@@ -168,23 +162,11 @@ def render_body(st) -> None:
             if "si_comp_editor" in st.session_state:
                 try: del st.session_state["si_comp_editor"]
                 except Exception: pass
-            fresh = _build_comp_table(
+            set_override(st, "YOUR_COMPENSATION_BY_AGE", comp_table_from_salary(
                 safe_int(get_override(st, "YOUR_AGE", 30), 30),
                 safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60),
                 you_base, you_bonus, you_rsu, you_growth,
-            )
-            new_table = {}
-            for _, row in fresh.iterrows():
-                age = safe_int(row["age"])
-                base = safe_int(row["base"])
-                bonus = safe_int(row["bonus"])
-                rsu = safe_int(row["rsu_gross"])
-                total = base + bonus + rsu
-                new_table[age] = {
-                    "base": base, "bonus": bonus, "rsu_gross": rsu,
-                    "total_comp": total, "saved": int(total * _SAVED_SHARE),
-                }
-            set_override(st, "YOUR_COMPENSATION_BY_AGE", new_table)
+            ))
             st.session_state["si_comp_customized"] = False
             st.rerun()
 
@@ -229,17 +211,9 @@ def render_body(st) -> None:
         # Persist back to overrides
         new_table = {}
         for _, row in edited.iterrows():
-            age = safe_int(row["age"])
-            base = safe_int(row.get("base", 0))
-            bonus = safe_int(row.get("bonus", 0))
-            rsu = safe_int(row.get("rsu_gross", 0))
-            total = base + bonus + rsu
-            # No after_tax: the simulation computes take-home from the tax
-            # rules (the Taxes section shows the same figure).
-            new_table[age] = {
-                "base": base, "bonus": bonus, "rsu_gross": rsu,
-                "total_comp": total, "saved": int(total * _SAVED_SHARE),
-            }
+            new_table[safe_int(row["age"])] = comp_row(
+                safe_int(row.get("base", 0)), safe_int(row.get("bonus", 0)),
+                safe_int(row.get("rsu_gross", 0)))
         set_override(st, "YOUR_COMPENSATION_BY_AGE", new_table)
 
 

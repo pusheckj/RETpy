@@ -435,7 +435,7 @@ class TestSimTaskReportsErrors:
     """
 
     def test_errors_are_counted_and_the_first_is_reported(self, monkeypatch):
-        def boom(age, verbose=False):
+        def boom(age, verbose=False, random_seed=None):
             raise RuntimeError("synthetic engine crash")
 
         monkeypatch.setattr(mc_parallel.sim, "run_detailed_simulation", boom)
@@ -450,11 +450,11 @@ class TestSimTaskReportsErrors:
         real = mc_parallel.sim.run_detailed_simulation
         state = {"i": 0}
 
-        def flaky(age, verbose=False):
+        def flaky(age, verbose=False, random_seed=None):    # each path passes its own seed
             state["i"] += 1
             if state["i"] % 2 == 0:
                 raise ValueError("every other path fails")
-            return real(age, verbose=False)
+            return real(age, verbose=False, random_seed=random_seed)
 
         monkeypatch.setattr(mc_parallel.sim, "run_detailed_simulation", flaky)
         out = mc_parallel.sim_task((50, 6, 1, 7))

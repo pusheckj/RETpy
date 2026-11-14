@@ -270,3 +270,47 @@ def test_curve_uses_the_main_run_at_the_target_age():
     target = r["config_snapshot"]["TARGET_SUCCESS_RATE"]
     if r["primary_result"]["success_rate"] < target:
         assert r["earliest_retirement_age"] is None or r["earliest_retirement_age"] != 55
+
+
+# ---------------------------------------------------------------- one seed per path
+
+def test_a_path_does_not_depend_on_the_paths_before_it():
+    """Path i of a batch is seeded seed + i: the last six paths of a 12-path
+    batch are exactly a 6-path batch that starts six seeds later."""
+    from retirement_sim import mc_parallel
+    orig = sr._apply_overrides(sr.build_config_overrides(SINGLE))
+    try:
+        whole = mc_parallel.sim_task((60, 12, 0, 500))
+        tail = mc_parallel.sim_task((60, 6, 0, 506))
+    finally:
+        sr._restore_overrides(orig)
+    assert all(tail["finals"]) and whole["finals"][6:] == tail["finals"]
+
+
+def test_results_do_not_depend_on_how_the_run_is_split(monkeypatch):
+    """Split into 3 chunks or 8, the target-age run simulates the same paths,
+    keeps the same ones for the charts, and gives the same numbers."""
+    runs = {}
+    for chunks in (3, 8):
+        monkeypatch.setattr(sr, "_PRIMARY_CHUNKS", chunks)
+        sr.clear_cache(include_disk=False)
+        plan = sr.plan_full_analysis(SINGLE, 120, 55, (55, 56, 1))
+        assert sum(c[0] == "batch" for c in plan.job["calls"]) == chunks
+        runs[chunks] = sr.execute_plan(plan)["primary_result"]
+    for key in ("success_rate", "median_final", "p10_final", "p90_final",
+                "median_trajectory", "sample_paths", "withdrawals_by_year"):
+        assert runs[3][key] == runs[8][key], key
+
+
+def test_a_tiny_spending_change_moves_the_success_rate_a_little():
+    """$200 a year more spending can only tip the few paths that were on the
+    edge. With one random stream per chunk it reshuffled every later path and
+    the rate jumped by points."""
+    def rate(extra):
+        sr.clear_cache(include_disk=False)
+        ov = {**SINGLE, "SPEND_OTHER_MONTHLY": 300 + extra / 12}
+        return sr.execute_plan(sr.plan_full_analysis(ov, 300, 50, (50, 51, 1)))[
+            "primary_result"]["success_rate"]
+    rates = [rate(200 * k) for k in range(4)]
+    assert 0.05 < rates[0] < 0.95                       # a rate that can move both ways
+    assert max(abs(b - a) for a, b in zip(rates, rates[1:])) <= 0.01, rates
