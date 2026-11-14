@@ -155,7 +155,10 @@ def test_big_mortgage_year_cuts_only_nonhousing():
     age = cfg.YOUR_AGE + 5                     # mortgage still owed
     expenses = sim.calculate_retirement_expenses(age, IF, age)
     housing = sim._retirement_housing_expense(age)
-    assert housing == cfg.MORTGAGE_ANNUAL == 120_000
+    # The all-in payment in today's dollars: escrow flat, P&I deflated 5 years.
+    escrow = cfg.HOME_VALUE * cfg.HOME_CARRYING_COST_PCT
+    assert housing == pytest.approx(
+        escrow + (120_000 - escrow) / (1 + cfg.EXPECTED_INFLATION) ** 5)
     ratio = cfg.DISCRETIONARY_EXPENSE_RATIO
     cut = expenses - _guard(expenses, age)
     assert cut == pytest.approx(0.20 * ratio * (expenses - housing))
@@ -195,9 +198,12 @@ def test_house_move_engine_housing_is_fixed():
     age = cfg.HOUSE_MOVE_AGE + 1                # new 3,500/mo loan owed
     p.maybe_execute_house_move(cfg.HOUSE_MOVE_AGE)
     expenses = sim.calculate_retirement_expenses(age, IF, age, portfolio=p)
-    assert sim._retirement_housing_expense(age, 1.0, p) == pytest.approx(42_000)
+    # Year 2 of the new loan: escrow flat, its P&I deflated one year.
+    escrow = cfg.NEW_HOME_VALUE * cfg.HOME_CARRYING_COST_PCT
+    housing = escrow + (42_000 - escrow) / (1 + cfg.EXPECTED_INFLATION)
+    assert sim._retirement_housing_expense(age, 1.0, p) == pytest.approx(housing)
     cut = expenses - _guard(expenses, age, p)
-    assert cut == pytest.approx(0.20 * cfg.DISCRETIONARY_EXPENSE_RATIO * (expenses - 42_000))
+    assert cut == pytest.approx(0.20 * cfg.DISCRETIONARY_EXPENSE_RATIO * (expenses - housing))
 
 
 def test_simulate_retirement_year_passes_age_through():
@@ -210,7 +216,8 @@ def test_simulate_retirement_year_passes_age_through():
     p = sim.create_initial_portfolio()
     p.set_retirement_baseline()
     sim.simulate_retirement_year(p, age, expenses, 0.0, 1.0, age)
-    expected = expenses - 0.20 * cfg.DISCRETIONARY_EXPENSE_RATIO * (expenses - 120_000)
+    housing = sim._retirement_housing_expense(age)          # deflated all-in payment
+    expected = expenses - 0.20 * cfg.DISCRETIONARY_EXPENSE_RATIO * (expenses - housing)
     assert p.spending_log[-1]["living"] == pytest.approx(expected)
 
 

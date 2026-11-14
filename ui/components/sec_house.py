@@ -10,6 +10,8 @@ paid off. It is drawn last (into a slot at the top) so it never lags an edit.
 """
 from __future__ import annotations
 
+from retirement_sim import config as cfg
+
 try:
     from utils.section_icon import section_expander
 except ImportError:  # pragma: no cover
@@ -391,7 +393,7 @@ def _extra_principal(st) -> None:
                 # that almost never changes.
                 _sig = tuple(_ov.get(k) for k in (
                     "MORTGAGE_BALANCE", "MORTGAGE_YEARS_REMAINING", "MORTGAGE_MONTHLY",
-                    "MORTGAGE_RATE_FOR_PAYOFF", "YOUR_AGE",
+                    "MORTGAGE_RATE_FOR_PAYOFF", "YOUR_AGE", "EXPECTED_INFLATION",
                 )) + (repr(housing_timeline(_ov)), safe_int(extra), safe_int(start))
                 _memo = st.session_state.setdefault("_bp_payoff_memo", {})
                 if _sig in _memo:
@@ -432,7 +434,9 @@ def house_summary(overrides: dict) -> dict:
     pays property tax and insurance). ``monthly`` is the scheduled payment, the
     rent, or that tax and insurance; ``monthly_extra`` is this year's extra
     principal. ``payoff_age`` and ``payoff_age_no_extra`` are None when there is
-    no loan to pay off."""
+    no loan to pay off. ``fixed_loan`` is True when a loan is being paid and
+    prices rise: its principal and interest stay the same in dollars, so the
+    schedule shows it costing less each year in today's dollars."""
     age = safe_int(overrides.get("YOUR_AGE", 30), 30)
     ages = range(age, 101)
     now = mortgage_schedule(overrides, ages)
@@ -443,7 +447,9 @@ def house_summary(overrides: dict) -> dict:
             "monthly": (year["housing"] - year["extra"]) / 12.0,
             "monthly_extra": extra_mortgage_for_age(overrides, age) / 12.0 if year["extra"] > 0 else 0.0,
             "payoff_age": now["payoff_age"] if has_loan else None,
-            "payoff_age_no_extra": plain["payoff_age"] if has_loan else None}
+            "payoff_age_no_extra": plain["payoff_age"] if has_loan else None,
+            "fixed_loan": has_loan and safe_float(overrides.get(
+                "EXPECTED_INFLATION", cfg.EXPECTED_INFLATION), 0.0) > 0}
 
 
 _COST_OF = {"rent": "rent", "mortgage": "mortgage payment, with property tax and insurance",
@@ -460,6 +466,9 @@ def _summary_lines(s: dict) -> list:
         if s["payoff_age_no_extra"] not in (None, s["payoff_age"]):
             line += f" with your extra payments, {s['payoff_age_no_extra']} without"
         lines.append(line + ".")
+    if s.get("fixed_loan"):
+        lines.append("The loan part of the payment stays the same in dollars, so after "
+                     "inflation it costs less each year. Tax and insurance rise with prices.")
     return lines
 
 

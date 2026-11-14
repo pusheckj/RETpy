@@ -285,7 +285,17 @@ def project_net_worth(user_overrides: dict) -> dict:
 
     # Track the property and the loan separately so principal paydown shows up as
     # net worth (see the snapshot below). Rate/P&I are inferred from the stored
-    # all-in payment, with escrow removed first.
+    # all-in payment, with escrow removed first. Like the engine, the loan is
+    # NOMINAL (a fixed-rate loan is fixed in dollars): its balance is deflated
+    # by the CPI index wherever it meets this chart's today's dollars, a new
+    # loan is set in dollars of its year, and extra principal (today's
+    # dollars) is paid in dollars of its year.
+    _infl = safe_float(user_overrides.get("EXPECTED_INFLATION", cfg.EXPECTED_INFLATION),
+                       cfg.EXPECTED_INFLATION)
+
+    def _cpi(a):
+        return cfg.cpi_index(a, start_age, _infl)
+
     _home_value = float(safe_int(user_overrides.get("HOME_VALUE", 0), 0))
     _sale_value = _home_value          # the value a sale's costs are charged on
     _cur = current_mortgage_terms(user_overrides)
@@ -296,6 +306,7 @@ def project_net_worth(user_overrides: dict) -> dict:
     for offset in range(n_years):
         age = start_age + offset
         ages.append(age)
+        _c = _cpi(age)
 
         # --- Big-purchase / goal events happen "in this year" so the bend is
         # visible at this age. Applied BEFORE the snapshot so the drop/jump
@@ -309,7 +320,7 @@ def project_net_worth(user_overrides: dict) -> dict:
             # extra principal. Reading it stale DESTROYED the final year of
             # extra principal (charged to cash, never credited to the sale
             # proceeds): a measured $30k vanished at the move.
-            old_equity = max(0.0, _home_value - _mort_balance)
+            old_equity = max(0.0, _home_value - _mort_balance / _c)
             # Selling costs are charged against the home's entered value.
             selling_costs = _sale_value * ev["selling_cost_pct"]
             if ev["action"] == "sell_rent":
@@ -321,7 +332,7 @@ def project_net_worth(user_overrides: dict) -> dict:
                 # Swap the tracked property + loan over to the new house so the
                 # new mortgage starts amortizing from this age.
                 _home_value = _sale_value = float(ev["price"])
-                _mort_balance = float(ev["loan"])
+                _mort_balance = float(ev["loan"]) * _c
                 _mort_rate = float(ev["rate"])
                 _mort_pi = mortgage_payment(_mort_balance, _mort_rate, ev["years"])
             # Net cash flow = sale proceeds (old equity, net of selling costs)
@@ -351,7 +362,7 @@ def project_net_worth(user_overrides: dict) -> dict:
         # down IS net-worth accumulation, and ignoring it understated the band by
         # six figures within a decade on a real profile (and by the whole loan at
         # payoff) while the payments were charged as expenses elsewhere.
-        balances[home_label] = max(0.0, _home_value - _mort_balance)
+        balances[home_label] = max(0.0, _home_value - _mort_balance / _c)
 
         # Year start: snapshot
         for label, _, _, _ in ACCOUNTS:
@@ -373,12 +384,13 @@ def project_net_worth(user_overrides: dict) -> dict:
             # avoided interest. So only the portion actually funded may reduce
             # the principal, otherwise the chart mints equity for free.
             _extra = _draw_from_balances(
-                balances, min(_extra_for_age(user_overrides, age), _mort_balance),
+                balances, min(_extra_for_age(user_overrides, age), _mort_balance / _c),
                 cash_label,
             )
         _home_value *= (1.0 + scenario_returns["home"])
         _mort_balance, _extra_used = advance_mortgage_with_extra(
-            _mort_balance, _mort_rate, _mort_pi, months=12, extra_annual=_extra)
+            _mort_balance, _mort_rate, _mort_pi, months=12, extra_annual=_extra * _c)
+        _extra_used /= _c
         if _extra > _extra_used:
             # Payoff year: the loan absorbed less than we drew. Refund the rest
             # instead of letting it evaporate.

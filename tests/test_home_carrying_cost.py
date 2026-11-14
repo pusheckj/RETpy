@@ -78,7 +78,9 @@ def test_active_mortgage_is_unchanged():
     for age in range(cfg.YOUR_AGE, cfg.YOUR_AGE + 5):
         assert cfg.has_mortgage(age)
         assert _expenses(age, True) == _expenses(age, False)
-        assert cfg.owner_housing_annual(age) == cfg.MORTGAGE_ANNUAL
+        # The all-in payment in today's dollars (its fixed P&I deflated).
+        assert cfg.owner_housing_annual(age) == cfg.mortgage_real_annual(
+            cfg.MORTGAGE_ANNUAL, cfg.HOME_VALUE, age)
 
 
 def test_after_payoff_adds_value_times_pct_exactly():
@@ -201,14 +203,19 @@ def test_toggle_off_reduces_to_prefix_expressions():
     for age in range(cfg.YOUR_AGE, 95):
         p.maybe_execute_house_move(age)
         assert cfg.owner_housing_annual(age) == (
-            cfg.MORTGAGE_ANNUAL if cfg.has_mortgage(age) else 0.0)
+            cfg.mortgage_real_annual(cfg.MORTGAGE_ANNUAL, cfg.HOME_VALUE, age)
+            if cfg.has_mortgage(age) else 0.0)
         assert p.housing_expense_for_age(age) == p.mortgage_expense_for_age(age)
 
 
 def test_toggle_off_full_run_ignores_pct():
-    """With the toggle off the rate cannot reach any number the sim produces."""
+    """With the toggle off the rate cannot reach any number the sim produces.
+    At zero inflation: with inflation the rate also splits an all-in payment
+    into escrow (flat) and fixed P&I (deflated), whether or not the carrying
+    cost after payoff is modeled."""
     _house_move()
     cfg.MODEL_HOME_CARRYING_COST_AFTER_PAYOFF = False
+    cfg.EXPECTED_INFLATION = 0.0
     runs = []
     for pct in (0.0, 0.05):
         cfg.HOME_CARRYING_COST_PCT = pct
@@ -261,7 +268,11 @@ def test_mortgage_schedule_matches_engine_on_sample_household():
     ui = _assert_schedule_matches_engine(prof)
     # Spot-check the payoff boundary: new home carried after the new loan.
     payoff = prof["HOUSE_MOVE_AGE"] + prof["NEW_MORTGAGE_YEARS"]
-    assert ui[payoff - 1]["housing"] == pytest.approx(prof["NEW_MORTGAGE_MONTHLY"] * 12)
+    # The last loan year: escrow flat, the fixed P&I deflated since the move.
+    infl = prof.get("EXPECTED_INFLATION", cfg.EXPECTED_INFLATION)
+    all_in, escrow = prof["NEW_MORTGAGE_MONTHLY"] * 12, prof["NEW_HOME_VALUE"] * PCT
+    assert ui[payoff - 1]["housing"] == pytest.approx(
+        escrow + (all_in - escrow) / (1 + infl) ** (prof["NEW_MORTGAGE_YEARS"] - 1))
     assert ui[payoff]["housing"] == pytest.approx(prof["NEW_HOME_VALUE"] * PCT)
 
 

@@ -901,8 +901,10 @@ def home_sale_path(user_overrides: dict, last_age: int = None) -> dict:
 
     Follows ``AccountPortfolio``: the home's value is flat in today's dollars;
     the loan amortizes a year per age at its own rate (extra principal
-    included); the plan's own moves (``cfg.housing_events``) switch the home and
-    loan at their ages. ``proceeds[age]`` is the cash a sale AT that age, before
+    included) in NOMINAL dollars and is deflated by ``cfg.cpi_index``; the
+    basis and the exclusion are nominal too; the plan's own moves
+    (``cfg.housing_events``) switch the home and loan at their ages, a new loan
+    set in dollars of its year. ``proceeds[age]`` is the cash a sale AT that age, before
     that age's planned moves, leaves: value - loan - selling costs - a rough tax
     on any gain above the exclusion (``ROUGH_HOME_GAIN_TAX``). 0 while renting.
     ``housing[age]`` is what the plan itself pays for housing that year, its own
@@ -938,12 +940,15 @@ def home_sale_path(user_overrides: dict, last_age: int = None) -> dict:
         payoff = start + int(cfg.MORTGAGE_YEARS_REMAINING or 0)
         rent = float(getattr(cfg, "SPEND_RENT_MONTHLY", 0) or 0) if cfg.is_renter() else 0.0
         carrying = None
+        origin = start                     # the year the loan's dollars are fixed in
         proceeds, housing = {}, {}
         for age in range(start, end + 1):
+            cpi = cfg.cpi_index(age)
             if owns and value > 0:
                 fees = value * sell_pct
-                net = max(0.0, value - max(0.0, bal) - fees)
-                gain = value - fees - (value if basis is None else basis) - exclusion
+                net = max(0.0, value - max(0.0, bal) / cpi - fees)
+                gain = (value - fees - (value if basis is None else basis / cpi)
+                        - exclusion / cpi)
                 proceeds[age] = max(0.0, net - max(0.0, gain) * ROUGH_HOME_GAIN_TAX)
             else:
                 proceeds[age] = 0.0
@@ -952,9 +957,10 @@ def home_sale_path(user_overrides: dict, last_age: int = None) -> dict:
                     value, bal, pi, owns, basis = 0.0, 0.0, 0.0, False, None
                     monthly, payoff, rent, carrying = 0.0, age, float(e["rent"]), None
                 else:
-                    value, bal, rate = float(e["price"]), float(e["loan"]), float(e["rate"])
+                    value, rate = float(e["price"]), float(e["rate"])
+                    bal = float(e["loan"]) * cpi
                     pi = _level_payment(bal, rate, e["years"])
-                    owns, basis = True, value
+                    owns, basis, origin = True, value * cpi, age
                     monthly, payoff, rent = float(e["monthly"]), age + int(e["years"]), 0.0
                     carrying = e.get("carrying_pct")
             if not events:
@@ -962,11 +968,12 @@ def home_sale_path(user_overrides: dict, last_age: int = None) -> dict:
             elif not owns:
                 housing[age] = rent * 12.0
             elif age < payoff:
-                housing[age] = monthly * 12.0
+                housing[age] = float(cfg.mortgage_real_annual(monthly * 12.0, value, age,
+                                                              origin, carrying))
             else:
                 housing[age] = float(cfg.home_carrying_cost_annual(value, carrying))
             if bal > 0 and pi > 0:
-                extra = float(extra_fn(age)) if callable(extra_fn) else 0.0
+                extra = float(extra_fn(age)) * cpi if callable(extra_fn) else 0.0
                 r = max(0.0, rate) / 12.0
                 for _ in range(12):
                     after = bal * (1.0 + r) - pi

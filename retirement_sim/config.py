@@ -466,6 +466,12 @@ def calculate_partner_total_savings(salary: float, years_from_now: int, married:
 # Current monthly expenses (defaults: median 25-year-old renter household)
 # Median asking rent for a 1-bedroom in the US: ~$1,500/mo. Split between two
 # earners in shared living. No mortgage at simulation start (most 25yos rent).
+# MORTGAGE_MONTHLY is today's ALL-IN payment (principal + interest + property
+# tax + insurance). The engine works in today's dollars: the escrow part
+# (HOME_VALUE x HOME_CARRYING_COST_PCT) stays flat, while the fixed-rate
+# principal and interest stays the same in dollars and so costs a little less
+# each year after EXPECTED_INFLATION (mortgage_real_annual). The loan balance
+# amortizes in dollars of the day and is deflated the same way.
 MORTGAGE_MONTHLY = 0
 MORTGAGE_ANNUAL = MORTGAGE_MONTHLY * 12
 MORTGAGE_YEARS_REMAINING = 0  # No mortgage at start
@@ -487,7 +493,8 @@ SPEND_RENT_MONTHLY = 0
 # so it is charged ONLY in years the household owns a home but makes no mortgage
 # payment (loan paid off, or never had one). Left out, housing fell to $0 at
 # payoff although tax + insurance continue for life. Flat in real (today's)
-# dollars like the rest of the housing term. Same 1.35% default as the UI's
+# dollars: it tracks prices. The same rate splits an all-in payment into this
+# escrow part and the fixed-rate principal and interest (mortgage_escrow_annual). Same 1.35% default as the UI's
 # NEW_HOME_ESCROW_PCT, which config_builder translates onto this key so one
 # input drives both. Renters are unaffected (home value 0).
 # Set MODEL_HOME_CARRYING_COST_AFTER_PAYOFF False to reproduce the pre-fix
@@ -797,25 +804,84 @@ def home_carrying_cost_annual(home_value: float, pct=None) -> float:
     return max(0.0, float(home_value or 0)) * rate
 
 
+def cpi_index(your_age: float, start_age=None, inflation=None) -> float:
+    """General price level at ``your_age``, 1.0 at ``start_age`` (default
+    YOUR_AGE), growing by ``inflation`` (default EXPECTED_INFLATION) a year.
+
+    The engine works in today's dollars. A NOMINAL-fixed amount (a fixed-rate
+    loan's payment or balance) is worth ``nominal / cpi_index(age)`` of them;
+    a today's-dollar amount paid at ``age`` is ``real * cpi_index(age)``
+    dollars of the day. The same yearly deflator as the debts
+    (debts.real_schedule): plan year y counts at (1 + inflation) ** y.
+    """
+    start = YOUR_AGE if start_age is None else start_age
+    years = float(your_age) - float(start)
+    if years <= 0:
+        return 1.0
+    infl = EXPECTED_INFLATION if inflation is None else inflation
+    # Bounded so a damaged input can't overflow or go negative (the app's
+    # slider is 0-10%).
+    infl = min(max(float(infl or 0.0), -0.5), 1.0)
+    return (1.0 + infl) ** years
+
+
+def mortgage_escrow_annual(all_in_annual: float, home_value: float, pct=None) -> float:
+    """The property tax + insurance inside an all-in mortgage payment: the home's
+    value times its carrying rate (``pct``; None = HOME_CARRYING_COST_PCT),
+    never more than the payment itself. The same figure the home costs once
+    the loan is paid off (home_carrying_cost_annual)."""
+    rate = HOME_CARRYING_COST_PCT if pct is None else max(0.0, float(pct))
+    return min(max(0.0, float(all_in_annual or 0.0)),
+               max(0.0, float(home_value or 0.0)) * rate)
+
+
+def deflate_loan_payment(all_in_annual: float, escrow_annual: float, deflator: float) -> float:
+    """An all-in loan payment in today's dollars: the escrow part tracks prices
+    (flat in today's dollars), the principal-and-interest rest is fixed in
+    nominal dollars and so is scaled by ``deflator`` (cpi at the loan's start
+    / cpi now). A deflator of 1 returns the payment unchanged, so with no
+    inflation every result is exactly what it was before this conversion."""
+    if deflator == 1.0:
+        return all_in_annual
+    all_in = max(0.0, float(all_in_annual or 0.0))
+    escrow = min(all_in, max(0.0, float(escrow_annual or 0.0)))
+    return escrow + (all_in - escrow) * deflator
+
+
+def mortgage_real_annual(all_in_annual: float, home_value: float, your_age: float,
+                         origin_age=None, pct=None) -> float:
+    """What an all-in annual mortgage payment costs at ``your_age``, in today's
+    dollars. Property tax + insurance (mortgage_escrow_annual) stay flat; the
+    fixed-rate principal and interest, set in the dollars of ``origin_age``
+    (when the loan began; None = today), lose general inflation every year.
+    """
+    start = YOUR_AGE if origin_age is None else origin_age
+    deflator = cpi_index(start) / cpi_index(your_age)
+    return deflate_loan_payment(all_in_annual,
+                                mortgage_escrow_annual(all_in_annual, home_value, pct), deflator)
+
+
 def owner_housing_annual(your_age: int) -> float:
     """Config-path owner housing at ``your_age``: the all-in mortgage while it is
-    being paid, else the carrying cost of HOME_VALUE (no rent).
+    being paid (today's dollars, see mortgage_real_annual), else the carrying
+    cost of HOME_VALUE (no rent).
     """
     if has_mortgage(your_age):
-        return MORTGAGE_ANNUAL
+        return mortgage_real_annual(MORTGAGE_ANNUAL, globals().get("HOME_VALUE", 0), your_age)
     return home_carrying_cost_annual(globals().get("HOME_VALUE", 0))
 
 
 def housing_annual(your_age: int) -> float:
     """Config-path housing term ``calculate_annual_expenses`` adds at ``your_age``
-    (today's dollars): the all-in mortgage while it is being paid, else rent
-    (renters) plus the owner's post-payoff carrying cost. Single source for both
-    the expense total and the guardrails' fixed housing slice. It describes
-    today's home for the whole plan; with a housing timeline the engine replaces
-    it year by year with ``AccountPortfolio.housing_expense_for_age``.
+    (today's dollars): the all-in mortgage while it is being paid (its fixed
+    principal and interest shrinking with inflation, see mortgage_real_annual),
+    else rent (renters) plus the owner's post-payoff carrying cost. Single
+    source for both the expense total and the guardrails' fixed housing slice.
+    It describes today's home for the whole plan; with a housing timeline the
+    engine replaces it year by year with ``AccountPortfolio.housing_expense_for_age``.
     """
     if has_mortgage(your_age):
-        return MORTGAGE_ANNUAL
+        return mortgage_real_annual(MORTGAGE_ANNUAL, globals().get("HOME_VALUE", 0), your_age)
     return rent_annual(your_age) + home_carrying_cost_annual(globals().get("HOME_VALUE", 0))
 
 
@@ -3068,11 +3134,15 @@ def debt_payment_for_age(age: int) -> float:
 # HOME_SELLING_COST_PCT. Normalized by housing_events().
 HOME_EVENTS = []
 
-# What you paid for today's home (plus improvements), for tax on its sale.
-# None = its current value, i.e. no taxable gain (the prior assumption). The
-# gain above the exclusion (home_sale_exclusion) is taxed as a long-term gain.
-# A home bought through HOME_EVENTS has its price as basis; the engine holds
-# home values flat in today's dollars, so those sales have no real gain.
+# What you paid for today's home (plus improvements), for tax on its sale, in
+# the dollars you paid. None = its current value, i.e. no taxable gain (the
+# prior assumption). The gain above the exclusion (home_sale_exclusion) is
+# taxed as a long-term gain. A home bought through HOME_EVENTS has its price
+# (in dollars of the purchase year) as basis. Home values stay flat in today's
+# dollars, but the basis and the exclusion are fixed in nominal dollars (tax
+# law indexes neither), so with inflation a later sale shows a nominal gain.
+# The purchase loan is likewise set in dollars of its year: the event's price
+# and loan are today's dollars x cpi_index at that age.
 HOME_COST_BASIS = None
 HOME_SALE_EXCLUSION_SINGLE = 250_000   # per owner (IRC 121)
 HOME_SALE_EXCLUSION_MFJ = 500_000      # married filing jointly
@@ -3215,8 +3285,9 @@ def home_sale_exclusion() -> float:
 # EXTRA MORTGAGE PRINCIPAL (early payoff)
 # -----------------------------------------------------------------------------
 # Additional principal paid each year on top of the scheduled payment, in
-# today's dollars. 0.0 (the default) is a no-op, so the baseline plan is
-# byte-identical.
+# today's dollars (paid as that amount x cpi_index(age) dollars of the year
+# against the nominal loan). 0.0 (the default) is a no-op, so the baseline plan
+# is byte-identical.
 #
 # For a sweep of this to mean anything, all four of these must hold, and the
 # engine is wired so they do:

@@ -132,7 +132,9 @@ def test_net_worth_cfg_globals_restored():
 # SPENDING CHART — housing series + payoff age
 # ===========================================================================
 def test_spending_housing_baseline_payoff_age():
-    ov = _base_overrides()
+    # Payoff timing at zero inflation, so the payment is flat (the real-frame
+    # deflation of the P&I is tested in test_mortgage_real_frame.py).
+    ov = {**_base_overrides(), "EXPECTED_INFLATION": 0.0}
     ages = list(range(34, 91))
     series, owns_now, payoff = sp._compute_housing_series(ov, ages)
     assert owns_now is True
@@ -144,8 +146,9 @@ def test_spending_housing_baseline_payoff_age():
 
 
 def test_spending_house_move_recomputes_payoff_age_bug():
-    """The reported bug: move at 34 with a 30yr loan => paid off at 64, not 46."""
-    ov = dict(_base_overrides())
+    """The reported bug: move at 34 with a 30yr loan => paid off at 64, not 46.
+    Zero inflation keeps the payment flat (see test_mortgage_real_frame.py)."""
+    ov = {**_base_overrides(), "EXPECTED_INFLATION": 0.0}
     ov["HOUSE_MOVE_ENABLED"] = True
     ov["HOUSE_MOVE_AGE"] = 34
     ov["NEW_MORTGAGE_MONTHLY"] = 4_500
@@ -166,7 +169,8 @@ def test_spending_house_move_recomputes_payoff_age_bug():
 
 
 def test_spending_house_move_switches_payment_midstream():
-    ov = dict(_base_overrides())
+    ov = {**_base_overrides(), "EXPECTED_INFLATION": 0.0}       # flat payments
+
     ov["HOUSE_MOVE_ENABLED"] = True
     ov["HOUSE_MOVE_AGE"] = 40
     ov["NEW_MORTGAGE_MONTHLY"] = 4_500

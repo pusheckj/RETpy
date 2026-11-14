@@ -300,13 +300,11 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
     series = []
     housing_series, _, payoff_age = _compute_housing_series(overrides, ages)
     owns = _owns_by_age(overrides, ages)
-    # A fixed-rate mortgage is a FIXED NOMINAL payment, so it must NOT be
-    # inflated in the future-dollars view — it stays flat in nominal terms year
-    # to year. Rent, by contrast, is a real cost that rises with inflation, so
-    # it IS scaled. (In today's-dollars mode ``_apply`` is a no-op for both.)
-    # A housing timeline can mix the two (rent, then a purchase), so per year.
-    scaled = _apply(housing_series)
-    housing_series = [v if o else sv for v, sv, o in zip(housing_series, scaled, owns)]
+    # The schedule is already today's dollars the engine's way: a fixed-rate
+    # loan's principal and interest shrinks with inflation, its property tax +
+    # insurance and rent stay flat. So the future-dollars view scales all of it,
+    # which leaves the principal and interest flat in dollars, as it is paid.
+    housing_series = _apply(housing_series)
     if any(v > 0 for v in housing_series):
         housing_label = (_owner_housing_label(overrides, ages) if all(owns) else
                          "Housing (rent)" if not any(owns) else "Housing")
@@ -652,8 +650,10 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
             "are born and drop as each leaves home. If long-term care is on, it "
             "shows as the *expected* yearly cost (chance of needing care times the "
             "cost at that age). The cost if you do need care is much larger. "
-            "**Housing** comes from your mortgage or rent inputs, and the "
-            "mortgage bar drops to $0 when it's paid off. The lifecycle preset "
+            "**Housing** comes from your mortgage or rent inputs. A mortgage's "
+            "principal and interest stay the same in dollars, so in today's dollars "
+            "the payment shrinks a little each year. Once it's paid off, only "
+            "property tax and insurance remain. The lifecycle preset "
             "in the sidebar scales the other categories at certain ages. After you "
             "run the simulation, the dotted **4% rule** line shows 4% of your "
             "median projected portfolio each year, a rough ceiling for safe "

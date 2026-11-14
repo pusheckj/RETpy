@@ -153,6 +153,7 @@ def test_spending_chart_shows_the_go_go_extra():
 def test_spending_chart_housing_is_rent_then_mortgage():
     from components import spending_chart as sc
     ov = {"YOUR_AGE": 27, "SPEND_RENT_MONTHLY": 2_000, "SPEND_FOOD_MONTHLY": 500,
+          "EXPECTED_INFLATION": 0.03,
           "HOME_EVENTS": [{"age": 30, "action": "buy", "price": 450_000, "down_pct": 0.2,
                            "rate": 0.065, "years": 30}]}
     ages = list(range(27, 70))
@@ -161,5 +162,7 @@ def test_spending_chart_housing_is_rent_then_mortgage():
     label, _, housing = series[0]
     assert label == "Housing"
     assert housing[0] == 24_000 and housing[2] == pytest.approx(24_000 * 1.03 ** 2)  # rent inflates
-    assert housing[3] == housing[4]                                       # the payment doesn't
+    # The loan's P&I is fixed in dollars; its property tax + insurance inflates.
+    escrow = 450_000 * 0.0135
+    assert housing[4] - housing[3] == pytest.approx(escrow * (1.03 ** 4 - 1.03 ** 3))
     assert payoff == 60
