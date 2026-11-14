@@ -40,9 +40,10 @@ _RETIRED_KEYS = {"PARTNER_ESTIMATED_TAX_RATE", "PARTNER_401K_MATCH"}
 LEGACY_AUTO_AFTER_TAX_RATE = 0.70
 
 # The Roth-conversion target the UI used to store for everyone (the top of the
-# 12% bracket for a JOINT return). For other filing statuses it means "the
-# default", which now follows the filing status.
+# 12% bracket for a JOINT return, 2024). It and the other 2024 bracket tops
+# mean "the default", which now follows the filing status and the 2026 table.
 LEGACY_ROTH_TARGET_MFJ = 94_300
+LEGACY_ROTH_TARGETS = (LEGACY_ROTH_TARGET_MFJ, 47_150, 63_100)
 
 # Quick-income assumptions (used when the user hasn't entered a detailed
 # income breakdown and only supplies a single household income number).
@@ -90,9 +91,7 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
     comp = out.get("YOUR_COMPENSATION_BY_AGE")
     if isinstance(comp, dict) and comp:
         out["YOUR_COMPENSATION_BY_AGE"] = _strip_auto_after_tax(comp)
-    status = str(out.get("FILING_STATUS", "Married filing jointly")).strip().lower()
-    if (out.get("ROTH_CONVERSION_TARGET_BRACKET") == LEGACY_ROTH_TARGET_MFJ
-            and not (status.startswith("m") or status == "mfj")):
+    if out.get("ROTH_CONVERSION_TARGET_BRACKET") in LEGACY_ROTH_TARGETS:
         out["ROTH_CONVERSION_TARGET_BRACKET"] = None
 
     # 2. Translate HOUSEHOLD_INCOME_QUICK -> PARTNER_SALARY + default comp table

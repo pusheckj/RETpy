@@ -67,9 +67,12 @@ def _quote(your_age, partner_age, filing="Married filing jointly", magi=60_000.0
 def test_medicare_floor_is_per_adult():
     """At 70 the band ($8,000 for a couple) is the floor: half for one person."""
     cfg.MODEL_HEALTHCARE_COST_FLOOR = True
+    # Premiums alone ($202.90 Part B + $200 Part D/Medigap estimate, 2026) now
+    # exceed the default band at 65-74, so raise the band to see the floor bite.
+    cfg.HEALTHCARE_COSTS_BY_AGE = {**cfg.HEALTHCARE_COSTS_BY_AGE, "medicare_base": 12_000}
     band = cfg.HEALTHCARE_COSTS_BY_AGE["medicare_base"]
     assert _quote(70, 70) == pytest.approx(band)
-    assert _quote(70, 0, "Single") == pytest.approx(band / 2)       # was the full $8,000
+    assert _quote(70, 0, "Single") == pytest.approx(band / 2)       # not the full band
 
 
 def test_each_adult_is_charged_by_their_own_age():

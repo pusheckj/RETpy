@@ -259,7 +259,7 @@ class TestOtherStateTax:
         monkeypatch.setattr(cfg, "STATE_CHOICE", "Other", raising=False)
         monkeypatch.setattr(cfg, "YOUR_MARGINAL_TAX_RATE", 0.22, raising=False)
         model = _select_state_tax_brackets()
-        taxable = 250_000 - 29_200                      # MFJ standard deduction
+        taxable = 250_000 - 32_200                      # 2026 MFJ standard deduction
         assert self._ui_state_tax(0.22) == pytest.approx(model.calculate_tax(taxable))
 
     def test_whole_percent_form_is_accepted(self):
@@ -271,11 +271,12 @@ class TestOtherStateTax:
                                        "YOUR_MARGINAL_TAX_RATE": 0.0})["state"]
         ca_hi = derived.compute_taxes({"YOUR_BASE_SALARY": 250_000, "STATE_CHOICE": "CA",
                                        "YOUR_MARGINAL_TAX_RATE": 0.5})["state"]
-        # California's 2024 joint schedule above its $11,080 deduction, plus
-        # 1.1% State Disability Insurance on wages (was 15,525.26: the 2023
-        # brackets, no SDI).
+        # California's 2026 joint schedule above its $11,800 deduction, less one
+        # $158 personal exemption credit (a one-person return), plus 1.1% State
+        # Disability Insurance on wages.
         rules = cfg.state_tax_rules("CA", "MFJ", people=1)
-        expected = cfg.progressive_tax(rules["brackets"], 250_000 - 11_080) + 0.011 * 250_000
+        expected = (cfg.progressive_tax(rules["brackets"], 250_000 - 11_800) - 158
+                    + 0.011 * 250_000)
         assert ca_lo == ca_hi == pytest.approx(expected, abs=1.0)
         none = derived.compute_taxes({"YOUR_BASE_SALARY": 250_000,
                                       "STATE_CHOICE": "No state tax",

@@ -298,7 +298,7 @@ class TaxBrackets:
     """
     Progressive federal income-tax brackets.
 
-    The default field is the 2024 married-filing-jointly schedule; callers pass
+    The default field is the 2026 married-filing-jointly schedule; callers pass
     ``brackets=cfg.get_federal_brackets()`` to select the MFJ / Single / HOH
     table for the active ``cfg.FILING_STATUS`` (finding #8).
 
@@ -308,11 +308,8 @@ class TaxBrackets:
     Attributes:
         brackets: List of (income_threshold, tax_rate) tuples defining tax brackets
     """
-    brackets: List[Tuple[float, float]] = field(default_factory=lambda: [
-        (23_200, 0.10), (94_300, 0.12), (201_050, 0.22),
-        (383_900, 0.24), (487_450, 0.32), (731_200, 0.35),
-        (float('inf'), 0.37)
-    ])
+    brackets: List[Tuple[float, float]] = field(
+        default_factory=lambda: list(cfg.FEDERAL_BRACKETS_BY_STATUS[cfg._FILING_MFJ]))
 
     def calculate_tax(self, taxable_income: float) -> float:
         """
@@ -330,8 +327,9 @@ class TaxBrackets:
 @dataclass
 class CaliforniaTaxBrackets:
     """
-    California's married-filing-jointly schedule (2024, incl. the 1%
-    mental-health surtax above $1M), read from state_tax_data.
+    California's married-filing-jointly return (2026), read from
+    state_tax_data: the brackets, the two personal exemption credits and the
+    1% Behavioral Health Services Tax above $1M (cfg.state_income_tax).
 
     Kept as a convenience for callers that want the CA joint table directly.
     The engine itself uses StateIncomeTax, which covers every state, filing
@@ -354,7 +352,8 @@ class CaliforniaTaxBrackets:
         Returns:
             Total California state income tax owed
         """
-        return _progressive_tax(self.brackets, taxable_income)
+        rules = dict(cfg.state_tax_rules("CA", "MFJ", people=2), brackets=self.brackets)
+        return cfg.state_income_tax(rules, taxable_income)
 
 
 @dataclass
@@ -390,9 +389,14 @@ class StateIncomeTax:
     Built from ``cfg.state_tax_rules`` (state_tax_data.py: all 50 states + DC,
     plus "No state tax" and the flat-rate "Other"). ``calculate_tax`` takes
     income AFTER ``deduction`` (the state's standard deduction plus personal
-    exemptions), like every other bracket model here.
+    exemptions), like every other bracket model here, and applies the state's
+    exemption credits and surtax (cfg.state_income_tax). ``seniors`` (people
+    65+ on the return) and ``dependents`` (children under 17) size the credits;
+    the portfolio updates them each year (AccountPortfolio.update_ages).
     """
     rules: dict
+    seniors: int = 0
+    dependents: int = 0
 
     @property
     def code(self) -> str:
@@ -407,7 +411,7 @@ class StateIncomeTax:
         return self.rules["brackets"]
 
     def calculate_tax(self, taxable_income: float) -> float:
-        return _progressive_tax(self.rules["brackets"], taxable_income)
+        return cfg.state_income_tax(self.rules, taxable_income, self.seniors, self.dependents)
 
 
 def _select_state_tax_brackets(status=None, people=None) -> StateIncomeTax:
@@ -582,7 +586,7 @@ class AccountPortfolio:
                               "partner": cfg.return_status("partner")}
         # Federal brackets selected from cfg.FILING_STATUS (MFJ / Single / HOH).
         # MFJ remains the default (byte-identical to the prior hardcoded table);
-        # Single/HOH pull the 2024 IRS schedules so the filing-status selector
+        # Single/HOH pull the 2026 IRS schedules so the filing-status selector
         # actually changes federal tax (finding #8).
         self.federal_tax_brackets = TaxBrackets(
             brackets=list(cfg.get_federal_brackets(self.return_status["you"])))
@@ -803,9 +807,24 @@ class AccountPortfolio:
         self._retirement_excluded = {"you": 0.0, "partner": 0.0}
 
     def update_ages(self, your_age: int):
-        """Update tracked ages for standard deduction calculation."""
+        """Update tracked ages for the standard deduction and the state
+        exemption credits (people 65+ and children under 17 on each return;
+        the children go on yours)."""
         self.current_your_age = your_age
         self.current_partner_age = your_age - (cfg.YOUR_AGE - cfg.PARTNER_AGE)
+        kids = cfg.children_under_17(your_age - cfg.YOUR_AGE)
+        state = self.ca_tax_brackets
+        if hasattr(state, "seniors"):
+            if self.two_returns:
+                state.seniors = int(your_age >= 65)
+                partner_state = self._partner_state_tax
+                if hasattr(partner_state, "seniors"):
+                    partner_state.seniors = int(self.current_partner_age >= 65)
+            else:
+                ages = [your_age] + ([self.current_partner_age]
+                                     if int(state.rules.get("people", 1)) > 1 else [])
+                state.seniors = sum(1 for a in ages if a >= 65)
+            state.dependents = kids
 
     # ------------------------------------------------------------------
     # Returns: one (joint or single) or two (unmarried couple). ``owner`` is an
@@ -830,13 +849,25 @@ class AccountPortfolio:
     def _state_model(self, ret: str = "you"):
         return self._partner_state_tax if ret == "partner" else self.ca_tax_brackets
 
-    def get_standard_deduction(self, owner: str = "you") -> float:
-        """Federal standard deduction of ``owner``'s return, from current ages."""
+    def get_standard_deduction(self, owner: str = "you", magi: Optional[float] = None) -> float:
+        """Federal deduction of ``owner``'s return, from current ages: the
+        standard deduction, its 65+ add-on and the OBBBA senior deduction.
+
+        The senior deduction phases out with the return's MAGI: ``magi`` if
+        given, else the income and gains recognized on the return so far.
+        """
+        ret = self._return_of(owner)
+        if magi is None:
+            magi = self._return_income(ret) + self._return_investment(ret)
+        years = max(0, (self.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE)
         if not self.two_returns:
-            return cfg.get_standard_deduction(self.current_your_age, self.current_partner_age)
-        if self._return_of(owner) == "partner":
-            return cfg.standard_deduction_for_return(cfg._FILING_SINGLE, [self.current_partner_age])
-        return cfg.standard_deduction_for_return(self.return_status["you"], [self.current_your_age])
+            return cfg.get_standard_deduction(self.current_your_age, self.current_partner_age,
+                                              magi, years)
+        if ret == "partner":
+            return cfg.standard_deduction_for_return(cfg._FILING_SINGLE, [self.current_partner_age],
+                                                     magi, years)
+        return cfg.standard_deduction_for_return(self.return_status["you"], [self.current_your_age],
+                                                 magi, years)
 
     def _state_taxable_base(self, ret: str = "you") -> float:
         """Ordinary income actually subject to STATE tax this year on a return.
@@ -918,11 +949,13 @@ class AccountPortfolio:
         ret = self._return_of(owner)
         base = self._return_income(ret)
 
-        # Federal tax using taxable income (after the standard deduction)
-        std_deduction = self.get_standard_deduction(owner)
+        # Federal tax using taxable income (after the standard deduction). The
+        # senior deduction shrinks as MAGI rises, so the deduction is taken at
+        # the MAGI before and after this income.
+        magi = base + self._return_investment(ret)
         federal = self._federal_model(ret)
-        taxable_before = max(0, base - std_deduction)
-        taxable_after = max(0, base + income - std_deduction)
+        taxable_before = max(0, base - self.get_standard_deduction(owner, magi))
+        taxable_after = max(0, base + income - self.get_standard_deduction(owner, magi + income))
         federal_tax = federal.calculate_tax(taxable_after) - federal.calculate_tax(taxable_before)
 
         # State tax on the non-exempt part, after the state's own deduction.

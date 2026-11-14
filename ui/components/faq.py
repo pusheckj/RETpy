@@ -92,8 +92,11 @@ QUESTIONS: list[tuple[str, str]] = [
         "What about healthcare costs?",
         "The years before Medicare (ages 50-64) are often the most expensive. "
         "ACA premiums can run \\$20k or more a year for a couple without "
-        "subsidies. Medicare starts at 65 and costs about \\$8-15k a year for "
-        "a couple, including supplemental coverage. The plan covers both phases.",
+        "subsidies. The extra subsidies of 2021-2025 have ended, so from 2026 "
+        "there is no subsidy at all above 400% of the poverty line (about \\$84,600 "
+        "for a couple). Medicare starts at 65: Part B is \\$202.90 a month per "
+        "person in 2026, more at high incomes, and with a drug plan and a "
+        "supplement a couple pays about \\$10-15k a year. The plan covers both phases.",
     ),
     (
         "What if I rent, or I'm single?",

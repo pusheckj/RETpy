@@ -49,12 +49,12 @@ class TestFederalTaxBrackets:
     def test_multiple_brackets(self):
         """Test income spanning multiple brackets."""
         brackets = TaxBrackets()
-        # Test income: $50,000
-        # $0-$23,200 @ 10% = $2,320
-        # $23,200-$50,000 @ 12% = $26,800 * 0.12 = $3,216
-        # Total = $5,536
+        # Test income: $50,000 (2026 MFJ)
+        # $0-$24,800 @ 10% = $2,480
+        # $24,800-$50,000 @ 12% = $25,200 * 0.12 = $3,024
+        # Total = $5,504
         tax = brackets.calculate_tax(50_000)
-        expected = 23_200 * 0.10 + (50_000 - 23_200) * 0.12
+        expected = 24_800 * 0.10 + (50_000 - 24_800) * 0.12
         assert abs(tax - expected) < 0.01
 
     def test_highest_bracket(self):
@@ -84,10 +84,12 @@ class TestCaliforniaTaxBrackets:
     def test_lowest_bracket(self):
         """Test income in lowest CA bracket."""
         brackets = CaliforniaTaxBrackets()
-        # First bracket: $0-$20,824 at 1%
-        tax = brackets.calculate_tax(20_824)
-        expected = 20_824 * 0.01
-        assert abs(tax - expected) < 0.01
+        # First 2026 joint bracket: $0-$22,912 at 1% -> $229.12 bracket tax ...
+        assert brackets.brackets[0] == (22_912, 0.01)
+        assert abs(cfg.progressive_tax(brackets.brackets, 22_912) - 229.12) < 0.01
+        # ... which the two $158 personal exemption credits wipe out.
+        assert brackets.calculate_tax(22_912) == 0
+        assert abs(brackets.calculate_tax(40_000) - (229.12 + 17_088 * 0.02 - 316)) < 0.01
 
     def test_multiple_brackets(self):
         """Test income spanning multiple CA brackets."""
@@ -119,8 +121,8 @@ class TestLTCGTax:
 
     def test_gains_in_zero_bracket(self):
         """Gains entirely in 0% bracket."""
-        # For MFJ, 0% bracket goes up to $94,050
-        # With $50k other income, can have $44,050 of gains tax-free
+        # For MFJ, 0% bracket goes up to $98,900 (2026)
+        # With $50k other income, can have $48,900 of gains tax-free
         gains = 40_000
         other_income = 50_000
         tax = calculate_ltcg_tax(gains, other_income)
@@ -129,36 +131,36 @@ class TestLTCGTax:
     def test_gains_spanning_zero_and_15_brackets(self):
         """Gains spanning 0% and 15% brackets."""
         # Other income: $60,000
-        # 0% bracket room: $94,050 - $60,000 = $34,050
+        # 0% bracket room: $98,900 - $60,000 = $38,900 (2026)
         # Gains: $50,000
-        # Tax: ($50,000 - $34,050) * 0.15 = $15,950 * 0.15 = $2,392.50
+        # Tax: ($50,000 - $38,900) * 0.15 = $11,100 * 0.15 = $1,665
         gains = 50_000
         other_income = 60_000
         tax = calculate_ltcg_tax(gains, other_income)
-        expected = (50_000 - (94_050 - 60_000)) * 0.15
+        expected = (50_000 - (98_900 - 60_000)) * 0.15
         assert abs(tax - expected) < 0.01
 
     def test_gains_in_all_three_brackets(self):
         """Gains spanning all three brackets (0%, 15%, 20%)."""
         # Other income: $100,000
-        # 0% bracket room: max(0, $94,050 - $100,000) = $0
-        # 15% bracket room: max(0, $583,750 - $100,000) = $483,750
+        # 2026: 0% bracket room: max(0, $98,900 - $100,000) = $0
+        # 15% bracket room: max(0, $613,700 - $100,000) = $513,700
         # Gains: $600,000
-        # Tax: $483,750 * 0.15 + ($600,000 - $483,750) * 0.20
+        # Tax: $513,700 * 0.15 + ($600,000 - $513,700) * 0.20
         gains = 600_000
         other_income = 100_000
         tax = calculate_ltcg_tax(gains, other_income)
-        gains_at_15 = 583_750 - 100_000
+        gains_at_15 = 613_700 - 100_000
         gains_at_20 = gains - gains_at_15
         expected = gains_at_15 * 0.15 + gains_at_20 * 0.20
         assert abs(tax - expected) < 1.0
 
     def test_high_income_all_gains_at_20(self):
         """High income means all gains taxed at 20%."""
-        # Other income: $600,000
+        # Other income: $650,000 (above the 2026 $613,700 15% top)
         # All gains will be in 20% bracket
         gains = 100_000
-        other_income = 600_000
+        other_income = 650_000
         tax = calculate_ltcg_tax(gains, other_income)
         expected = gains * 0.20
         assert abs(tax - expected) < 0.01
@@ -254,49 +256,52 @@ class TestNIIT:
 class TestMedicareIRMAA:
     """Test Medicare IRMAA (Income-Related Monthly Adjustment Amount)."""
 
+    # 2026 CMS tiers (Part B $202.90 standard) plus the $200/month Part D + Medigap
+    # estimate per person (cfg.MEDICARE_SUPPLEMENTAL_MONTHLY_PER_PERSON).
+    SUPP = 200.0
+
     def test_base_premium_below_threshold(self):
         """Below first threshold, pay base premium."""
-        # Below $212,000 (2025 CMS MFJ first tier)
+        # At or below $218,000 (2026 CMS MFJ first tier)
         magi = 150_000
         premium = cfg.calculate_medicare_irmaa(magi)
-        # Base premium for couple: (185.00 + 0) * 12 * 2 = $4,440.00
-        expected_base = 185.00 * 12 * 2
+        # Base premium for couple: (202.90 + 0 + 200) * 12 * 2 = $9,669.60
+        expected_base = (202.90 + self.SUPP) * 12 * 2
         assert abs(premium - expected_base) < 1.0
 
     def test_first_surcharge_tier(self):
-        """First surcharge tier with IRMAA (2025 CMS MFJ: $212,000)."""
+        """First surcharge tier with IRMAA (2026 CMS MFJ: above $218,000)."""
         magi = 220_000
         premium = cfg.calculate_medicare_irmaa(magi)
-        # Should include surcharge
-        # Part B: $259.00, Part D: $13.70 per person per month
-        expected = (259.00 + 13.70) * 12 * 2
+        # Part B: $284.10, Part D surcharge: $14.50 per person per month
+        expected = (284.10 + 14.50 + self.SUPP) * 12 * 2
         assert abs(premium - expected) < 1.0
 
     def test_highest_tier(self):
         """Highest IRMAA tier."""
         magi = 800_000
         premium = cfg.calculate_medicare_irmaa(magi)
-        # Highest tier: Part B $628.90, Part D $85.80
-        expected = (628.90 + 85.80) * 12 * 2
+        # Highest tier: Part B $689.90, Part D $91.00
+        expected = (689.90 + 91.00 + self.SUPP) * 12 * 2
         assert abs(premium - expected) < 1.0
 
-    def test_2025_tier_boundary_212k(self):
-        """Pin the 2025 CMS second-tier boundary at exactly $212,000 MFJ."""
-        premium_at = cfg.calculate_medicare_irmaa(212_000)
-        premium_below = cfg.calculate_medicare_irmaa(211_999)
-        expected_at = (259.00 + 13.70) * 12 * 2
-        expected_below = 185.00 * 12 * 2
+    def test_2026_tier_boundary_218k(self):
+        """Pin the 2026 CMS second-tier boundary: tier 1 starts above $218,000 MFJ."""
+        premium_above = cfg.calculate_medicare_irmaa(218_001)
+        premium_at = cfg.calculate_medicare_irmaa(218_000)
+        expected_above = (284.10 + 14.50 + self.SUPP) * 12 * 2
+        expected_at = (202.90 + self.SUPP) * 12 * 2
+        assert abs(premium_above - expected_above) < 1.0
         assert abs(premium_at - expected_at) < 1.0
-        assert abs(premium_below - expected_below) < 1.0
 
-    def test_2025_tier_boundary_400k(self):
-        """Pin the 2025 CMS fifth-tier boundary at exactly $400,000 MFJ."""
-        premium_at = cfg.calculate_medicare_irmaa(400_000)
-        premium_below = cfg.calculate_medicare_irmaa(399_999)
-        expected_at = (591.90 + 78.60) * 12 * 2
-        expected_below = (480.90 + 57.00) * 12 * 2
+    def test_2026_tier_boundary_410k(self):
+        """Pin the 2026 CMS fifth-tier boundary: above $410,000 MFJ."""
+        premium_above = cfg.calculate_medicare_irmaa(410_001)
+        premium_at = cfg.calculate_medicare_irmaa(410_000)
+        expected_above = (649.20 + 83.30 + self.SUPP) * 12 * 2
+        expected_at = (527.50 + 60.40 + self.SUPP) * 12 * 2
+        assert abs(premium_above - expected_above) < 1.0
         assert abs(premium_at - expected_at) < 1.0
-        assert abs(premium_below - expected_below) < 1.0
 
     def test_inflation_adjustment(self):
         """Premiums increase with inflation factor."""

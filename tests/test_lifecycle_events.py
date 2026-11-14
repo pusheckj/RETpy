@@ -215,7 +215,14 @@ class TestLifecycleFeaturesDefaultOff:
         # {45: 0.069, 50: 0.436}, credit on {45: 0.105, 50: 0.539}. The 2026
         # contribution limits and the partner's backdoor Roth do not move this pin
         # (its contributions are far below every limit). Previously {45: 0.066, 50: 0.431}.
-        assert results == {45: 0.105, 50: 0.539}
+        # REBASELINED 2026-11-14: 2026 tax tables (docs/data_sources/
+        # 2026_verification.md). Larger federal standard deduction ($32,200) and
+        # wider brackets, 2026 California brackets / deduction / exemption credits
+        # (incl. $491 per child), the 2026 ACA percentages and $625 benchmark all
+        # lower this low-income household's taxes and pre-65 health costs; the
+        # $805.80/month Medicare estimate raises costs from 65. Net: success up.
+        # Previously {45: 0.105, 50: 0.539}.
+        assert results == {45: 0.1485, 50: 0.6}
 
 
 # ==============================================================================

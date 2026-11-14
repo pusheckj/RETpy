@@ -1,5 +1,6 @@
 """
-State income tax tables: all 50 states + DC, tax year 2024.
+State income tax tables: all 50 states + DC. Tax year 2024, except California
+(2026, FTB Tax News October 2026; see docs/data_sources/2026_verification.md).
 
 License: MIT (see LICENSE at project root)
 
@@ -40,11 +41,23 @@ ltcg_exclusion    share of long-term capital gains the state does not tax
 pretax_401k_taxed True where 401(k) deferrals are still state wages (PA)
 hsa_taxed         True where HSA payroll contributions are still state wages
 payroll           employee state payroll tax on wages: {"rate", "wage_cap"}
+exemption_credits optional nonrefundable credits taken off the bracket tax
+                  (config.state_income_tax): {"personal", "senior",
+                  "dependent"} dollars per credit -- one personal credit per
+                  person on the return, one senior credit per person 65+, one
+                  dependent credit per child under 17 -- and a phase-out:
+                  "phaseout_agi" {"S"|"MFJ"|"HOH": AGI}, each credit cut by
+                  "phaseout_per_step" dollars per "phaseout_step" of AGI above
+                  it (a part step counts as a whole one)
+surtax            optional {"threshold", "rate"}: an extra rate on taxable
+                  income above the threshold, after credits (California's
+                  Behavioral Health Services Tax)
 note              what is simplified, local taxes left out, known changes
 
-Not modeled anywhere: credits (child, earned-income, personal-exemption
-credits), dependent exemptions, itemized deductions, alternative minimum
-taxes, city/county income taxes, and bracket "recapture" for top earners.
+Not modeled anywhere: credits other than the exemption_credits above (child,
+earned-income, renter's credits), dependent exemptions, itemized deductions,
+alternative minimum taxes, city/county income taxes, and bracket "recapture"
+for top earners.
 """
 
 INF = float("inf")
@@ -103,24 +116,43 @@ STATES = {
              "brackets and the $29 personal credit are left out), so lower "
              "incomes are slightly overstated."),
     "CA": dict(
-        name="California", year=2024, confidence="high",
+        # 2026 figures: FTB Tax News, October 2026 (3.4% CCPI indexing). The
+        # brackets apply to Form 540 taxable income (after the standard
+        # deduction). HOH is its own schedule.
+        name="California", year=2026, confidence="high",
         brackets={
-            "S": [(10_756, .01), (25_499, .02), (40_245, .04), (55_866, .06),
-                  (70_606, .08), (360_659, .093), (432_787, .103),
-                  (721_314, .113), (1_000_000, .123), (INF, .133)],
-            "MFJ": [(21_512, .01), (50_998, .02), (80_490, .04), (111_732, .06),
-                    (141_212, .08), (721_318, .093), (865_574, .103),
-                    (1_000_000, .113), (1_442_628, .123), (INF, .133)],
-            "HOH": [(21_527, .01), (51_000, .02), (65_744, .04), (81_364, .06),
-                    (96_107, .08), (490_493, .093), (588_593, .103),
-                    (980_987, .113), (1_000_000, .123), (INF, .133)],
+            "S": [(11_456, .01), (27_157, .02), (42_861, .04), (59_498, .06),
+                  (75_197, .08), (384_109, .093), (460_927, .103),
+                  (768_213, .113), (INF, .123)],
+            "MFJ": [(22_912, .01), (54_314, .02), (85_722, .04), (118_996, .06),
+                    (150_394, .08), (768_218, .093), (921_854, .103),
+                    (1_536_426, .113), (INF, .123)],
+            "HOH": [(22_927, .01), (54_316, .02), (70_018, .04), (86_654, .06),
+                    (102_356, .08), (522_385, .093), (626_864, .103),
+                    (1_044_771, .113), (INF, .123)],
         },
-        std_deduction={"S": 5_540, "MFJ": 11_080, "HOH": 11_080},
-        exemption=0, social_security="exempt", retirement_exclusion=None,
+        std_deduction={"S": 5_900, "MFJ": 11_800, "HOH": 11_800},
+        exemption=0,
+        # Personal $158 each ($316 joint), senior $158 per person 65+,
+        # dependent $491 each. Senior $158 is inferred from the 2025 Form 540
+        # (personal, blind and senior all equal). The 2026 phase-out
+        # thresholds are ESTIMATES (FTB had not published them): the verified
+        # 2025 thresholds (252,203 / 504,411 / 378,310) x 1.034.
+        exemption_credits={"personal": 158, "senior": 158, "dependent": 491,
+                           "phaseout_agi": {"S": 260_778, "MFJ": 521_561, "HOH": 391_173},
+                           "phaseout_step": 2_500, "phaseout_per_step": 6},
+        # Behavioral Health Services Tax (formerly the Mental Health Services
+        # Tax): 1% of taxable income above $1,000,000, every filing status.
+        surtax={"threshold": 1_000_000, "rate": 0.01},
+        social_security="exempt", retirement_exclusion=None,
         hsa_taxed=True, payroll={"rate": 0.011, "wage_cap": None},
-        note="Includes the 1% mental-health surtax above $1M and State "
-             "Disability Insurance (1.1% of all wages in 2024). Personal "
-             "exemption credits ($149 per person) are left out."),
+        note="2026 brackets, standard deduction and exemption credits (personal "
+             "$158, senior $158, dependent $491 -- the dependent count is "
+             "children under 17), plus the 1% Behavioral Health Services Tax "
+             "above $1M of taxable income. The credit phase-out uses estimated "
+             "2026 thresholds and treats income after the deduction plus the "
+             "deduction as AGI. State Disability Insurance is the 2024 rate "
+             "(1.1% of all wages)."),
     "CO": dict(
         name="Colorado", year=2024, confidence="medium",
         brackets=_flat(.0425), std_deduction="federal", exemption=0,

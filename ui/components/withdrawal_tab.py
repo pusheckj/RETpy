@@ -56,7 +56,7 @@ def render(st, results: dict, chart_key: str = "withdrawal_tab_main") -> None:
     st.markdown(
         f"""
         When on, the plan moves money from Traditional to Roth in low-income early-retirement years,
-        up to the top of the 12% tax bracket for your filing status ({_top}; 2024 values).
+        up to the top of the 12% tax bracket for your filing status ({_top}; 2026 values).
         That money then grows tax-free and your future RMDs get smaller
         (your RMD age is {_rmd_age}).
 

@@ -34,9 +34,10 @@ from retirement_sim.account_simulation import (
 # ==============================================================================
 
 class TestCaliforniaStandardDeductionFix:
-    def test_constant_value_matches_2024_ftb_figure(self):
-        """The named constant must hold the correct 2024 CA MFJ standard deduction."""
-        assert cfg.CA_STANDARD_DEDUCTION_MFJ_2024 == 11_080
+    def test_constant_value_matches_2026_ftb_figure(self):
+        """The named constant (old *_2024 name kept) holds the 2026 CA MFJ
+        standard deduction (FTB Tax News, October 2026; was 11,080 for 2024)."""
+        assert cfg.CA_STANDARD_DEDUCTION_MFJ_2024 == 11_800
 
     def test_marginal_tax_on_income_uses_named_constant(self):
         """

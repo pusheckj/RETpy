@@ -69,7 +69,7 @@ def _rate(age):
 
 def test_defaults():
     assert cfg.MODEL_ACA_AGE_RATED is True
-    assert cfg.ACA_BENCHMARK_MONTHLY_AT_40 == 650
+    assert cfg.ACA_BENCHMARK_MONTHLY_AT_40 == 625   # 2026 US average (KFF); was 650 (San Diego)
     assert cfg.ACA_CHILD_MONTHLY == 390
     assert cfg.ACA_OOP_PER_PERSON_ANNUAL == 1_500
     assert cfg.ACA_AGE_CURVE[21] == 1.000 and cfg.ACA_AGE_CURVE[64] == 3.000
@@ -79,7 +79,7 @@ def test_defaults():
 def test_sixty_year_old_pays_curve_ratio_of_forty_year_old():
     at_40 = cfg.aca_member_full_price_annual(40)
     at_60 = cfg.aca_member_full_price_annual(60)
-    assert at_40 == pytest.approx(650 * 12)
+    assert at_40 == pytest.approx(625 * 12)
     assert at_60 / at_40 == pytest.approx(2.714 / 1.278)
     # Through the engine: single filers, rich (no subsidy).
     p40, _ = _household(40).quote_marketplace_cost(40, [40], RICH)
@@ -195,8 +195,10 @@ def test_cliff_moves_with_household_size():
 
 @pytest.mark.parametrize("ratio,expected", [
     (0.80, 0.0210),
-    (1.33, 0.0210),
-    ((1.33 + 1.50) / 2, (0.0210 + 0.0419) / 2),
+    (1.3299, 0.0210),
+    # Rev. Proc. 2025-25: the 133-150% band starts at 3.14%, not 2.10% (a step).
+    (1.33, 0.0314),
+    ((1.33 + 1.50) / 2, (0.0314 + 0.0419) / 2),
     (1.50, 0.0419),
     (1.75, (0.0419 + 0.0660) / 2),
     (2.00, 0.0660),

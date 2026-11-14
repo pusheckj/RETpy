@@ -207,7 +207,7 @@ def render_body(st) -> None:
     with c7:
         ensure_default(st, "sa_aca_benchmark",
                        safe_int(get_override(st, "ACA_BENCHMARK_MONTHLY_AT_40",
-                                             getattr(cfg, "ACA_BENCHMARK_MONTHLY_AT_40", 650)), 650))
+                                             getattr(cfg, "ACA_BENCHMARK_MONTHLY_AT_40", 625)), 625))
         v = st.number_input("Marketplace plan, age 40 ($/mo)", min_value=0, max_value=5_000,
                             step=25, key="sa_aca_benchmark",
                             help="Before 65, without a work plan, you buy insurance on the "
