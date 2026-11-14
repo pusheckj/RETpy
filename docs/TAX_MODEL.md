@@ -7,7 +7,7 @@ This document describes every tax rule encoded in the simulator, with bracket ta
 ## 1. Scope
 
 - **Jurisdictions modeled:** US federal income tax, federal long-term capital gains tax, the Net Investment Income Tax (NIIT), Medicare IRMAA surcharges, payroll taxes on wages (FICA, plus California SDI), and **state income tax for all 50 states + DC** (`retirement_sim/state_tax_data.py`).
-- **Tax year baseline:** **2024** statutory brackets and thresholds; contribution limits are the **2026** IRS values (IRMAA uses the 2025 CMS tiers). The engine runs in an **all-real (today's-dollars) frame**: statutory items that are CPI-indexed in reality (federal ordinary/LTCG brackets, standard deduction, contribution limits, the Social Security wage base, IRMAA tiers, state tables) are held **flat at their real values**. Thresholds that are *not* indexed in reality — **NIIT** ($250k/$200k), the **Additional Medicare Tax** ($250k/$200k) and the **Social Security taxation** thresholds — decay in real terms over the horizon (a conservative, realistic bias). See `METHODOLOGY.md` §4.
+- **Tax year baseline:** **2024** statutory brackets and thresholds; contribution limits, the Social Security wage base, the Roth IRA phase-out, the student-loan-interest phase-out and the Social Security earnings-test limits are the **2026** values (IRMAA uses the 2025 CMS tiers). The engine runs in an **all-real (today's-dollars) frame**: statutory items that are CPI-indexed in reality (federal ordinary/LTCG brackets, standard deduction, contribution limits, the Social Security wage base, IRMAA tiers, state tables) are held **flat at their real values**. Thresholds that are *not* indexed in reality — **NIIT** ($250k/$200k), the **Additional Medicare Tax** ($250k/$200k) and the **Social Security taxation** thresholds — decay in real terms over the horizon (a conservative, realistic bias). See `METHODOLOGY.md` §4.
 - **Granularity:** working-year pay is taxed once per year by `working_year_taxes` (§2.4); retirement-year taxes are computed incrementally as income is recognized (withdrawals, RMDs, conversions, Social Security), each stacked on the income already on the return.
 - **Filing status:** `FILING_STATUS` — **Married filing jointly**, **Single** or **Head of household** — selects every status-dependent table below, for the whole plan. An **unmarried couple** (a partner in the plan with a status other than MFJ) files **two returns**: you on `FILING_STATUS`, your partner as Single, each person's wages, withdrawals, RMDs, conversions, gains and Social Security on their own return (`files_two_returns()`, `return_status()`). Married filing separately and qualifying widow(er) are not modeled.
 - **Out of scope by design:** AMT, self-employment tax, tax credits other than the working-year child tax credit (last subsection of section 11; the earned-income credit and state credits are out), itemized deductions, city/county income taxes, estate and gift tax, foreign-tax credits.
@@ -52,17 +52,23 @@ The engine itemizes only if `USE_ITEMIZED_DEDUCTION = True`; otherwise the stand
 `config.working_year_taxes()` is the single source of the tax on a year's pay; `account_simulation.working_year_cashflow()` feeds it the year's pay and deferrals and the engine, the sidebar's Taxes panel (`ui/utils/derived.compute_taxes`) and the tax chart all read the result:
 
 ```
-federal  = brackets(status)[ wages + other − 401(k) − HSA − standard deduction ]   (per return)
-state    = state brackets(status)[ state income − state deduction ] + state payroll tax
-FICA     = 6.2% × min(wages − HSA, $168,600)          per earner
+federal  = brackets(status)[ wages + other − pre-tax 401(k) − HSA − student loan interest
+                              − standard deduction ]                               (per return)
+state    = state brackets(status)[ state income − student loan interest − state deduction ]
+           + state payroll tax
+FICA     = 6.2% × min(wages − HSA, $184,500)          per earner (2026 wage base)
          + 1.45% × (wages − HSA)                       per earner
          + 0.9% × max(0, return's wages − $250k/$200k) per return (Additional Medicare Tax)
-take-home = wages + other − 401(k) − HSA − federal − state − FICA
+take-home = wages + other − 401(k) (pre-tax and Roth) − HSA − federal − state − FICA
 ```
+
+**Roth catch-up (SECURE 2.0, from 2026).** If a person's FICA wages in the prior year passed **$150,000** (`ROTH_CATCHUP_WAGE_THRESHOLD`; $145,000 indexed, the IRS figure for 2026), their 401(k) catch-up (the part of the deferral above the $24,500 regular limit: $8,000 at 50+, $11,250 at 60-63) is Roth: it doesn't lower taxable pay and lands in the Roth account (`your_roth_ira` / `partner_roth_ira`; the engine has no separate Roth 401(k), and the tax treatment is the same). Prior-year wages are the comp table's row for the year before (the partner's salary a year earlier); the sidebar's Taxes panel uses this year's pay. Switch: `MODEL_ROTH_CATCHUP_RULE`.
+
+**Student loan interest deduction.** Interest paid on `DEBTS` of kind `student_loan` (`config.student_loan_interest_for_age`, from the payoff math) is deducted above the line, up to **$2,500** a year, phased out linearly over modified AGI (AGI before this deduction) of **$85,000-$100,000** (single, head of household) or **$175,000-$205,000** (joint). The cap has never been indexed, so it decays in real terms like NIIT; the ranges are indexed and stay flat. States are assumed to follow the federal deduction. It goes on your return (on an unmarried couple's two returns, yours). Working years only. Switch: `STUDENT_LOAN_INTEREST_DEDUCTION_MAX = 0`.
 
 401(k) deferrals remain FICA wages; HSA contributions made through payroll do not. On a joint return each spouse's share of the income tax is pro-rata to their taxable income (used to attribute savings to each person's accounts). A comp-table row that sets `after_tax` overrides the primary's computed take-home.
 
-The employer 401(k) match is `min(deferral, match % × base)`, per person. The partner's Roth IRA contribution is limited by the IRA limit and earned income, with no income phase-out: above the direct-Roth range it is a backdoor Roth, as the primary's `YOUR_BACKDOOR_ROTH` is.
+The employer 401(k) match is `min(deferral, match % × base)`, per person, on the whole deferral (a Roth catch-up included). The partner's Roth IRA contribution is limited by the IRA limit and earned income, with no income phase-out: above the direct-Roth range it is a backdoor Roth, as the primary's `YOUR_BACKDOOR_ROTH` is.
 
 ---
 
@@ -140,7 +146,11 @@ taxable_SS = 0                                              if PI ≤ t1
 
 The thresholds were set in 1983/1993 and are never indexed, so they decay in real terms. On two returns each person's own benefit and income are used. State treatment follows §4.
 
-### 5.3 Example (MFJ)
+### 5.3 Earnings test
+
+Benefits claimed before full retirement age while still working are reduced before any of this: $1 for every $2 of wages above $24,480, $1 for every $3 above $65,160 in the year of full retirement age (2026 limits, flat in today's dollars). Withheld benefits are not income. From full retirement age the benefit is raised as if the claim had come later by the months withheld. See `METHODOLOGY.md` §12.4.
+
+### 5.4 Example (MFJ)
 
 SS $40,000; other AGI $60,000; provisional income $80,000 → 0.85 × 36,000 + 6,000 = $36,600, capped at 0.85 × 40,000 = **$34,000** taxable.
 
@@ -258,9 +268,10 @@ IRS limits are CPI-indexed in reality, so in the all-real frame they are **held 
 | IRA                  | $7,500            | +$1,100 at 50+                    |
 | HSA — self-only      | $4,400            | +$1,000 at 55+                    |
 | HSA — family         | $8,750            | +$1,000 at 55+ (per eligible spouse) |
-| SS wage base         | $168,600 (2024)   | N/A                               |
+| SS wage base         | $184,500 (2026)   | N/A                               |
+| Roth IRA phase-out (MAGI) | $153,000-$168,000 single / HOH; $242,000-$252,000 joint | N/A |
 
-Sources: IRS Notice 2025-67 (401(k), IRA, 415(c)) and Rev. Proc. 2025-19 (HSA). Not modeled: the 2026 rule that high earners' catch-up must be Roth. The HSA uses the **family** limit when the plan has a partner or any child, else the self-only limit (`cfg.hsa_is_family`).
+Sources: IRS Notice 2025-67 (401(k), IRA, 415(c), Roth IRA phase-out, the $150,000 Roth catch-up wage threshold), Rev. Proc. 2025-19 (HSA), SSA's 2026 COLA fact sheet (wage base, earnings-test limits). High earners' catch-up is Roth (§2.4). The Roth IRA phase-out table (`ROTH_IRA_PHASEOUT_BY_STATUS`) is the one the Money check-up uses; the planner treats a Roth IRA above it as a backdoor Roth. The HSA uses the **family** limit when the plan has a partner or any child, else the self-only limit (`cfg.hsa_is_family`).
 
 The backdoor Roth pathway uses the IRA limit; no separate cap is enforced for the conversion step itself.
 
@@ -282,5 +293,6 @@ $2,200 per child under 17 (One Big Beautiful Bill Act, 2025; indexed later, so f
 - **CMS Medicare IRMAA tables** — annual Part B and Part D surcharge schedules
 - **California Franchise Tax Board Form 540 instructions** — state brackets, standard deduction, mental-health surtax
 - **State revenue department 2024 forms and rate schedules** — the other state rows in `state_tax_data.py` (each row's `confidence` and `note` say how complete it is)
-- **IRS Publication 15 / Topic 560** — FICA rates, the 2024 Social Security wage base, the Additional Medicare Tax
+- **IRS Publication 15 / Topic 560** — FICA rates, the Additional Medicare Tax; **SSA 2026 COLA fact sheet** — the $184,500 wage base and the $24,480 / $65,160 earnings-test limits
+- **IRS Publication 970** — student loan interest deduction (2026 phase-out from Rev. Proc. 2025-32)
 - **SECURE Act 2.0 (2022)** — RMD start-age increases

@@ -20,7 +20,8 @@ Two phases share a single age axis:
     see ``utils.sim_runner._median_withdrawal_log_from_data``; the caption from
     ``retirement_caption`` says so). With no results, Social
     Security is still shown deterministically via
-    ``cfg.calculate_social_security`` (guarded), and a caption invites the user
+    ``sim_runner.social_security_path`` (the engine's figure, after the
+    earnings test), and a caption invites the user
     to run the sim for the full drawdown breakdown.
 
 A "Today's dollars" vs "Future (nominal) dollars" toggle inflates every year's
@@ -239,6 +240,22 @@ def build_income_series(
             return primary_age < retirement_age
         return (primary_age - _age_gap) < safe_int(_pra_raw, retirement_age)
 
+    # Social Security by age, the engine's own figure under these inputs (after
+    # the earnings test). Falls back to the plain benefit if that fails.
+    try:
+        try:
+            from utils.sim_runner import social_security_path
+        except ImportError:  # pragma: no cover
+            from ui.utils.sim_runner import social_security_path  # type: ignore
+        ss_path = social_security_path(overrides, ages, retirement_age)
+    except Exception:  # pragma: no cover - defensive
+        ss_path = {}
+
+    def _ss(age: int) -> float:
+        if age in ss_path:
+            return ss_path[age]
+        return _retirement_ss_for_age(age, ss_claim_age, overrides)
+
     # Retirement-year income sources from Monte Carlo results, keyed by age.
     ret_rows = {}
     if results:
@@ -258,7 +275,7 @@ def build_income_series(
             series["Your RSU"][i] = yr
             series["Your other income"][i] = yo
             # Social Security claimed while still working (engine: working_year_cashflow).
-            series["Social Security"][i] = _retirement_ss_for_age(age, ss_claim_age, overrides)
+            series["Social Security"][i] = _ss(age)
 
         # --- Partner working income (their OWN retirement boundary) ---
         # Runs independently of the primary's phase so a partner who keeps
@@ -282,8 +299,7 @@ def build_income_series(
                 series["HSA"][i] = safe_float(row.get("hsa", 0), 0.0)
             else:
                 # No sim results (or this age not covered): show SS only.
-                series["Social Security"][i] = _retirement_ss_for_age(
-                    age, ss_claim_age, overrides)
+                series["Social Security"][i] = _ss(age)
 
     # Apply inflation (future/nominal dollars) if requested.
     if future_dollars:

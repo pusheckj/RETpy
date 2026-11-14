@@ -168,7 +168,10 @@ class TestSocialSecurityStartsAtClaimAge:
                   YOUR_BONUS_AMOUNT=0,
                   YOUR_RSU_AMOUNT=0, CHILDREN=[], STATE_CHOICE="TX", FILING_STATUS="Single",
                   HOME_VALUE=0, MORTGAGE_MONTHLY=0, MORTGAGE_BALANCE=0, HOME_EVENTS=[],
-                  HOUSE_MOVE_ENABLED=False)
+                  HOUSE_MOVE_ENABLED=False,
+                  # The claim-age plumbing, without the earnings test (which
+                  # withholds all of it at $95k of wages: tests/test_ss_earnings_test.py).
+                  SS_EARNINGS_TEST_ENABLED=False)
         return ov
 
     def test_claiming_at_62_pays_the_reduced_benefit_while_still_working(self):

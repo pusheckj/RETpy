@@ -164,6 +164,7 @@ class Payoff:
     payments: List[float] = field(default_factory=list)   # total paid, month 1..months
     underwater: List[int] = field(default_factory=list)
     ending: List[float] = field(default_factory=list)     # per row, owed at the end
+    student_interest: List[float] = field(default_factory=list)  # student-loan interest paid, month 1..months
 
     @property
     def growing(self) -> bool:
@@ -203,21 +204,27 @@ def amortize(debts: Any, extra_monthly: Any = 0.0, strategy: Any = "avalanche",
     balances = [sum(bal)]
     payments: List[float] = []
     interest = paid = 0.0
+    student = [r["kind"] == "student_loan" for r in rows]
+    student_interest: List[float] = []
     month = 0
     while month < max_months and any(b > PAID_EPS for b in bal):
         month += 1
         pool = budget
+        charges = [0.0] * n
+        pays = [0.0] * n
         for k in range(n):
             if bal[k] > PAID_EPS:
                 charge = bal[k] * rate[k]
                 bal[k] += charge
                 interest += charge
                 interest_by[k] += charge
+                charges[k] = charge
         for k in range(n):
             if bal[k] > PAID_EPS:
                 pay = min(mins[k], bal[k], pool)
                 bal[k] -= pay
                 pool -= pay
+                pays[k] += pay
         for k in order:
             if pool <= 0:
                 break
@@ -225,8 +232,12 @@ def amortize(debts: Any, extra_monthly: Any = 0.0, strategy: Any = "avalanche",
                 pay = min(pool, bal[k])
                 bal[k] -= pay
                 pool -= pay
+                pays[k] += pay
         paid += budget - pool
         payments.append(budget - pool)
+        # Interest PAID on student loans this month (a payment covers the
+        # month's interest first; an underwater loan pays only part of it).
+        student_interest.append(sum(min(charges[k], pays[k]) for k in range(n) if student[k]))
         for k in range(n):
             if payoff_month[k] is None and bal[k] <= PAID_EPS:
                 bal[k] = 0.0
@@ -236,7 +247,8 @@ def amortize(debts: Any, extra_monthly: Any = 0.0, strategy: Any = "avalanche",
     done = all(b <= PAID_EPS for b in bal)
     return Payoff(strategy, rows, done, month, budget, interest, paid,
                   0.0 if done else sum(bal), payoff_month, interest_by, order,
-                  balances, payments, underwater(rows), [0.0 if m is not None else b for m, b in zip(payoff_month, bal)])
+                  balances, payments, underwater(rows), [0.0 if m is not None else b for m, b in zip(payoff_month, bal)],
+                  student_interest)
 
 
 def until_runaway(balances: Sequence[float], factor: float = 2.0) -> List[float]:
@@ -264,6 +276,7 @@ class RealSchedule:
     nominal: List[float]
     balances: List[float]
     payoff: Payoff
+    student_interest: List[float] = field(default_factory=list)   # nominal, by plan year
 
 
 def real_schedule(debts: Any, extra_monthly: Any = 0.0, strategy: Any = "avalanche",
@@ -281,11 +294,30 @@ def real_schedule(debts: Any, extra_monthly: Any = 0.0, strategy: Any = "avalanc
     real = [v / deflator[y] for y, v in enumerate(nominal)]
     balances = [p.balances[12 * y] / deflator[y] for y in range(len(nominal) + 1)
                 if 12 * y < len(p.balances)]
-    return RealSchedule(real, nominal, balances, p)
+    student = [0.0] * len(nominal)
+    for m, amount in enumerate(p.student_interest):
+        student[m // 12] += amount
+    return RealSchedule(real, nominal, balances, p, student)
 
 
 _CACHE: Dict[Tuple, Tuple[float, ...]] = {}
 _CACHE_MAX = 64
+
+
+_STUDENT_CACHE: Dict[Tuple, Tuple[float, ...]] = {}
+
+
+def student_interest_by_year(debts: Any, extra_monthly: Any, strategy: Any) -> Tuple[float, ...]:
+    """Student-loan interest paid in each plan year, in NOMINAL dollars of the
+    year (the deduction is claimed on a nominal tax return), memoized."""
+    key = (repr(debts), repr(extra_monthly), repr(strategy))
+    hit = _STUDENT_CACHE.get(key)
+    if hit is None:
+        hit = tuple(real_schedule(debts, extra_monthly, strategy, 0.0).student_interest)
+        if len(_STUDENT_CACHE) >= _CACHE_MAX:
+            _STUDENT_CACHE.clear()
+        _STUDENT_CACHE[key] = hit
+    return hit
 
 
 def real_payments_by_year(debts: Any, extra_monthly: Any, strategy: Any,

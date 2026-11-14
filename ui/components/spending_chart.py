@@ -2,9 +2,10 @@
 
 Reads the spending-category inputs and lifecycle preset from
 ``st.session_state.user_overrides`` (written by
-``components.spending_inputs``). Purely visual — does not depend on sim
-results, though the ``results`` arg is accepted for signature consistency
-with the other chart components.
+``components.spending_inputs``) and draws them with the engine's own spending
+rules (cfg helpers), so before any run the bars equal what the simulation
+spends each year, minus the path-dependent guardrail cuts. After a run it adds
+the health premium the simulation paid and a line for its median spending.
 """
 from __future__ import annotations
 
@@ -174,9 +175,10 @@ def _ltc_expected(overrides: dict, age: int) -> float:
     LTC is STOCHASTIC in the engine: each year from LTC_START_AGE there's an
     ``LTC_PROBABILITY`` chance of incurring the age-scaled ``LTC_ANNUAL_COST``.
     For this deterministic by-category chart we show the EXPECTED value =
-    probability × the if-needed cost, reusing ``cfg.calculate_ltc_cost`` (with
-    inflation_factor=1.0 so it's in today's dollars) so the age-scaling (1.15×
-    at 87+, 1.25× at 90+) matches the Monte Carlo engine exactly. Returns 0 when
+    probability × the if-needed cost, reusing ``cfg.calculate_ltc_cost`` so the
+    age-scaling (1.15× at 87+, 1.25× at 90+) matches the Monte Carlo engine,
+    grown by the expected healthcare factor as the engine grows it (today's
+    dollars, all-real frame). Returns 0 when
     LTC modeling is off or before the start age.
     """
     if cfg is None:  # pragma: no cover
@@ -189,12 +191,66 @@ def _ltc_expected(overrides: dict, age: int) -> float:
     prob = safe_float(overrides.get("LTC_PROBABILITY",
                                     getattr(cfg, "LTC_PROBABILITY", 0.0)), 0.0)
     prob = max(0.0, min(1.0, prob))
+    # The engine prices care with the healthcare factor, which grows faster
+    # than prices (expected value here).
     with _cfg_patched(overrides, _LTC_CFG_KEYS):
         try:
-            full = float(calc(int(age), 1.0, True))
+            full = float(calc(int(age), _cost_growth(overrides, "healthcare", age), True))
         except Exception:  # pragma: no cover - defensive
             return 0.0
     return full * prob
+
+
+# Retirement-years rules the engine applies to the living categories
+# (account_simulation.calculate_retirement_expenses): the retirement spending
+# mode, the later-years reduction and the faster-than-prices growth of
+# children's costs and long-term care. The chart reads cfg's own helpers.
+_RETIREMENT_MODE_KEYS = ("RETIREMENT_SPENDING_MODE", "RETIREMENT_SPENDING_PCT",
+                         "RETIREMENT_SPENDING_ABSOLUTE")
+_LATE_CFG_KEYS = ("LATE_RETIREMENT_START_AGE", "LATE_RETIREMENT_MIN_YEARS",
+                  "LATE_RETIREMENT_LEISURE_DECREASE")
+
+
+def _retirement_living(overrides: dict, living_base: float) -> float:
+    """The retirement living base the engine uses for a today's base of
+    ``living_base`` a year (cfg.retirement_living_base: same / % of today /
+    an absolute amount)."""
+    if cfg is None:  # pragma: no cover
+        return living_base
+    with _cfg_patched({**overrides, "BASE_RETIREMENT_EXPENSES_NO_MORTGAGE": living_base},
+                      _RETIREMENT_MODE_KEYS + ("BASE_RETIREMENT_EXPENSES_NO_MORTGAGE",)):
+        return float(cfg.retirement_living_base())
+
+
+def _late_factor(overrides: dict, age: int, retirement_age: int) -> float:
+    """cfg.late_retirement_factor: the share of non-housing living spending
+    left in the later years (0.85 from 75 by default), 1 before."""
+    if cfg is None:  # pragma: no cover
+        return 1.0
+    with _cfg_patched(overrides, _LATE_CFG_KEYS):
+        return float(cfg.late_retirement_factor(int(age), int(retirement_age)))
+
+
+def _cost_growth(overrides: dict, category: str, age: int) -> float:
+    """Expected real growth of a faster-than-prices category since today
+    (cfg.expected_cost_growth), as the engine grows it."""
+    if cfg is None:  # pragma: no cover
+        return 1.0
+    start = safe_int(overrides.get("YOUR_AGE", _cfg_default("YOUR_AGE", 25)), 25)
+    return float(cfg.expected_cost_growth(category, int(age) - start))
+
+
+def _college_bill(overrides: dict, age: int) -> float:
+    """The year's college bill for every child (cfg.calculate_college_expenses):
+    the whole bill, part of which each child's 529 pays."""
+    if cfg is None:  # pragma: no cover
+        return 0.0
+    with _cfg_patched({**overrides, "CHILDREN": cfg.children_in(overrides)},
+                      _CHILD_CFG_KEYS + ("COLLEGE_START_AGE",)):
+        try:
+            return float(cfg.calculate_college_expenses(int(age))["total"])
+        except Exception:  # pragma: no cover - defensive
+            return 0.0
 
 
 def _debt_payments(overrides: dict, ages, nominal: bool = False) -> list:
@@ -265,15 +321,23 @@ def _owns_by_age(overrides: dict, ages: list) -> list:
 
 
 def _owner_housing_label(overrides: dict, ages: list) -> str:
-    """Label for housing that is owned every year: "mortgage" while a loan is
-    being paid, else the property tax and insurance an owned-outright home costs."""
+    """Label for housing that is owned every year, true for every bar: "mortgage"
+    when a loan is paid in every year shown, the property tax and insurance an
+    owned-outright home costs when none is, and both when the loan is paid off
+    (or a home is bought outright) inside the chart. It used to say "mortgage"
+    whenever any year had a loan, so the years after payoff (a legacy house
+    move's paid-off home, say) were labelled mortgage too."""
     try:
         from utils.derived import mortgage_schedule
     except ImportError:  # pragma: no cover
         from ui.utils.derived import mortgage_schedule  # type: ignore
     by_age = mortgage_schedule(overrides, ages)["by_age"]
-    if any(by_age.get(safe_int(a, 0), {}).get("scheduled", 0.0) > 0 for a in ages):
+    rows = [by_age.get(safe_int(a, 0), {}) for a in ages]
+    loan = [r.get("scheduled", 0.0) > 0 for r in rows if r.get("housing", 0.0) > 0]
+    if loan and all(loan):
         return "Housing (mortgage)"
+    if any(loan):
+        return "Housing (mortgage, then tax + insurance)"
     return "Housing (property tax, insurance)"
 
 
@@ -310,29 +374,59 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
                          "Housing (rent)" if not any(owns) else "Housing")
         series.append((housing_label, category_colors["_AUTO_HOUSING"], housing_series))
 
-    for _, okey, label, default in SPENDING_CATEGORIES:
-        monthly = safe_int(overrides.get(okey, default), default)
-        annual_today = monthly * 12
+    # The engine's retirement-years rules (calculate_retirement_expenses), so
+    # the bars match what it spends at every age:
+    #   * the retirement spending mode scales the living base (categories and
+    #     the partner's spending) by ``scale``; the lifecycle preset's change
+    #     is added on top, unscaled (cfg.lifecycle_spend_delta_annual);
+    #   * from the later-years age, non-housing living spending (those, the
+    #     children and the travel extra) drops by LATE_RETIREMENT_LEISURE_DECREASE;
+    #   * children's costs grow with the childcare factor in retirement.
+    # Working years are spent as entered.
+    ret_age = int(retirement_age)
+    partner_monthly = safe_float(overrides.get("PARTNER_OTHER_MONTHLY",
+                                               _cfg_default("PARTNER_OTHER_MONTHLY", 0)), 0.0)
+    cats = [(okey, label, safe_int(overrides.get(okey, default), default) * 12)
+            for _, okey, label, default in SPENDING_CATEGORIES]
+    living_base = sum(a for _, _, a in cats) + partner_monthly * 12
+    retired_living = _retirement_living(overrides, living_base)
+    scale = retired_living / living_base if living_base > 0 else 0.0
+    late = [(_late_factor(overrides, a, ret_age) if a >= ret_age else 1.0) for a in ages]
+
+    for okey, label, annual_today in cats:
         cat_mults = multipliers.get(okey, {})
-        ys = _apply([annual_today * cat_mults.get(a, 1.0) for a in ages])
-        series.append((label, category_colors.get(okey, "#94a3b8"), ys))
+        ys = [annual_today * (cat_mults.get(a, 1.0) if a < ret_age
+                              else max(0.0, scale + cat_mults.get(a, 1.0) - 1.0) * f)
+              for a, f in zip(ages, late)]
+        series.append((label, category_colors.get(okey, "#94a3b8"), _apply(ys)))
 
     # The partner's own spending: its own line in the engine's living base
     # (cfg.PARTNER_OTHER_MONTHLY, zeroed when there is no partner), not part of
     # any category above.
-    partner_monthly = safe_float(overrides.get("PARTNER_OTHER_MONTHLY",
-                                               _cfg_default("PARTNER_OTHER_MONTHLY", 0)), 0.0)
     if partner_monthly > 0:
         series.append(("Partner's spending", series_color(9, st),
-                       _apply([partner_monthly * 12] * len(ages))))
+                       _apply([partner_monthly * 12 * (1.0 if a < ret_age else scale * f)
+                               for a, f in zip(ages, late)])))
+    if living_base <= 0 < retired_living:
+        # An absolute retirement amount with no categories to scale.
+        series.append(("Living costs in retirement", series_color(10, st),
+                       _apply([retired_living * f if a >= ret_age else 0.0
+                               for a, f in zip(ages, late)])))
 
     # Children — annual child-rearing cost from the engine's own function
     # (ramps up as kids are born, drops as each leaves home). Only shown when
     # kids are planned (non-zero in some year). Palette-series colors start
     # past the category keys (indices 0..len-1) so they don't collide.
-    child_series = _apply([_child_expense(overrides, a) for a in ages])
+    child_series = _apply([_child_expense(overrides, a)
+                           * (1.0 if a < ret_age else _cost_growth(overrides, "childcare", a) * f)
+                           for a, f in zip(ages, late)])
     if any(v > 0 for v in child_series):
         series.append(("Children", series_color(len(_CATEGORY_KEYS), st), child_series))
+
+    # College: each year's whole bill (each child's 529 pays part of it).
+    college_series = _apply([_college_bill(overrides, a) for a in ages])
+    if any(v > 0 for v in college_series):
+        series.append(("College", series_color(len(_CATEGORY_KEYS) + 6, st), college_series))
 
     # Debt payments: fixed nominal payments (like a mortgage), so the
     # future-dollars view shows them as paid, and today's dollars deflate them
@@ -345,7 +439,8 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
     if any(v > 0 for v in vac_series):
         series.append(("Retirement vacation", series_color(len(_CATEGORY_KEYS) + 1, st), vac_series))
 
-    gogo_series = _apply([_go_go_extra(overrides, a, retirement_age) for a in ages])
+    gogo_series = _apply([_go_go_extra(overrides, a, retirement_age) * f
+                          for a, f in zip(ages, late)])
     if any(v > 0 for v in gogo_series):
         # "Early" only fits someone who has not retired yet.
         gogo_label = ("Early-retirement extra" if min(ages) < int(retirement_age)
@@ -427,6 +522,7 @@ def _build_figure(
     inflation_factors: list | None = None,
     four_pct_series: list | None = None,
     health_by_age: dict | None = None,
+    sim_median: list | None = None,
     four_pct_color: str = "#0f172a",
     mortgage_color: str = "#1d4ed8",
     title: str,
@@ -486,6 +582,19 @@ def _build_figure(
                 xref="paper", yref="paper", x=1, y=1, xanchor="right", yanchor="top",
                 showarrow=False, align="right", font=dict(size=10, color="#64748b"),
                 text=f"4% rule line runs off the top (up to {money(line_max, shorten=True)}/yr)")
+    # What the simulation really spent: the median across its runs of each
+    # year's living spending after the guardrails (which cut in bad markets, so
+    # it differs path by path) plus the health premium. Car purchases and
+    # long-term care are left out (the bars show their planned or expected cost).
+    if sim_median is not None and any(v is not None for v in sim_median):
+        sm = (list(sim_median) if inflation_factors is None else
+              [None if v is None else v * f for v, f in zip(sim_median, inflation_factors)])
+        fig.add_trace(go.Scatter(
+            x=ages, y=sm, name="Simulation median spent",
+            mode="lines", connectgaps=False,
+            line=dict(color=four_pct_color, width=1.5),
+            hovertemplate="Simulation median spent: $%{y:,.0f}/yr<extra></extra>",
+        ))
     if current_age <= retirement_age <= plan_until:
         fig.add_vline(
             x=retirement_age,
@@ -602,6 +711,18 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
         except (KeyError, TypeError, ValueError):
             continue
 
+    # The simulation's median spending from the retirement age (see _build_figure).
+    sim_median = None
+    living_p50 = {}
+    for row in ((results or {}).get("primary_result", {}) or {}).get("spending_by_year") or []:
+        try:
+            living_p50[int(row["age"])] = float(row["p50"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    if living_p50:
+        sim_median = [living_p50[a] + health_by_age.get(a, 0.0)
+                      if (a >= retirement_age and a in living_p50) else None for a in ages]
+
     inflation_factors = [(1.0 + inflation_rate) ** (age - current_age) for age in ages]
 
     # Single chart with a Today's / Future-dollars toggle (wrapped in a fragment
@@ -624,6 +745,7 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
             fig = _build_figure(
                 ages, overrides, multipliers, current_age, retirement_age, plan_until, preset,
                 inflation_factors=inflation_factors, health_by_age=health_by_age,
+                sim_median=sim_median,
                 four_pct_series=four_pct_today, four_pct_color=four_pct_color,
                 mortgage_color=mortgage_color,
                 title="Projected annual spending by category (future dollars)",
@@ -636,6 +758,7 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
             fig = _build_figure(
                 ages, overrides, multipliers, current_age, retirement_age, plan_until, preset,
                 four_pct_series=four_pct_today, health_by_age=health_by_age,
+                sim_median=sim_median,
                 four_pct_color=four_pct_color,
                 mortgage_color=mortgage_color,
                 title="Projected annual spending by category",
@@ -660,7 +783,13 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
             "spending, on the same axis as the bars (a line far above them runs "
             "off the top so the bars stay readable). After the run, the "
             "**health insurance** band is what the simulation pays for ACA "
-            "coverage before 65 and Medicare after."
+            "coverage before 65 and Medicare after. The bars follow the "
+            "simulation's spending rules: your retirement spending setting, the "
+            "later-years cut and children's costs that grow faster than prices. "
+            "**College** is the whole bill; your 529 pays part of it. The solid "
+            "line is what the simulation really spent, the median of its runs. It "
+            "can sit below the bars because spending is cut after bad markets. It "
+            "leaves out car purchases and long-term care."
         )
         base_caption += _health_gap_note(health_by_age, retirement_age, overrides)
         if future:

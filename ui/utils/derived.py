@@ -70,11 +70,31 @@ def _working_tax_inputs(overrides: dict, pretax_savings: bool = True) -> dict:
         if partner:
             p401 = min(max(0, safe_int(overrides.get("PARTNER_401K_CONTRIBUTION", 0), 0)),
                        cfg.get_401k_limit(partner_age, year))
+        # A high earner's catch-up is Roth (after tax), as in the simulation;
+        # this year's pay stands in for last year's.
+        k401 -= cfg.roth_catchup_amount(k401, your_age, year, your_wages)
+        p401 -= cfg.roth_catchup_amount(p401, partner_age, year, partner_wages)
+
+    # Student loan interest deduction, this year's interest on the plan's
+    # student loans (the simulation's rule, cfg.student_loan_deduction_amount).
+    deduction = 0.0
+    if overrides.get("DEBTS"):
+        from retirement_sim import debts as debt_math
+        by_year = debt_math.student_interest_by_year(
+            overrides.get("DEBTS"), overrides.get("DEBT_EXTRA_MONTHLY", 0),
+            overrides.get("DEBT_STRATEGY"))
+        if by_year:
+            two = cfg.files_two_returns(status, partner)
+            magi = your_wages + your_other - k401 - hsa
+            if not two:
+                magi += partner_wages + partner_other - p401
+            deduction = cfg.student_loan_deduction_amount(
+                by_year[0], magi, cfg.return_status("you", status, partner) if two else status)
 
     return dict(
         your_wages=your_wages, partner_wages=partner_wages,
         your_other=your_other, partner_other=partner_other,
-        your_401k=k401, partner_401k=p401, your_hsa=hsa,
+        your_401k=k401, partner_401k=p401, your_hsa=hsa, your_deduction=deduction,
         your_age=your_age, partner_age=partner_age, status=status, partner=partner,
         state=overrides.get("STATE_CHOICE", "CA"),
         flat_rate=as_fraction(overrides.get("YOUR_MARGINAL_TAX_RATE", 0.05), 0.05),

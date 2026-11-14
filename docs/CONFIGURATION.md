@@ -221,7 +221,7 @@ The app's *Debts* section sets these (the mortgage is not one of them: it stays 
 |---|---|---|
 | `DEBTS` | `[]` | One entry per debt; `[]` = no debts (the simulation is exactly as without the feature). Fields below. Plain data, so it reaches browser workers. |
 | `name` | — | A label, up to 40 characters. |
-| `kind` | guessed from the name | `credit_card`, `student_loan`, `car`, `personal`, `medical` or `other`. Display only. |
+| `kind` | guessed from the name | `credit_card`, `student_loan`, `car`, `personal`, `medical` or `other`. `student_loan` interest is tax-deductible in working years (see `STUDENT_LOAN_INTEREST_DEDUCTION_MAX`); otherwise display only. |
 | `balance` | — | What you owe now, in dollars of the day (as on the statement). |
 | `apr` | — | Yearly rate as a fraction (`0.24` = 24%), charged monthly at `apr / 12` on the nominal balance. |
 | `min_payment` | — | The minimum due each month, in dollars of the day. Held fixed. |
@@ -334,6 +334,9 @@ Get personal estimates from [ssa.gov](https://www.ssa.gov) — log in and downlo
 | `PARTNER_SS_MONTHLY_FRA` | `$1,800` | Partner's monthly benefit at FRA. |
 | `EARLY_SS_AGE` | `62` | Earliest SS claim. ~30% benefit reduction vs FRA. |
 | `DELAYED_SS_AGE` | `70` | Latest SS claim. ~24% benefit increase vs FRA. |
+| `SS_EARNINGS_TEST_ENABLED` | `True` | Earnings test for a claimant under full retirement age who still earns wages: benefits withheld, credited back as a higher benefit from full retirement age (METHODOLOGY §12.4). `False` = full benefit while working. |
+| `SS_EARNINGS_TEST_LIMIT` | `$24,480` | 2026 limit: $1 withheld per $2 of wages above it, in the years before the year of full retirement age. |
+| `SS_EARNINGS_TEST_LIMIT_FRA_YEAR` | `$65,160` | 2026 limit for the year of full retirement age (the year at 66): $1 per $3 above it. |
 
 Social Security benefits are entered in today's dollars. Because SS is COLA-indexed, in the all-real frame they are held **flat in real terms** (no growth beyond general CPI) — no nominal inflation is applied.
 
@@ -348,8 +351,12 @@ All tables are 2024 figures held flat in today's dollars (statutory thresholds t
 | `FILING_STATUS` | MFJ | Selects the federal and state brackets, standard deductions, LTCG brackets, Social Security taxability thresholds, NIIT and Additional Medicare thresholds, IRMAA tiers, the Roth IRA phase-out and the Roth conversion target. |
 | `STANDARD_DEDUCTION_BY_STATUS` | $29,200 / $14,600 / $21,900 | Federal standard deduction. Age 65+ adds $1,550 per spouse (joint) or $1,950 (single/HOH). |
 | `LTCG_BRACKETS_BY_STATUS` | 0% to $94,050 / $47,025 / $63,000 | 15% to $583,750 / $518,900 / $551,350, then 20%. |
-| `SS_WAGE_BASE` | `$168,600` | Social Security wage base, per earner. With `SOCIAL_SECURITY_TAX_RATE` 6.2%, `MEDICARE_TAX_RATE` 1.45%, `ADDITIONAL_MEDICARE_TAX_RATE` 0.9% above `ADDITIONAL_MEDICARE_THRESHOLD_BY_STATUS` ($250k joint / $200k otherwise, per return). |
-| `ROTH_IRA_PHASEOUT_BY_STATUS` | $230k–$240k joint, $146k–$161k others | Direct Roth IRA phase-out (used by `roth_ira_allowed`; the engine's partner Roth ignores it, see `PARTNER_ROTH_CONTRIBUTION`). |
+| `SS_WAGE_BASE` | `$184,500` | Social Security wage base (2026), per earner. With `SOCIAL_SECURITY_TAX_RATE` 6.2%, `MEDICARE_TAX_RATE` 1.45%, `ADDITIONAL_MEDICARE_TAX_RATE` 0.9% above `ADDITIONAL_MEDICARE_THRESHOLD_BY_STATUS` ($250k joint / $200k otherwise, per return). |
+| `ROTH_IRA_PHASEOUT_BY_STATUS` | $242k–$252k joint, $153k–$168k others (2026) | Direct Roth IRA phase-out (used by `roth_ira_allowed` and the Money check-up's Roth card; the engine's partner Roth ignores it, see `PARTNER_ROTH_CONTRIBUTION`). |
+| `MODEL_ROTH_CATCHUP_RULE` | `True` | SECURE 2.0: a 401(k) catch-up by someone whose prior-year FICA wages passed `ROTH_CATCHUP_WAGE_THRESHOLD` is Roth (after tax, into the Roth account). `False` = pre-tax for everyone. |
+| `ROTH_CATCHUP_WAGE_THRESHOLD` | `$150,000` | Prior-year wages above which the catch-up must be Roth (2026 figure). |
+| `STUDENT_LOAN_INTEREST_DEDUCTION_MAX` | `$2,500` | Yearly cap on the above-the-line deduction for interest on `student_loan` debts (working years; not indexed, so it shrinks in today's dollars). `0` = off. |
+| `STUDENT_LOAN_INTEREST_PHASEOUT_BY_STATUS` | $175k–$205k joint, $85k–$100k others | MAGI range over which the deduction phases out (2026). |
 | `YOUR_MARGINAL_TAX_RATE` | `0.05` | Flat **state** rate for `STATE_CHOICE = "Other"` (the app's *Another state (flat rate)*), applied above the federal standard deduction, Social Security exempt. |
 | `RETIREMENT_STATE_CHOICE` | `None` | State whose income tax applies to retirement-year withdrawals, Roth conversions and RMDs. `None` means the same as `STATE_CHOICE`, so plans are unchanged. Working years always use `STATE_CHOICE`. Same value forms as `STATE_CHOICE`. The UI's Freedom milestones check sets it to test retiring in another place. |
 

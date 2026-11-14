@@ -852,15 +852,27 @@ def retirement_spending_basis(user_overrides: dict, retirement_age: int) -> dict
     terms as the living base. ``housing`` is the config housing term at that age
     (``cfg.housing_annual``), ``pre_medicare`` whether that age is before
     Medicare, and ``health_knobs`` the pre-Medicare price inputs a place scales.
+
+    Health follows the engine's pricing at that age (AccountPortfolio.
+    quote_health_insurance_cost), not the flat 'early_retirement' band: the
+    age-rated marketplace premium after subsidy plus out-of-pocket before
+    Medicare (none while a working partner's employer plan covers you), the
+    Medicare band / IRMAA after, grown by the expected healthcare real excess
+    since today. MAGI: half the year's spending (``core``, the engine's own
+    first estimate), plus a still-working partner's pay, plus the Roth
+    conversion the engine would make that year. ``health_params``
+    is that pricing as plain data, so utils/milestones.health_cost can re-price
+    each place (its spending sets the MAGI, its price level the premiums).
     """
     try:
         from utils import place_costs as pc
+        from utils import milestones as ms
     except ImportError:  # pragma: no cover
         from ui.utils import place_costs as pc  # type: ignore
+        from ui.utils import milestones as ms  # type: ignore
     original = _apply_overrides(build_config_overrides(user_overrides))
     try:
         age = max(int(retirement_age), int(getattr(cfg, "YOUR_AGE", 25)))
-        adults = 2 if cfg.has_partner() else 1
         if cfg.granular_nonhousing_annual() is not None:
             weights = {cat: float(getattr(cfg, key, 0) or 0) * 12.0
                        for key, cat in pc.CONFIG_KEYS.items()}
@@ -869,10 +881,13 @@ def retirement_spending_basis(user_overrides: dict, retirement_age: int) -> dict
                        pc.CAT_FUN: float(getattr(cfg, "YOUR_OTHER_MONTHLY", 0) or 0) * 12.0,
                        pc.CAT_PARTNER: float(getattr(cfg, "PARTNER_OTHER_MONTHLY", 0) or 0) * 12.0}
         bands = getattr(cfg, "HEALTHCARE_COSTS_BY_AGE", None)
+        core = float(cfg.calculate_annual_expenses(age, 1.0, 1.0, retirement=True,
+                                                   retirement_age=age))
+        health_params = _health_params(age, core)
         return {
-            "core": float(cfg.calculate_annual_expenses(age, 1.0, 1.0, retirement=True,
-                                                        retirement_age=age)),
-            "health": float(adults * cfg.healthcare_cost_per_adult(age)),
+            "core": core,
+            "health": float(ms.health_cost(health_params, 0.5 * core)),
+            "health_params": health_params,
             "living": float(cfg.retirement_living_base()),
             "today": float(getattr(cfg, "CURRENT_ANNUAL_EXPENSES", 0.0) or 0.0),
             "discretionary_ratio": float(getattr(cfg, "DISCRETIONARY_EXPENSE_RATIO", 0.30)),
@@ -888,6 +903,66 @@ def retirement_spending_basis(user_overrides: dict, retirement_age: int) -> dict
         }
     finally:
         _restore_overrides(original)
+
+
+def _health_params(age: int, core: float) -> dict:
+    """The engine's health pricing as plain data (cfg must hold the plan): who
+    is covered, the expected healthcare factor, a working partner's pay, the
+    year's Roth conversion, the Medicare part, and the marketplace price inputs. Read by
+    ``utils.milestones.health_cost``.
+
+    Priced at ``age``, except while a still-working partner's employer plan
+    covers the household (the engine then charges no marketplace premium): the
+    quick rule wants the lasting cost, so it is priced at your age in the
+    partner's first retired year (``age`` in the result) instead."""
+    has_partner = cfg.has_partner()
+    gap = cfg.YOUR_AGE - cfg.PARTNER_AGE
+    pra = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
+    working = has_partner and pra is not None and age - gap < int(pra)
+    if working and getattr(cfg, "PARTNER_EMPLOYER_HEALTH_COVERAGE", False):
+        age = max(age, min(int(pra) + gap, int(cfg.plan_end_age())))
+        working = age - gap < int(pra)          # still working at the plan's end
+    partner_age = age - gap
+    adults = [age] + ([partner_age] if has_partner else [])
+    excess = float((getattr(cfg, "INFLATION_REAL_EXCESS", {}) or {}).get("healthcare", 0.0))
+    factor = (1.0 + excess) ** max(0, age - int(cfg.YOUR_AGE))
+    income = (float(sim.working_year_cashflow(age, partner_working=True, you_working=False)["partner_agi"])
+              if working else 0.0)
+    # Roth conversions fill ordinary income up to the target each early-retirement
+    # year (AccountPortfolio.perform_roth_conversion), and they count in MAGI.
+    conversion = 0.0
+    trad = sum(float(getattr(cfg, k, 0) or 0) for k in (
+        "YOUR_401K", "YOUR_TRADITIONAL_IRA", "PARTNER_401K", "PARTNER_TRADITIONAL_IRA",
+        "YOUR_401K_CONTRIBUTION", "PARTNER_401K_CONTRIBUTION"))
+    if getattr(cfg, "ENABLE_ROTH_CONVERSION", False) and age < cfg.ROTH_CONVERSION_STOP_AGE and trad > 0:
+        target = cfg.roth_conversion_target(cfg.return_status("you"))
+        if cfg.files_two_returns():
+            target += cfg.roth_conversion_target(cfg.return_status("partner"))
+        conversion = min(max(0.0, target - income), float(cfg.ROTH_CONVERSION_MAX_ANNUAL))
+    on_medicare = [a for a in adults if a >= cfg.MEDICARE_AGE]
+    magi = 0.5 * core + income + conversion
+    medicare = 0.0
+    if on_medicare:
+        medicare = float(cfg.calculate_medicare_irmaa(magi, factor, enrollees=len(on_medicare)))
+        if getattr(cfg, "MODEL_HEALTHCARE_COST_FLOOR", False):
+            medicare = max(medicare, sum(cfg.healthcare_cost_per_adult(a, factor) for a in on_medicare))
+    bands = getattr(cfg, "HEALTHCARE_COSTS_BY_AGE", None)
+    return {
+        "age": age, "adult_ages": adults, "kid_ages": list(cfg.children_at_home_ages(age)),
+        "factor": factor, "income": income, "conversion": conversion, "medicare": medicare,
+        "employer": bool(working and getattr(cfg, "PARTNER_EMPLOYER_HEALTH_COVERAGE", False)),
+        "source": {
+            "ACA_ENABLED": bool(getattr(cfg, "ACA_ENABLED", True)),
+            "MODEL_ACA_AGE_RATED": bool(getattr(cfg, "MODEL_ACA_AGE_RATED", False)),
+            "MEDICARE_AGE": int(cfg.MEDICARE_AGE),
+            "ACA_BENCHMARK_MONTHLY_AT_40": float(cfg.ACA_BENCHMARK_MONTHLY_AT_40),
+            "ACA_CHILD_MONTHLY": float(cfg.ACA_CHILD_MONTHLY),
+            "ACA_OOP_PER_PERSON_ANNUAL": float(cfg.ACA_OOP_PER_PERSON_ANNUAL),
+            "SPEND_HEALTH_MONTHLY": float(getattr(cfg, "SPEND_HEALTH_MONTHLY", 0) or 0),
+            "HEALTHCARE_COSTS_BY_AGE": dict(bands) if isinstance(bands, dict) else {},
+            "ACA_BASE_ANNUAL_PREMIUM": float(getattr(cfg, "ACA_BASE_ANNUAL_PREMIUM", 0) or 0),
+        },
+    }
 
 
 #: Rough tax rate on the part of a home-sale gain above the exclusion, for the
@@ -2029,6 +2104,24 @@ def _median_withdrawal_log(paths, portfolios, successes=None) -> List[dict]:
     return _median_withdrawal_log_from_data(paths, logs, successes)
 
 
+def social_security_path(user_overrides: dict, ages, retirement_age: int) -> Dict[int, float]:
+    """The household's Social Security at each age under ``user_overrides``
+    (today's dollars), the engine's own figure: after the earnings test, which
+    withholds an early claimant's benefit while they work and credits it back
+    after full retirement age (account_simulation.social_security_for_year).
+    0 everywhere when Social Security is off. ``retirement_age`` is when you
+    stop work."""
+    original = _apply_overrides(build_config_overrides(user_overrides))
+    try:
+        if not bool(getattr(cfg, "INCLUDE_SOCIAL_SECURITY", False)):
+            return {int(a): 0.0 for a in ages}
+        return {int(a): float(sim.social_security_for_year(
+                    int(a), None if int(a) < int(retirement_age) else int(retirement_age))["total"])
+                for a in ages}
+    finally:
+        _restore_overrides(original)
+
+
 def _approximate_income_sources(withdrawal_rows: List[dict], retirement_age: int) -> List[IncomeSourceYearRow]:
     """Per-year retirement income breakdown from the per-age median
     withdrawal rows (see ``_median_withdrawal_log_from_data``), plus Social
@@ -2039,7 +2132,6 @@ def _approximate_income_sources(withdrawal_rows: List[dict], retirement_age: int
     dollars with no further income tax due — because the chart's fixed
     5-series layout has no separate cash bucket.
     """
-    ss_claim_age = int(getattr(cfg, "SS_CLAIM_AGE", 67))
     include_ss = bool(getattr(cfg, "INCLUDE_SOCIAL_SECURITY", False))
     calc_ss = getattr(cfg, "calculate_social_security", None)
 
@@ -2050,10 +2142,12 @@ def _approximate_income_sources(withdrawal_rows: List[dict], retirement_age: int
             continue
         ss = 0.0
         # No claim-age gate here: the partner may claim at their own age, and
-        # calculate_social_security is already 0 before anyone has claimed.
+        # the benefit is already 0 before anyone has claimed. The engine's own
+        # figure, after the earnings test (a still-working partner's withheld
+        # benefit, credits after full retirement age).
         if include_ss and calc_ss is not None:
             try:
-                ss = float(calc_ss(age, ss_claim_age))
+                ss = float(sim.social_security_for_year(age, retirement_age)["total"])
             except Exception:
                 ss = 0.0
         out.append({
@@ -2360,11 +2454,11 @@ def _approximate_taxes(withdrawal_rows: List[dict], retirement_age: int) -> List
                 state_tax = min(float(row.get("state_tax", 0.0)), max(0.0, total_taxes - niit))
                 ss_income = 0.0
                 if bool(getattr(cfg, "INCLUDE_SOCIAL_SECURITY", False)):
-                    ss_claim_age = int(getattr(cfg, "SS_CLAIM_AGE", 67))
                     calc_ss = getattr(cfg, "calculate_social_security", None)
                     if calc_ss is not None:
                         try:
-                            ss_income = float(calc_ss(age, ss_claim_age))
+                            ss_income = float(sim.social_security_for_year(
+                                age, retirement_age)["total"])
                         except Exception:
                             ss_income = 0.0
                 reinvested_rmd = max(0.0, float(row.get("rmd_gross", 0.0)) - float(row.get("rmd_spent", 0.0)))

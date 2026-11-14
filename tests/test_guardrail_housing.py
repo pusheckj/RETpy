@@ -39,7 +39,8 @@ def _restore_cfg():
     try:
         yield
     finally:
-        for k in [k for k in vars(cfg) if not k.startswith("__") and k not in saved]:
+        for k in [k for k in vars(cfg) if not k.startswith("__") and k not in saved
+                  and not isinstance(getattr(cfg, k), types.ModuleType)]:   # keep config's imports
             delattr(cfg, k)
         for k, v in saved.items():
             setattr(cfg, k, v)

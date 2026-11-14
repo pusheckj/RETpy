@@ -92,13 +92,13 @@ class TestTakeHomeByHand:
 
     def test_high_earner_over_the_wage_base(self):
         t = cfg.working_year_taxes(250_000, status="S", partner=False, state="TX")
-        ss = 168_600 * 0.062
+        ss = 184_500 * 0.062       # 2026 wage base
         medicare = 250_000 * 0.0145 + 0.009 * (250_000 - 200_000)
         assert t["fica"] == pytest.approx(ss + medicare)
 
     def test_fica_per_earner_with_own_wage_base(self):
         t = cfg.working_year_taxes(200_000, 200_000, status="MFJ", partner=True, state="TX")
-        ss = 2 * 168_600 * 0.062
+        ss = 2 * 184_500 * 0.062
         medicare = 400_000 * 0.0145 + 0.009 * (400_000 - 250_000)
         assert t["fica"] == pytest.approx(ss + medicare)
 
@@ -213,9 +213,16 @@ class TestFilingStatusTables:
 
     def test_roth_ira_phaseout(self):
         assert cfg.roth_ira_allowed(7_000, 100_000, "S") == 7_000
-        assert cfg.roth_ira_allowed(7_000, 153_500, "S") == pytest.approx(3_500)
+        # 2026 ranges: single / HOH $153,000-$168,000, joint $242,000-$252,000.
+        assert cfg.roth_ira_allowed(7_000, 153_000, "S") == 7_000
+        assert cfg.roth_ira_allowed(7_000, 160_500, "S") == pytest.approx(3_500)
+        assert cfg.roth_ira_allowed(7_000, 160_500, "HOH") == pytest.approx(3_500)
         assert cfg.roth_ira_allowed(7_000, 170_000, "S") == 0.0
-        assert cfg.roth_ira_allowed(7_000, 235_000, "MFJ") == pytest.approx(3_500)
+        assert cfg.roth_ira_allowed(7_000, 247_000, "MFJ") == pytest.approx(3_500)
+        assert cfg.roth_ira_allowed(7_000, 252_000, "MFJ") == 0.0
+
+    def test_2026_wage_base(self):
+        assert cfg.SS_WAGE_BASE == 184_500
 
 
 # ---------------------------------------------------------------------------
