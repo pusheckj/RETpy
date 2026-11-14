@@ -403,7 +403,7 @@ Conversion income is added to ordinary income for the year and taxed accordingly
 
 ## 15. Failure condition
 
-A simulation path is marked a **failure** when, in any year, the portfolio cannot cover **≥ 99%** of the required net withdrawal. The 1% tolerance absorbs rounding and avoids false failures from trivial shortfalls.
+A simulation path is marked a **failure** when, in any year, the portfolio cannot cover **≥ 99%** of the required net withdrawal. The 1% tolerance absorbs rounding and avoids false failures from trivial shortfalls. A shortfall of less than $1 never fails either: that is where the tax gross-up stops, so a need under $100 (say $52) is judged by the same $1 slack instead of 1% of itself. The same rule applies to working-year deficits.
 
 ### 15.1 Home equity backstop
 

@@ -39,6 +39,19 @@ WITHDRAWAL_SHORTFALL_TOLERANCE = 0.99
 GROSSUP_TOLERANCE = 1.0          # dollars of remaining net shortfall
 GROSSUP_MAX_ITERATIONS = 12
 
+
+def _fell_short(net_delivered: float, need: float) -> bool:
+    """Did a withdrawal leave a real shortfall? More than the 1% tolerance AND
+    more than the gross-up solver's own stopping slack (GROSSUP_TOLERANCE).
+
+    The solver stops once less than $1 of net need is left. Judged by 1% alone,
+    a need under $100 could fail on that leftover cent-level slack: a working
+    year $52.51 short drew $51.96 net and failed a $2.25M household, at one
+    spending level and not the next, flipping a quarter of all paths at once.
+    For needs of $100 or more this is exactly ``net < need * 0.99``.
+    """
+    return net_delivered < min(need * WITHDRAWAL_SHORTFALL_TOLERANCE, need - GROSSUP_TOLERANCE)
+
 # Medical expense portion of total expenses (before/after Medicare)
 MEDICAL_EXPENSE_PORTION_PRE_MEDICARE = 0.15
 MEDICAL_EXPENSE_PORTION_POST_MEDICARE = 0.10
@@ -2668,7 +2681,7 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
             shortfall, is_medical=False, your_age=your_age
         )
         net_delivered = withdrawn - cost
-        if net_delivered < shortfall * WITHDRAWAL_SHORTFALL_TOLERANCE:
+        if _fell_short(net_delivered, shortfall):
             return False
 
     # A brokerage-contribution FLOOR above the year's actual surplus must also be
@@ -2696,7 +2709,7 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
             _floor_excess_to_fund, is_medical=False, your_age=your_age
         )
         net_delivered = withdrawn - cost
-        if net_delivered < _floor_excess_to_fund * WITHDRAWAL_SHORTFALL_TOLERANCE:
+        if _fell_short(net_delivered, _floor_excess_to_fund):
             return False
     return True
 
@@ -3313,7 +3326,7 @@ def _fund_net_expenses(
     # penalties reduce what is available to spend. Using the gross figure reported
     # depletion a year late and could turn a final-year depletion into a counted
     # success.
-    if net_delivered < net_expenses * WITHDRAWAL_SHORTFALL_TOLERANCE:
+    if _fell_short(net_delivered, net_expenses):
         return False, rmd_total, reinvested_surplus
 
     return True, rmd_total, reinvested_surplus
