@@ -43,7 +43,9 @@ def _after_move(overrides):
 def test_new_loan_amortizes_at_its_own_rate():
     before, after, pi = _after_move({**MOVE, "MORTGAGE_RATE_FOR_PAYOFF": 0.0575, "NEW_MORTGAGE_RATE": 0.07})
     assert (before, after) == (0.0575, 0.07)
-    assert pi == pytest.approx(sim._level_payment(800_000, 0.07, 15))
+    # The loan is set in dollars of the move year (42, two years from today).
+    loan = 800_000 * (1 + cfg.EXPECTED_INFLATION) ** 2
+    assert pi == pytest.approx(sim._level_payment(loan, 0.07, 15))
 
 
 def test_new_rate_falls_back_to_the_current_loan():

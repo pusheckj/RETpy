@@ -471,8 +471,9 @@ class TestHouseMoveEngine:
             start_cash = p.get_total_balance()
 
             # Expected net proceeds from the sale (independent recomputation).
-            # The engine settles the loan at its tracked balance.
-            remaining_principal = p.mortgage_balance
+            # The engine settles the loan at its tracked balance (nominal, so
+            # in today's dollars at the move age it is deflated).
+            remaining_principal = p.mortgage_balance / cfg.cpi_index(move_age)
             selling_costs = p.home_value * cfg.HOME_SELLING_COST_PCT
             expected_proceeds = max(
                 0.0, p.home_value - remaining_principal - selling_costs

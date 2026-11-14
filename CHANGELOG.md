@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (engine: fixed-rate mortgages in today's dollars)
+- A fixed-rate mortgage's principal and interest is fixed in dollars, so in the engine's today's dollars it now shrinks by inflation each year; property tax and insurance (escrow, `HOME_VALUE` x `HOME_CARRYING_COST_PCT`) stay flat. Before, the whole all-in payment was flat in today's dollars, which overstated late-loan housing costs. Same convention as the debts (`config.cpi_index`, `config.mortgage_real_annual`)
+- The loan balance amortizes in nominal dollars and is reported in today's dollars (home equity, the equity backstop, sale proceeds, the net-worth projection). Extra principal is entered in today's dollars and paid in dollars of its year. A `HOME_EVENTS` purchase sets its loan in that year's dollars. The term and payoff age don't change
+- Home-sale tax: the cost basis and the $250k / $500k exclusion are nominal (tax law indexes neither), so a later sale can now owe tax on the inflation part of its gain
+- The spending chart, net-worth projection, mortgage paydown tab (interest in today's dollars), House section, home-sale path and Freedom milestones use the same schedule and match the engine to the dollar. The future-dollars spending view now shows the principal and interest flat in dollars and the escrow rising
+- `EXPECTED_INFLATION = 0` reproduces the previous results bit for bit. At 2.75%, 1,000 runs: the default sample (renter) is unchanged (51, 96.7%); Mid-career couple preset success at 55 goes 59.1% to 60.1% (earliest age 58 both); Near retirement unchanged (55); a 28-year loan at 40 goes from 63 to 62 (25.2% to 32.6% at 55); a renter who buys at 32 goes from 57 to 54
+
 ### Fixed (engine, from the persona QA)
 - Renters: `CURRENT_ANNUAL_EXPENSES` (today's spending) now includes rent. It sizes the "Portfolio needed to retire" grid and the emergency-fund months, which were too small for renters. One function, `config.current_annual_expenses()`, replaces two hand-kept copies; debt payments are not part of it (the engine adds them once)
 - HSA: a single person with no children is funded at the self-only limit, not the family limit (engine, Auto-allocate and Max out now share `config.hsa_is_family`)

@@ -193,11 +193,14 @@ def test_downsizer_sells_and_rents_at_72():
         assert p.housing_expense_for_age(71) == pytest.approx(650_000 * PCT)
         before = p.get_total_balance()
         assert p.apply_housing_events(72) is True
-        # Gain 650k - 39k selling - 200k basis = 411k; a single owner excludes
-        # 250k, so 161k is a taxed long-term gain.
+        # Gain 650k - 39k selling - 200k basis; a single owner excludes 250k.
+        # The basis and the exclusion are nominal, so in today's dollars at 72
+        # both are divided by the price index (at 0% inflation: 161k taxed).
+        cpi = cfg.cpi_index(72)
+        taxable = 650_000 * 0.94 - (200_000 + 250_000) / cpi
         assert p.total_taxes_paid > 0
         proceeds = p.get_total_balance() - before + 5_000          # + moving costs
-        assert 650_000 * 0.94 - 161_000 * 0.25 < proceeds < 650_000 * 0.94
+        assert 650_000 * 0.94 - taxable * 0.30 < proceeds < 650_000 * 0.94 - taxable * 0.10
         assert not p.owns_home() and p.home_equity == 0
         assert p.housing_expense_for_age(73) == 30_000
         # The later-years drop (from 75) leaves the rent alone.
@@ -230,7 +233,10 @@ def test_two_moves_switch_loans_and_payoff():
         for age in range(27, 46):
             p.record_year(2026 + age - 27, age)        # closes last year: amortizes
             p.apply_housing_events(age)
-        assert p.home_value == 800_000 and p.mortgage_balance == 600_000
+        # The loan is set in dollars of 45: 600k today's dollars.
+        assert p.home_value == 800_000
+        assert p.mortgage_balance == pytest.approx(600_000 * cfg.cpi_index(45))
+        assert p.real_mortgage_balance(45) == pytest.approx(600_000)
         assert p.mortgage_payoff_age == 60 and p._mortgage_rate == 0.055
         assert sim.mortgage_payoff_projection()["payoff_age"] == 60
     ui = mortgage_schedule(ov, range(27, 93))

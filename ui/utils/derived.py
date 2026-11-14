@@ -906,12 +906,18 @@ def mortgage_schedule(overrides: dict, ages) -> dict:
       * ``scheduled`` is the all-in annual payment (0 once the loan is gone),
         or the year's rent while renting,
       * ``extra``     is the extra principal actually paid that year (never more
-                      than the balance left),
+                      than the loan can absorb, the engine's cap),
       * ``housing``   is scheduled + extra, i.e. the real cash going to housing;
                       for an owner with no loan outstanding (paid off, or never
                       had one) it is the property tax + insurance carrying cost
                       instead -- the engine's ``home_carrying_cost_annual`` rule,
       * ``owns``      is whether a home is owned that year.
+
+    All in today's dollars, the engine's way: the loan is nominal, so the
+    payment's principal and interest shrinks with EXPECTED_INFLATION while
+    its property tax + insurance stays flat (``cfg.mortgage_real_annual``),
+    ``balance`` is the nominal balance deflated, and the extra principal
+    (entered in today's dollars) is paid in dollars of its year.
 
     ``balance`` is the principal at the START of the year. Events apply at the
     start of their year, like the engine (``AccountPortfolio.apply_housing_events``):
@@ -921,8 +927,13 @@ def mortgage_schedule(overrides: dict, ages) -> dict:
     """
     ages = [safe_int(a, 0) for a in ages]
     your_age = safe_int(overrides.get("YOUR_AGE", 25), 25)
+    infl = safe_float(overrides.get("EXPECTED_INFLATION", cfg.EXPECTED_INFLATION),
+                      cfg.EXPECTED_INFLATION)
+
+    def cpi(age):
+        return cfg.cpi_index(age, your_age, infl)
+
     rate = max(0.0, _payoff_rate(overrides))
-    r = rate / 12.0
 
     bal = safe_float(overrides.get("MORTGAGE_BALANCE", 0) or 0, 0.0)
     years = safe_int(overrides.get("MORTGAGE_YEARS_REMAINING", 0), 0)
@@ -938,15 +949,18 @@ def mortgage_schedule(overrides: dict, ages) -> dict:
     else:
         pi = 0.0
     scheduled_annual = monthly * 12.0
+    origin = your_age                      # the year the current loan's dollars are fixed in
     rent_annual = safe_float(overrides.get("SPEND_RENT_MONTHLY", 0) or 0, 0.0) * 12.0
     owns = bal > 0 or monthly > 0 or home_value > 0      # the engine's is_renter rule
     events = housing_timeline(overrides)
     purchases = [e["age"] for e in events if e["action"] != "sell_rent"]
     # Post-payoff carrying cost (mirrors cfg.home_carrying_cost_annual; the pct
-    # resolves exactly as config_builder translates it onto the engine).
+    # resolves exactly as config_builder translates it onto the engine). A home
+    # bought with its own carrying rate keeps it, like the engine.
     carry_on = bool(overrides.get("MODEL_HOME_CARRYING_COST_AFTER_PAYOFF", True))
     carry_pct = safe_float(overrides.get(
         "HOME_CARRYING_COST_PCT", overrides.get("NEW_HOME_ESCROW_PCT", 0.0135)), 0.0135)
+    home_pct = carry_pct
 
     by_age, payoff_age, ever_owns = {}, None, owns
     for age in range(min(ages or [your_age]), max(ages or [your_age]) + 1):
@@ -960,7 +974,6 @@ def mortgage_schedule(overrides: dict, ages) -> dict:
                 rent_annual = e["rent"] * 12.0
                 continue
             rate = e["rate"]                                 # the new loan's own rate
-            r = rate / 12.0
             bal = e["loan"]
             if bal > 0:
                 pi = mortgage_payment(bal, rate, e["years"])
@@ -970,34 +983,32 @@ def mortgage_schedule(overrides: dict, ages) -> dict:
                 # current_mortgage_terms) and invert the annuity for principal.
                 pi = _pi_from_all_in(e["monthly"], e["price"], overrides)
                 bal = _balance_from_payment(pi, rate, e["years"])
+            # Set in dollars of the purchase year (the price is today's dollars).
+            bal, pi, origin = bal * cpi(age), pi * cpi(age), age
             scheduled_annual = e["monthly"] * 12.0
             home_value = e["price"]
+            home_pct = e.get("carrying_pct", carry_pct)
             owns = ever_owns = True
             payoff_age = None                                # a new loan to retire
 
-        start_balance = bal
+        c = cpi(age)
+        start_balance = bal / c
         if owns and bal > 0 and age >= your_age:
-            extra = min(extra_mortgage_for_age(overrides, age), bal)
-            sched = scheduled_annual
-            # Advance 12 months, applying the extra monthly the way the engine
-            # does (so it compounds into the interest saving).
-            em = extra / 12.0
-            for _ in range(12):
-                if bal <= 0:
-                    break
-                bal = bal * (1.0 + r) - pi - em
-                if bal < 0:
-                    bal = 0.0
-                    break
-            if bal < 0.01:
-                bal = 0.0
-                if payoff_age is None:
-                    # Paid off DURING this year -> the payment stops next year.
-                    payoff_age = age + 1
+            sched = cfg.deflate_loan_payment(
+                scheduled_annual, cfg.mortgage_escrow_annual(scheduled_annual, home_value, home_pct),
+                cpi(origin) / c)
+            # Advance 12 months exactly like the engine (_amortize_year_capped):
+            # the extra goes in monthly, never more than the loan can absorb.
+            bal, paid = advance_mortgage_with_extra(
+                bal, rate, pi, months=12, extra_annual=extra_mortgage_for_age(overrides, age) * c)
+            extra = paid / c
+            if bal <= 0 and payoff_age is None:
+                # Paid off DURING this year -> the payment stops next year.
+                payoff_age = age + 1
         else:
             extra, sched = 0.0, (0.0 if owns else rent_annual)
         # Owner with no loan left: property tax + insurance continue.
-        carry = (max(0.0, home_value) * carry_pct
+        carry = (max(0.0, home_value) * home_pct
                  if (owns and carry_on and start_balance <= 0) else 0.0)
 
         by_age[age] = {"balance": start_balance, "scheduled": sched,

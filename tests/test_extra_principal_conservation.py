@@ -96,6 +96,11 @@ class TestNetWorthProjectionConserves:
         """The move converts equity to sale proceeds. Reading a stale equity
         snapshot destroyed the final year's prepayment; the delta must stay
         smooth across the move instead of stepping by ~one year's extra.
+
+        Smooth means the step across the move is in line with the step the
+        year before. The delta drifts every year (cash left the investments;
+        in today's dollars a prepaid nominal loan also loses inflation), so the
+        step itself grows; a leak shows as a jump of about one year's extra.
         """
         ov = {**BASE, "HOUSE_MOVE_ENABLED": True, "HOUSE_MOVE_AGE": 36,
               "NEW_HOME_VALUE": 1_000_000, "NEW_MORTGAGE_BALANCE": 800_000,
@@ -104,10 +109,10 @@ class TestNetWorthProjectionConserves:
         xtra = project_net_worth({**ov,
                                   "EXTRA_MORTGAGE_PAYMENT_ANNUAL": EXTRA,
                                   "EXTRA_MORTGAGE_PAYMENT_START_AGE": 32})
-        d_before = _total(xtra, 35) - _total(base, 35)
-        d_after = _total(xtra, 36) - _total(base, 36)
-        assert abs(d_after - d_before) < 0.25 * EXTRA, (
-            f"net worth jumped {d_after - d_before:,.0f} across the move"
+        d = {a: _total(xtra, a) - _total(base, a) for a in (34, 35, 36)}
+        step_before, step_across = d[35] - d[34], d[36] - d[35]
+        assert abs(step_across - step_before) < 0.25 * EXTRA, (
+            f"net worth jumped {step_across - step_before:,.0f} across the move"
         )
 
     def test_paying_extra_never_increases_liquid_assets(self):

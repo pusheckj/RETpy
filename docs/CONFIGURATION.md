@@ -72,7 +72,7 @@ Add fields for partner Traditional IRA or HSA if relevant by copying the pattern
 | `HOME_VALUE` | `$700,000` | Current market value. Held flat in real terms (housing real-excess rate is 0%). |
 | `MORTGAGE_BALANCE` | `$500,000` | Outstanding principal. |
 | `MORTGAGE_RATE_FOR_PAYOFF` | `0.065` | The current loan's fixed rate (the app's *Mortgage interest rate*). The balance is amortized at it, so it sets how fast equity builds and what is left to repay at a sale. |
-| `HOME_COST_BASIS` | `None` | What you paid for today's home (plus improvements), for tax on its sale. `None` = its value, i.e. no taxable gain. |
+| `HOME_COST_BASIS` | `None` | What you paid for today's home (plus improvements), in the dollars you paid, for tax on its sale. `None` = its value, i.e. no taxable gain. Like the exclusion it is not indexed, so it shrinks in today's dollars. |
 | `HOME_EQUITY_ACCESSIBLE_PCT` | `0.85` | Fraction of equity recoverable after selling costs (agent fees, transfer taxes). Only used if `USE_HOME_AS_BACKUP = True`. |
 
 `HOME_EQUITY` is auto-computed as `HOME_VALUE - MORTGAGE_BALANCE`. A renter sets
@@ -189,7 +189,7 @@ The app sets the housing rows in its *House* section and the monthly spending ro
 
 | Parameter | Default | Description |
 |---|---|---|
-| `MORTGAGE_MONTHLY` | `$0` | Principal + interest + escrow. |
+| `MORTGAGE_MONTHLY` | `$0` | Principal + interest + escrow, today. The escrow part (home value × `HOME_CARRYING_COST_PCT`) stays flat in today's dollars; the fixed principal + interest shrinks with `EXPECTED_INFLATION` (METHODOLOGY §4). |
 | `MORTGAGE_YEARS_REMAINING` | `0` | Years until payoff. When reached, mortgage drops from expenses. |
 | `UTILITIES_MONTHLY` | `$150` | Water, gas, electric, internet, etc. |
 | `YOUR_OTHER_MONTHLY` | `$2,000` | Your personal non-housing spending (food, transportation, hobbies). |
