@@ -609,6 +609,8 @@ def _how_it_works(st, inp, rate: float, basis: dict, source: str, end_age) -> No
             "the loan, selling costs and tax on any gain above the exclusion. Then you buy a typical home "
             "there with that money (a loan covers any shortfall, at your plan's new-loan rate) and pay its "
             "property tax and insurance, or you rent there. Leftover sale money joins your investments. "
+            "A new loan's payment counts at its first-year size. Its principal and interest stay the same "
+            "in dollars, so later years cost less after inflation. "
             "*Where you live now* keeps your housing as planned.\n"
             f"- **FIRE in a place.** Investments plus what the move frees cover a year of spending there "
             f"divided by the withdrawal rate (now **{rate * 100:.2f}%**). Your plan spends about "

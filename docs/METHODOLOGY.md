@@ -97,9 +97,29 @@ The only categories that *grow* are those that historically **outpace** general 
 
 The real-excess is a **fixed premium over CPI** (`INFLATION_REAL_EXCESS`: healthcare 1.75%, childcare 1.25%). It does not move with the *Expected inflation* slider.
 
-> **What the Expected inflation slider does.** In an all-real model it changes only (a) the decay of the frozen-nominal tax thresholds below (more inflation, more tax drag) and (b) the deflation of a historical-return stress path. It does not rescale spending, savings, mortgage payments or Social Security. Fixed-rate mortgage and consumer-debt payments are treated as constant in real terms, which is conservative: with higher inflation a real fixed payment would shrink. Healthcare and childcare used to be nominal literals measured against the slider, so 10% inflation made them fall 5% a year in real terms and success on the sample plan rose from 0.49 (0%) to 0.97 (10%). With a fixed premium the same sweep is flat (0.83 / 0.83 / 0.84).
+> **What the Expected inflation slider does.** In an all-real model it changes (a) the decay of the frozen-nominal tax thresholds below (more inflation, more tax drag), (b) the deflation of a historical-return stress path, and (c) the real cost of anything fixed in nominal dollars: fixed-rate mortgage and consumer-debt payments and balances, and the home-sale cost basis and exclusion (see *Nominal-fixed amounts* below). It does not rescale spending, savings or Social Security. Healthcare and childcare used to be nominal literals measured against the slider, so 10% inflation made them fall 5% a year in real terms and success on the sample plan rose from 0.49 (0%) to 0.97 (10%). With a fixed premium the same sweep is flat (0.83 / 0.83 / 0.84).
 
 Each real-excess category follows an **independent random walk**: each year's draw is normal with the real-excess mean above and volatility ~1.5%. The general factor is pinned at **1.0** for the whole horizon.
+
+**Nominal-fixed amounts.** Some amounts are fixed in dollars, not in buying power. The engine converts each with one index, `cpi_index(age) = (1 + EXPECTED_INFLATION)^(age − YOUR_AGE)` (1.0 today; the same yearly deflator as the debts, Section 6.3, and like them the expectation, not a path's own draw): an amount fixed in nominal dollars is worth `nominal / cpi_index(age)` today's dollars, and a today's-dollar amount paid at `age` is `real × cpi_index(age)` dollars of that year.
+
+| Item | Frame | In today's dollars |
+|------|-------|--------------------|
+| Living costs, rent, leisure, college, Social Security | track prices | flat |
+| Property tax + insurance (escrow, and the carrying cost after payoff) | track prices | flat |
+| Home values, purchase prices, a move's price and loan as entered | today's dollars | flat |
+| Mortgage principal + interest (fixed rate) | nominal, fixed when the loan starts | shrinks by 1 / (1 + π) a year |
+| Mortgage balance | nominal, amortized at the loan's rate | nominal / `cpi_index` |
+| Extra mortgage principal (`EXTRA_MORTGAGE_PAYMENT_ANNUAL`) | entered in today's dollars | flat; paid as × `cpi_index` against the nominal loan |
+| Consumer-debt payments and balances (Section 6.3) | nominal | nominal / `cpi_index` |
+| Home-sale cost basis (`HOME_COST_BASIS`, or a purchase price × `cpi_index` at purchase) and the $250k / $500k exclusion | nominal (not indexed in law) | nominal / `cpi_index` at the sale |
+| NIIT, IRMAA and Social Security taxation thresholds | nominal (frozen in law) | nominal / `cpi_index` |
+
+**Mortgage payment.** `MORTGAGE_MONTHLY` (and a purchase's `monthly`) is all-in. Its escrow part is the home's value × its carrying rate (`HOME_CARRYING_COST_PCT`, or the purchase's `carrying_pct`), capped at the payment; the rest is principal and interest. In the plan year at `age` it costs
+
+  escrow + (all-in − escrow) × cpi_index(loan start) / cpi_index(age)
+
+today's dollars (`config.mortgage_real_annual`), so year *k* of a loan costs escrow + P&I / (1 + π)^*k*. The term and payoff age don't change. After payoff the home costs its escrow, flat. A purchase in a later year sets its loan in that year's dollars (price and loan × `cpi_index` at that age), so its first year costs exactly the today's-dollar payment you see. The housing chart, net-worth projection, mortgage paydown tab, House section and Freedom milestones read the same schedule. With `EXPECTED_INFLATION = 0` every index is 1 and results are exactly what they were before this conversion.
 
 > **Limitation — frozen-nominal statutory thresholds.** A handful of tax thresholds are specified in *nominal* dollars by statute and are **not** inflation-indexed in reality (or are indexed on a lag we do not model). In an all-real frame these are held at their nominal 2024 values, so over a multi-decade horizon they effectively *tighten* in real terms and bite harder each year — a conservative, realistic bias. This applies to: the **NIIT** $250k MFJ MAGI threshold, the **IRMAA** Medicare surcharge brackets, and the **Social Security taxation** provisional-income thresholds ($32k–$44k MFJ). Statutory items that *are* CPI-indexed in reality (federal ordinary/LTCG brackets, the standard deduction, contribution limits) are correctly held flat in real terms.
 
@@ -160,18 +180,23 @@ dated moves (the old single house move becomes one of them), applied at the star
 of their year in both phases, before that year's expenses:
 
 - **Sell** (any move while owning): proceeds = value − loan left (the tracked,
-  amortized balance) − selling costs − tax, into cash. The gain over the cost
-  basis above $250,000 per owner ($500,000 married filing jointly; unmarried
-  partners are taken as co-owners) is a long-term gain stacked on the year's
-  income (federal LTCG, state, NIIT).
+  amortized nominal balance, deflated) − selling costs − tax, into cash. The
+  gain over the cost basis above $250,000 per owner ($500,000 married filing
+  jointly; unmarried partners are taken as co-owners) is a long-term gain
+  stacked on the year's income (federal LTCG, state, NIIT). The basis and the
+  exclusion are nominal (Section 4).
 - **Buy**: the down payment (price − loan) and costs come out of savings; the new
-  loan is amortized at its own rate, its all-in payment replaces the old housing
-  cost, and the accessible-equity reserve restarts at the down payment. Rent stops.
+  loan, set in dollars of the purchase year, is amortized at its own rate, its
+  all-in payment replaces the old housing cost (its principal and interest
+  shrinking in today's dollars from then on, Section 4), and the
+  accessible-equity reserve restarts at the down payment. Rent stops.
 - **Sell and rent**: costs come out of savings; there is no home, loan or equity
   afterwards, and the new rent is paid every year from then on.
 
 Home values are held flat in today's dollars, so a home bought in the plan sells
-for what it cost (no real gain). The ownership test for the exclusion (two of
+for what it cost in today's dollars (no real gain). Tax is on the nominal gain,
+though: with inflation the price has risen in dollars since the purchase, and
+the part of that gain above the (unindexed) exclusion is taxed. The ownership test for the exclusion (two of
 the last five years) is assumed met. A sale in a retirement year is taxed
 before that year's other income is counted, as the down payment always was.
 

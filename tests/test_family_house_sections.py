@@ -234,7 +234,12 @@ def test_house_summary_for_an_owner_with_and_without_extra_payments():
     assert plain["payoff_age"] == plain["payoff_age_no_extra"] == 60
     assert _summary_lines(plain) == [
         "Housing costs \\$2,800/mo this year: mortgage payment, with property tax and insurance.",
-        "Mortgage paid off at 60."]
+        "Mortgage paid off at 60.",
+        "The loan part of the payment stays the same in dollars, so after inflation it costs "
+        "less each year. Tax and insurance rise with prices."]
+    # No inflation: the payment is flat in today's dollars, so no such line.
+    assert not any("loan part" in line for line in
+                   _summary_lines(house_summary({**ov, "EXPECTED_INFLATION": 0.0})))
 
 
 def test_house_summary_for_a_renter_and_a_paid_off_owner():

@@ -624,8 +624,10 @@ class AccountPortfolio:
         # Monthly rent while renting (0 once a home is bought).
         self.rent_monthly = (float(getattr(cfg, "SPEND_RENT_MONTHLY", 0) or 0)
                              if cfg.is_renter() else 0.0)
-        # What today's home cost, for tax on its sale. None = no taxable gain
-        # (basis = its value when sold); a purchased home's basis is its price.
+        # What today's home cost, for tax on its sale, in NOMINAL dollars (what
+        # was paid; basis is never indexed for inflation). None = no taxable
+        # gain (basis = its value when sold); a purchased home's basis is its
+        # price in the dollars of the purchase year.
         basis = getattr(cfg, "HOME_COST_BASIS", None)
         self.home_cost_basis = None if basis is None else float(basis)
         self.house_moved = False          # True once any housing event has fired
@@ -636,7 +638,14 @@ class AccountPortfolio:
         # KNOWN starting balance; the P&I payment is derived from it rather than
         # read off ``mortgage_monthly`` because that figure is all-in (it bundles
         # property tax + insurance) and would overstate principal paydown.
+        # NOMINAL dollars, like the fixed-rate loan itself: the balance and the
+        # P&I below amortize in dollars of the day, and are converted to the
+        # engine's today's dollars (/ cfg.cpi_index) wherever they meet real
+        # flows (real_mortgage_balance). ``mortgage_annual`` / ``mortgage_monthly``
+        # stay the all-in payment in dollars of the year the loan began
+        # (``_mortgage_origin_age``); cfg.mortgage_real_annual deflates its P&I.
         self.mortgage_balance = float(cfg.MORTGAGE_BALANCE)
+        self._mortgage_origin_age = cfg.YOUR_AGE
         # Rate of the loan currently being paid down (switches at a house move).
         self._mortgage_rate = float(cfg.MORTGAGE_RATE_FOR_PAYOFF)
         self._mortgage_pi = _level_payment(
@@ -1304,15 +1313,23 @@ class AccountPortfolio:
             return
         self.mortgage_balance, _ = self._amortize_year_capped(extra_annual)
 
+    def real_mortgage_balance(self, your_age=None) -> float:
+        """The (nominal) loan balance in today's dollars at ``your_age``
+        (default: the age last recorded, else today)."""
+        if your_age is None:
+            your_age = cfg.YOUR_AGE if self._last_recorded_age is None else self._last_recorded_age
+        return max(0.0, self.mortgage_balance) / cfg.cpi_index(your_age)
+
     def refresh_home_equity(self) -> None:
-        """Recompute the accessible-equity reserve from value minus principal.
+        """Recompute the accessible-equity reserve from value minus principal
+        (both in today's dollars).
 
         ``home_equity_used`` (drawn as an emergency backstop) is netted out so a
         prior draw is not silently restored by the next year's paydown.
         """
         if not getattr(cfg, "TRACK_HOME_EQUITY_PAYDOWN", False):
             return
-        gross = max(0.0, self.home_value - self.mortgage_balance)
+        gross = max(0.0, self.home_value - self.real_mortgage_balance())
         self.home_equity = max(
             0.0, gross * cfg.HOME_EQUITY_ACCESSIBLE_PCT - self.home_equity_used
         )
@@ -1349,9 +1366,11 @@ class AccountPortfolio:
         if self._last_recorded_age is not None and age > self._last_recorded_age:
             if getattr(cfg, "TRACK_HOME_EQUITY_PAYDOWN", False):
                 # Extra principal is attributed to the year being CLOSED, which
-                # is the year whose expense assembly already charged it.
+                # is the year whose expense assembly already charged it. It is
+                # entered in today's dollars; the loan takes dollars of that year.
                 self._amortize_mortgage_year(
                     cfg.extra_mortgage_payment_for_age(self._last_recorded_age)
+                    * cfg.cpi_index(self._last_recorded_age)
                     if hasattr(cfg, "extra_mortgage_payment_for_age") else 0.0
                 )
         self._last_recorded_age = age
@@ -1365,9 +1384,9 @@ class AccountPortfolio:
             'accounts': {name: acc.balance for name, acc in self.accounts.items()},
             'home_equity': self.home_equity, 'home_equity_used': self.home_equity_used,
             # Loan state, so the UI can chart real home equity (value − principal)
-            # instead of the accessible reserve.
+            # instead of the accessible reserve. Both in today's dollars.
             'home_value': self.home_value,
-            'mortgage_balance': self.mortgage_balance,
+            'mortgage_balance': self.real_mortgage_balance(age),
         }
         self.yearly_history.append(record)
 
@@ -1676,20 +1695,30 @@ class AccountPortfolio:
         if extra_on and getattr(cfg, "TRACK_HOME_EQUITY_PAYDOWN", False):
             if self.mortgage_balance <= 0:
                 return 0.0
-            scheduled = (self.mortgage_annual if timeline
-                         else float(cfg.MORTGAGE_ANNUAL))
             # Never bill more principal than the loan can absorb this year. The
             # cap must account for the scheduled payments too, not just the
             # opening balance -- in the payoff year the schedule alone may
             # retire the loan, and billing the full extra on top would spend
-            # cash against principal that is already gone.
+            # cash against principal that is already gone. The extra is entered
+            # in today's dollars and paid in dollars of the year.
+            cpi = cfg.cpi_index(your_age)
             _, extra = self._amortize_year_capped(
-                cfg.extra_mortgage_payment_for_age(your_age))
-            return scheduled + extra
+                cfg.extra_mortgage_payment_for_age(your_age) * cpi)
+            return self.scheduled_mortgage_real(your_age) + extra / cpi
 
         if not timeline:
-            return cfg.MORTGAGE_ANNUAL if cfg.has_mortgage(your_age) else 0.0
-        return self.mortgage_annual if your_age < self.mortgage_payoff_age else 0.0
+            return self.scheduled_mortgage_real(your_age) if cfg.has_mortgage(your_age) else 0.0
+        return self.scheduled_mortgage_real(your_age) if your_age < self.mortgage_payoff_age else 0.0
+
+    def scheduled_mortgage_real(self, your_age: int) -> float:
+        """The scheduled all-in payment at ``your_age`` in today's dollars:
+        escrow flat, the fixed P&I deflated since the loan began
+        (cfg.mortgage_real_annual). Without a housing timeline that is config's
+        loan; with one, the loan the engine holds now."""
+        if not _housing_timeline_on():
+            return cfg.mortgage_real_annual(cfg.MORTGAGE_ANNUAL, cfg.HOME_VALUE, your_age)
+        return cfg.mortgage_real_annual(self.mortgage_annual, self.home_value, your_age,
+                                        self._mortgage_origin_age, self.home_carrying_pct)
 
     def housing_expense_for_age(self, your_age: int) -> float:
         """
@@ -1764,19 +1793,27 @@ class AccountPortfolio:
         # bundles property tax + insurance), which overstates the outstanding
         # principal and so understated sale proceeds (~$61k on the packaged
         # profile). Fall back to the estimator when paydown tracking is off.
+        # Everything below is today's dollars at ``your_age``: the nominal loan
+        # balance is deflated (real_mortgage_balance).
+        cpi = cfg.cpi_index(your_age)
         if getattr(cfg, "TRACK_HOME_EQUITY_PAYDOWN", False):
-            remaining_principal = max(0.0, self.mortgage_balance)
+            remaining_principal = self.real_mortgage_balance(your_age)
         else:
+            # The payment is in dollars of the loan's first year; the estimate
+            # is nominal, then deflated to today's dollars.
             months_remaining = max(0, (self.mortgage_payoff_age - your_age) * 12)
             remaining_principal = cfg.estimate_remaining_mortgage_principal(
                 self.mortgage_monthly, months_remaining
-            )
+            ) * cfg.cpi_index(self._mortgage_origin_age) / cpi
         selling_costs = self.home_value * selling_cost_pct
         net_proceeds = max(0.0, self.home_value - remaining_principal - selling_costs)
         # Main-home gain above the exclusion ($250k per owner, $500k joint) is a
         # long-term capital gain. Paid from the proceeds, any rest from savings.
-        basis = self.home_value if self.home_cost_basis is None else self.home_cost_basis
-        taxable_gain = self.home_value - selling_costs - basis - cfg.home_sale_exclusion()
+        # Tax law fixes the basis and the exclusion in nominal dollars (neither
+        # is indexed), so in today's dollars both shrink with inflation and a
+        # home held flat in real terms still shows the inflation as a gain.
+        basis = self.home_value if self.home_cost_basis is None else self.home_cost_basis / cpi
+        taxable_gain = self.home_value - selling_costs - basis - cfg.home_sale_exclusion() / cpi
         tax = self._tax_home_sale_gain(taxable_gain) if taxable_gain > 0 else 0.0
         self._deposit_cash(net_proceeds - min(tax, net_proceeds))
         if tax > net_proceeds:
@@ -1825,17 +1862,22 @@ class AccountPortfolio:
         value and accessible-equity reserve to it."""
         down_payment = max(0.0, event["price"] - event["loan"])
         self.pay_lump_sum(down_payment + event["costs"], your_age)
+        # The price and loan are today's dollars; the purchase happens in
+        # dollars of this year (cfg.cpi_index), which is what the basis and the
+        # fixed-rate loan are then fixed in.
+        cpi = cfg.cpi_index(your_age)
         self.home_value = float(event["price"])
-        self.home_cost_basis = self.home_value
+        self.home_cost_basis = self.home_value * cpi
         self.home_carrying_pct = event.get("carrying_pct")
         self.mortgage_monthly = float(event["monthly"])
         self.mortgage_annual = float(event["monthly"]) * 12.0
         self.mortgage_payoff_age = your_age + event["years"]
+        self._mortgage_origin_age = your_age
         self.home_equity = down_payment * cfg.HOME_EQUITY_ACCESSIBLE_PCT
         self.rent_monthly = 0.0
         # Re-anchor the amortization schedule on the NEW loan so equity starts
         # rebuilding from the down payment at this age.
-        self.mortgage_balance = float(event["loan"])
+        self.mortgage_balance = float(event["loan"]) * cpi
         self._mortgage_rate = event["rate"]          # the new loan's own rate
         self._mortgage_pi = _level_payment(
             self.mortgage_balance, self._mortgage_rate, event["years"],
@@ -4033,6 +4075,11 @@ def mortgage_payoff_projection(extra_annual: float = 0.0,
     rent ends it. Kept next to ``_amortize_mortgage_year`` so the two stay
     consistent.
 
+    Like the engine, the loan is nominal: ``extra_annual`` is today's dollars
+    (paid as ``extra_annual * cfg.cpi_index(age)`` dollars of the year), a
+    purchase's loan is set in dollars of its year, and ``total_interest`` adds
+    up each year's interest in today's dollars.
+
     Returns ``{payoff_age, total_interest, years_saved_vs_scheduled}``;
     ``payoff_age`` is None when the loan outlives ``max_age``.
     """
@@ -4057,7 +4104,8 @@ def mortgage_payoff_projection(extra_annual: float = 0.0,
             if e["action"] == cfg.HOME_SELL_RENT:
                 bal, pi = 0.0, 0.0                      # sold: the loan is repaid
             else:
-                bal, rate = e["loan"], e["rate"]        # the new loan's own rate
+                # The new loan's own rate, in dollars of the purchase year.
+                bal, rate = e["loan"] * cfg.cpi_index(age), e["rate"]
                 r = rate / 12.0
                 pi = _level_payment(bal, rate, e["years"])
         if bal <= 0:
@@ -4066,11 +4114,12 @@ def mortgage_payoff_projection(extra_annual: float = 0.0,
                 payoff_age = age
                 break
         else:
-            extra_monthly = extra_annual / 12.0
+            cpi = cfg.cpi_index(age)
+            extra_monthly = extra_annual * cpi / 12.0
             for _ in range(12):
                 if bal <= 0:
                     break
-                interest += bal * r
+                interest += bal * r / cpi
                 bal = bal * (1.0 + r) - pi - extra_monthly
                 if bal < 0:
                     bal = 0.0
