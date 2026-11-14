@@ -10,7 +10,7 @@ A section on the planner's results page. It shows
 The test for each is a quick rule that costs nothing to run (utils/milestones.py).
 A place's spending is built per category against where you live now, and moving
 there sells your home, then buys or rents at that place's prices (utils/place_costs.py
-holds the rough data). Each place has a "Confirm with simulation" button that runs
+holds the sourced data). Each place has a "Confirm with simulation" button that runs
 the real Monte Carlo with the same move, spending, health prices and tax
 (sim_runner.plan_place_check), on the server or in the visitor's browser like the
 other sweeps.
@@ -538,7 +538,7 @@ def _edit_place(st, state: dict, p, pr, here_cost, home: str) -> None:
                 st.number_input("Home price there ($)", min_value=0, max_value=pl.PRICE_MAX, step=10_000,
                                 key=f"ms_price_{pid}", on_change=_on_field, args=args("price"),
                                 help=f"Typical for the area: ${pc.get(p.area_code(home)).price:,}. "
-                                     f"Property tax and insurance: {p.carry(home) * 100:.2f}% a year.")
+                                     f"Property tax (a new buyer's) and insurance: {p.carry(home) * 100:.2f}% a year.")
             elif p.housing == pl.HOUSING_RENT:
                 ensure_default(st, f"ms_rent_{pid}", int(p.monthly_rent(home)))
                 st.number_input("Rent there ($ a month)", min_value=0, max_value=pl.RENT_MAX, step=50,
@@ -616,7 +616,9 @@ def _how_it_works(st, inp, rate: float, basis: dict, source: str, end_age) -> No
             "- **Housing in a place.** Moving sells the home you own at that age. You get its value less "
             "the loan, selling costs and tax on any gain above the exclusion. Then you buy a typical home "
             "there with that money (a loan covers any shortfall, at your plan's new-loan rate) and pay its "
-            "property tax and insurance, or you rent there. Leftover sale money joins your investments. "
+            "property tax and insurance, or you rent there. That rate is a new buyer's tax plus insurance. "
+            "It replaces your own home's tax and insurance, so nothing is counted twice. "
+            "Leftover sale money joins your investments. "
             "A new loan's payment counts at its first-year size. Its principal and interest stay the same "
             "in dollars, so later years cost less after inflation. "
             "*Where you live now* keeps your housing as planned.\n"
@@ -636,9 +638,13 @@ def _how_it_works(st, inp, rate: float, basis: dict, source: str, end_age) -> No
             "replaced. It sets your retirement everyday spending to the place's, scales pre-Medicare "
             "health prices, and applies the place's state tax to retirement years. Your working years "
             "keep the state you live in now.\n\n"
-            "**Rough numbers.** Prices, home values and rents are rough estimates in the shape of "
-            "BEA regional price parities, typical home values and rents, and Numbeo-style ratios abroad. "
-            f"They are not data. Edit any place. {pl.ABROAD_CAVEAT}"
+            "**Where the numbers come from.** Everyday price levels are the US Bureau of Economic "
+            "Analysis regional price parities (2024). Health prices are KFF's 2026 benchmark marketplace "
+            "premiums. Home values are Zillow (September and October 2026) and rents are Zillow "
+            "single-family rents (October 2026); a state's rent is modeled from its metros. Property tax "
+            "is what a new buyer pays, plus 2026 homeowners insurance. Places abroad use Numbeo "
+            "estimates from November 2026. These are typical figures for an area, not your own quote, "
+            f"so edit any place. {pl.ABROAD_CAVEAT}"
         )
 
 
@@ -716,8 +722,9 @@ def render(st, results: dict = None) -> None:
     else:
         st.caption("**Coast FIRE:** stop saving, growth does the rest. **FIRE:** your investments pay for "
                    "life there. Moving sells your home, then buys or rents there. Everyday costs are "
-                   "scaled line by line against where you live now. The numbers are rough, so confirm "
-                   "the places you care about.")
+                   "scaled line by line against where you live now. Prices are sourced data from late "
+                   "2026 (see How this is calculated). They are typical for an area, so confirm the places you "
+                   "care about.")
         homes = pc.home_options()
         ensure_default(st, "ms_home_area", inp.cost.home if inp.cost.home in homes else pc.US_CODE)
         with st.columns(2)[0]:
