@@ -188,6 +188,8 @@ section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stExpa
    every rerun) but are hidden; the odometer in front reads them. Removing them
    froze every st.metric at its first value. */
 .mc-odo-host > :not(.mc-odo):not(.mc-topbar-metric-hint){ display:none !important; }
+.mc-odo-bare{ font-size:0 !important; }
+.mc-odo-bare > .mc-odo{ font-size:var(--mc-odo-fs); }
 
 @media (prefers-reduced-motion: reduce){
   .mc-flash, .mc-pulse::after, [data-testid="stToast"], .mc-entrance, .mc-cascade,
@@ -259,13 +261,17 @@ _ANIM_JS = """
   }
   function buildOdo(node, valTxt, animate){
     var old = node.querySelector(':scope > .mc-odo'); if(old) node.removeChild(old);
-    // Bare text (our own HTML metrics) moves into a hidden span; framework-owned
-    // element children are left exactly where they are and hidden by CSS.
-    Array.prototype.slice.call(node.childNodes).forEach(function(cn){
-      if(cn.nodeType===3 && cn.nodeValue.trim()){
-        var src=D.createElement('span'); src.className='mc-odo-src';
-        node.replaceChild(src, cn); src.appendChild(cn); }
-    });
+    // Nothing the framework owns is moved: React later removes or re-inserts its own
+    // nodes relative to their old parent, and a node moved elsewhere makes that throw
+    // ("NotFoundError: The object can not be found here", seen after Run simulation).
+    // Element children are hidden by CSS. Bare text cannot be hidden by display, so the
+    // host's font-size drops to 0 (.mc-odo-bare) and the odometer keeps the real size.
+    var bare = false;
+    for(var j=0;j<node.childNodes.length;j++){
+      var c0 = node.childNodes[j]; if(c0.nodeType===3 && c0.nodeValue.trim()){ bare = true; break; } }
+    if(bare && !node.classList.contains('mc-odo-bare')){
+      node.style.setProperty('--mc-odo-fs', P.getComputedStyle(node).fontSize);
+      node.classList.add('mc-odo-bare'); }
     node.classList.add('mc-odo-host');
     var wrap = D.createElement('span'); wrap.className='mc-odo'; var cols=[];
     for(var i=0;i<valTxt.length;i++){
@@ -300,6 +306,20 @@ _ANIM_JS = """
     node.classList.remove('mc-flash'); void node.offsetWidth; node.classList.add('mc-flash');
     var tile = node.closest && node.closest('.mc-stat-card, [data-testid="stMetric"], [class*="st-key-mc-tile"]');
     if(tile){ tile.classList.remove('mc-pulse'); void tile.offsetWidth; tile.classList.add('mc-pulse'); }
+  }
+  // The odometer's font size is stored in a variable (the host's own is 0): re-read it
+  // when the window is resized, since a breakpoint can change the metric's size.
+  if(!P.__mcOdoResize){
+    P.__mcOdoResize = true; var rt = null;
+    P.addEventListener('resize', function(){
+      P.clearTimeout(rt);
+      rt = P.setTimeout(function(){
+        D.querySelectorAll('.mc-odo-bare').forEach(function(n){
+          n.classList.remove('mc-odo-bare');
+          n.style.setProperty('--mc-odo-fs', P.getComputedStyle(n).fontSize);
+          n.classList.add('mc-odo-bare'); });
+      }, 150);
+    });
   }
   function odometer(){
     var nodes = D.querySelectorAll('[data-testid="stMetricValue"], .mc-topbar-metric-value, .mc-stat-value');

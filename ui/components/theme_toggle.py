@@ -605,6 +605,14 @@ label[data-baseweb="radio"]:has(input:checked) > div:first-child > div { backgro
 [data-testid="stDataEditor"] [data-testid="stDataFrameResizable"] {
     filter: invert(0.9) hue-rotate(20deg) saturate(0.6) brightness(1.3);
 }
+
+/* ---- Visual QA round 3 (dark) ---- */
+:root { --mc-muted: #bdb4a9; }
+/* Sidebar section icons: dark teal on a dark teal chip was 2.6:1. */
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary :is([data-testid="stExpanderIcon"], [data-testid="stIconMaterial"]),
+section[data-testid="stSidebar"] .mc-sec-ico { color: #5eead4 !important; }
+.stMarkdown .mc-bad { color: #fca5a5 !important; }
+/* -- end Visual QA round 3 (dark) -- */
 </style>
 """
 
