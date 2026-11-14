@@ -48,9 +48,10 @@ def test_area_data_is_complete_and_sane():
     assert set(state_tax_data.STATES) <= set(pc.AREAS)       # every state (and DC) has prices
     for a in pc.AREAS.values():
         for v in (a.goods, a.services, a.utilities, a.health):
-            assert 0.15 <= v <= 2.5, a
+            assert 0.1 <= v <= 3.0, a        # abroad health (local private plan) is down to 0.12
         assert 50_000 <= a.price <= 3_000_000 and 300 <= a.rent <= 10_000, a
-        assert 0.0 <= a.carry <= 0.04, a
+        # New-buyer property tax + insurance: Florida's insurance pushes it to 4.2%, Miami 4.5%.
+        assert 0.0 <= a.carry <= 0.06, a
         assert a.tax == "same" or pl.normalize_tax(a.tax) == a.tax, a
         for c in pc.CATEGORIES:
             assert pc.index(a, c) > 0
