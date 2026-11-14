@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (success-rate spike on small withdrawals)
+- A working or retirement year that needed less than $100 from the portfolio could fail the whole plan. The tax gross-up stops with up to $1 still owed, and the 99% check counted that as a shortfall. In the Mid-career preset (as a bare dict, before the pay table is drawn) a $52.51 working-year deficit delivered $51.96 and failed a $2.25M household. Every path had the same deficit, so success at 55 fell from 61.7% to 37.3% for $200 more spending a year (1,000 runs, common seeds) and came back at the next $200. The check now allows the solver's $1 slack (`_fell_short`); needs of $100 or more are judged exactly as before
+- The 2024-vs-2026 jump in the Mid-career preset (41.1% to 63.4%) was this spike: on the 2024 tables the preset sat on it. With the fix the 2024 tables give 61.5%
+
 ### Changed (2026 tax figures, verified)
 - All tax figures checked against primary sources in November 2026; the report (quotes, links, changed / confirmed) is `docs/data_sources/2026_verification.md`, linked from `docs/TAX_MODEL.md`. Every item marked changed is applied; confirmed items (contribution limits, wage base, earnings test, Roth and student-loan phase-outs, child tax credit, NIIT, Additional Medicare Tax, Social Security taxation, poverty guidelines) are unchanged
 - Federal 2026 (Rev. Proc. 2025-32): ordinary brackets for single, joint and head of household (head of household has its own 24% / 32% tops); standard deduction $32,200 / $16,100 / $24,150 (was 2024's $29,200 / $14,600 / $21,900); 65+ add-on $1,650 / $2,050 (from the Rev. Proc., not the report); LTCG 0% tops $98,900 / $49,450 / $66,200. The Roth conversion target (top of the 12% bracket) follows: $100,800 / $50,400 / $67,450, and a saved 2024 default follows the status. `STANDARD_DEDUCTION_*_2024` names stay as aliases
