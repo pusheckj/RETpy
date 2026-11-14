@@ -17,6 +17,15 @@ All notable changes to this project will be documented in this file. Format: [Ke
 - Contribution limits are the 2026 IRS values ($24,500 401(k), $8,000 catch-up, $11,250 at 60-63, $7,500 IRA, $4,400 / $8,750 HSA, $72,000 415(c)); the model's table is `CONTRIBUTION_LIMITS_2026` and the planner reads it
 - Child tax credit ($2,200 a child under 17, phased out above $200k single / $400k joint, with the refundable part) is applied to working-year federal tax
 
+### Fixed (round 2 UI text, visuals and inputs)
+- Holding an arrow key on a slider no longer drops key presses: the request that follows a key press carried the typed box's old value, which counted as a typed edit and reset the slider
+- Wording: the child tax credit is modeled (working years); the 2024 federal and state tables are said to be 2024 and held flat in today's dollars, next to the 2026 contribution limits. A refund shows as "Federal -$759" with a note that the refundable child tax credit pays out
+- A plan that never succeeds now says so in the "When can you retire?", first-decade stress, withdrawal and sample-path charts instead of drawing empty plots, and the net worth projection takes the stated overspending out of savings each working year
+- The target retirement and partner retirement sliders start at the person's own age
+- Number boxes say when they move a saved value ("Your saved value 400,000 is outside 0 to 250,000, so 250,000 is used."), as sliders already did; sliders also say when their range moved under a value. Ceilings raised to realistic levels (Roth fill-to $750k, salary $10M, RSU $20M, fee 200 bps, match 50%, Social Security $10k a month). Home moves outside the plan get a note
+- After an input edit the top card shows the live net worth and marks the success rate "old inputs"; the tax legend no longer says "working years"; phone stat values wrap instead of ending in "..."; the SWR chart's two labels no longer overprint on a phone
+- Mid-career couple preset: family-sized living costs ($68k a year instead of $35k), 2026 contribution limits
+
 ### Fixed (engine and numbers, round-2 QA)
 - Safe withdrawal rate: "your withdrawal rate" is the portfolio draw in the first year nobody works, divided by the balance at retirement. A partner who still works no longer nets their pay out of year 1 (the sample couple read 0.06%, now 1.6%, and the safe rate moves with it). The tile says which age it uses and that it tests your target retirement age
 - Effective retirement tax rate: the denominator is every dollar taxed (withdrawals, the whole forced RMD, Roth conversions, Social Security, a working partner's pay), not the RMD after its own tax, so it can no longer pass the top bracket

@@ -17,7 +17,7 @@ Key features:
 
 - Account-level tracking across 401(k), Roth IRA, Traditional IRA, HSA, taxable brokerage, and cash
 - Tax-efficient withdrawal ordering that changes at age 59.5
-- Full 2024 US federal income tax brackets (married filing jointly, single, head of household), state income tax for all 50 states and DC (some approximate), and FICA per earner
+- Full US federal income tax brackets (2024 tables; married filing jointly, single, head of household), state income tax for all 50 states and DC (some approximate), and FICA per earner
 - Social Security modeling with claiming-age adjustments (62 through 70)
 - ACA marketplace premium subsidies and Medicare IRMAA surcharges
 - Required Minimum Distributions under SECURE 2.0 rules
@@ -123,7 +123,7 @@ At minimum, users typically edit:
 
 ### Taxes
 
-- Federal income tax brackets (2024; married filing jointly, single and head of household)
+- Federal income tax brackets (2024 tables, held flat in today's dollars; married filing jointly, single and head of household)
 - State income tax for all 50 states and DC (some approximate)
 - FICA (Social Security and Medicare) per earner
 - Long-term capital gains rates with 0% / 15% / 20% thresholds
@@ -169,7 +169,7 @@ At minimum, users typically edit:
 
 Transparency matters. The following are deliberately out of scope:
 
-- City and county income taxes and the child tax credit
+- City and county income taxes, and tax credits other than the child tax credit (modeled in working years only)
 - Federal estate tax and gift tax planning
 - Self-employment tax, SEP-IRA, or Solo 401(k) mechanics
 - Annuity products (immediate, deferred, QLAC)

@@ -26,14 +26,14 @@ try:
                                mortgage_payment, housing_timeline,
                                extra_mortgage_for_age as _extra_for_age,
                                savings_budget, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
-    from utils.formatting import money, money_precise
+    from utils.formatting import money, money_md, money_precise
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float  # type: ignore
     from ui.utils.derived import (advance_mortgage_with_extra,  # type: ignore
                                   current_mortgage_terms, mortgage_payment, housing_timeline,
                                   extra_mortgage_for_age as _extra_for_age,
                                   savings_budget, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
-    from ui.utils.formatting import money, money_precise  # type: ignore
+    from ui.utils.formatting import money, money_md, money_precise  # type: ignore
 
 
 try:
@@ -219,6 +219,18 @@ def _debt_relief(user_overrides: dict) -> list:
     return [pay[0] - p for p in pay] + [pay[0]]
 
 
+def _working_deficit(user_overrides: dict) -> float:
+    """Dollars a working year costs (tax plus spending) beyond take-home pay, else 0.
+    Same figure as the overspend warning (decision_narrative.overspend_gap)."""
+    try:
+        b = savings_budget(user_overrides)
+        income = float(b["income"])
+        gap = float(b["taxes"]["total"]) + float(b["expenses"]) - income
+    except Exception:  # pragma: no cover - a half-built profile must not break the chart
+        return 0.0
+    return gap if income > 0 and gap >= 1 else 0.0
+
+
 @_proj_cache
 def project_net_worth(user_overrides: dict) -> dict:
     """Deterministic forward projection of each account.
@@ -242,6 +254,9 @@ def project_net_worth(user_overrides: dict) -> dict:
     # This year's amounts already leave out this year's debt payments; as the
     # debts are paid off, the simulation's sweep invests what they freed.
     debt_relief = _debt_relief(user_overrides) if auto_mode else []
+    # Spending (and tax) above take-home pay: the simulation pays it out of savings
+    # in every working year, so the projection must too (flat, in today's dollars).
+    deficit = _working_deficit(user_overrides)
 
     scenario = str(user_overrides.get("ACTIVE_RETURN_SCENARIO", "historical")).lower()
     if scenario not in _SCENARIO_RETURNS:
@@ -394,8 +409,10 @@ def project_net_worth(user_overrides: dict) -> dict:
                 if contrib_key == "YOUR_BROKERAGE_CONTRIBUTION" and debt_relief:
                     contribution += debt_relief[min(offset, len(debt_relief) - 1)]
             balances[label] = balances[label] * (1 + r) + contribution
+        if deficit > 0 and offset < n_years - 1:
+            _draw_from_balances(balances, deficit, cash_label)
 
-    return {"ages": ages, "by_account": by_account}
+    return {"ages": ages, "by_account": by_account, "deficit": deficit}
 
 
 def render(st, results: dict = None, chart_key: str = "net_worth_projection_main") -> None:
@@ -478,6 +495,12 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
         from ui.utils.plot_theme import style_fig, show_chart
 
     show_chart(st, fig, chart_key, PLOTLY_CONFIG)
+    if proj.get("deficit", 0) > 0:
+        st.caption(
+            f"Your spending and tax are about {money_md(proj['deficit'], shorten=True)} a year more "
+            "than your take-home pay. This projection takes that amount out of your savings "
+            "each working year, so nothing is added."
+        )
     st.caption(
         f"Real (inflation-adjusted) return: investment accounts "
         f"{_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['investment']*100:.1f}%, "

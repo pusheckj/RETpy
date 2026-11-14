@@ -48,13 +48,20 @@ def _move_partner_retirement(st, target: int, age_gap: int) -> None:
     ss = st.session_state
     n = int(ss.get("ay_partner_later", 0) or 0)
     want = target - age_gap + n
-    age = max(TARGET_MIN, min(TARGET_MAX, want))       # the same range as the slider
+    lo = _retire_floor(safe_int(get_override(st, "PARTNER_AGE", 0), 0))
+    age = max(lo, min(TARGET_MAX, want))               # the same range as the slider
     ss["ay_partner_target_age"] = age
     ss.pop(LATER_NOTE, None)
     if age != want:
-        ss[LATER_NOTE] = (age, f"A retirement age can only be {TARGET_MIN} to {TARGET_MAX}, "
+        ss[LATER_NOTE] = (age, f"A retirement age can only be {lo} to {TARGET_MAX}, "
                                f"so {age} was used.")
     forget_box(st, "ay_partner_target_age")
+
+
+def _retire_floor(age: int) -> int:
+    """Lowest retirement age the sliders offer: the person's own age today (an earlier
+    age has already passed). Never reaches the top, so a slider always has a range."""
+    return max(TARGET_MIN, min(age, TARGET_MAX - 1))
 
 
 def _section_label(st, txt):
@@ -98,7 +105,7 @@ def _lifestyle(st, overrides: dict) -> None:
     with c2:
         ensure_default(st, "rg_leisure_until",
                        safe_int(get_override(st, "EARLY_RETIREMENT_LEISURE_UNTIL_AGE", 70), 70))
-        v = st.number_input("Until age", min_value=50, max_value=100, step=1,
+        v = st.number_input("Until age", min_value=40, max_value=100, step=1,
                             key="rg_leisure_until")
         set_override(st, "EARLY_RETIREMENT_LEISURE_UNTIL_AGE", safe_int(v))
     ensure_default(st, "rg_late_pct", int(round(safe_float(
@@ -109,7 +116,7 @@ def _lifestyle(st, overrides: dict) -> None:
     set_override(st, "LATE_RETIREMENT_LEISURE_DECREASE", v / 100)
     ensure_default(st, "rg_late_from",
                    safe_int(get_override(st, "LATE_RETIREMENT_START_AGE", 75), 75))
-    v = st.number_input("Spend less from age", min_value=55, max_value=100, step=1,
+    v = st.number_input("Spend less from age", min_value=50, max_value=100, step=1,
                         key="rg_late_from")
     set_override(st, "LATE_RETIREMENT_START_AGE", safe_int(v))
 
@@ -136,7 +143,7 @@ def render_retirement_ages(st) -> None:
     has_partner = safe_int(get_override(st, "PARTNER_AGE", 0), 0) > 0
     ensure_default(st, "ay_target_age",
                    safe_int(get_override(st, "TARGET_RETIREMENT_AGE", 60), 60))
-    target = slider_with_box(st, "Target retirement age", TARGET_MIN, TARGET_MAX,
+    target = slider_with_box(st, "Target retirement age", _retire_floor(your_age), TARGET_MAX,
                        1, key="ay_target_age",
                        help="When you plan to stop working.")
     set_override(st, "TARGET_RETIREMENT_AGE", safe_int(target))
@@ -161,12 +168,13 @@ def render_retirement_ages(st) -> None:
         # than storing the clamped value, which would wrongly retire the partner
         # early/late and diverge from the "retire together" intent.
         together_raw = target - age_gap
-        together_in_range = TARGET_MIN <= together_raw <= TARGET_MAX
-        slider_default = max(TARGET_MIN, min(TARGET_MAX, together_raw))
+        p_floor = _retire_floor(partner_age)
+        together_in_range = p_floor <= together_raw <= TARGET_MAX
+        slider_default = max(p_floor, min(TARGET_MAX, together_raw))
         ensure_default(st, "ay_partner_target_age",
                        safe_int(get_override(st, "PARTNER_RETIREMENT_AGE", None) or slider_default,
                                 slider_default))
-        p_target = slider_with_box(st, "Partner's retirement age", TARGET_MIN, TARGET_MAX,
+        p_target = slider_with_box(st, "Partner's retirement age", p_floor, TARGET_MAX,
                              1, key="ay_partner_target_age",
                              help="Your partner's age when they stop working. Set it apart "
                                   "from yours if one of you retires first. The other keeps "
@@ -286,7 +294,7 @@ def render_body(st) -> None:
         ensure_default(st, "rg_your_fra",
                        safe_int(get_override(st, "YOUR_SS_MONTHLY_FRA", 2_000), 2_000))
         v = st.number_input("Your monthly benefit ($)",
-                            min_value=0, max_value=5_000, step=50,
+                            min_value=0, max_value=10_000, step=50,
                             key="rg_your_fra",
                             help="Your monthly benefit at full retirement age. Find yours at "
                                  "https://www.ssa.gov/myaccount. The average is about $1,900/mo.")
@@ -297,7 +305,7 @@ def render_body(st) -> None:
                            safe_int(get_override(st, "PARTNER_SS_MONTHLY_FRA", 1_800), 1_800))
             v = st.number_input("Partner's monthly benefit ($)",
                                 help="Their monthly benefit at full retirement age.",
-                                min_value=0, max_value=5_000, step=50,
+                                min_value=0, max_value=10_000, step=50,
                                 key="rg_partner_fra")
             set_override(st, "PARTNER_SS_MONTHLY_FRA", safe_int(v))
         else:

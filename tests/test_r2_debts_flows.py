@@ -273,11 +273,11 @@ def test_the_years_after_you_box_uses_the_slider_range(goals):
     at.number_input(key="ay_partner_later").set_value(80).run()      # past 99: moved, with a note
     assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] == 99
     assert at.number_input(key="ay_partner_later").value == 46
-    assert any("can only be 25 to 99, so 99 was used" in c.value for c in at.caption)
+    assert any("can only be 36 to 99, so 99 was used" in c.value for c in at.caption)
     assert at.slider(key="ay_partner_target_age").value == 99
     at.number_input(key="ay_partner_later").set_value(-60).run()
-    assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] == 25
-    assert any("so 25 was used" in c.value for c in at.caption)
+    assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] == 36      # the slider starts at their own age
+    assert any("so 36 was used" in c.value for c in at.caption)
 
 
 def test_the_setup_partner_gap_is_moved_into_range_with_a_note(wizard):

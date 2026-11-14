@@ -39,6 +39,15 @@ def render(st, results: dict, chart_key: str = "success_by_age_main") -> None:
     config_snapshot = results.get("config_snapshot", {}) or {}
     target_success_rate = float(config_snapshot.get("TARGET_SUCCESS_RATE", 0.80) or 0.80)
     colors = [_color(r, target_success_rate, st) for r in rates]
+    if max(rates) < 0.005:
+        # Bars of zero height are an empty plot: say what it means instead.
+        st.info(
+            f"No retirement age from {ages[0]} to {ages[-1]} has a chance of success: "
+            f"each one runs out of money in nearly every simulation, so there is no "
+            f"{target_success_rate:.0%} age to mark. Check the spending warning above, "
+            "then earn more, spend less or save more."
+        )
+        return
 
     fig = go.Figure()
     fig.add_trace(go.Bar(

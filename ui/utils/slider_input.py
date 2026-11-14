@@ -10,6 +10,7 @@ Seams (see the module tests in tests/test_slider_input.py):
 - The BOX lives under ``key + "__box"``. Two helper entries sit beside it:
   ``key + "__seen"`` (the slider value the box last showed) and
   ``key + "__note"`` (a short message after a typed value was clamped).
+  ``key + "__moved"`` is a flag, set by the slider's callback and cleared at the next draw.
 - Both widgets use ``on_change`` callbacks. A callback runs BEFORE the next
   draw, so the other widget is already updated when the page redraws (no lag of
   one rerun, and no "created with a default value but also had its value set
@@ -18,6 +19,11 @@ Seams (see the module tests in tests/test_slider_input.py):
   guided setup handing over, a reset), ``__seen`` no longer matches it, so the
   box re-seeds itself on the next draw. ``utils.widget_sync`` also clears the
   helper keys, so both routes work.
+- Holding an arrow key sends the next request BEFORE the browser has the box value
+  the last pass pushed, so that request carries the box's OLD value next to the
+  slider's new one. Streamlit calls that an edit of the box. ``_on_box`` ignores a
+  box that arrives in the same pass as a slider move (nobody edits both at once).
+  Without this the stale box reset the slider and most key presses were lost.
 
 Units: the slider and the box are both in DISPLAY units (percent as 4.0, not
 0.04). The caller converts, as it did with ``st.slider``.
@@ -30,7 +36,8 @@ from typing import Any, Optional
 BOX = "__box"
 SEEN = "__seen"
 NOTE = "__note"
-SUFFIXES = (BOX, SEEN, NOTE)
+MOVED = "__moved"       # the slider's callback ran in this pass (see _on_box)
+SUFFIXES = (BOX, SEEN, NOTE, MOVED)
 
 BOX_WIDTH = 76          # px; "100.00" fits with the pill padding, even on a phone
 
@@ -85,16 +92,29 @@ def _loaded_note(ss, key: str):
     return pair if pair and ss.get(key) == pair[1] else None
 
 
+def _is_number_value(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _loaded_note_for(ss, key: str, was) -> bool:
+    """True when ``widget_sync`` already recorded a note for this key's loaded value ``was``."""
+    pair = (ss.get("_sync_notes") or {}).get(key)
+    return bool(pair) and pair[0] == was
+
+
 def _on_slider(st, key: str, as_int: bool, decimals: int) -> None:
     ss = st.session_state
     (ss.get("_sync_notes") or {}).pop(key, None)
     ss[key + BOX] = _to_box(ss[key], as_int, decimals)
     ss[key + SEEN] = ss[key]
+    ss[key + MOVED] = True
     ss.pop(key + NOTE, None)
 
 
 def _on_box(st, key: str, lo, hi, step, as_int: bool) -> None:
     ss = st.session_state
+    if ss.get(key + MOVED) or ss.get(key) != ss.get(key + SEEN):
+        return                  # the slider moved in this same pass: this box value is a stale echo
     (ss.get("_sync_notes") or {}).pop(key, None)
     decimals = 0 if as_int else _decimals(step)
     value, note = snap(ss.get(key + BOX), lo, hi, step, as_int)
@@ -145,14 +165,22 @@ def slider_with_box(st, label: str, min_value, max_value, step=1, *, key: str,
         inside = min_value <= ss[key] <= max_value
     except TypeError:
         inside = False
+    moved_in = None
     if not inside:                          # a value past the ends (a saved plan, another widget) moves in
-        fitted, _ = snap(ss[key], min_value, max_value, step, as_int)
+        was = ss[key]
+        fitted, _ = snap(was, min_value, max_value, step, as_int)
         ss[key] = min_value if fitted is None else fitted
+        if _is_number_value(was) and not _loaded_note_for(ss, key, was):
+            moved_in = (was, ss[key])
     bkey = key + BOX
+    ss.pop(key + MOVED, None)
     if bkey not in ss or ss.get(key + SEEN) != ss[key]:
         ss[bkey] = _to_box(ss[key], as_int, decimals)     # changed from outside: follow it
         ss[key + SEEN] = ss[key]
         ss.pop(key + NOTE, None)
+    if moved_in:                            # the range moved under the value (e.g. your age): say so
+        ss[key + NOTE] = (f"Your {moved_in[0]:g} is outside {min_value:g} to {max_value:g}, "
+                          f"so {moved_in[1]:g} is used.")
 
     base = "%d" if as_int else f"%.{decimals}f"
     fmt = format or (base + unit.replace("%", "%%") if unit else None)

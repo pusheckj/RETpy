@@ -157,6 +157,15 @@ def _remove_move(st, i: int) -> None:
     _clear_move_widgets(st)
 
 
+def _plan_end(st) -> int:
+    """The age your plan ends (the later of your plan-until and your partner's, in your years)."""
+    try:
+        from utils.household import plan_end_ages
+    except ImportError:  # pragma: no cover
+        from ui.utils.household import plan_end_ages  # type: ignore
+    return plan_end_ages(st.session_state.get("user_overrides", {}) or {})[0]
+
+
 def _num_input(st, label, key, value, **kw):
     ensure_default(st, key, value)
     return st.number_input(label, key=key, **kw)
@@ -172,6 +181,13 @@ def _move_row(st, i: int, event: dict, owns_before: bool) -> dict:
     with c2:
         age = _num_input(st, "At age", f"bp_ev{i}_age", safe_int(event.get("age"), 40),
                          min_value=18, max_value=100, step=1)
+        _your = safe_int(get_override(st, "YOUR_AGE", 30), 30)
+        _end = _plan_end(st)
+        if safe_int(age) < _your:
+            st.caption(f"You are {_your} today, so a move at {safe_int(age)} has already passed "
+                       "and does not change the plan.")
+        elif safe_int(age) > _end:
+            st.caption(f"The plan ends at {_end}, so a move at {safe_int(age)} does not change the plan.")
     out = {"age": safe_int(age), "costs": event.get("costs"),
            "selling_cost_pct": event.get("selling_cost_pct")}
     if kind == 1:

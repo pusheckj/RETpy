@@ -108,6 +108,11 @@ PROFILES = {
     "Mid-career couple (40, kids)": {
         'YOUR_AGE': 40, 'PARTNER_AGE': 38,
         'CHILDREN': [_kid(-5, 2_100), _kid(-2, 1_400)],
+        # Living costs for a family of four on $365k (about $68k a year before the mortgage and
+        # the children). The sample's single-person boxes ($35k) let this household retire at 43.
+        'SPEND_UTILITIES_MONTHLY': 400, 'UTILITIES_MONTHLY': 400,
+        'SPEND_FOOD_MONTHLY': 1_500, 'SPEND_TRANSPORT_MONTHLY': 900, 'SPEND_HEALTH_MONTHLY': 700,
+        'SPEND_DISCRETIONARY_MONTHLY': 1_500, 'SPEND_OTHER_MONTHLY': 700,
         'YOUR_401K': 350_000, 'YOUR_ROTH_IRA': 95_000, 'YOUR_TRADITIONAL_IRA': 20_000,
         'YOUR_HSA': 25_000, 'YOUR_BROKERAGE': 180_000, 'YOUR_CASH': 40_000,
         'PARTNER_401K': 180_000, 'PARTNER_ROTH_IRA': 55_000, 'PARTNER_BROKERAGE': 30_000, 'PARTNER_CASH': 25_000,

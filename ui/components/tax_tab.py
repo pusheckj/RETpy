@@ -32,9 +32,9 @@ def _tax_context(st) -> dict:
     if code == cfg.STATE_NONE:
         state_label = "State (none)"
     elif code == cfg.STATE_FLAT:
-        state_label = "State (flat rate, working years)"
+        state_label = "State (flat rate)"
     else:
-        state_label = f"State ({code}, working years)"
+        state_label = f"State ({code})"
     return {"state_label": state_label, "state_name": cfg.state_display_name(code),
             "status_label": _FILING_LABELS[status],
             "two_returns": cfg.files_two_returns(status, partner),
@@ -71,7 +71,7 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
         st.markdown(
             f"""
             **How taxes are modeled:**
-            - **Federal income tax**: 2024 brackets for {ctx['status_label']} (10% to 37%)
+            - **Federal income tax**: 2024 brackets for {ctx['status_label']} (10% to 37%), held flat in today's dollars
             - **State ({ctx['state_name']})**: that state's 2024 tax table
             - **Payroll (FICA)**: Social Security and Medicare tax on pay
             - **Federal LTCG**: 0% / 15% / 20% based on taxable income
@@ -215,7 +215,7 @@ def render(st, results: dict, chart_key: str = "tax_tab_main") -> None:
     with st.expander("About these tax categories"):
         st.markdown(
             f"""
-            - **Federal income tax**: 2024 brackets for {ctx['status_label']}, applied to ordinary income: wages, Traditional 401(k)/IRA withdrawals, and up to 85% of Social Security.{two_returns}
+            - **Federal income tax**: 2024 brackets for {ctx['status_label']} (held flat in today's dollars), applied to ordinary income: wages, Traditional 401(k)/IRA withdrawals, and up to 85% of Social Security. In working years the child tax credit comes off this tax, so the Federal band can be below zero when the refundable part of the credit pays out.{two_returns}
             - **{ctx['state_label']}**: {ctx['state_name']} income tax from its 2024 tax table (brackets, deductions, and whether it taxes Social Security and retirement income). In retirement years it covers the state tax on withdrawals and conversions; the Federal band also carries capital-gains, Roth-conversion and RMD tax.
             - **Payroll (FICA)**: Social Security and Medicare tax on working-year pay.
             - **LTCG**: long-term capital gains tax (0%, 15% or 20%) on taxable brokerage withdrawals.

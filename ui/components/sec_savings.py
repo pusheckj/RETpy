@@ -204,7 +204,7 @@ def _render_employer_match(st, overrides: dict) -> None:
     ensure_default(st, "sv_match_pct",
                    safe_float(get_override(st, "YOUR_401K_MATCH_PCT", 0.0), 0.0) * 100)
     v = st.number_input(
-        "Your employer's 401(k) match (% of pay)", min_value=0.0, max_value=25.0,
+        "Your employer's 401(k) match (% of pay)", min_value=0.0, max_value=50.0,
         step=0.5, format="%.2f", key="sv_match_pct",
         help="The most your employer adds, like \"we match up to 4%\". If you "
              "contribute less than that, you get less match.",
@@ -214,7 +214,7 @@ def _render_employer_match(st, overrides: dict) -> None:
         ensure_default(st, "sv_partner_match_pct",
                        safe_float(get_override(st, "PARTNER_401K_MATCH_PCT", 0.0), 0.0) * 100)
         v = st.number_input(
-            "Partner's employer 401(k) match (% of pay)", min_value=0.0, max_value=25.0,
+            "Partner's employer 401(k) match (% of pay)", min_value=0.0, max_value=50.0,
             step=0.5, format="%.2f", key="sv_partner_match_pct",
         )
         set_override(st, "PARTNER_401K_MATCH_PCT", float(v) / 100.0)
