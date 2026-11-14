@@ -48,11 +48,12 @@ def _move_partner_retirement(st, target: int, age_gap: int) -> None:
     ss = st.session_state
     n = int(ss.get("ay_partner_later", 0) or 0)
     want = target - age_gap + n
-    age = max(TARGET_MIN, min(TARGET_MAX, want))       # the same range as the slider
+    lo = _retire_floor(safe_int(get_override(st, "PARTNER_AGE", 0), 0))
+    age = max(lo, min(TARGET_MAX, want))               # the same range as the slider
     ss["ay_partner_target_age"] = age
     ss.pop(LATER_NOTE, None)
     if age != want:
-        ss[LATER_NOTE] = (age, f"A retirement age can only be {TARGET_MIN} to {TARGET_MAX}, "
+        ss[LATER_NOTE] = (age, f"A retirement age can only be {lo} to {TARGET_MAX}, "
                                f"so {age} was used.")
     forget_box(st, "ay_partner_target_age")
 
