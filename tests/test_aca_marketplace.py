@@ -370,7 +370,9 @@ def full_run(monkeypatch):
 
 def _median_profile():
     from components.profile_picker import PROFILES
-    return dict(PROFILES["Median US 25-year-old household"])
+    # The partner retires with you at 40, the youngest age scanned: the pre-change quote
+    # (_legacy_quote) has no working partner on an employer plan.
+    return {**PROFILES["Median US 25-year-old household"], "PARTNER_RETIREMENT_AGE": 40}
 
 
 @pytest.mark.parametrize("profile", [dict, _median_profile], ids=["defaults", "median"])

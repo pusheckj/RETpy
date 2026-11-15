@@ -169,37 +169,6 @@ _PAY_KEYS = ("YOUR_COMPENSATION_BY_AGE", "YOUR_SALARY_GROWTH_RATE", "YOUR_OTHER_
 _INCOME_SECTION_OUTPUTS = ("YOUR_COMPENSATION_BY_AGE", "HOUSEHOLD_INCOME_QUICK", "PARTNER_SALARY")
 
 
-def _side_panel():
-    import importlib
-    import os
-    import sys
-    sys.path[:0] = [os.environ["SEAM_TEST_UI"], os.path.dirname(os.environ["SEAM_TEST_UI"])]
-    import streamlit as st
-    for name in ("sec_about_you", "sec_family", "sec_income", "sec_taxes", "sec_house",
-                 "sec_expenses", "sec_debts", "account_inputs", "sec_investments",
-                 "sec_retirement_goals", "sec_assumptions"):        # app.py's order
-        importlib.import_module("components." + name).render(st)
-
-
-@pytest.fixture(scope="module")
-def after_side_panel():
-    """{preset name: (preset, its overrides after the planner's side panel drew it)},
-    for every built-in preset, picked the way profile_picker picks one."""
-    from streamlit.testing.v1 import AppTest
-    from components.profile_picker import PROFILES, PRESET_NAMES
-    os.environ["SEAM_TEST_UI"] = _UI
-    out = {}
-    for name in [n for n in PROFILES if n in PRESET_NAMES and PROFILES[n]]:
-        at = AppTest.from_function(_side_panel, default_timeout=120)
-        at.session_state["user_overrides"] = dict(PROFILES[name])
-        at.session_state["si_comp_customized"] = "YOUR_COMPENSATION_BY_AGE" in PROFILES[name]
-        at.run()
-        assert not at.exception, at.exception
-        out[name] = (dict(PROFILES[name]), dict(at.session_state["user_overrides"]))
-    assert len(out) == 4
-    return out
-
-
 def _engine(overrides, keys=(), paths=0):
     """The config values ``keys`` and the final balances of ``paths`` seeded
     runs at the target age, with ``overrides`` applied the way the planner does."""

@@ -15,12 +15,13 @@ except ImportError:  # pragma: no cover
 try:
     from utils.coerce import safe_int, safe_float, ensure_default
     from utils.formatting import money, money_md, pct
-    from utils.household import plan_end_ages
+    from utils.household import plan_end_ages, retire_floor as _retire_floor, retire_together
     from utils.derived import RETIREMENT_SPENDING_MODES
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md, pct  # type: ignore
-    from ui.utils.household import plan_end_ages  # type: ignore
+    from ui.utils.household import (plan_end_ages, retire_floor as _retire_floor,  # type: ignore
+                                    retire_together)
     from ui.utils.derived import RETIREMENT_SPENDING_MODES  # type: ignore
 
 try:
@@ -56,12 +57,6 @@ def _move_partner_retirement(st, target: int, age_gap: int) -> None:
         ss[LATER_NOTE] = (age, f"A retirement age can only be {lo} to {TARGET_MAX}, "
                                f"so {age} was used.")
     forget_box(st, "ay_partner_target_age")
-
-
-def _retire_floor(age: int) -> int:
-    """Lowest retirement age the sliders offer: the person's own age today (an earlier
-    age has already passed). Never reaches the top, so a slider always has a range."""
-    return max(TARGET_MIN, min(age, TARGET_MAX - 1))
 
 
 def _section_label(st, txt):
@@ -167,10 +162,8 @@ def render_retirement_ages(st) -> None:
         # (retire together) until the user deliberately moves the slider -- rather
         # than storing the clamped value, which would wrongly retire the partner
         # early/late and diverge from the "retire together" intent.
-        together_raw = target - age_gap
         p_floor = _retire_floor(partner_age)
-        together_in_range = p_floor <= together_raw <= TARGET_MAX
-        slider_default = max(p_floor, min(TARGET_MAX, together_raw))
+        slider_default, together_in_range = retire_together(st.session_state.get("user_overrides", {}))
         ensure_default(st, "ay_partner_target_age",
                        safe_int(get_override(st, "PARTNER_RETIREMENT_AGE", None) or slider_default,
                                 slider_default))

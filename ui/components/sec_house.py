@@ -27,11 +27,13 @@ except ImportError:  # pragma: no cover
 try:
     from utils.overrides import get_override, set_override
     from utils.derived import housing_timeline, mortgage_schedule, extra_mortgage_for_age
+    from utils.expense_categories import RENT_DEFAULT, owns_home
     from components.sec_expenses import _money_input
 except ImportError:  # pragma: no cover
     from ui.utils.overrides import get_override, set_override  # type: ignore
     from ui.utils.derived import (housing_timeline, mortgage_schedule,  # type: ignore
                                   extra_mortgage_for_age)
+    from ui.utils.expense_categories import RENT_DEFAULT, owns_home  # type: ignore
     from ui.components.sec_expenses import _money_input  # type: ignore
 
 # Plain-language choices for a move, by what you have just before it.
@@ -57,8 +59,7 @@ def _housing(st) -> None:
     _section_label(st, "Housing")
     # Own when there is a home value or a payment (cfg.is_renter's rule): a mortgage
     # with no home value is still a housing cost, and "Renting" would erase it.
-    owns_default = (safe_int(get_override(st, "HOME_VALUE", 0), 0) > 0
-                    or safe_int(get_override(st, "MORTGAGE_MONTHLY", 0), 0) > 0)
+    owns_default = owns_home(st.session_state.get("user_overrides", {}) or {})
     ensure_default(st, "se_rent_own", "Own home" if owns_default else "Renting")
     status = st.radio("Rent or own?", ["Renting", "Own home"], horizontal=True, key="se_rent_own")
     owns = status == "Own home"
@@ -93,7 +94,7 @@ def _housing(st) -> None:
         for k in ("HOME_VALUE", "MORTGAGE_BALANCE", "MORTGAGE_MONTHLY", "MORTGAGE_YEARS_REMAINING"):
             set_override(st, k, 0)
         _money_input(st, "Monthly rent", "se_rent_monthly", "SPEND_RENT_MONTHLY",
-                     1_500, 20_000, 50)
+                     RENT_DEFAULT, 20_000, 50)
 
 
 def _migrate_legacy_move(st) -> None:

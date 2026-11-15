@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from typing import Dict, NamedTuple, Tuple
 
+try:
+    from utils.coerce import safe_int
+except ImportError:  # pragma: no cover
+    from ui.utils.coerce import safe_int  # type: ignore
+
 
 class Category(NamedTuple):
     label: str
@@ -24,6 +29,7 @@ class Category(NamedTuple):
     help: str = ""
 
 
+RENT_DEFAULT = 1_500   # the House section's monthly rent when none is entered
 HOUSING = "Housing"
 HOUSING_KEYS = ("MORTGAGE_MONTHLY", "SPEND_RENT_MONTHLY")   # owner, renter
 HOUSING_STATEMENT = ("Housing",)
@@ -63,3 +69,35 @@ INPUTS: Dict[str, Tuple[str, int]] = {
     **{c.key: (c.widget, c.max_value) for c in CATEGORIES},
 }
 MIRRORS: Dict[str, str] = {c.key: c.mirror for c in CATEGORIES if c.mirror}
+
+
+def owns_home(overrides: dict) -> bool:
+    """Own (a home value or a mortgage payment, as cfg.is_renter decides) or rent."""
+    return (safe_int(overrides.get("HOME_VALUE", 0), 0) > 0
+            or safe_int(overrides.get("MORTGAGE_MONTHLY", 0), 0) > 0)
+
+
+def expense_defaults(overrides: dict, has_partner: bool) -> Dict[str, int]:
+    """What the Expenses and House sections store for each box ``overrides`` leaves out
+    (a missing key, or None): the category's default, its mirror key alongside, and
+    rent for a renter (an owner pays through the mortgage, so no rent). A renter has
+    no home. The partner's spending only with a partner."""
+    out: Dict[str, int] = {}
+
+    def fill(key: str, value: int) -> None:
+        if overrides.get(key) is None:
+            out[key] = value
+
+    for c in CATEGORIES:
+        if c.partner_only and not has_partner:
+            continue
+        fill(c.key, c.default)
+        if c.mirror:
+            fill(c.mirror, out.get(c.key, overrides.get(c.key)))
+    if owns_home(overrides):
+        fill("SPEND_RENT_MONTHLY", 0)
+    else:
+        fill("SPEND_RENT_MONTHLY", RENT_DEFAULT)
+        for key in ("HOME_VALUE", "MORTGAGE_BALANCE", "MORTGAGE_MONTHLY", "MORTGAGE_YEARS_REMAINING"):
+            fill(key, 0)
+    return out

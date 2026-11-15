@@ -407,6 +407,8 @@ KEEP_AMOUNTS_MODE = "Auto-invest what's left (keep my amounts)"
 CUSTOM_PCT_MODE = "Custom %"
 MANUAL_MODE = "Manual amounts"
 SAVINGS_MODES = [AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, CUSTOM_PCT_MODE, MANUAL_MODE]
+# The employer 401(k) match when none is entered: none. (config.py's 4% is its sample household's.)
+EMPLOYER_MATCH_DEFAULT = 0.0
 # The other two "pick one of these stored strings" settings. widget_sync checks a loaded
 # value against them, so an unknown (renamed or hand-edited) string falls back to the first.
 RETIREMENT_SPENDING_MODES = ["Same as today's expenses", "% of today's expenses",
@@ -502,6 +504,26 @@ def sidebar_savings_budget(state) -> Dict[str, object]:
         if state.get(widget) is not None:
             overrides[key] = safe_float(state[widget], 0.0) / 100.0
     return savings_budget(overrides, custom_pcts=pcts)
+
+
+def auto_stored_amounts(allocation: Dict[str, int]) -> Dict[str, int]:
+    """The contribution amounts Auto-allocate stores (components/sec_savings._render_auto).
+    Like "keep my amounts", the simulation invests everything left each year (its
+    brokerage sweep), so the brokerage figure shown is this year's sweep, not a
+    minimum to store: stored, the engine would enforce it as a floor in every working
+    year and sell investments to fund it whenever a later year leaves less."""
+    return {key: 0 if "BROKERAGE" in key else int(amount) for key, amount in allocation.items()}
+
+
+def auto_allocate_defaults(overrides: dict) -> Dict[str, int]:
+    """Auto-allocate's stored contribution amounts for ``overrides`` (the Investments
+    section's own figures: sidebar_savings_budget on a plan with no widgets yet)."""
+    return auto_stored_amounts(sidebar_savings_budget({"user_overrides": overrides})["amounts"])
+
+
+def has_contributions(overrides: dict) -> bool:
+    """Does ``overrides`` already say how much goes into some account each year?"""
+    return any(overrides.get(k) is not None for k in CONTRIBUTION_KEYS)
 
 
 def partner_roth_allowed(overrides: dict, amounts: dict) -> float:
