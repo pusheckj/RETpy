@@ -167,8 +167,10 @@ def test_presets_and_sensitivity_grid_use_the_2026_limits():
     from components import profile_picker as pp
     from components import sensitivity_tab as stab
     lim = cfg.CONTRIBUTION_LIMITS_2026
-    young = pp.PROFILES["Young professional (28, single)"]
-    couple = pp.PROFILES["Mid-career couple (40, kids)"]
+    from utils.config_builder import build_config_overrides
+    # the presets state no amounts: Auto-allocate fills the 401(k), IRA and HSA to the limits
+    young = build_config_overrides(pp.PROFILES["Young professional (28, single)"])
+    couple = build_config_overrides(pp.PROFILES["Mid-career couple (40, kids)"])
     assert young["YOUR_401K_CONTRIBUTION"] == couple["YOUR_401K_CONTRIBUTION"] == lim["401k"]
     assert young["YOUR_BACKDOOR_ROTH"] == lim["ira"]
     assert young["YOUR_HSA_CONTRIBUTION"] == lim["hsa_individual"]      # single, no kids

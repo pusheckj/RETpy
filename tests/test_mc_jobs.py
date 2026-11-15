@@ -22,8 +22,12 @@ from retirement_sim import mc_jobs  # noqa: E402
 from utils import browser_compute as bc  # noqa: E402
 from utils import sim_runner as sr  # noqa: E402
 
-SINGLE = {"YOUR_AGE": 30, "PARTNER_AGE": 0, "FILING_STATUS": "Single", "YOUR_BASE_SALARY": 90_000,
-          "YOUR_401K": 40_000, "YOUR_CASH": 20_000, "TARGET_RETIREMENT_AGE": 55}
+# A plan that names its household (ages) is filled in like the side panel's (config_builder.
+# sidebar_defaults): rent, living costs, Auto-allocate. The pay and rent are chosen so the
+# success rate at 50 sits mid-range, where a small input change can move it both ways.
+SINGLE = {"YOUR_AGE": 30, "PARTNER_AGE": 0, "FILING_STATUS": "Single", "YOUR_BASE_SALARY": 130_000,
+          "YOUR_401K": 40_000, "YOUR_CASH": 20_000, "TARGET_RETIREMENT_AGE": 55,
+          "SPEND_RENT_MONTHLY": 500}
 
 
 @pytest.fixture(autouse=True)
@@ -87,7 +91,8 @@ def test_a_fresh_interpreter_with_only_the_job_matches_the_server():
     """What the browser does: start from config defaults, apply the job's plain
     data snapshot, run the calls. Must equal the server, bit for bit."""
     ov = {**SINGLE, "HOME_VALUE": 400_000, "MORTGAGE_BALANCE": 250_000, "MORTGAGE_MONTHLY": 2_000,
-          "MORTGAGE_YEARS_REMAINING": 25, "HOUSE_MOVE_ENABLED": True}
+          "MORTGAGE_YEARS_REMAINING": 25, "HOUSE_MOVE_ENABLED": True,
+          "YOUR_401K_CONTRIBUTION": 5_000}      # stated, so the extra payment is the only change
     plan = sr.plan_mortgage_paydown(ov, 40, 55, extra_grid=[0, 12_000])
     assert plan.job["patches"][1] == {"EXTRA_MORTGAGE_PAYMENT_ANNUAL": 12_000.0}
     server = [mc_jobs.dumps(r) for r in sr.run_plan_calls(plan)]

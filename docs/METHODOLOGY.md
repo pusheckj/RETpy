@@ -298,7 +298,7 @@ When `GLIDE_PATH_ENABLED = True`, the stock/bond mix shifts with age:
 
 | Age    | Stocks | Bonds |
 |--------|--------|-------|
-| ≤ retirement age | 90% | 10% |
+| ≤ retirement age | 80% (`STOCK_ALLOCATION`, which is also `GLIDE_PATH_START_STOCK_PCT`) | 20% |
 | 75+              | 60% | 40% |
 | between          | linear interpolation |
 

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 try:
     from utils.coerce import safe_int
+    from utils.age_limits import TARGET_MIN, TARGET_MAX
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int  # type: ignore
+    from ui.utils.age_limits import TARGET_MIN, TARGET_MAX  # type: ignore
 
 JUST_ME, SPOUSE, PARTNER = "Just me", "Me and my spouse", "Me and my partner (not married)"
 HOUSEHOLDS = [JUST_ME, SPOUSE, PARTNER]
@@ -78,6 +80,41 @@ def has_partner(values: dict) -> bool:
     """cfg.has_partner() for an overrides dict (or a run's config snapshot):
     PARTNER_AGE > 0, falling back to the config's when the dict has none."""
     return safe_int(_value(values, "PARTNER_AGE"), 0) > 0
+
+
+def retire_floor(age: int) -> int:
+    """Lowest retirement age the sliders offer: the person's own age today (an earlier
+    age has already passed). Never reaches the top, so a slider always has a range."""
+    return max(TARGET_MIN, min(age, TARGET_MAX - 1))
+
+
+def retire_together(overrides: dict) -> tuple:
+    """(the partner's age in the year YOU retire, clamped to the slider's range; whether it
+    fitted in that range without clamping). The Retirement section starts the partner's
+    retirement age here, and stores None (retire together) when it cannot be shown."""
+    target = safe_int(overrides.get("TARGET_RETIREMENT_AGE", 60), 60)
+    gap = safe_int(overrides.get("YOUR_AGE", 30), 30) - safe_int(overrides.get("PARTNER_AGE", 0), 0)
+    raw = target - gap
+    floor = retire_floor(safe_int(overrides.get("PARTNER_AGE", 0), 0))
+    return max(floor, min(TARGET_MAX, raw)), floor <= raw <= TARGET_MAX
+
+
+def partner_defaults(overrides: dict) -> dict:
+    """What the side panel stores for the partner settings ``overrides`` leaves out
+    (a missing key, or None). Only when the dict says who is in the plan (PARTNER_AGE):
+
+    * no partner (PARTNER_AGE <= 0): every partner amount 0, the partner's own ages None;
+    * a partner: retires the year you do (None when that age is off the slider), plans
+      to your plan-until age and claims Social Security at your claim age.
+    """
+    if overrides.get("PARTNER_AGE") is None:
+        return {}
+    if safe_int(overrides["PARTNER_AGE"], 0) <= 0:
+        return {**dict.fromkeys(PARTNER_AMOUNT_KEYS, 0), **dict.fromkeys(PARTNER_OPTIONAL_KEYS)}
+    together, fits = retire_together(overrides)
+    return {"PARTNER_RETIREMENT_AGE": together if fits else None,
+            "PARTNER_PLAN_UNTIL_AGE": safe_int(_value(overrides, "PLAN_UNTIL_AGE"), 95),
+            "PARTNER_SS_CLAIM_AGE": safe_int(_value(overrides, "SS_CLAIM_AGE"), 67)}
 
 
 def plan_end_ages(values: dict) -> tuple:

@@ -472,8 +472,8 @@ Shift from stocks to bonds over retirement.
 | Parameter | Default | Description |
 |---|---|---|
 | `GLIDE_PATH_ENABLED` | `True` | Toggle glide path (otherwise uses fixed `STOCK_ALLOCATION`/`BOND_ALLOCATION`). |
-| `GLIDE_PATH_START_STOCK_PCT` | `0.90` | Stock allocation at retirement. |
-| `GLIDE_PATH_START_BOND_PCT` | `0.10` | Bond allocation at retirement. |
+| `GLIDE_PATH_START_STOCK_PCT` | `0.80` | Stock allocation at retirement. Equal to `STOCK_ALLOCATION`, so the stock share never steps up when you retire. The side panel starts from the same value. |
+| `GLIDE_PATH_START_BOND_PCT` | `0.20` | Bond allocation at retirement. |
 | `GLIDE_PATH_END_AGE` | `75` | Target age for end allocation. |
 | `GLIDE_PATH_END_STOCK_PCT` | `0.60` | Stock allocation at `GLIDE_PATH_END_AGE`. |
 | `GLIDE_PATH_END_BOND_PCT` | `0.40` | Bond allocation at `GLIDE_PATH_END_AGE`. |

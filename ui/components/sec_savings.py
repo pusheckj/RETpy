@@ -14,6 +14,7 @@ try:
     from utils.derived import (
         KEEP_AMOUNTS_MODE, SAVINGS_MODES, SAVINGS_MODE_LABELS,
         sidebar_savings_budget, custom_pct_defaults, custom_pct_amounts, pct_widget_key,
+        auto_stored_amounts, EMPLOYER_MATCH_DEFAULT,
     )
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
@@ -21,6 +22,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.derived import (  # type: ignore
         KEEP_AMOUNTS_MODE, SAVINGS_MODES, SAVINGS_MODE_LABELS,
         sidebar_savings_budget, custom_pct_defaults, custom_pct_amounts, pct_widget_key,
+        auto_stored_amounts, EMPLOYER_MATCH_DEFAULT,
     )
 
 try:
@@ -185,7 +187,7 @@ def render_body(st) -> None:
         base_sal = safe_int(get_override(st, "YOUR_BASE_SALARY", 0), 0)
         deferral = min(safe_int(get_override(st, "YOUR_401K_CONTRIBUTION", 0), 0),
                        int(cfg.get_401k_limit(age, cfg.CURRENT_YEAR)), base_sal)
-        match_pct = safe_float(get_override(st, "YOUR_401K_MATCH_PCT", 0.0), 0.0)
+        match_pct = safe_float(get_override(st, "YOUR_401K_MATCH_PCT", EMPLOYER_MATCH_DEFAULT), EMPLOYER_MATCH_DEFAULT)
         match = min(deferral, int(match_pct * base_sal))
         room = max(0, total_limit - deferral - match)
         est = min(int(atp / 100.0 * base_sal), room)
@@ -202,7 +204,7 @@ def render_body(st) -> None:
 def _render_employer_match(st, overrides: dict) -> None:
     """Employer 401(k) match inputs (yours, and your partner's if any)."""
     ensure_default(st, "sv_match_pct",
-                   safe_float(get_override(st, "YOUR_401K_MATCH_PCT", 0.0), 0.0) * 100)
+                   safe_float(get_override(st, "YOUR_401K_MATCH_PCT", EMPLOYER_MATCH_DEFAULT), EMPLOYER_MATCH_DEFAULT) * 100)
     v = st.number_input(
         "Your employer's 401(k) match (% of pay)", min_value=0.0, max_value=50.0,
         step=0.5, format="%.2f", key="sv_match_pct",
@@ -212,7 +214,7 @@ def _render_employer_match(st, overrides: dict) -> None:
     set_override(st, "YOUR_401K_MATCH_PCT", float(v) / 100.0)
     if safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0:
         ensure_default(st, "sv_partner_match_pct",
-                       safe_float(get_override(st, "PARTNER_401K_MATCH_PCT", 0.0), 0.0) * 100)
+                       safe_float(get_override(st, "PARTNER_401K_MATCH_PCT", EMPLOYER_MATCH_DEFAULT), EMPLOYER_MATCH_DEFAULT) * 100)
         v = st.number_input(
             "Partner's employer 401(k) match (% of pay)", min_value=0.0, max_value=50.0,
             step=0.5, format="%.2f", key="sv_partner_match_pct",
@@ -235,8 +237,8 @@ def _render_auto(st, budget: dict, overrides: dict) -> None:
     # shown is this year's sweep, not a minimum to store: stored, the engine
     # enforces it as a floor in EVERY working year and sells investments to
     # fund it whenever a later year leaves less (a new home, children).
-    for key, amount in allocation.items():
-        set_override(st, key, 0 if "BROKERAGE" in key else int(amount))
+    for key, amount in auto_stored_amounts(allocation).items():
+        set_override(st, key, amount)
 
     st.caption(
         "Fills accounts in this order: **401(k) → HSA → Roth IRA → Taxable brokerage** "

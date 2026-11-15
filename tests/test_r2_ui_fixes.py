@@ -178,7 +178,9 @@ def test_mid_career_couple_spends_like_a_family():
     living = sum(p[k] for k in ("SPEND_UTILITIES_MONTHLY", "SPEND_FOOD_MONTHLY", "SPEND_TRANSPORT_MONTHLY",
                                 "SPEND_HEALTH_MONTHLY", "SPEND_DISCRETIONARY_MONTHLY", "SPEND_OTHER_MONTHLY"))
     assert living >= 5_000                                    # a family of four, not the single-person boxes
-    assert p["YOUR_401K_CONTRIBUTION"] == 24_500 and p["YOUR_HSA_CONTRIBUTION"] == 8_750
+    from utils.config_builder import build_config_overrides
+    built = build_config_overrides(p)           # Auto-allocate fills the amounts
+    assert built["YOUR_401K_CONTRIBUTION"] == 24_500 and built["YOUR_HSA_CONTRIBUTION"] == 8_750
 
 
 # ---- the top card -----------------------------------------------------------

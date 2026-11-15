@@ -159,6 +159,49 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
     if escrow_pct is not None and "HOME_CARRYING_COST_PCT" not in user_overrides:
         out["HOME_CARRYING_COST_PCT"] = escrow_pct
 
+    # 6. What the side panel would store for the inputs left out (see below).
+    merged = {**user_overrides, **out}
+    for key, value in sidebar_defaults(merged).items():
+        if merged.get(key) is None:
+            out[key] = value
+
+    return out
+
+
+def sidebar_defaults(overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """What the side panel would store for the inputs ``overrides`` leaves out.
+
+    The side panel writes a value for every input it draws, so a plan that went
+    through it carries its boxes' defaults (the expense boxes, the match, a partner's
+    ages), while overrides that did not (a preset, a test, a tool) would run on the
+    config's sample values instead. This gives such overrides the same values, using
+    the panel's own helpers. It never replaces a value that is there, and a plan
+    saved from the side panel holds all of them, so it changes nothing for it.
+
+    Only for overrides that say who is in the plan (``YOUR_AGE`` and ``PARTNER_AGE``).
+    Any other dict is a patch on the config's own sample household, and mixing the
+    panel's blank-slate boxes into that would describe nobody. The core household
+    inputs (ages, pay, balances, the home loan) are never filled: they stay the config's.
+    """
+    if overrides.get("YOUR_AGE") is None or overrides.get("PARTNER_AGE") is None:
+        return {}
+    try:
+        from utils import derived, expense_categories, household
+    except ImportError:  # pragma: no cover
+        from ui.utils import derived, expense_categories, household  # type: ignore
+
+    out: Dict[str, Any] = {}
+    out.update(household.partner_defaults(overrides))
+    has_partner = household.has_partner(overrides)
+    out.update(expense_categories.expense_defaults(overrides, has_partner))
+    for key in ("YOUR_401K_MATCH_PCT", "PARTNER_401K_MATCH_PCT"):
+        out[key] = derived.EMPLOYER_MATCH_DEFAULT
+    # Auto-allocate stores the amounts it works out, so a plan in that mode that has
+    # none yet gets them (one that has some keeps them). They follow from everything above.
+    mode = str(overrides.get("SAVINGS_MODE", derived.AUTO_ALLOCATE_MODE))
+    if mode == derived.AUTO_ALLOCATE_MODE and not derived.has_contributions(overrides):
+        filled = {**overrides, **{k: v for k, v in out.items() if overrides.get(k) is None}}
+        out.update(derived.auto_allocate_defaults(filled))
     return out
 
 

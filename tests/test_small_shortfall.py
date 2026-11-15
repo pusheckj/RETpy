@@ -56,6 +56,10 @@ def _bare_preset(extra_spending: int) -> dict:
     sample table is set explicitly to keep the case."""
     ov = dict(PROFILES["Mid-career couple (40, kids)"])
     ov["YOUR_COMPENSATION_BY_AGE"] = copy.deepcopy(asim.cfg.YOUR_COMPENSATION_BY_AGE)
+    # ... with the contributions the preset used to state (stated, Auto-allocate leaves them
+    # alone; its own would fill the IRAs too and remove the deficit).
+    lim = asim.cfg.CONTRIBUTION_LIMITS_2026
+    ov.update({"YOUR_401K_CONTRIBUTION": lim["401k"], "YOUR_HSA_CONTRIBUTION": lim["hsa_family"]})
     ov["SPEND_OTHER_MONTHLY"] = ov["SPEND_OTHER_MONTHLY"] + extra_spending / 12.0
     return ov
 

@@ -65,6 +65,19 @@ print(f"Success rate:     {result['success_rate']:.1%}")
 print(f"Median end value: ${result['median_ending_balance']:,.0f}")
 ```
 
+To run a UI preset (or your own overrides dict) from Python, the way the app does, use `run_full_analysis` from the UI package. A dict that names its household (`YOUR_AGE` and `PARTNER_AGE`) is filled in with the side panel's defaults for anything it leaves out (expense boxes, 0% employer match, Auto-allocate saving, the partner's retirement, plan-until and claim ages), so it gives the same result as the same plan after the side panel drew it. Values you state are never replaced.
+
+```python
+import sys
+sys.path[:0] = ["ui"]
+from components.profile_picker import PROFILES
+from utils.sim_runner import run_full_analysis
+
+result = run_full_analysis(dict(PROFILES["Mid-career couple (40, kids)"]),
+                           n_simulations=1000, target_retirement_age=55)
+print(result["earliest_retirement_age"], result["primary_result"]["success_rate"])
+```
+
 ## Try the interactive UI
 
 A polished Streamlit UI ships with the package: a welcome screen (Money check-up or Retirement planner), a short guided setup, a linear sidebar of input sections (About you, Family, Income, Taxes, House, Expenses, Debts, Accounts, Investments, Retirement, Assumptions), and a results page that updates as you edit. It includes Plotly charts for Monte Carlo fan projections, success-by-age curves, allocation glide paths and tax flow, a **Freedom milestones** section (net worth rungs, Coast FIRE and FIRE in places you can edit, and other markers of freedom, each with a *Confirm with simulation* button), a **Debt payoff** section (debt-free date, avalanche vs snowball, a pay-more what-if and plain-language *Things to know*), plus a What-if section for scenario comparisons.

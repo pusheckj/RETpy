@@ -98,12 +98,12 @@ def render_investing_body(st) -> None:
                     key="sa_glide_enable")
     set_override(st, "GLIDE_PATH_ENABLED", bool(v))
     if st.session_state.get("sa_glide_enable", True):
-        cur_start = max(50.0, min(100.0, as_fraction(get_override(st, "GLIDE_PATH_START_STOCK_PCT", 0.90), 0.90) * 100))
+        cur_start = max(50.0, min(100.0, as_fraction(get_override(st, "GLIDE_PATH_START_STOCK_PCT", cfg.GLIDE_PATH_START_STOCK_PCT), cfg.GLIDE_PATH_START_STOCK_PCT) * 100))
         ensure_default(st, "sa_glide_start", cur_start)
         v = slider_with_box(st, "Stock % at retirement", 50, 100, 5, key="sa_glide_start", unit="%",
                             help="Your stock share on the day you retire.")
         set_override(st, "GLIDE_PATH_START_STOCK_PCT", v / 100)
-        cur_end = max(20.0, min(80.0, as_fraction(get_override(st, "GLIDE_PATH_END_STOCK_PCT", 0.60), 0.60) * 100))
+        cur_end = max(20.0, min(80.0, as_fraction(get_override(st, "GLIDE_PATH_END_STOCK_PCT", cfg.GLIDE_PATH_END_STOCK_PCT), cfg.GLIDE_PATH_END_STOCK_PCT) * 100))
         ensure_default(st, "sa_glide_end", cur_end)
         v = slider_with_box(st, "Stock % at age 75", 20, 80, 5, key="sa_glide_end", unit="%",
                             help="Your stock share at age 75. It slides from the retirement "

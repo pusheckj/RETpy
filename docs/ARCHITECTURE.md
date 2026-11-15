@@ -51,6 +51,33 @@ single-threaded state for the duration of one simulation run.** There is no
 per-run config object — every UI-triggered simulation temporarily rewrites
 the one shared module, runs, then rewrites it back.
 
+## Overrides that skipped the side panel
+
+The side panel writes a value for every input it draws (the expense boxes, the
+employer match, Auto-allocate's contribution amounts, the partner's retirement,
+plan-until and claim ages), so a plan that went through it carries them all. A
+preset, a test or a script that passes a bare dict to the engine would otherwise
+simulate the config's sample values for those instead, and get a different answer
+for the same household.
+
+`config_builder.build_config_overrides` closes that gap with one function,
+`sidebar_defaults`: for a dict that names its household (`YOUR_AGE` and
+`PARTNER_AGE`) it fills what the dict leaves out (a missing key or `None`) with
+the side panel's own defaults, through the panel's own helpers
+(`expense_categories.expense_defaults`, `household.partner_defaults`,
+`derived.auto_allocate_defaults`). It never replaces a value that is there, so a
+saved profile (which holds all of them) is unchanged. Core inputs (ages, pay,
+balances, the home loan) are not filled; a dict that does not name its household is
+a patch on the config's sample household and is left alone. Auto-allocate fills the
+contribution amounts only when the dict states none; once any is stated (a saved
+profile, a Manual or Keep-my-amounts plan) they are kept. `tests/test_preset_defaults.py`
+checks that every preset, run directly, reaches the engine as it does after the side
+panel drew it.
+
+Where a default existed in two places they now agree in one: the glide path starts at
+`cfg.GLIDE_PATH_START_STOCK_PCT` (80%, the accumulation mix) in the side panel as well
+as in the config.
+
 ### Why this makes `config.py` high-risk to split into submodules
 
 Because overrides are applied via `setattr(cfg, key, value)` where `cfg` is
