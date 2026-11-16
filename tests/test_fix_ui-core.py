@@ -272,11 +272,11 @@ class TestOtherStateTax:
         ca_hi = derived.compute_taxes({"YOUR_BASE_SALARY": 250_000, "STATE_CHOICE": "CA",
                                        "YOUR_MARGINAL_TAX_RATE": 0.5})["state"]
         # California's 2026 joint schedule above its $11,800 deduction, less one
-        # $158 personal exemption credit (a one-person return), plus 1.1% State
+        # $158 personal exemption credit (a one-person return), plus 1.3% State
         # Disability Insurance on wages.
         rules = cfg.state_tax_rules("CA", "MFJ", people=1)
         expected = (cfg.progressive_tax(rules["brackets"], 250_000 - 11_800) - 158
-                    + 0.011 * 250_000)
+                    + 0.013 * 250_000)
         assert ca_lo == ca_hi == pytest.approx(expected, abs=1.0)
         none = derived.compute_taxes({"YOUR_BASE_SALARY": 250_000,
                                       "STATE_CHOICE": "No state tax",

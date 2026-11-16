@@ -79,8 +79,8 @@ class TestTakeHomeByHand:
         # 229.12 + 628.04 + 1,256.32 + 1,996.44 + 2,511.84 + 9.3% x 37,806,
         # less two $158 personal exemption credits
         ca_income = 229.12 + 628.04 + 1_256.32 + 1_996.44 + 2_511.84 + 0.093 * 37_806 - 316
-        assert t["state"] == pytest.approx(ca_income + 0.011 * 200_000)   # + SDI
-        assert t["state_payroll"] == pytest.approx(2_200.0)
+        assert t["state"] == pytest.approx(ca_income + 0.013 * 200_000)   # + SDI
+        assert t["state_payroll"] == pytest.approx(2_600.0)
         assert t["fica"] == pytest.approx(200_000 * 0.0765)
         # Joint income tax is shared pro-rata to each person's income.
         assert t["you"]["federal"] == pytest.approx(26_340.0 * 0.6)

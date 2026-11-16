@@ -145,14 +145,14 @@ STATES = {
         # Tax): 1% of taxable income above $1,000,000, every filing status.
         surtax={"threshold": 1_000_000, "rate": 0.01},
         social_security="exempt", retirement_exclusion=None,
-        hsa_taxed=True, payroll={"rate": 0.011, "wage_cap": None},
+        hsa_taxed=True, payroll={"rate": 0.013, "wage_cap": None},
         note="2026 brackets, standard deduction and exemption credits (personal "
              "$158, senior $158, dependent $491 -- the dependent count is "
              "children under 17), plus the 1% Behavioral Health Services Tax "
              "above $1M of taxable income. The credit phase-out uses estimated "
              "2026 thresholds and treats income after the deduction plus the "
-             "deduction as AGI. State Disability Insurance is the 2024 rate "
-             "(1.1% of all wages)."),
+             "deduction as AGI. State Disability Insurance is 1.3% of all "
+             "wages (2026 rate, not in the verification report; owner-approved)."),
     "CO": dict(
         name="Colorado", year=2024, confidence="medium",
         brackets=_flat(.0425), std_deduction="federal", exemption=0,

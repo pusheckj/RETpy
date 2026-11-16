@@ -318,4 +318,4 @@ def test_a_tiny_spending_change_moves_the_success_rate_a_little():
             "primary_result"]["success_rate"]
     rates = [rate(200 * k) for k in range(4)]
     assert 0.05 < rates[0] < 0.95                       # a rate that can move both ways
-    assert max(abs(b - a) for a, b in zip(rates, rates[1:])) <= 0.01, rates
+    assert max(abs(b - a) for a, b in zip(rates, rates[1:])) <= 0.01 + 1e-9, rates

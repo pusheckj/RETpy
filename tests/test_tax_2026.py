@@ -220,10 +220,10 @@ class TestCalifornia2026:
 
     def test_single_80k_wages(self):
         # 80,000 - 5,900 = 74,100: 114.56 + 314.02 + 628.16 + 998.22 + 8% x 14,602
-        # = 3,223.12, less the $158 personal credit = 3,065.12, plus 1.1% SDI.
+        # = 3,223.12, less the $158 personal credit = 3,065.12, plus 1.3% SDI.
         t = cfg.working_year_taxes(80_000, status="S", partner=False, state="CA",
                                    your_age=40, children_under_17=0)
-        assert t["state"] == pytest.approx(3_065.12 + 880.0)
+        assert t["state"] == pytest.approx(3_065.12 + 1_040.0)
 
     def test_mfj_two_personal_credits(self):
         # 229.12 + 628.04 + 1,256.32 + 1,996.44 + 2,511.84 + 9.3% x 49,606 = 11,235.118

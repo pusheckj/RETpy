@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (California SDI 2026)
+- California State Disability Insurance is now 1.3% of all wages (the 2026 rate), up from the 2024 rate of 1.1%. Not covered by the verification report; set on the owner's decision. Kept as approved: the darker primary button gradient and the $200 a month Medigap + Part D estimate per Medicare enrollee.
+
 ### Fixed (presets run without the side panel used the config's sample defaults)
 - A preset (or any overrides dict) run directly now reaches the engine as it does after the side panel drew it. The side panel stores a default for every input it draws, so a bare preset still simulated the config's sample values for: the expense boxes (food, transport, health, fun, other, utilities; rent for a renter), the partner's spending (a single household was charged the sample $1,500 a month), the employer match (the config's 4% against 0), Auto-allocate's contribution amounts (the config's $2,700 401(k) and sample IRAs against the filled 401(k), HSA and IRAs), the partner's retirement age, plan-until age and claim age, and the glide path start. `config_builder.sidebar_defaults` now fills them, using the panel's own helpers (`expense_categories.expense_defaults`, `household.partner_defaults`, `derived.auto_allocate_defaults`). Only for a dict that names its household (`YOUR_AGE` and `PARTNER_AGE`); a value that is there is never replaced, so a saved profile gives the same results as before (checked on the sample household). Core inputs (ages, pay, balances, the home loan) are still not filled
 - Auto-allocate's amounts are filled only when the dict states no contribution. The four presets stated 401(k), HSA and IRA amounts that Auto-allocate replaced on the first draw (dead values, and wrong for the Median household); they now state none

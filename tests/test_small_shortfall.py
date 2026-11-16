@@ -73,8 +73,19 @@ def test_success_is_monotone_in_spending_with_common_random_numbers(monkeypatch)
         return real(self, amount_needed, *a, **kw)
 
     monkeypatch.setattr(asim.AccountPortfolio, "withdraw_tax_efficient", spy)
-    levels = [2_800, 3_000, 3_200, 3_400, 3_600]
     n, age = 200, 55
+    # Find the spending level whose working year is a few dollars short (it moves
+    # whenever a tax figure changes), then sweep $200 steps around it.
+    edge = None
+    for extra in range(1_600, 4_400, 20):
+        draws.clear()
+        with applied(_bare_preset(extra)):
+            asim.run_detailed_simulation(age, random_seed=1000)
+        if any(1 < need < 100 and your_age < age for need, your_age in draws):
+            edge = extra
+            break
+    assert edge is not None, "no spending level gives a tiny working-year shortfall"
+    levels = [edge - 400, edge - 200, edge, edge + 200, edge + 400]
     rates = []
     for extra in levels:
         wins = 0
@@ -86,7 +97,7 @@ def test_success_is_monotone_in_spending_with_common_random_numbers(monkeypatch)
                 # A plan with millions invested never fails while still working.
                 assert ok or pf.yearly_history[-1]["age"] >= age, (extra, i)
         rates.append(wins / n)
-        if extra == 3_200:
+        if extra == edge:
             # The case the bug needed: a working year a few dollars short.
             assert any(1 < need < 100 and your_age < age for need, your_age in draws)
     # More spending never raises success by more than noise, nor drops it off a cliff.
