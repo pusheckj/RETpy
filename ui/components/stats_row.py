@@ -26,10 +26,27 @@ def _stat_card(label: str, value: str, sublabel: str = "", color: str = "#0f172a
     '''
 
 
+def _render_run_warnings(st, pr: dict) -> None:
+    """Say so when some runs crashed or the trajectory charts are estimates.
+
+    Keys are optional (``.get``): a result without them shows no warning."""
+    n_err = int(pr.get("sim_errors") or 0)
+    if n_err > 0:
+        first = pr.get("sim_first_error")
+        st.warning(
+            f"{n_err:,} simulation run{'s' if n_err != 1 else ''} failed with an error "
+            "and may be missing from these results."
+            + (f" First error: {first}" if first else "")
+        )
+    if pr.get("trajectory_is_synthetic"):
+        st.info("The trajectory charts are estimates, not taken from the simulation runs.")
+
+
 def render(st, results: dict) -> None:
     if not results:
         return
     pr = results.get("primary_result", {}) or {}
+    _render_run_warnings(st, pr)
     median_final = pr.get("median_final", 0.0)
     p10 = pr.get("p10_final", 0.0)
     success = pr.get("success_rate", 0.0)

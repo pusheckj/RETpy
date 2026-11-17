@@ -106,11 +106,11 @@ def render(st, results: dict | None) -> None:
                     <div class="mc-ink-strong" style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">
                         {pct(summary.get("success_rate"))}
                     </div>
-                    <div style="font-size: 12px; color: #64748b;">Median ending balance</div>
+                    <div style="font-size: 12px; color: #64748b;">Median final portfolio</div>
                     <div class="mc-ink-strong" style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">
                         {money(summary.get("median_final"), shorten=True)}
                     </div>
-                    <div style="font-size: 12px; color: #64748b;">P10 ending balance</div>
+                    <div style="font-size: 12px; color: #64748b;">10th percentile</div>
                     <div class="mc-ink-strong" style="font-size: 16px; font-weight: 600;">
                         {money(summary.get("p10_final"), shorten=True)}
                     </div>

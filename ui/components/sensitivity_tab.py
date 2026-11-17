@@ -68,8 +68,8 @@ def render(st, results: dict) -> None:
                         "Scenario": name,
                         "Retire age": age,
                         "Success": pr.get("success_rate", 0.0),
-                        "Median final": pr.get("median_final", 0.0),
-                        "P10 final": pr.get("p10_final", 0.0),
+                        "Median final portfolio": pr.get("median_final", 0.0),
+                        "10th percentile": pr.get("p10_final", 0.0),
                     })
                 except Exception as e:
                     progress.progress(
@@ -78,7 +78,7 @@ def render(st, results: dict) -> None:
                     )
                     rows.append({
                         "Scenario": name, "Retire age": age, "Success": 0.0,
-                        "Median final": 0.0, "P10 final": 0.0,
+                        "Median final portfolio": 0.0, "10th percentile": 0.0,
                     })
 
         st.session_state["sensitivity_results"] = rows
@@ -91,8 +91,8 @@ def render(st, results: dict) -> None:
     if rows:
         df = pd.DataFrame(rows)
         df["Success"] = df["Success"].apply(pct)
-        df["Median final"] = df["Median final"].apply(lambda v: money(v, shorten=True))
-        df["P10 final"] = df["P10 final"].apply(lambda v: money(v, shorten=True))
+        df["Median final portfolio"] = df["Median final portfolio"].apply(lambda v: money(v, shorten=True))
+        df["10th percentile"] = df["10th percentile"].apply(lambda v: money(v, shorten=True))
         st.dataframe(df, width="stretch", hide_index=True)
     else:
         st.info("Click **Run sensitivity analysis** above to see how your plan responds when inputs change.")

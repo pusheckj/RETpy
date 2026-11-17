@@ -1528,6 +1528,16 @@ footer { display: none !important; }
     [class*="st-key-mc-mode-switch"] [role="radiogroup"] label { padding: 5px 10px !important; }
     [class*="st-key-mc-mode-switch"] [role="radiogroup"] p { font-size: 14px !important; }
 }
+/* Narrow phones: the two labels share the pill's inner width, so the active one
+   cannot overhang the container. */
+@media (max-width: 400px) {
+    [class*="st-key-mc-mode-switch"] [role="radiogroup"] { max-width: 100%; box-sizing: border-box; }
+    [class*="st-key-mc-mode-switch"] [role="radiogroup"] label {
+        flex: 1 1 0; min-width: 0; max-width: 100%; justify-content: center;
+        padding: 5px 6px !important;
+    }
+    [class*="st-key-mc-mode-switch"] [role="radiogroup"] p { font-size: 13px !important; white-space: nowrap; }
+}
 @media (max-height: 500px) and (min-width: 641px) {
     [data-testid="stLayoutWrapper"]:has(> .st-key-mc-mode-switch-gutter) { top: 8px; right: 20px; }
 }

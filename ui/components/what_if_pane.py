@@ -15,10 +15,19 @@ from utils.formatting import money, pct
 TOGGLE_LABELS = {
     "CAR_ONETIME_ENABLED": "One-time car purchase",
     "CAR_RECURRING_ENABLED": "Recurring car purchases",
-    "HOUSE_MOVE_ENABLED": "Home move (older plan)",
+    "HOUSE_MOVE_ENABLED": "Home move",
     "HOME_EVENTS": "Home moves",
     "RETIREMENT_VACATION_ENABLED": "Retirement vacation spending",
 }
+
+
+def _toggle_labels(keys) -> list:
+    """Plain-words labels, one per event. The older single-move switch and the
+    home-events list both mean a home move, so when both are on, show one."""
+    keys = list(keys)
+    if "HOME_EVENTS" in keys:
+        keys = [k for k in keys if k != "HOUSE_MOVE_ENABLED"]
+    return [TOGGLE_LABELS.get(k, k) for k in keys]
 
 
 def _fmt_age_delta(value) -> str:
@@ -98,7 +107,7 @@ def render(st, results: Dict[str, Any] | None = None, delta: Dict[str, Any] | No
     st.markdown('<div class="mc-section">What-if: lifecycle events</div>', unsafe_allow_html=True)
 
     if active_toggles:
-        labels = ", ".join(TOGGLE_LABELS.get(k, k) for k in active_toggles)
+        labels = ", ".join(_toggle_labels(active_toggles))
         st.caption(f"Turned on: {labels}")
 
     earliest_delta = deltas.get("earliest_retirement_age")
@@ -111,7 +120,7 @@ def render(st, results: Dict[str, Any] | None = None, delta: Dict[str, Any] | No
     html = (
         '<div class="mc-card" style="padding: 16px;">'
         '<div class="mc-ink-strong" style="font-size: 13px; font-weight: 600; margin-bottom: 10px;">'
-        'Baseline (toggles off) vs. Scenario (toggles on)</div>'
+        'Baseline (events off) vs. Scenario (events on)</div>'
         '<div style="font-size: 12px; color: #64748b;">Earliest retirement age</div>'
         f'<div class="mc-ink-strong" style="font-size: 14px; margin-bottom: 2px;">'
         f'Baseline: {_fmt_earliest(baseline.get("earliest_retirement_age"))}'
@@ -124,7 +133,7 @@ def render(st, results: Dict[str, Any] | None = None, delta: Dict[str, Any] | No
         f' &rarr; Scenario: {pct(scenario_primary.get("success_rate"))}</div>'
         f'<div class="{_delta_class(success_delta, higher_is_better=True)}" style="font-size: 16px; font-weight: 600; color: {_delta_color(success_delta, higher_is_better=True)}; margin-bottom: 10px;">'
         f'{_fmt_signed_pct(success_delta)}</div>'
-        '<div style="font-size: 12px; color: #64748b;">Median ending balance</div>'
+        '<div style="font-size: 12px; color: #64748b;">Median final portfolio</div>'
         f'<div class="mc-ink-strong" style="font-size: 14px; margin-bottom: 2px;">'
         f'Baseline: {money(baseline_primary.get("median_final"), shorten=True)}'
         f' &rarr; Scenario: {money(scenario_primary.get("median_final"), shorten=True)}</div>'
