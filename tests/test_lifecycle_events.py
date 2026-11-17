@@ -222,7 +222,7 @@ class TestLifecycleFeaturesDefaultOff:
         # lower this low-income household's taxes and pre-65 health costs; the
         # $805.80/month Medicare estimate raises costs from 65. Net: success up.
         # Previously {45: 0.105, 50: 0.539}.
-        assert results == {45: 0.1385, 50: 0.583}   # CA SDI 1.3% (2026)
+        assert results == {45: 0.1355, 50: 0.5865}   # CA SDI 1.3%; SS taxability counts gains; excess ACA premium returned
 
 
 # ==============================================================================
