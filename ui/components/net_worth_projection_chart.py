@@ -59,12 +59,55 @@ ACCOUNTS = [
 ]
 
 
-# Per-asset-class real expected returns by scenario. Used for the
-# deterministic projection (no volatility — single forward path).
+def investment_real_return(scenario: str, overrides: dict = None) -> float:
+    """Expected real return of the investment accounts in ``scenario``, built
+    the way the engine builds it (account_simulation.calculate_blended_return):
+    the stock/bond means blended at STOCK_ALLOCATION, less the investment fee,
+    less half the blended variance when APPLY_VOLATILITY_DRAG is on. Reads the
+    scenario table, allocation, fee and drag switch from ``overrides`` first,
+    then from the engine config."""
+    ov = overrides or {}
+
+    def pick(key):
+        return ov.get(key, getattr(cfg, key))
+
+    params = cfg.get_return_parameters(scenario)
+    w_s = max(0.0, min(1.0, safe_float(pick("STOCK_ALLOCATION"), 0.8)))
+    w_b = 1.0 - w_s
+    fee = safe_float(pick("INVESTMENT_FEE_RATE"), 0.0)
+    rate = (w_s * (params["stock_return"] - fee) + w_b * (params["bond_return"] - fee))
+    if pick("APPLY_VOLATILITY_DRAG"):
+        sd_s, sd_b = params["stock_volatility"], params["bond_volatility"]
+        rho = safe_float(pick("STOCK_BOND_CORRELATION"), 0.0)
+        rate -= (w_s ** 2 * sd_s ** 2 + w_b ** 2 * sd_b ** 2
+                 + 2 * w_s * w_b * rho * sd_s * sd_b) / 2
+    return rate
+
+
+# Per-asset-class real expected returns by scenario, for the default allocation
+# and fee. Used for the deterministic projection (no volatility -- single
+# forward path). ``returns_for(overrides)`` is the version that follows the
+# user's allocation, fee and drag switch; this table backs callers that only
+# know the scenario (Freedom milestones).
+_CASH_HOME_RETURNS = {
+    "conservative": {"cash": 0.005, "home": 0.005},
+    "historical":   {"cash": 0.010, "home": 0.010},
+    "pessimistic":  {"cash": 0.000, "home": 0.000},
+}
+
+
+def returns_for(overrides: dict = None) -> dict:
+    """The active scenario's {investment, cash, home} real returns for the
+    projection, with the investment rate net of volatility drag like the engine."""
+    scen = str((overrides or {}).get("ACTIVE_RETURN_SCENARIO", "historical")).lower()
+    if scen not in _CASH_HOME_RETURNS:
+        scen = "historical"
+    return {"investment": investment_real_return(scen, overrides), **_CASH_HOME_RETURNS[scen]}
+
+
 _SCENARIO_RETURNS = {
-    "conservative": {"investment": 0.055, "cash": 0.005, "home": 0.005},
-    "historical":   {"investment": 0.075, "cash": 0.010, "home": 0.010},
-    "pessimistic": {"investment": 0.040, "cash": 0.000, "home": 0.000},
+    scen: {"investment": investment_real_return(scen), **cash_home}
+    for scen, cash_home in _CASH_HOME_RETURNS.items()
 }
 
 
@@ -258,10 +301,7 @@ def project_net_worth(user_overrides: dict) -> dict:
     # in every working year, so the projection must too (flat, in today's dollars).
     deficit = _working_deficit(user_overrides)
 
-    scenario = str(user_overrides.get("ACTIVE_RETURN_SCENARIO", "historical")).lower()
-    if scenario not in _SCENARIO_RETURNS:
-        scenario = "historical"
-    scenario_returns = _SCENARIO_RETURNS[scenario]
+    scenario_returns = returns_for(user_overrides)
 
     # SAVINGS_INFLATION_ADJUST is intentionally NOT read here — see the
     # contribution block below for why (this projection is in real dollars).
@@ -513,10 +553,11 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
             "than your take-home pay. This projection takes that amount out of your savings "
             "each working year, so nothing is added."
         )
+    _ret = returns_for(overrides)
     st.caption(
         f"Real (inflation-adjusted) return: investment accounts "
-        f"{_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['investment']*100:.1f}%, "
-        f"cash {_SCENARIO_RETURNS[str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() if str(overrides.get('ACTIVE_RETURN_SCENARIO', 'historical')).lower() in _SCENARIO_RETURNS else 'historical']['cash']*100:.1f}%, "
+        f"{_ret['investment']*100:.1f}% (after the drag from market ups and downs), "
+        f"cash {_ret['cash']*100:.1f}%, "
         f"home equity follows the mortgage paydown and any planned moves. "
         f"**Run simulation** (top bar) adds market ups and downs and "
         f"tax-efficient withdrawals."

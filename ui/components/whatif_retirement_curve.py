@@ -63,10 +63,18 @@ def _alt_overrides(st, base: dict) -> dict:
     alt["INCLUDE_SOCIAL_SECURITY"] = include_ss
     if include_ss:
         alt["SS_CLAIM_AGE"] = ss_claim
-    # Retirement spending as a % of today's expenses (100% = same as today).
+    # Retirement spending as a % of the PLAN's own retirement spending (100% = the plan
+    # unchanged, in whatever mode it uses), so the slider is continuous around 100.
     if abs(spend_pct - 1.0) > 1e-6:
-        alt["RETIREMENT_SPENDING_MODE"] = "% of today's expenses"
-        alt["RETIREMENT_SPENDING_PCT"] = spend_pct
+        mode = str(_base_default(base, "RETIREMENT_SPENDING_MODE", "Same as today's expenses"))
+        if mode.startswith("Absolute"):
+            alt["RETIREMENT_SPENDING_ABSOLUTE"] = safe_float(
+                _base_default(base, "RETIREMENT_SPENDING_ABSOLUTE", 0), 0.0) * spend_pct
+        else:
+            plan_pct = (safe_float(_base_default(base, "RETIREMENT_SPENDING_PCT", 0.80), 0.80)
+                        if mode.startswith("%") else 1.0)
+            alt["RETIREMENT_SPENDING_MODE"] = "% of today's expenses"
+            alt["RETIREMENT_SPENDING_PCT"] = plan_pct * spend_pct
     # Extra annual savings routed to the taxable brokerage on top of the plan.
     if extra_savings:
         cur_brk = safe_int(base.get("YOUR_BROKERAGE_CONTRIBUTION", 0), 0)
@@ -119,8 +127,8 @@ def render(st, results: dict = None) -> None:
                      help="Market returns used in the alternate scenario.")
         slider_with_box(st, "Stock allocation (%)", 0, 100, 5, key="wifc_stock", unit="%", value=d_stock,
                         help="More stock means higher expected returns and bigger swings.")
-        slider_with_box(st, "Retirement spending (% of today's)", 40, 150, 5, key="wifc_spend",
-                        unit="%", value=100.0, help="Retirement living costs compared with today. 100% means the same.")
+        slider_with_box(st, "Retirement spending (% of your plan)", 40, 150, 5, key="wifc_spend",
+                        unit="%", value=100.0, help="Retirement living costs compared with your plan. 100% means the same.")
         st.number_input("Extra annual savings ($/yr)", min_value=0, max_value=200_000,
                         step=1_000, key="wifc_savings", value=0,
                         help="Extra yearly savings, added to your taxable brokerage.")

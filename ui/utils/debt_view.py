@@ -31,8 +31,8 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 PREFIX = "debt_"
 FIELDS = ("name", "kind", "balance", "apr", "min")
-BALANCE_MAX = 10_000_000
-PAYMENT_MAX = 100_000
+BALANCE_MAX = int(dm.BALANCE_MAX)    # the engine's own limits: saved debts are never cut
+PAYMENT_MAX = int(dm.PAYMENT_MAX)
 EXTRA_KEY = "debt_extra"
 STRATEGY_KEY = "debt_strategy"
 
@@ -201,13 +201,15 @@ def what_if(overrides: Any, more: float) -> Dict[str, Any]:
 
 def real_return(overrides: Any) -> float:
     """The expected real return of the plan's return scenario: the same simple
-    rate the net-worth projection and Freedom milestones use."""
+    rate the net-worth projection uses (net of the engine's volatility drag)."""
     try:
-        from components.net_worth_projection_chart import _SCENARIO_RETURNS
+        from components.net_worth_projection_chart import investment_real_return
     except ImportError:  # pragma: no cover
-        from ui.components.net_worth_projection_chart import _SCENARIO_RETURNS  # type: ignore
+        from ui.components.net_worth_projection_chart import investment_real_return  # type: ignore
     scen = str((overrides or {}).get("ACTIVE_RETURN_SCENARIO", cfg.ACTIVE_RETURN_SCENARIO)).lower()
-    return float(_SCENARIO_RETURNS.get(scen, _SCENARIO_RETURNS["historical"])["investment"])
+    if scen not in cfg.RETURN_SCENARIOS:
+        scen = "historical"
+    return float(investment_real_return(scen, overrides))
 
 
 def inflation(overrides: Any) -> float:
@@ -280,7 +282,7 @@ def years_text(months: int) -> str:
     whole = math.floor(y)
     frac = y - whole
     if frac >= 0.75:
-        return f"about {whole + 1} years"
+        return "about a year" if whole + 1 == 1 else f"about {whole + 1} years"
     if frac >= 0.25:
         return f"about {whole} and a half years" if whole else "about half a year"
     return f"about {whole} years" if whole != 1 else "about a year"
