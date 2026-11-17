@@ -43,6 +43,11 @@ def _apply_restored(st, restored: dict, source_name: str) -> None:
 
 
 def render(st) -> None:
+    # The load button reruns the app, so its success message is kept in session
+    # state and shown on the next run (it would be gone before it was painted).
+    loaded_msg = st.session_state.pop("_save_load_msg", None)
+    if loaded_msg:
+        st.success(loaded_msg)
     with st.expander("Save / Load profile", expanded=False, icon=":material/save:"):
         overrides = st.session_state.get("user_overrides", {}) or {}
 
@@ -72,7 +77,7 @@ def render(st) -> None:
         uploaded = st.file_uploader(
             "Upload saved inputs",
             type=["json"],
-            key="save_load_upload",
+            key=f"save_load_upload_{st.session_state.get('_save_load_upload_n', 0)}",
         )
 
         # Preview + Load button appear only when a file is staged.
@@ -101,7 +106,9 @@ def render(st) -> None:
                     type="primary",
                 ):
                     _apply_restored(st, preview, uploaded.name)
-                    st.success(f"Loaded {len(preview)} inputs from {uploaded.name}.")
+                    st.session_state["_save_load_msg"] = f"Loaded {len(preview)} inputs from {uploaded.name}."
+                    # A new uploader key clears the staged file, so the button goes away.
+                    st.session_state["_save_load_upload_n"] = st.session_state.get("_save_load_upload_n", 0) + 1
                     try:
                         st.rerun()
                     except Exception:

@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (planner copy, run warnings, load message, narrow-phone switch)
+- One name per metric: "Median final portfolio" and "10th percentile" in the tiles, what-if card, stress presets, scenario compare and sensitivity table (they said "Median ending balance", "Median final", "P10 ending balance", "P10 final").
+- The stat tiles now warn when some simulation runs failed (count and first error) and say when the trajectory charts are estimates. Results without those keys show nothing.
+- What-if card says "events", not "toggles", and shows one "Home move" label when both home-move settings are on.
+- "Load these inputs" keeps its success message across the rerun and clears the uploaded file.
+- At 400px and narrower the Money check-up | Retirement planner switch fits inside its pill.
+
 ### Changed (California SDI 2026)
 - California State Disability Insurance is now 1.3% of all wages (the 2026 rate), up from the 2024 rate of 1.1%. Not covered by the verification report; set on the owner's decision. Kept as approved: the darker primary button gradient and the $200 a month Medigap + Part D estimate per Medicare enrollee.
 

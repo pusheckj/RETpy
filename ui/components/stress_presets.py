@@ -101,7 +101,7 @@ def render(st, results: dict = None) -> None:
             base_med = base_pr.get("median_final")
             shock_med = shock_pr.get("median_final")
             st.metric(
-                "Median ending balance",
+                "Median final portfolio",
                 money(shock_med, shorten=True),
                 delta=None if (base_med is None or shock_med is None)
                 else money(shock_med - base_med, shorten=True),
