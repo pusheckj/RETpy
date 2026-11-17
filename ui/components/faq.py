@@ -139,6 +139,17 @@ QUESTIONS: list[tuple[str, str]] = [
         "file stays on your computer.",
     ),
     (
+        "How do patterns in an uploaded spending rules file work?",
+        "In the Spending view, a rules file you upload matches plain text, not "
+        "regular expressions. A pattern such as \"remoteville\" matches any "
+        "description that contains it, in upper or lower case. Characters like "
+        "`.` `*` `|` and `\\` mean themselves, so write `gadget.com/us`, not "
+        "`GADGET\\.COM/US`. An empty pattern is refused. A file may hold at most "
+        "500 patterns, each at most 200 characters (20,000 in total). The rules "
+        "file in your own local spending folder still accepts full regular "
+        "expressions.",
+    ),
+    (
         "What isn't modeled?",
         "Pensions, rental real estate, qualified charitable distributions, "
         "inherited IRAs, tax-loss harvesting, SEP-IRAs, solo 401(k)s, city and "

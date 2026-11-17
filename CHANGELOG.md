@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (hosted visitor safety)
+- An uploaded spending rules file can no longer freeze the shared server. Every pattern in an uploaded rules file is now plain text: a case-insensitive "contains" test, with no regular-expression syntax at all, so matching time grows only with the text length. Write `gadget.com/us`, not `GADGET\.COM/US`. The bundled default rules and the rules file in your own spending folder keep full regex syntax and behave as before. The Spending view help and the FAQ say so
+- Uploaded rules are checked before use. Each pattern must be a non-empty text value of at most 200 characters. At most 500 patterns and 20,000 pattern characters in total. Category and label values, names, `fixed_monthly` items (at most 50) and `work_trip_window_days` (0 to 31) are type-checked too. A list or object where text belongs is a clean "Using the default rules" message, never a crash
+- The "Simulation cache" panel (Recompute everything) is not drawn when hosted. It cleared caches shared by every visitor's session
+
 ### Fixed (Social Security tax and excess health premium)
 - Social Security taxability now counts the year's realized capital gains in provisional income (both the provisional quote and the true-up). Before, only ordinary income was passed, so a year with gains under-taxed Social Security (40,000 of benefits plus 60,000 of gains on a joint return: 34,000 taxable, was 6,000)
 - When the true health premium is below the provisional one that sized the withdrawals, the part of the difference that Pass 1 really delivered as cash goes back into taxable brokerage and counts as reinvested surplus. Before it left the portfolio without being spent. Nothing is returned for a Pass-1 shortfall, so no money is created. The withdrawal log drops the returned cash from the year's withdrawals (pro rata across sources, gross of tax) and no longer takes it off the RMD figure

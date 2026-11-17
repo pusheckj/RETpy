@@ -18,10 +18,18 @@ work-travel locations, the employer's reimbursement deposits, who pays rent —
 belongs in a personal rules JSON stored next to the statements or uploaded with
 them (never in this package); ``load_rules`` / ``parse_rules`` merge it on top
 of the defaults.
+
+Two pattern dialects. The bundled defaults and the rules file in your own
+spending folder are full regular expressions. An UPLOADED rules file (hosted
+visitors) is untrusted, so every pattern in it is plain text: a case-insensitive
+"contains" test (``PlainPattern``), linear in the text length, with hard limits
+on how many patterns it may hold. No regex syntax is read at all, so a hostile
+file cannot make matching slow.
 """
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from typing import Dict, List, Optional
@@ -207,33 +215,162 @@ _PATTERN_LISTS = ("transfer_patterns", "housing_refund_patterns", "work_travel_l
                   "work_travel_exceptions", "excluded_purchase_patterns",
                   "excluded_payback_note_patterns", "reimbursement_patterns",
                   "work_trip_day_patterns")
+_EXACT_LISTS = ("venmo_transfer_types", "transfer_counterparties")   # whole-value matches
+
+# Limits on an uploaded rules file (hosted visitors).
+MAX_RULE_PATTERNS = 500          # patterns and exact names, all fields together
+MAX_PATTERN_CHARS = 200          # one pattern, name or label
+MAX_TOTAL_PATTERN_CHARS = 20_000
+MAX_FIXED_ITEMS = 50
+MAX_TRIP_WINDOW_DAYS = 31
+MAX_TEXT_CHARS = 1000            # plain matching looks at this much of a description or note
+
+
+class PlainPattern(str):
+    """An uploaded pattern: matches as a case-insensitive substring, never as a regex."""
+
+    def __new__(cls, text: str):
+        obj = super().__new__(cls, text)
+        obj.needle = text.lower()
+        return obj
+
+
+class _Budget:
+    """Type and size checks for every string in an uploaded rules file."""
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.chars = 0
+
+    def text(self, value, where: str, plain: bool = False, counted: bool = True) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"{where} must be text, not {type(value).__name__}")
+        if not value.strip():
+            raise ValueError(f"{where} must not be empty")
+        if len(value) > MAX_PATTERN_CHARS:
+            raise ValueError(f"{where} is too long ({len(value)} characters; "
+                             f"the limit is {MAX_PATTERN_CHARS})")
+        if counted:
+            self.count += 1
+            self.chars += len(value)
+            if self.count > MAX_RULE_PATTERNS:
+                raise ValueError(f"too many patterns (the limit is {MAX_RULE_PATTERNS})")
+            if self.chars > MAX_TOTAL_PATTERN_CHARS:
+                raise ValueError(f"the patterns are too long in total "
+                                 f"(the limit is {MAX_TOTAL_PATTERN_CHARS} characters)")
+        return PlainPattern(value) if plain else value
+
+
+def _number(value, where: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError(f"{where} must be a number")
+    return value
+
+
+def _container(value, kind, key: str):
+    if not isinstance(value, kind):
+        raise ValueError(f"{key} must be a JSON {'list' if kind is list else 'object'}")
+    return value
+
+
+def _clean_uploaded(personal: Dict) -> Dict:
+    """The known fields of an uploaded rules object, type-checked, with every
+    pattern as a ``PlainPattern``. Raises ValueError on anything else.
+
+    Types are checked before any membership test, so a list or object where a
+    pattern should be is a clean error, not an unhashable-type crash.
+    """
+    b = _Budget()
+    out: Dict = {}
+    for key in _PATTERN_LISTS:
+        if key in personal:
+            out[key] = [b.text(p, f"{key}: a pattern", plain=True)
+                        for p in _container(personal[key], list, key)]
+    for key in _EXACT_LISTS:
+        if key in personal:
+            out[key] = [b.text(p, f"{key}: a name") for p in _container(personal[key], list, key)]
+    for key in ("merchant_categories", "transfer_reasons"):
+        if key in personal:
+            out[key] = {b.text(k, f"{key}: a pattern", plain=True):
+                        b.text(v, f"{key}: the value for {str(k)[:40]!r}", counted=False)
+                        for k, v in _container(personal[key], dict, key).items()}
+    if "income_patterns" in personal:
+        out["income_patterns"] = {
+            b.text(label, "income_patterns: a label", counted=False):
+                [b.text(p, f"income_patterns[{label[:40]!r}]: a pattern", plain=True)
+                 for p in _container(pats, list, f"income_patterns[{label[:40]!r}]")]
+            for label, pats in _container(personal["income_patterns"], dict, "income_patterns").items()}
+    if "income_counterparties" in personal:
+        people = {}
+        for name, v in _container(personal["income_counterparties"], dict, "income_counterparties").items():
+            name = b.text(name, "income_counterparties: a name")
+            if isinstance(v, dict):
+                where = f"income_counterparties[{name[:40]!r}]"
+                v = {"label": b.text(v.get("label"), f"{where}: label", counted=False),
+                     **({"min_amount": _number(v["min_amount"], f"{where}: min_amount")}
+                        if "min_amount" in v else {})}
+            else:
+                v = b.text(v, f"income_counterparties: the label for {name[:40]!r}", counted=False)
+            people[name] = v
+        out["income_counterparties"] = people
+    if "fixed_monthly" in personal:
+        items = _container(personal["fixed_monthly"], list, "fixed_monthly")
+        if len(items) > MAX_FIXED_ITEMS:
+            raise ValueError(f"fixed_monthly has too many items (the limit is {MAX_FIXED_ITEMS})")
+        out["fixed_monthly"] = []
+        for it in items:
+            if not isinstance(it, dict):
+                raise ValueError("fixed_monthly: each item must be a JSON object")
+            item = {"amount": _number(it.get("amount"), "fixed_monthly: amount")}
+            for f in ("label", "category"):
+                if f in it:
+                    item[f] = b.text(it[f], f"fixed_monthly: {f}", counted=False)
+            out["fixed_monthly"].append(item)
+    if "work_trip_window_days" in personal:
+        n = personal["work_trip_window_days"]
+        if isinstance(n, bool) or not isinstance(n, int) or not 0 <= n <= MAX_TRIP_WINDOW_DAYS:
+            raise ValueError(f"work_trip_window_days must be a whole number from 0 to {MAX_TRIP_WINDOW_DAYS}")
+        out["work_trip_window_days"] = n
+    return out
 
 
 def parse_rules(data: bytes) -> Dict:
     """Rules from an uploaded rules JSON's bytes (same format as the file), in memory.
 
-    Raises ValueError for anything unusable — not JSON, not an object, or a
-    pattern that isn't a valid regex — so the caller can fall back to the
-    defaults instead of failing later inside ``classify``.
+    Uploads are untrusted, so every pattern becomes plain case-insensitive text
+    (see ``PlainPattern``) and the file must stay inside the size limits above.
+    Raises ValueError for anything unusable (not JSON, not an object, a value of
+    the wrong type, an empty pattern, too many or too long patterns) so the
+    caller can fall back to the defaults.
     """
-    personal = json.loads(data.decode("utf-8-sig"))
+    try:
+        personal = json.loads(data.decode("utf-8-sig"))
+    except RecursionError:
+        raise ValueError("the rules file is nested too deeply") from None
     if not isinstance(personal, dict):
         raise ValueError("the rules file must be a JSON object")
-    rules = merge_rules(personal)
-    patterns = [p for k in _PATTERN_LISTS for p in rules[k]]
-    patterns += list(rules["merchant_categories"]) + list(rules["transfer_reasons"])
-    patterns += [p for v in rules["income_patterns"].values()
-                 for p in (v if isinstance(v, list) else [v])]
-    for p in patterns:
-        try:
-            re.compile(p)
-        except (re.error, TypeError) as exc:
-            raise ValueError(f"invalid pattern {p!r} ({exc})") from None
-    return rules
+    return merge_rules(_clean_uploaded(personal))
+
+
+def _search(pattern: str, text: str) -> bool:
+    """One pattern against ``text``, case-insensitive: plain text for an
+    uploaded ``PlainPattern``, a regular expression for a trusted one."""
+    if isinstance(pattern, PlainPattern):
+        return pattern.needle in text[:MAX_TEXT_CHARS].lower()
+    return re.search(pattern, text, re.I) is not None
 
 
 def _any(patterns: List[str], text: str) -> bool:
-    return any(re.search(p, text, re.I) for p in patterns)
+    low = None                               # lowercased once, only if a plain pattern needs it
+    for p in patterns:
+        if isinstance(p, PlainPattern):
+            if low is None:
+                low = text[:MAX_TEXT_CHARS].lower()
+            if p.needle in low:
+                return True
+        elif re.search(p, text, re.I):
+            return True
+    return False
 
 
 def _mcc_category(mcc) -> Optional[str]:
@@ -276,7 +413,7 @@ def merchant_category(row, rules: Dict, learned: Optional[Dict[str, str]] = None
     merchant's MCC seen elsewhere → issuer category → keyword → Other."""
     desc = row["description"]
     for pattern, cat in rules["merchant_categories"].items():
-        if re.search(pattern, desc, re.I):
+        if _search(pattern, desc):
             return cat
     return (_mcc_category(row.get("mcc"))
             or (learned or {}).get(merchant_key(desc))
@@ -313,7 +450,7 @@ def _classify_row(row, rules: Dict, learned: Optional[Dict[str, str]] = None):
     if _any(rules["excluded_purchase_patterns"], desc):
         return "excluded", None, REASON_BOUGHT_FOR_OTHERS
     if _any(rules["transfer_patterns"], desc) or (src == "Apple Card" and row["raw_type"] == "Payment"):
-        label = next((v for k, v in rules["transfer_reasons"].items() if re.search(k, desc, re.I)),
+        label = next((v for k, v in rules["transfer_reasons"].items() if _search(k, desc)),
                      "Between your accounts")
         return "transfer", None, label
     if amt > 0:
