@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (sim_runner: shared cache, pool, config and error reporting)
+- Results that include a visitor's browser replies are no longer written to the shared (or disk) cache, so a forged reply cannot be served to later visitors with the same inputs. `finish_plan(..., from_browser=True)` skips `plan.store`; `browser_compute` sets it for any job filled from a browser reply
+- A hung pool worker no longer freezes a run: the pool is not joined on exit, its workers are terminated at the 300 s deadline, and the same seeded calls run serially
+- A bad override (for example a text `YOUR_AGE`) no longer leaves the shared config half written: `_write_overrides` puts the originals back before it re-raises
+- Engine errors are reported: `primary_result["sim_errors"]` / `["sim_first_error"]`, and `scan_sim_errors` / `scan_sim_first_error` for the age scan. The success-rate maths is unchanged
+- `primary_result["trajectory_is_synthetic"]` is True when no real path was available and the placeholder curve was used; the first trajectory failure is logged
+- "Recompute everything" now also clears the mortgage paydown cache (all small caches are in one list), and a disk hit no longer grows a small cache past its bound
+- Changing only the target retirement age reuses the success-by-age scans (their own cache key) and reruns only the target-age batch; results equal a cold run
+
 ### Changed (California SDI 2026)
 - California State Disability Insurance is now 1.3% of all wages (the 2026 rate), up from the 2024 rate of 1.1%. Not covered by the verification report; set on the owner's decision. Kept as approved: the darker primary button gradient and the $200 a month Medigap + Part D estimate per Medicare enrollee.
 
