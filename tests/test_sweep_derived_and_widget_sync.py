@@ -184,7 +184,7 @@ class TestComputeExpensesToday:
         assert derived.compute_expenses_today(o) == 2_000 * 12
 
     def test_mortgage_wins_over_rent(self):
-        o = dict(self.NO_PARTNER, MORTGAGE_MONTHLY=3_000, SPEND_RENT_MONTHLY=2_000)
+        o = dict(self.NO_PARTNER, MORTGAGE_MONTHLY=3_000, MORTGAGE_YEARS_REMAINING=20, SPEND_RENT_MONTHLY=2_000)
         assert derived.compute_expenses_today(o) == 3_000 * 12
 
     def test_rent_counts_only_for_non_owners(self):

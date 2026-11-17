@@ -12,6 +12,12 @@ All notable changes to this project will be documented in this file. Format: [Ke
 - `primary_result["trajectory_is_synthetic"]` is True when no real path was available and the placeholder curve was used; the first trajectory failure is logged
 - "Recompute everything" now also clears the mortgage paydown cache (all small caches are in one list), and a disk hit no longer grows a small cache past its bound
 - Changing only the target retirement age reuses the success-by-age scans (their own cache key) and reruns only the target-age batch; results equal a cold run
+### Fixed (UI numbers and input limits agree with the engine)
+- Debt payoff and the net-worth projection grew investments at a flat 7.5% real (historical scenario). The engine nets volatility drag, about 6.5% for the 80/20 mix, so payoff dates and projections were a little too good. The rate now comes from the engine's own formula (`net_worth_projection_chart.investment_real_return`: scenario stock and bond means at the stock allocation, less the fee, less half the blended variance), and follows the allocation, fee and drag switch. Freedom milestones read the table at the default allocation
+- What-if spending slider: at 100% the plan is unchanged, and other values scale the plan's own retirement spending (percent or absolute), so 99% no longer jumps by thousands for an Absolute-mode plan. Label now reads "% of your plan"
+- Today's expense total no longer counts a mortgage payment with 0 years left (it charges the owned-outright carrying cost, as the engine does)
+- The Debts section no longer cuts balances above $10M or payments above $100k; its limits are the engine's ($100M, $1M)
+- "about 1 years" for 11 months now reads "about a year"
 
 ### Changed (California SDI 2026)
 - California State Disability Insurance is now 1.3% of all wages (the 2026 rate), up from the 2024 rate of 1.1%. Not covered by the verification report; set on the owner's decision. Kept as approved: the darker primary button gradient and the $200 a month Medigap + Part D estimate per Medicare enrollee.

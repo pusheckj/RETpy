@@ -169,8 +169,9 @@ def compute_expenses_today(overrides: dict) -> int:
     """Sum of all monthly spending categories × 12 + housing (mortgage or rent) × 12.
 
     Categories from spending_inputs: utilities, food, transport, health, discretionary, other.
-    Housing auto-derived from MORTGAGE_MONTHLY (if active mortgage years remaining > 0)
-    or SPEND_RENT_MONTHLY (if renting). Plus this year's debt payments
+    Housing auto-derived from MORTGAGE_MONTHLY (only while MORTGAGE_YEARS_REMAINING > 0:
+    a paid-off loan costs nothing, like cfg.has_mortgage), the owned-outright carrying
+    cost, or SPEND_RENT_MONTHLY (if renting). Plus this year's debt payments
     (``debt_payments_this_year``).
     """
     cats = [
@@ -197,16 +198,18 @@ def compute_expenses_today(overrides: dict) -> int:
     mortgage = safe_int(overrides.get("MORTGAGE_MONTHLY", 0), 0)
     rent = safe_int(overrides.get("SPEND_RENT_MONTHLY", 0), 0)
     home_value = safe_int(overrides.get("HOME_VALUE", 0), 0)
+    # A payment with no years left is a paid-off loan (cfg.has_mortgage).
+    loan_active = mortgage > 0 and safe_int(overrides.get("MORTGAGE_YEARS_REMAINING", 0), 0) > 0
 
-    if mortgage > 0:
+    if loan_active:
         monthly += mortgage
-    elif home_value == 0 and rent > 0:
+    elif mortgage <= 0 and home_value == 0 and rent > 0:
         monthly += rent
     # Owned outright: property tax + insurance are still due. Same rate and
     # toggle as the engine (cfg.home_carrying_cost_annual), so this total and
     # the simulation agree for an owner with no loan.
     carrying = 0.0
-    if mortgage <= 0 and home_value > 0 and bool(
+    if not loan_active and home_value > 0 and bool(
             overrides.get("MODEL_HOME_CARRYING_COST_AFTER_PAYOFF", True)):
         pct = safe_float(overrides.get("HOME_CARRYING_COST_PCT",
                                        overrides.get("NEW_HOME_ESCROW_PCT", 0.0135)), 0.0135)
