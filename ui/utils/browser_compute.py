@@ -166,7 +166,10 @@ def unsent(st) -> bool:
 
 def _finish(job: Dict[str, Any]) -> None:
     from utils import sim_runner as sr
-    job["on_done"](sr.finish_plan(job["plan"], job["results"]))
+    # Browser replies are untrusted: such a result stays with this session and
+    # never enters the shared cache that other visitors read.
+    job["on_done"](sr.finish_plan(job["plan"], job["results"],
+                                  from_browser=bool(job.get("from_browser"))))
 
 
 def _run_here(st, job: Dict[str, Any], why: str) -> None:
@@ -197,6 +200,7 @@ def _accept(job: Dict[str, Any], text: Any) -> bool:
             return False
     for i, v in zip(job["remote"], values):
         job["results"][i] = v
+    job["from_browser"] = True
     return True
 
 

@@ -183,13 +183,21 @@ def _write_overrides(overrides: dict) -> dict:
         )
 
     original: dict = {}
-    for key, value in overrides.items():
-        if hasattr(cfg, key):
-            original[key] = getattr(cfg, key)
-            setattr(cfg, key, value)
+    try:
+        for key, value in overrides.items():
+            if hasattr(cfg, key):
+                original[key] = getattr(cfg, key)
+                setattr(cfg, key, value)
 
-    # Then, recompute derived values so downstream sim sees consistent state
-    _recompute_derived(original)
+        # Then, recompute derived values so downstream sim sees consistent state
+        _recompute_derived(original)
+    except BaseException:
+        # A bad override (e.g. a text age) must not leave the shared cfg half
+        # written: the caller never gets ``original`` back, so nothing else
+        # would restore it, and every later run would start from the corruption.
+        # ``original`` already holds every derived value _recompute_derived reached.
+        _put_back(original)
+        raise
     return original
 
 
@@ -371,14 +379,19 @@ def _recompute_derived(original: dict) -> None:
         cfg.INFLATION_RATES["general"] = cfg.EXPECTED_INFLATION
 
 
+def _put_back(original: dict) -> None:
+    """Write the values saved in ``original`` back onto cfg."""
+    for key, value in original.items():
+        if key == "INFLATION_RATES.general":
+            cfg.INFLATION_RATES["general"] = value
+        else:
+            setattr(cfg, key, value)
+
+
 def _restore_overrides(original: dict) -> None:
     """Put back the values _apply_overrides replaced, then release CONFIG_LOCK."""
     try:
-        for key, value in original.items():
-            if key == "INFLATION_RATES.general":
-                cfg.INFLATION_RATES["general"] = value
-            else:
-                setattr(cfg, key, value)
+        _put_back(original)
     finally:
         CONFIG_LOCK.release()
 
@@ -536,6 +549,16 @@ _SWR_CACHE: Dict[tuple, Any] = {}
 # Small cache for the Freedom milestones "Confirm with simulation" check.
 _PLACE_CACHE: Dict[tuple, Any] = {}
 
+# Every small cache, for clear_cache(): a new one must be added here (the
+# mortgage cache, defined further down, appends itself) or "Recompute
+# everything" would keep serving its old results.
+_SMALL_CACHES: List[Dict[tuple, Any]] = [_NW_CACHE, _SWR_CACHE, _PLACE_CACHE]
+# Success-by-age scans of the full analysis, which do not depend on the target
+# retirement age (see plan_full_analysis).
+_SCAN_CACHE: Dict[tuple, Any] = {}
+_SMALL_CACHES.append(_SCAN_CACHE)
+_SMALL_CACHE_MAX = 24
+
 
 def clear_cache(include_disk: bool = True) -> None:
     """Clear the cached simulation results (call after editing the underlying model).
@@ -546,9 +569,8 @@ def clear_cache(include_disk: bool = True) -> None:
     everything now" case.
     """
     _CACHE.clear()
-    _NW_CACHE.clear()
-    _SWR_CACHE.clear()
-    _PLACE_CACHE.clear()
+    for cache in _SMALL_CACHES:
+        cache.clear()
     if include_disk:
         d = _disk()
         if d is not None:
@@ -558,21 +580,26 @@ def clear_cache(include_disk: bool = True) -> None:
                 pass
 
 
+def _small_cache_insert(cache: Dict[tuple, Any], key: tuple, value: Any) -> None:
+    """Add to a small cache, evicting the oldest entries above the bound."""
+    cache[key] = value
+    while len(cache) > _SMALL_CACHE_MAX:
+        cache.pop(next(iter(cache)))
+
+
 def _small_cache_lookup(cache: Dict[tuple, Any], kind: str, key: tuple):
     if key in cache:
         return cache[key]
     hit = _disk_load(_disk_key(kind, key))
     if hit is not None:
-        cache[key] = hit
+        _small_cache_insert(cache, key, hit)
     return hit
 
 
 def _small_cache_writer(cache: Dict[tuple, Any], kind: str, key: tuple):
     def store(result):
-        cache[key] = result
+        _small_cache_insert(cache, key, result)
         _disk_store(_disk_key(kind, key), result)
-        if len(cache) > 24:
-            cache.pop(next(iter(cache)))
     return store
 
 
@@ -1337,6 +1364,7 @@ def sweep_break_even(
 # run the same tasks in-process, so the result is identical either way.
 
 _PARALLEL_MIN_TASKS = 4  # not worth spinning up a pool for trivially small work
+_POOL_TIMEOUT_S = 300    # past this the pool is dropped and the calls run serially
 
 # Number of chunks the target-age Monte Carlo is split into (the unit of work
 # handed to a pool worker or a browser worker). The numbers don't depend on it:
@@ -1429,14 +1457,18 @@ def run_plan_calls(plan: Plan, indices: Optional[List[int]] = None,
         _restore_overrides(original)
 
 
-def finish_plan(plan: Plan, results: List[Any]) -> Dict[str, Any]:
-    """Results of all calls -> the analysis result (cached)."""
+def finish_plan(plan: Plan, results: List[Any], from_browser: bool = False) -> Dict[str, Any]:
+    """Results of all calls -> the analysis result (cached).
+
+    ``from_browser``: some call results came from a visitor's browser. Those are
+    untrusted, so the result is NOT written to the process-wide or disk cache,
+    where it would be served to other visitors with the same inputs."""
     original = _apply_overrides(build_config_overrides(plan.overrides))
     try:
         result = plan.finish(results)
     finally:
         _restore_overrides(original)
-    if plan.store is not None:
+    if plan.store is not None and not from_browser:
         plan.store(result)
     return result
 
@@ -1446,6 +1478,15 @@ def execute_plan(plan: Plan, progress_callback=None) -> Dict[str, Any]:
     if plan.result is not None:
         return plan.result
     return finish_plan(plan, run_plan_calls(plan, None, progress_callback))
+
+
+def _terminate_pool(ex) -> None:
+    """Kill a pool's worker processes (best effort), so a hung one cannot linger."""
+    for proc in list((getattr(ex, "_processes", None) or {}).values()):
+        try:
+            proc.terminate()
+        except Exception:
+            pass
 
 
 def _run_calls(job: Dict[str, Any], indices: List[int], progress_callback=None) -> List[Any]:
@@ -1467,17 +1508,25 @@ def _run_calls(job: Dict[str, Any], indices: List[int], progress_callback=None) 
             n_workers = max(2, min(n_cores - 1, max_workers))
             results_by_pos: Dict[int, Any] = {}
             done = 0
-            with _cf.ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as ex:
+            # No ``with`` block: its exit is shutdown(wait=True), which would wait
+            # out a hung worker and make the timeout below useless.
+            ex = _cf.ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx)
+            try:
                 futs = {ex.submit(mc_jobs.run_call, calls[i], patches): pos
                         for pos, i in enumerate(indices)}
                 # Generous overall timeout: a real fork deadlock (rare) raises
                 # TimeoutError -> caught below -> clean serial fallback, instead
                 # of freezing the UI forever.
-                for fut in _cf.as_completed(futs, timeout=300):
+                for fut in _cf.as_completed(futs, timeout=_POOL_TIMEOUT_S):
                     results_by_pos[futs[fut]] = fut.result()
                     done += 1
                     _emit_progress(progress_callback, done, total)
-            return [results_by_pos[pos] for pos in range(total)]
+                return [results_by_pos[pos] for pos in range(total)]
+            except BaseException:
+                _terminate_pool(ex)         # a hung worker must not outlive the deadline
+                raise
+            finally:
+                ex.shutdown(wait=False, cancel_futures=True)
         except Exception as e:  # BrokenProcessPool, fork/pickle issues, ...
             logger.warning("parallel MC pool unavailable (%s); running serially in-process", e)
     out = []
@@ -1633,6 +1682,14 @@ def _percentiles_by_age(by_age: Dict[int, List[float]]) -> List[dict]:
     return out
 
 
+def _error_totals(results: List[dict]) -> Tuple[int, Optional[str]]:
+    """Total engine errors across ``sim_task`` / ``scan_age`` results, and the
+    first error message (None if there was none)."""
+    errors = sum(int(r.get("errors", 0) or 0) for r in results)
+    first = next((str(r["first_error"]) for r in results if r.get("first_error")), None)
+    return errors, first
+
+
 def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> dict:
     """Build the ``primary_result`` dict from parallel ``sim_task`` chunk outputs.
 
@@ -1647,6 +1704,7 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
     details: List[dict] = []
     spending_by_age: Dict[int, List[float]] = {}
     health_by_age: Dict[int, List[float]] = {}
+    sim_errors, sim_first_error = _error_totals(chunks)
     for r in chunks:
         finals.extend(r.get("finals", []))
         successes += int(r.get("successes", 0))
@@ -1660,7 +1718,9 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
 
     if n == 0:
         # Nothing ran (all errored) — defer to the legacy serial path.
-        return _run_primary_at_age(retirement_age, 200)
+        fallback = _run_primary_at_age(retirement_age, 200)
+        fallback["sim_errors"], fallback["sim_first_error"] = sim_errors, sim_first_error
+        return fallback
 
     success_rate = successes / n
     # Final-balance percentiles over ALL n runs (the stat tiles and the
@@ -1674,7 +1734,10 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
     paths = [d["trajectory"] for d in details if d.get("trajectory")]
     det_successes = [bool(d.get("success")) for d in details if d.get("trajectory")]
     logs = [d.get("withdrawal_log", []) for d in details if d.get("trajectory")]
-    if not paths:
+    trajectory_is_synthetic = not paths
+    if trajectory_is_synthetic:
+        logger.warning("sim_runner: no simulated path returned a trajectory; "
+                       "charting a placeholder curve instead")
         paths = [_synthetic_trajectory(retirement_age)]
         det_successes = [False]
         logs = [[]]
@@ -1701,6 +1764,12 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
         "p75_final": p75_final,
         "p90_final": p90_final,
         "n_simulations": n,
+        # Paths the engine raised on (left out of n and the success rate) and the
+        # first error, so a rate over survivors is not shown as a clean one.
+        "sim_errors": sim_errors,
+        "sim_first_error": sim_first_error,
+        # True when no real path was available and the chart curve is made up.
+        "trajectory_is_synthetic": trajectory_is_synthetic,
         "median_trajectory": median_traj,
         "p10_trajectory": p10_traj,
         "p90_trajectory": p90_traj,
@@ -1735,6 +1804,11 @@ def plan_full_analysis(
     hit = _CACHE.lookup(key)
     if hit is not None:
         return Plan("full", key, user_overrides, result=hit)
+    # The scans do not depend on the target age, so they are cached on their own
+    # key: moving only the target reruns just the primary batch.
+    scan_overrides = {k: v for k, v in user_overrides.items() if k != "TARGET_RETIREMENT_AGE"}
+    scan_key = (_hashable(scan_overrides), n_simulations, tuple(scan_age_range))
+    cached_scans = _small_cache_lookup(_SCAN_CACHE, "scan", scan_key)
     original = _apply_overrides(build_config_overrides(user_overrides))
     try:
         your_age = int(getattr(cfg, "YOUR_AGE", 25))
@@ -1749,8 +1823,9 @@ def plan_full_analysis(
         calls = _batch_calls(target_retirement_age, n_simulations, detail_cap)
         n_primary = len(calls)
         # One seed for every age: the ages replay the same market paths (mc_jobs.scan_age).
-        calls += [["scan", -1, [age, scan_sims, mc_jobs.PATH_SEED, target_success]]
-                  for age in scan_ages]
+        if cached_scans is None:
+            calls += [["scan", -1, [age, scan_sims, mc_jobs.PATH_SEED, target_success]]
+                      for age in scan_ages]
         job = {"base": mc_jobs.snapshot(), "patches": [], "calls": calls}
         # Record the count ACTUALLY run (the UI's n_simulations), not cfg's
         # NUM_SIMULATIONS default -- otherwise "out of N simulations" in the UI
@@ -1760,10 +1835,14 @@ def plan_full_analysis(
     finally:
         _restore_overrides(original)
 
+    fresh_scans: List[Any] = []
+
     def finish(results: List[Any]) -> Dict[str, Any]:
         primary = _assemble_primary_from_chunks(target_retirement_age, results[:n_primary])
+        scans = cached_scans if cached_scans is not None else results[n_primary:]
+        fresh_scans[:] = [] if cached_scans is not None else scans
         success_by_age = {int(r["age"]): (r["successes"] / r["n"]) if r["n"] else 0.0
-                          for r in results[n_primary:]}
+                          for r in scans}
         # At the target age the main run is the better estimate (more runs), and
         # the page shows it as THE success rate: use it on the curve too, so the
         # earliest age can never contradict it (e.g. "earliest age 40" next to
@@ -1772,15 +1851,24 @@ def plan_full_analysis(
             success_by_age[target_retirement_age] = float(primary["success_rate"])
         earliest = next((age for age in sorted(success_by_age)
                          if success_by_age[age] >= target_success), None)
+        scan_errors, scan_first_error = _error_totals(scans)
         return {
             "earliest_retirement_age": earliest,
             "success_rate_by_age": success_by_age,
+            # Engine errors across the scan (each age's rate is over the paths that ran).
+            "scan_sim_errors": scan_errors,
+            "scan_sim_first_error": scan_first_error,
             "primary_result": primary,
             "config_snapshot": snap,
         }
 
+    def store(result: Dict[str, Any]) -> None:
+        _CACHE.store(key, result)
+        if fresh_scans:
+            _small_cache_writer(_SCAN_CACHE, "scan", scan_key)(list(fresh_scans))
+
     return Plan("full", key, user_overrides, job, finish, local=tuple(range(n_primary)),
-                store=lambda r: _CACHE.store(key, r))
+                store=store)
 
 
 def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
@@ -1832,6 +1920,7 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
         "p75_final": p75_final,
         "p90_final": p90_final,
         "n_simulations": int(n_simulations),
+        "trajectory_is_synthetic": all(p is None for p in portfolios),
         "median_trajectory": median_traj,
         "p10_trajectory": p10_traj,
         "p90_trajectory": p90_traj,
@@ -1861,11 +1950,15 @@ def _collect_trajectories(retirement_age: int, n_paths: int, seed: Optional[int]
     paths: List[List[Tuple[int, float]]] = []
     portfolios: list = []
     successes: List[bool] = []
+    first_error = None
     for i in range(n_paths):
         try:
             success, portfolio = sim.run_detailed_simulation(
                 retirement_age, verbose=False, random_seed=sim.path_seed(seed, i))
-        except Exception:
+        except Exception as exc:
+            if first_error is None:
+                first_error = exc
+                logger.warning("sim_runner: trajectory run failed (%r); skipping such paths", exc)
             continue
         traj = _trajectory_from_portfolio(portfolio)
         if traj:
@@ -1873,6 +1966,7 @@ def _collect_trajectories(retirement_age: int, n_paths: int, seed: Optional[int]
             portfolios.append(portfolio)
             successes.append(bool(success))
     if not paths:
+        logger.warning("sim_runner: no trajectory run succeeded; charting a placeholder curve")
         paths = [_synthetic_trajectory(retirement_age)]
         portfolios = [None]
         successes = [False]
@@ -2536,6 +2630,7 @@ def _payoff_projection_for(overrides: dict, extra: float) -> dict:
 
 
 _MORTGAGE_CACHE: Dict[tuple, Any] = {}
+_SMALL_CACHES.append(_MORTGAGE_CACHE)
 
 
 def has_mortgage_to_prepay() -> bool:
