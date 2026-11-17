@@ -757,6 +757,9 @@ class AccountPortfolio:
         self._current_year_withdrawals: Dict[str, float] = {
             'cash': 0.0, 'taxable': 0.0, 'traditional': 0.0, 'roth': 0.0, 'hsa': 0.0,
         }
+        # Part of this year's reinvested surplus that came from the health-premium
+        # true-up (cash Pass 1 withdrew for a premium that turned out lower).
+        self._premium_excess_returned: float = 0.0
 
     def set_retirement_baseline(self, inflation_factor: float = 1.0):
         """Set the baseline portfolio value at retirement for spending guardrails."""
@@ -3061,7 +3064,7 @@ def _collect_social_security(
             # state's Social Security rule applies (most states exempt it).
             for owner, ss_part in _social_security_by_return(portfolio, ss_income):
                 taxable_ss = cfg.calculate_taxable_social_security(
-                    ss_part, portfolio._return_income(owner),
+                    ss_part, portfolio._return_income(owner) + portfolio._return_investment(owner),
                     years_from_start=max(0, your_age - cfg.YOUR_AGE),
                     status=portfolio.return_status[owner],
                 )
@@ -3100,9 +3103,10 @@ def _true_up_social_security_tax(
     book the real SS tax into the running totals (CONSERVATION #18a).
 
     ``other_agi`` for the IRS provisional-income formula is all recognized
-    ordinary income EXCLUDING the taxable SS itself, which is exactly the current
-    ``year_ordinary_income`` (SS tax was quoted, not recognized, in
-    ``_collect_social_security``). The final taxable SS is then recognized into
+    income EXCLUDING the taxable SS itself: the current ordinary income plus the
+    year's realized capital gains (``year_ordinary_income`` +
+    ``year_investment_income``, per return). SS tax was quoted, not recognized,
+    in ``_collect_social_security``. The final taxable SS is then recognized into
     ``year_ordinary_income`` and its tax booked once.
 
     Returns the FINAL (booked) SS tax so the caller can net it against SS income.
@@ -3113,7 +3117,7 @@ def _true_up_social_security_tax(
     ss_tax = 0.0
     for owner, ss_part in _social_security_by_return(portfolio, ss_income):
         taxable_ss = cfg.calculate_taxable_social_security(
-            ss_part, portfolio._return_income(owner),
+            ss_part, portfolio._return_income(owner) + portfolio._return_investment(owner),
             years_from_start=max(0, (portfolio.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
             status=portfolio.return_status[owner],
         )
@@ -3177,6 +3181,21 @@ def _assemble_health_ltc_car_expenses(
     # solvency machinery. OFF by default -> calculate_car_purchase returns 0.
     car_cost = cfg.calculate_car_purchase(your_age)
     return health_insurance, ltc_cost, car_cost
+
+
+def _unspend_year_withdrawals(portfolio: AccountPortfolio, amount: float) -> None:
+    """Take ``amount`` back out of this year's withdrawal accumulator, pro rata
+    across the source buckets, because cash that was withdrawn was put back into
+    the portfolio instead of spent. Keeps the withdrawal log's "money consumed"
+    consistent with the balances. The log's per-source figures are gross of tax,
+    so the tax already paid on the returned cash stays in the log."""
+    wk = portfolio._current_year_withdrawals
+    total = sum(wk.values())
+    if amount <= 0 or total <= 0:
+        return
+    keep = max(0.0, 1.0 - amount / total)
+    for key in wk:
+        wk[key] *= keep
 
 
 def _fund_net_expenses(
@@ -3321,11 +3340,28 @@ def _fund_net_expenses(
         total_withdrawn += extra_withdrawn
         net_delivered += extra_withdrawn
         net_expenses += premium_shortfall
+    elif premium_shortfall < 0:
+        # The Pass-1 withdrawals were sized on a higher provisional premium.
+        # Lower the need by the excess, then return to taxable brokerage only
+        # what Pass 1 really delivered beyond the true need (never more than the
+        # excess). ``net_expenses`` is the clamped Pass-1 need and
+        # ``reinvested_surplus`` is the part clamped away, so their difference is
+        # the signed need: surplus = excess - Pass-1 shortfall. When Pass 1 fell
+        # short, nothing is returned. Solvency is judged BEFORE the deposit.
+        excess_premium = -premium_shortfall
+        pass1_short = max(0.0, net_expenses - net_delivered)
+        premium_returned = max(0.0, excess_premium - pass1_short)
+        net_expenses = max(0.0, net_expenses - excess_premium)
+        if premium_returned > 0:
+            portfolio._deposit_taxable(premium_returned)
+            reinvested_surplus += premium_returned
+            portfolio._premium_excess_returned = premium_returned
+            _unspend_year_withdrawals(portfolio, min(premium_returned, net_delivered))
 
     # Solvency is judged on NET cash delivered, not gross withdrawn: taxes and
     # penalties reduce what is available to spend. Using the gross figure reported
     # depletion a year late and could turn a final-year depletion into a counted
-    # success.
+    # success. (A premium excess is returned only after this test would pass.)
     if _fell_short(net_delivered, net_expenses):
         return False, rmd_total, reinvested_surplus
 
@@ -3351,7 +3387,10 @@ def _flush_withdrawal_log(
     # (they never left the portfolio to be spent). Subtract that reinvested
     # surplus so `total`/`withdrawal_pct` reflect money actually consumed, not the
     # forced-out-then-put-back RMD overflow (which otherwise inflated the rate).
-    net_rmd_out = max(0.0, float(rmd_total) - float(reinvested_surplus))
+    # A premium excess returned to the portfolio came from this year's expense
+    # withdrawals (already taken out of the buckets below), not from the RMD.
+    rmd_surplus = max(0.0, float(reinvested_surplus) - portfolio._premium_excess_returned)
+    net_rmd_out = max(0.0, float(rmd_total) - rmd_surplus)
     wk = portfolio._current_year_withdrawals
     total_wd = (
         wk.get('cash', 0.0) + wk.get('taxable', 0.0) + wk.get('traditional', 0.0)
@@ -3483,6 +3522,7 @@ def simulate_retirement_year(
     portfolio._current_year_withdrawals = {
         'cash': 0.0, 'taxable': 0.0, 'traditional': 0.0, 'roth': 0.0, 'hsa': 0.0,
     }
+    portfolio._premium_excess_returned = 0.0
     pre_withdrawal_total = portfolio.get_total_balance()
 
     # Calculate partner's age

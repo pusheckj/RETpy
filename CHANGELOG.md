@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (Social Security tax and excess health premium)
+- Social Security taxability now counts the year's realized capital gains in provisional income (both the provisional quote and the true-up). Before, only ordinary income was passed, so a year with gains under-taxed Social Security (40,000 of benefits plus 60,000 of gains on a joint return: 34,000 taxable, was 6,000)
+- When the true health premium is below the provisional one that sized the withdrawals, the part of the difference that Pass 1 really delivered as cash goes back into taxable brokerage and counts as reinvested surplus. Before it left the portfolio without being spent. Nothing is returned for a Pass-1 shortfall, so no money is created. The withdrawal log drops the returned cash from the year's withdrawals (pro rata across sources, gross of tax) and no longer takes it off the RMD figure
+
 ### Fixed (sim_runner: shared cache, pool, config and error reporting)
 - Results that include a visitor's browser replies are no longer written to the shared (or disk) cache, so a forged reply cannot be served to later visitors with the same inputs. `finish_plan(..., from_browser=True)` skips `plan.store`; `browser_compute` sets it for any job filled from a browser reply
 - A hung pool worker no longer freezes a run: the pool is not joined on exit, its workers are terminated at the 300 s deadline, and the same seeded calls run serially
