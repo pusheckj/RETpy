@@ -20,10 +20,16 @@ except ImportError:  # pragma: no cover
 def render(st) -> None:
     try:
         from utils import disk_cache
+        from utils.hosting import is_hosted
         from utils.sim_runner import clear_cache
     except ImportError:  # pragma: no cover
         from ui.utils import disk_cache  # type: ignore
+        from ui.utils.hosting import is_hosted  # type: ignore
         from ui.utils.sim_runner import clear_cache  # type: ignore
+
+    # The caches are shared by every visitor's session: clearing them is the owner's call.
+    if is_hosted():
+        return
 
     with st.expander("Simulation cache", expanded=False, icon=":material/bolt:"):
         try:

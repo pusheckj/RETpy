@@ -821,7 +821,10 @@ def _upload_panel(st, store: Dict) -> None:
         key=_uploader_key(st), on_change=_take_uploads, args=(st,),
         help="Bank, card and Venmo statements (CSV or PDF). You can also add a rules file "
              f"({RULES_FILENAME}, JSON) to change what counts as spending. Without one, "
-             "default rules apply. A file with the same name as an earlier one replaces it.")
+             "default rules apply. In an uploaded rules file every pattern is plain text "
+             "that matches anywhere in a description, upper or lower case (no regex): "
+             "write `gadget.com/us`, not `GADGET\\.COM/US`. At most 500 patterns of 200 "
+             "characters. A file with the same name as an earlier one replaces it.")
     n = len(store["files"])
     if n or store["rules"]:
         rules = f"rules from {store['rules'][0]}" if store["rules"] else "default rules"

@@ -254,7 +254,8 @@ def test_uploaded_rules_match_the_same_file_on_disk(tmp_path):
 
 
 @pytest.mark.parametrize("bad,why", [(b"{not json", "Expecting"), (b"[1, 2]", "JSON object"),
-                                     (b'{"work_travel_locations": ["("]}', "invalid pattern")])
+                                     (b'{"work_travel_locations": [5]}', "must be text"),
+                                     (b'{"work_travel_locations": [""]}', "must not be empty")])
 def test_unusable_rules_fall_back_to_defaults(bad, why):
     data = sd.load_uploaded([("fid.csv", FIDELITY_CSV.encode())], bad)
     assert why in data["rules_error"]
@@ -357,3 +358,158 @@ def test_local_without_folder_offers_folder_and_upload_with_same_numbers(tmp_pat
     assert not folder.exception, folder.exception
     assert [(m.label, m.value) for m in uploaded.metric] == [(m.label, m.value) for m in folder.metric]
     assert len(folder.metric) == 4
+
+
+# ---------------------------------------------------------------- hostile rules
+# An uploaded rules file is untrusted: every pattern is plain case-insensitive
+# text (sr.PlainPattern), never a regex. Bundled/local rules keep full regex.
+
+import time  # noqa: E402
+
+EVIL = ["^(a|a)*a*b$", "(a+)+$", "(a*)*b", "(a?){30}a{30}", "(x.*)*y",
+        "a*a*c", "a*a*a*c", "a*a*a*a*c", "a*a*a*a*a*c", ".*.*.*.*x", "[a-z]*[a-z]*[a-z]*x",
+        "(a|aa)+$", "a+a+a+a+$", r"(\s*\s*)x", "(?>a|b)c", "(?>a+)+b", "(?=a)b", "a++b",
+        "a|" * 59 + "a*b", "|", "x|", "(", "[z-a]", "\\", "*a"]
+
+
+def _rules_bytes(evil, key="work_travel_locations"):
+    return json.dumps({key: [evil]}).encode()
+
+
+@pytest.mark.parametrize("evil", EVIL)
+def test_every_historical_exploit_is_accepted_as_inert_text_and_matches_fast(evil):
+    rules = sr.parse_rules(_rules_bytes(evil))
+    assert all(isinstance(p, sr.PlainPattern) for p in rules["work_travel_locations"][-1:])
+    for text in ["a" * 199 + "b", " " * 199 + "b", ("a" * 10 + " ") * 18 + "b", "a" * 100000 + "b"]:
+        t0 = time.perf_counter()
+        sr._any(rules["work_travel_locations"][-1:], text)
+        assert time.perf_counter() - t0 < 0.05, evil
+
+
+def test_plain_patterns_are_case_insensitive_substrings_not_regex():
+    pats = sr.parse_rules(json.dumps({"transfer_patterns": ["a.c", "x|y", "(z)", "^start", "Mr?s"]}
+                                     ).encode())["transfer_patterns"][-5:]
+    assert sr._any(pats, "ABC A.C") and not sr._any(pats[:1], "abc")          # '.' is a dot
+    assert sr._any(pats[1:2], "pre X|Y post") and not sr._any(pats[1:2], "x")  # '|' is a bar
+    assert sr._any(pats[2:3], "a (Z) b") and not sr._any(pats[2:3], "z")
+    assert sr._any(pats[3:4], "the ^start") and not sr._any(pats[3:4], "start here")
+    assert sr._any(pats[4:5], "MR?S JONES") and not sr._any(pats[4:5], "MRS JONES")
+
+
+def test_all_fields_use_plain_matching_in_classify():
+    rules = sr.parse_rules(json.dumps({
+        "merchant_categories": {"cafe.luna": "Dining"}, "transfer_reasons": {"loan.pay": "Loan"},
+        "income_patterns": {"Side gig": ["gig.co"]}}).encode())
+    assert sr._search(next(iter(rules["merchant_categories"])), "CAFE.LUNA 12")
+    assert not sr._search(next(iter(rules["merchant_categories"])), "CAFEXLUNA 12")
+    assert sr._any(rules["income_patterns"]["Side gig"], "GIG.CO PAYOUT")
+    assert not sr._any(rules["income_patterns"]["Side gig"], "GIGXCO PAYOUT")
+
+
+@pytest.mark.parametrize("payload", [
+    {"transfer_patterns": [["a"]]}, {"transfer_patterns": [{"a": 1}]}, {"transfer_patterns": [None]},
+    {"transfer_patterns": [5]}, {"transfer_patterns": "abc"}, {"transfer_patterns": {"a": 1}},
+    {"merchant_categories": {"a": ["Dining"]}}, {"merchant_categories": {"a": {"x": 1}}},
+    {"merchant_categories": {"a": 5}}, {"merchant_categories": ["a"]},
+    {"transfer_reasons": {"a": ["Loan"]}}, {"transfer_reasons": {"a": None}},
+    {"income_patterns": {"Pay": "PAYROLL"}}, {"income_patterns": {"Pay": [["x"]]}},
+    {"income_patterns": {"Pay": [{"x": 1}]}}, {"income_patterns": ["a"]},
+    {"venmo_transfer_types": [["x"]]}, {"transfer_counterparties": [{"a": 1}]},
+    {"income_counterparties": {"Rae": ["Rent"]}}, {"income_counterparties": {"Rae": {"label": ["x"]}}},
+    {"income_counterparties": {"Rae": {"label": "Rent", "min_amount": "lots"}}},
+    {"fixed_monthly": [{"label": "x", "amount": "5"}]}, {"fixed_monthly": ["x"]},
+    {"fixed_monthly": [{"label": ["x"], "amount": 5}]}, {"fixed_monthly": {"a": 1}},
+    {"work_trip_window_days": [1]}, {"work_trip_window_days": 10 ** 9}, {"work_trip_window_days": True},
+    {"work_trip_day_patterns": [[]]},
+])
+def test_wrongly_typed_uploaded_values_are_a_clean_value_error(payload):
+    with pytest.raises(ValueError):
+        sr.parse_rules(json.dumps(payload).encode())
+    data = sd.load_uploaded([("fid.csv", FIDELITY_CSV.encode())], json.dumps(payload).encode())
+    assert data["rules_error"] and _hotel(data)["kind"] == "spend"       # defaults used
+
+
+@pytest.mark.parametrize("empty", ["", " ", "   \t"])
+def test_empty_patterns_are_rejected_in_every_field(empty):
+    for payload in ({"transfer_patterns": [empty]}, {"merchant_categories": {empty: "Dining"}},
+                    {"transfer_reasons": {empty: "Loan"}}, {"income_patterns": {"Pay": [empty]}},
+                    {"transfer_counterparties": [empty]}):
+        with pytest.raises(ValueError, match="empty"):
+            sr.parse_rules(json.dumps(payload).encode())
+
+
+@pytest.mark.parametrize("bad", [b"\xff\xfe\x00", b"[" * 100000, b"null", b'"x"'])
+def test_any_unreadable_rules_file_is_a_value_error(bad):
+    with pytest.raises(ValueError):
+        sr.parse_rules(bad)
+
+
+def test_budget_caps():
+    with pytest.raises(ValueError, match="too long"):
+        sr.parse_rules(json.dumps({"transfer_patterns": ["a" * 201]}).encode())
+    sr.parse_rules(json.dumps({"transfer_patterns": ["a" * 200]}).encode())
+    many = [f"shop{i}" for i in range(sr.MAX_RULE_PATTERNS)]
+    sr.parse_rules(json.dumps({"transfer_patterns": many}).encode())             # exactly at the cap
+    with pytest.raises(ValueError, match="too many"):
+        sr.parse_rules(json.dumps({"transfer_patterns": many + ["one more"]}).encode())
+    with pytest.raises(ValueError, match="too many"):                            # the cap spans fields
+        sr.parse_rules(json.dumps({"transfer_patterns": many, "work_travel_locations": ["x"]}).encode())
+    with pytest.raises(ValueError, match="in total"):                            # 101 * 200 > 20,000
+        sr.parse_rules(json.dumps({"transfer_patterns": ["b" * 199 + str(i % 10) for i in range(101)]}).encode())
+    with pytest.raises(ValueError, match="too many"):
+        sr.parse_rules(json.dumps({"fixed_monthly": [{"amount": 1}] * 51}).encode())
+
+
+def test_max_budget_classify_is_fast_on_1000_rows_of_200_characters():
+    """The earlier volume attack: 500 accepted patterns x many long rows."""
+    # 100 long patterns + 400 short ones: the most the 20,000-character budget allows
+    pats = [("a" * 148 + f"{i:02d}") if i < 100 else ("a" * 8 + f"{i:03d}") for i in range(500)]
+    pats = pats[::5] + pats[1::5] + pats[2::5] + pats[3::5] + pats[4::5]
+    rules = sr.parse_rules(json.dumps({
+        "excluded_purchase_patterns": pats[:100], "work_travel_locations": pats[100:200],
+        "transfer_patterns": pats[200:300], "reimbursement_patterns": pats[300:400],
+        "work_travel_exceptions": pats[400:]}).encode())
+    n = 1000
+    desc = ["a" * 199 + "b", ("a" * 10 + " ") * 18 + "b", " " * 199 + "b", "z" * 200] * (n // 4)
+    df = pd.DataFrame({"date": pd.date_range("2026-01-01", periods=n, freq="h"),
+                       "description": desc, "amount": [-10.0 - i for i in range(n)],
+                       "source": "Fidelity", "account": "x", "raw_type": "", "raw_category": "",
+                       "note": "", "counterparty": "", "mcc": ""})
+    t0 = time.perf_counter()
+    out = sr.classify(df, rules)
+    assert time.perf_counter() - t0 < 2.0
+    assert len(out) == n
+
+
+def test_defaults_and_local_rules_keep_full_regex():
+    assert sr.parse_rules(b"{}") == sr.DEFAULT_RULES
+    assert any("(" in p for p in sr.DEFAULT_RULES["transfer_patterns"])
+    assert not any(isinstance(p, sr.PlainPattern) for p in sr.DEFAULT_RULES["transfer_patterns"])
+    uploaded = sr.parse_rules(b'{"transfer_patterns": ["mine"]}')["transfer_patterns"]
+    assert [type(p) for p in uploaded[:-1]] == [str] * (len(uploaded) - 1)     # bundled stay regex
+    assert isinstance(uploaded[-1], sr.PlainPattern)
+    assert sr._any(sr.DEFAULT_RULES["transfer_patterns"], "ELAN CARD PYMT")    # regex still works
+    assert sr._any([r"GADGET\.COM/US"], "gadget.com/us order")
+    assert not sr._any([r"GADGET\.COM/US"], "gadgetXcom/us")
+
+
+def test_personal_rules_fixture_classifies_as_before_locally_and_as_plain_text_uploaded(tmp_path):
+    files = [("fid.csv", FIDELITY_CSV.encode())]
+    p = tmp_path / "rules.json"
+    p.write_text(json.dumps(PERSONAL_RULES), encoding="utf-8")
+    local = sd.prepare(*sp.load_files(files), sr.load_rules(str(p)))["tx"]        # full regex, as before
+    assert _hotel({"tx": local})["reason"] == sr.REASON_WORK_TRAVEL
+    assert (local["reason"] == sr.REASON_BOUGHT_FOR_OTHERS).any()
+    plain = {**PERSONAL_RULES, "excluded_purchase_patterns": ["gadget.com/us"]}   # same intent, plain text
+    up = sd.load_uploaded(files, json.dumps(plain).encode())
+    assert up["rules_error"] is None
+    assert up["tx"][["description", "kind", "reason"]].equals(local[["description", "kind", "reason"]])
+    # a regex-escaped pattern is just literal text now: it no longer matches
+    esc = sd.load_uploaded(files, json.dumps(PERSONAL_RULES).encode())["tx"]
+    assert not (esc["reason"] == sr.REASON_BOUGHT_FOR_OTHERS).any()
+
+
+def test_plain_matching_reads_at_most_max_text_chars():
+    pats = sr.parse_rules(b'{"transfer_patterns": ["needle"]}')["transfer_patterns"][-1:]
+    assert not sr._any(pats, "x" * sr.MAX_TEXT_CHARS + "needle")
+    assert sr._any(pats, "x" * 10 + "needle")
