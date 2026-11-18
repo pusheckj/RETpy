@@ -200,8 +200,9 @@ def what_if(overrides: Any, more: float) -> Dict[str, Any]:
 
 
 def real_return(overrides: Any) -> float:
-    """The expected real return of the plan's return scenario: the same simple
-    rate the net-worth projection uses (net of the engine's volatility drag)."""
+    """The expected real return of the plan's return scenario: the same
+    geometric rate the net-worth projection uses (the Monte Carlo's median
+    compounded growth)."""
     try:
         from components.net_worth_projection_chart import investment_real_return
     except ImportError:  # pragma: no cover

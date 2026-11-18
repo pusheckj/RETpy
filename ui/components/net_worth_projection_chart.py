@@ -60,35 +60,30 @@ ACCOUNTS = [
 
 
 def investment_real_return(scenario: str, overrides: dict = None) -> float:
-    """Expected real return of the investment accounts in ``scenario``, built
-    the way the engine builds it (account_simulation.calculate_blended_return):
-    the stock/bond means blended at STOCK_ALLOCATION, less the investment fee,
-    less half the blended variance when APPLY_VOLATILITY_DRAG is on. Reads the
-    scenario table, allocation, fee and drag switch from ``overrides`` first,
-    then from the engine config."""
+    """Expected GEOMETRIC real return of the investment accounts in
+    ``scenario`` (cfg.geometric_portfolio_return): the arithmetic stock/bond
+    means blended at STOCK_ALLOCATION, less the fee, less half the blended
+    variance. This is the Monte Carlo's median compounded growth, so the
+    deterministic projection and the simulation agree. Reads allocation, fee
+    and correlation from ``overrides`` first, then from the engine config."""
     ov = overrides or {}
 
     def pick(key):
         return ov.get(key, getattr(cfg, key))
 
     params = cfg.get_return_parameters(scenario)
-    w_s = max(0.0, min(1.0, safe_float(pick("STOCK_ALLOCATION"), 0.8)))
-    w_b = 1.0 - w_s
-    fee = safe_float(pick("INVESTMENT_FEE_RATE"), 0.0)
-    rate = (w_s * (params["stock_return"] - fee) + w_b * (params["bond_return"] - fee))
-    if pick("APPLY_VOLATILITY_DRAG"):
-        sd_s, sd_b = params["stock_volatility"], params["bond_volatility"]
-        rho = safe_float(pick("STOCK_BOND_CORRELATION"), 0.0)
-        rate -= (w_s ** 2 * sd_s ** 2 + w_b ** 2 * sd_b ** 2
-                 + 2 * w_s * w_b * rho * sd_s * sd_b) / 2
-    return rate
+    return cfg.geometric_portfolio_return(
+        safe_float(pick("STOCK_ALLOCATION"), 0.8),
+        params["stock_return"], params["bond_return"],
+        params["stock_volatility"], params["bond_volatility"],
+        safe_float(pick("STOCK_BOND_CORRELATION"), 0.0),
+        fee=safe_float(pick("INVESTMENT_FEE_RATE"), 0.0))
 
 
 # Per-asset-class real expected returns by scenario, for the default allocation
 # and fee. Used for the deterministic projection (no volatility -- single
 # forward path). ``returns_for(overrides)`` is the version that follows the
-# user's allocation, fee and drag switch; this table backs callers that only
-# know the scenario (Freedom milestones).
+# user's allocation and fee; this table is the default-allocation fallback.
 _CASH_HOME_RETURNS = {
     "conservative": {"cash": 0.005, "home": 0.005},
     "historical":   {"cash": 0.010, "home": 0.010},
@@ -98,7 +93,8 @@ _CASH_HOME_RETURNS = {
 
 def returns_for(overrides: dict = None) -> dict:
     """The active scenario's {investment, cash, home} real returns for the
-    projection, with the investment rate net of volatility drag like the engine."""
+    projection. The investment rate is the geometric (median) rate, which is
+    what the Monte Carlo's compounded draws grow at."""
     scen = str((overrides or {}).get("ACTIVE_RETURN_SCENARIO", "historical")).lower()
     if scen not in _CASH_HOME_RETURNS:
         scen = "historical"
@@ -556,7 +552,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_projection_main
     _ret = returns_for(overrides)
     st.caption(
         f"Real (inflation-adjusted) return: investment accounts "
-        f"{_ret['investment']*100:.1f}% (after the drag from market ups and downs), "
+        f"{_ret['investment']*100:.1f}% (the typical compounded growth with market ups and downs, the simulation's median), "
         f"cash {_ret['cash']*100:.1f}%, "
         f"home equity follows the mortgage paydown and any planned moves. "
         f"**Run simulation** (top bar) adds market ups and downs and "

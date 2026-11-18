@@ -26,7 +26,7 @@ from utils.widget_sync import DIRECT_MAPPINGS  # noqa: E402
 SECTION_ORDER = ["About you", "Family", "Income", "Taxes", "House", "Expenses", "Debts",
                  "Accounts", "Investments", "Retirement", "Assumptions (advanced)"]
 
-RETURNS_AND_MIX_KEYS = {"sa_scenario", "sa_stock_alloc", "sa_fee_bps", "sa_vol_drag",
+RETURNS_AND_MIX_KEYS = {"sa_scenario", "sa_stock_alloc", "sa_fee_bps",
                         "sa_inflation", "sa_glide_enable", "sa_glide_start", "sa_glide_end",
                         "sa_roth_enable", "sa_roth_target", "sa_roth_max", "sa_roth_stop"}
 ASSUMPTIONS_LEFTOVER_KEYS = {"sa_dyn_enable", "sa_ret_spend", "sa_aca", "sa_aca_benchmark",
@@ -115,7 +115,10 @@ def test_planner_sidebar_shows_the_sections_in_order(monkeypatch):
         return [self.options.index(self.format_func(v)) for v in values]
     monkeypatch.setattr(et.ButtonGroup, "indices", property(indices))
     monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "1")
-    at = AppTest.from_file(os.path.join(_UI, "app.py"), default_timeout=90).run()
+    # 180 s: with a cold result cache the first draw runs the whole simulation
+    # (89 s on main already, so 90 s was flaky; more runs now survive to the
+    # plan end after the volatility-drag fix, which adds about 15%).
+    at = AppTest.from_file(os.path.join(_UI, "app.py"), default_timeout=180).run()
     at.button(key="device_skip").click().run()
     next(b for b in at.button if b.label == "Open the retirement planner").click().run()
     at.button(key="gs_skip").click().run()
@@ -189,7 +192,7 @@ def test_assumptions_keeps_only_the_leftovers(monkeypatch):
 def test_moved_widgets_keep_their_keys_and_overrides():
     """widget_sync maps each moved widget key to the same override as before."""
     expected = {"sa_scenario": "ACTIVE_RETURN_SCENARIO", "sa_stock_alloc": "STOCK_ALLOCATION",
-                "sa_fee_bps": "INVESTMENT_FEE_RATE", "sa_vol_drag": "APPLY_VOLATILITY_DRAG",
+                "sa_fee_bps": "INVESTMENT_FEE_RATE",
                 "sa_inflation": "EXPECTED_INFLATION", "sa_glide_enable": "GLIDE_PATH_ENABLED",
                 "sa_roth_enable": "ENABLE_ROTH_CONVERSION", "sv_mode": "SAVINGS_MODE",
                 "sv_manual_your_401k": "YOUR_401K_CONTRIBUTION",

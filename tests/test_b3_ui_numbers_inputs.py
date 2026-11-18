@@ -20,51 +20,77 @@ from utils import debt_view as dv  # noqa: E402
 from utils import derived  # noqa: E402
 
 
-# --- return rate: the engine's volatility drag -------------------------------
-def _engine_rate(scen, w_s, fee=0.0, drag=True):
+# --- return rate: the geometric (median) rate, drag netted once -------------
+def _engine_rate(scen, w_s, fee=0.0):
     p = cfg.get_return_parameters(scen)
     w_b = 1 - w_s
     rate = w_s * (p["stock_return"] - fee) + w_b * (p["bond_return"] - fee)
-    if drag:
-        rate -= (w_s ** 2 * p["stock_volatility"] ** 2 + w_b ** 2 * p["bond_volatility"] ** 2
-                 + 2 * w_s * w_b * cfg.STOCK_BOND_CORRELATION
-                 * p["stock_volatility"] * p["bond_volatility"]) / 2
+    rate -= (w_s ** 2 * p["stock_volatility"] ** 2 + w_b ** 2 * p["bond_volatility"] ** 2
+             + 2 * w_s * w_b * cfg.STOCK_BOND_CORRELATION
+             * p["stock_volatility"] * p["bond_volatility"]) / 2
     return rate
 
 
 @pytest.mark.parametrize("scen", ["conservative", "historical", "pessimistic"])
 def test_investment_return_nets_volatility_drag(scen):
-    ov = {"STOCK_ALLOCATION": 0.8, "INVESTMENT_FEE_RATE": 0.0, "APPLY_VOLATILITY_DRAG": True}
+    ov = {"STOCK_ALLOCATION": 0.8, "INVESTMENT_FEE_RATE": 0.0}
     assert nw.investment_real_return(scen, ov) == pytest.approx(_engine_rate(scen, 0.8))
     assert nw._SCENARIO_RETURNS[scen]["investment"] == pytest.approx(
         nw.investment_real_return(scen, {"STOCK_ALLOCATION": cfg.STOCK_ALLOCATION}))
 
 
-def test_historical_return_is_about_six_and_a_half_not_seven_and_a_half():
-    r = nw.investment_real_return("historical", {"STOCK_ALLOCATION": 0.8, "INVESTMENT_FEE_RATE": 0.0,
-                                                 "APPLY_VOLATILITY_DRAG": True})
-    assert 0.062 < r < 0.067
+def test_historical_return_is_about_six_and_a_third_not_seven_and_a_half():
+    r = nw.investment_real_return("historical", {"STOCK_ALLOCATION": 0.8, "INVESTMENT_FEE_RATE": 0.0})
+    assert 0.060 < r < 0.067
 
 
-def test_return_follows_allocation_fee_and_drag_switch():
-    base = {"STOCK_ALLOCATION": 1.0, "INVESTMENT_FEE_RATE": 0.0, "APPLY_VOLATILITY_DRAG": True}
-    assert nw.investment_real_return("historical", {**base, "APPLY_VOLATILITY_DRAG": False}) == pytest.approx(0.087)
+def test_return_follows_allocation_and_fee_and_ignores_retired_drag_switch():
+    """APPLY_VOLATILITY_DRAG no longer changes anything: an old profile that saved
+    it off still gets the geometric rate the simulation's median grows at."""
+    base = {"STOCK_ALLOCATION": 1.0, "INVESTMENT_FEE_RATE": 0.0}
+    assert nw.investment_real_return("historical", {**base, "APPLY_VOLATILITY_DRAG": False}) == pytest.approx(
+        _engine_rate("historical", 1.0))
     assert nw.investment_real_return("historical", {**base, "INVESTMENT_FEE_RATE": 0.01}) == pytest.approx(
         _engine_rate("historical", 1.0, fee=0.01))
 
 
 def test_debt_view_real_return_uses_the_net_rate():
-    ov = {"ACTIVE_RETURN_SCENARIO": "historical", "STOCK_ALLOCATION": 0.8,
-          "INVESTMENT_FEE_RATE": 0.0, "APPLY_VOLATILITY_DRAG": True}
+    ov = {"ACTIVE_RETURN_SCENARIO": "historical", "STOCK_ALLOCATION": 0.8, "INVESTMENT_FEE_RATE": 0.0}
     assert dv.real_return(ov) == pytest.approx(_engine_rate("historical", 0.8))
     assert dv.real_return(ov) < 0.07
 
 
 def test_projection_grows_at_the_net_rate():
     ov = {"YOUR_AGE": 40, "PARTNER_AGE": 0, "YOUR_401K": 100_000, "YOUR_401K_CONTRIBUTION": 0,
-          "ACTIVE_RETURN_SCENARIO": "historical", "STOCK_ALLOCATION": 0.8,
-          "INVESTMENT_FEE_RATE": 0.0, "APPLY_VOLATILITY_DRAG": True}
+          "ACTIVE_RETURN_SCENARIO": "historical", "STOCK_ALLOCATION": 0.8, "INVESTMENT_FEE_RATE": 0.0}
     assert nw.returns_for(ov)["investment"] == pytest.approx(_engine_rate("historical", 0.8))
+
+
+def test_freedom_milestones_rate_follows_the_allocation():
+    import components.freedom_milestones as fm
+    for w in (0.6, 1.0):
+        ov = {"ACTIVE_RETURN_SCENARIO": "historical", "STOCK_ALLOCATION": w}
+        assert fm._real_return(ov) == pytest.approx(_engine_rate("historical", w))
+
+
+def test_saved_profile_with_drag_switch_loads_and_runs_the_same():
+    """A profile saved with the old switch (on or off) still loads, keeps the key,
+    and simulates exactly like one without it: the switch no longer exists."""
+    import json
+    from utils import profile_io, sim_runner as sr
+    base = {"YOUR_AGE": 50, "PARTNER_AGE": 0, "YOUR_401K": 1_500_000, "SPEND_RENT_MONTHLY": 1_500}
+    rates = set()
+    for flag in (True, False, None):
+        ov = dict(base) if flag is None else {**base, "APPLY_VOLATILITY_DRAG": flag}
+        loaded = profile_io.deserialize_overrides(profile_io.serialize_overrides(ov))
+        if flag is not None:
+            assert loaded["APPLY_VOLATILITY_DRAG"] is flag
+        sr.clear_cache(include_disk=False)
+        res = sr.run_full_analysis(loaded, n_simulations=60, target_retirement_age=55,
+                                   scan_age_range=(55, 56, 1))
+        rates.add(json.dumps([res["success_rate_by_age"][55],
+                              round(res["primary_result"]["median_final"])]))
+    assert len(rates) == 1
 
 
 # --- what-if spending slider -------------------------------------------------

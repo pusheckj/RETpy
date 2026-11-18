@@ -245,10 +245,14 @@ def test_debts_cost_the_plan_money(applied):
     _, owing = sim.run_detailed_simulation(55, random_seed=3)
     at55 = lambda p: next(r["total"] for r in p.yearly_history if r["age"] == 55)  # noqa: E731
     assert at55(owing) < at55(base)
-    # Paying the same debts off faster costs less in all: more is left at 55.
+    # Paying a 24% card off faster costs less in all: more is left at 55. (Not
+    # a rule for the 5-7% loans: their real rate is below the expected return,
+    # so prepaying them is roughly a wash once returns compound correctly.)
+    cfg.DEBTS = [CARD]
+    _, card = sim.run_detailed_simulation(55, random_seed=3)
     cfg.DEBT_EXTRA_MONTHLY = 500
     _, faster = sim.run_detailed_simulation(55, random_seed=3)
-    assert at55(owing) < at55(faster) < at55(base)
+    assert at55(card) < at55(faster) < at55(base)
 
 
 # ---------------------------------------------------------------- browser compute

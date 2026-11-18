@@ -55,14 +55,18 @@ the engine computes its Cholesky factor `L` (so `Σ = L Lᵀ`) and generates cor
 
 ### 3.3 Fees and volatility drag
 
-1. **Investment fees** are subtracted from the arithmetic mean *before* the volatility-drag adjustment.
-2. **Volatility drag** converts arithmetic to geometric expected return:
+1. **Investment fees** are subtracted from the arithmetic mean before the draw.
+2. **The scenario returns are arithmetic means**, and the engine draws arithmetic yearly returns around them. It does **not** subtract a drag term. Compounding the draws already produces the drag: the median compounded growth is about
 
 ```
-geometric_return ≈ arithmetic_return − σ² / 2
+geometric_return ≈ arithmetic_return − σ_p² / 2
+σ_p² = w_s² σ_s² + w_b² σ_b² + 2 w_s w_b ρ σ_s σ_b
 ```
 
-This ensures the compounded growth of the simulated portfolio matches the stated real CAGR rather than overstating it.
+   For 100% stocks at 8.7% / 19% that is about 6.9% real; for 80/20 `historical` about 6.3%.
+3. **Deterministic projections** (net-worth projection, Debt payoff, Freedom milestones / Coast FIRE) need one expected rate, so they use this geometric rate (`config.geometric_portfolio_return`, blended portfolio variance with correlation). Their single path then matches the simulation's median.
+
+Earlier versions also subtracted σ_p²/2 from every draw, which counted the drag twice (100% stocks compounded at about 5.1% real). `APPLY_VOLATILITY_DRAG` is kept only so old profiles load; it has no effect.
 
 ### 3.4 Clamping
 
@@ -72,11 +76,11 @@ Annual portfolio returns are clamped to **[−35%, +50%]** for an 80/20 portfoli
 
 All values below are **real** (inflation-adjusted) returns.
 
-| Scenario     | Stock real return | Bond real return | Stock σ | Bond σ | Correlation |
-|--------------|-------------------|------------------|---------|--------|-------------|
-| Conservative | 7.0%              | 2.0%             | 17%     | 7%     | 0.10        |
-| Historical   | 8.7%              | 3.1%             | 17%     | 7%     | 0.10        |
-| Pessimistic  | 5.0%              | 1.0%             | 17%     | 7%     | 0.10        |
+| Scenario     | Stock real return (arithmetic) | Bond real return (arithmetic) | Stock σ | Bond σ | Correlation | 80/20 geometric |
+|--------------|-------------------|------------------|---------|--------|-------------|-----------------|
+| Conservative | 7.0%              | 2.0%             | 19%     | 8%     | −0.20       | 4.9%            |
+| Historical   | 8.7%              | 3.1%             | 20%     | 8.7%   | −0.20       | 6.3%            |
+| Pessimistic  | 5.0%              | 1.0%             | 22%     | 10%    | −0.20       | 2.7%            |
 
 `ACTIVE_RETURN_SCENARIO` selects one of these at run time.
 

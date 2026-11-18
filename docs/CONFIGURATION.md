@@ -288,7 +288,7 @@ These are today's-dollar amounts and grow at the healthcare **real-excess** rate
 | `historical` | 8.7% | 3.1% | 20% | 8.7% | 1926–2024 real arithmetic mean. |
 | `pessimistic` | 5.0% | 1.0% | 22% | 10% | Stress test for low-return futures. |
 
-All returns are **real** (inflation-adjusted).
+All returns are **real** (inflation-adjusted) **arithmetic** means. The simulation compounds yearly draws around them, so its median growth is lower: about mean minus half the portfolio variance (`config.geometric_portfolio_return`; about 6.3% for 80/20 `historical`).
 
 ### Volatility and correlation
 
@@ -298,7 +298,7 @@ All returns are **real** (inflation-adjusted).
 | `BOND_VOLATILITY` | `0.08` | Bond std dev. |
 | `STOCK_BOND_CORRELATION` | `-0.20` | Stock/bond correlation. Negative reflects post-2000 behavior (bonds rally on stock crashes). |
 | `INVESTMENT_FEE_RATE` | `0.0015` | 0.15% blended annual expense ratio. Set to `0.0003` for pure index funds, `0.01`+ for actively managed portfolios. |
-| `APPLY_VOLATILITY_DRAG` | `True` | Adjust arithmetic returns down by `vol^2 / 2` to get geometric returns for compounding. Leave on. |
+| `APPLY_VOLATILITY_DRAG` | `True` | **Deprecated, no effect.** Kept so saved profiles that carry it still load. The Monte Carlo draws arithmetic returns and compounding supplies the drag; deterministic projections use `geometric_portfolio_return`. |
 
 ### Inflation
 

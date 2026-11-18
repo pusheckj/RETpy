@@ -602,80 +602,96 @@ class TestReturnClamping:
 
 
 class TestVolatilityDrag:
-    """Test volatility drag calculation in returns."""
+    """Volatility drag must be counted exactly once.
+
+    The config means are ARITHMETIC. The Monte Carlo draws arithmetic returns
+    and compounds them, which already gives a median growth of about
+    mean - variance/2. It used to subtract variance/2 again, so 100% stocks
+    compounded at about mean - variance (~5.1% real instead of ~6.9%).
+    """
+
+    @staticmethod
+    def _median_cagr(stock_alloc, n_paths=4000, years=30, seed=2024):
+        import retirement_sim.account_simulation as S
+        np.random.seed(seed)
+        growth = np.empty(n_paths)
+        for i in range(n_paths):
+            g = 1.0
+            for _ in range(years):
+                g *= 1.0 + S.calculate_blended_return(stock_alloc, 1.0 - stock_alloc)
+            growth[i] = g
+        return float(np.median(growth) ** (1.0 / years) - 1.0)
 
     def test_volatility_drag_applied(self):
-        """Volatility drag should reduce returns in correlated returns."""
+        """Draws stay in a sane range."""
         np.random.seed(42)
         stock_return, bond_return = generate_correlated_returns()
-
-        # With volatility drag enabled, returns should be lower than raw normals
-        # (This is somewhat probabilistic, but generally should hold)
-        # Just verify returns are in reasonable range
         assert -0.50 < stock_return < 0.50
         assert -0.30 < bond_return < 0.30
 
-    def test_portfolio_level_drag_beats_per_asset(self):
-        """
-        Blended real return must be HIGHER than the old per-asset-drag value
-        by the diversification benefit.
-
-        Old (over-penalizing) behavior subtracted the weighted average of the
-        per-asset drags: w_s*var_s/2 + w_b*var_b/2.
-        New (correct) behavior subtracts blended portfolio variance / 2, which
-        is smaller when rho < 1 -- so the new blended return is higher.
-        """
+    def test_blended_draw_is_arithmetic(self):
+        """calculate_blended_return subtracts no drag: 100% stocks returns the
+        raw arithmetic stock draw (clamped)."""
         import retirement_sim.account_simulation as S
-        import retirement_sim.config as cfg
-
-        w_s, w_b = 0.80, 0.20
-        var_s = cfg.STOCK_VOLATILITY ** 2
-        var_b = cfg.BOND_VOLATILITY ** 2
-        cov = cfg.STOCK_BOND_CORRELATION * cfg.STOCK_VOLATILITY * cfg.BOND_VOLATILITY
-
-        old_drag = w_s * var_s / 2 + w_b * var_b / 2
-        blended_variance = w_s**2 * var_s + w_b**2 * var_b + 2 * w_s * w_b * cov
-        new_drag = blended_variance / 2
-
-        diversification_benefit = old_drag - new_drag
-        assert diversification_benefit > 0  # correlation < 1 => benefit exists
-
-        # The pre-clamp blended return must be higher by exactly the benefit.
-        # Compare using the same random draw for both drag conventions.
-        np.random.seed(7)
-        stock_return, bond_return = S.generate_correlated_returns()
-        arithmetic_blended = w_s * stock_return + w_b * bond_return
-        new_blended = arithmetic_blended - new_drag
-        old_blended = arithmetic_blended - old_drag
-        assert new_blended > old_blended
-        assert abs((new_blended - old_blended) - diversification_benefit) < 1e-12
-
-    def test_hundred_percent_stock_drag_unchanged(self):
-        """
-        A 100%-stock portfolio's drag must equal the old per-asset stock drag
-        (var_s / 2) -- the diversification fix must not move an undiversified
-        portfolio.
-        """
-        import retirement_sim.account_simulation as S
-        import retirement_sim.config as cfg
-
-        var_s = cfg.STOCK_VOLATILITY ** 2
-        old_stock_drag = var_s / 2
-
-        # New portfolio-variance drag with w_s=1, w_b=0 reduces to var_s/2.
-        blended_variance = 1.0**2 * var_s + 0.0**2 * (cfg.BOND_VOLATILITY**2) + 0.0
-        assert abs(blended_variance / 2 - old_stock_drag) < 1e-15
-
-        # End-to-end: pre-clamp blended return equals stock_return - var_s/2.
         np.random.seed(11)
         stock_return, _ = S.generate_correlated_returns()
-        # Re-seed identically and run through calculate_blended_return.
         np.random.seed(11)
-        blended = S.calculate_blended_return(1.0, 0.0)
-        expected = stock_return - old_stock_drag
-        # calculate_blended_return clamps; within-bounds draw should match.
-        if S.MIN_BLENDED_RETURN < expected < S.MAX_BLENDED_RETURN:
-            assert abs(blended - expected) < 1e-12
+        assert S.calculate_blended_return(1.0, 0.0) == pytest.approx(S.clamp_return(stock_return), abs=1e-12)
+
+    def test_drag_switch_does_not_change_draws(self):
+        """APPLY_VOLATILITY_DRAG is a deprecated no-op (kept so old profiles load)."""
+        import retirement_sim.account_simulation as S
+        import retirement_sim.config as cfg
+        saved = cfg.APPLY_VOLATILITY_DRAG
+        try:
+            draws = {}
+            for flag in (True, False):
+                cfg.APPLY_VOLATILITY_DRAG = flag
+                np.random.seed(5)
+                draws[flag] = [S.calculate_blended_return(0.8, 0.2) for _ in range(20)]
+            assert draws[True] == draws[False]
+        finally:
+            cfg.APPLY_VOLATILITY_DRAG = saved
+
+    def test_hundred_percent_stock_median_growth_nets_drag_once(self):
+        """Regression: median compounded growth of 100% stocks is ~ mu - sigma^2/2,
+        not mu - sigma^2 (the double-counted value)."""
+        import retirement_sim.config as cfg
+        mu, sd = cfg.EXPECTED_STOCK_RETURN - cfg.INVESTMENT_FEE_RATE, cfg.STOCK_VOLATILITY
+        cagr = self._median_cagr(1.0)
+        assert cagr == pytest.approx(mu - sd ** 2 / 2, abs=0.004)
+        assert cagr > mu - sd ** 2 + 0.012
+
+    def test_deterministic_rate_matches_stochastic_median(self):
+        """cfg.geometric_portfolio_return (the rate every deterministic projection
+        uses) equals the Monte Carlo's median compounded growth for 80/20."""
+        import retirement_sim.config as cfg
+        rate = cfg.geometric_portfolio_return(
+            0.8, cfg.EXPECTED_STOCK_RETURN, cfg.EXPECTED_BOND_RETURN,
+            cfg.STOCK_VOLATILITY, cfg.BOND_VOLATILITY, cfg.STOCK_BOND_CORRELATION,
+            fee=cfg.INVESTMENT_FEE_RATE)
+        assert self._median_cagr(0.8) == pytest.approx(rate, abs=0.003)
+
+    def test_geometric_rate_uses_blended_variance(self):
+        """The deterministic rate nets half the BLENDED variance (with correlation),
+        which is less than the weighted per-asset drags when rho < 1."""
+        import retirement_sim.config as cfg
+        w_s, w_b, sd_s, sd_b, rho = 0.8, 0.2, 0.19, 0.08, -0.2
+        rate = cfg.geometric_portfolio_return(w_s, 0.087, 0.031, sd_s, sd_b, rho)
+        var_p = w_s ** 2 * sd_s ** 2 + w_b ** 2 * sd_b ** 2 + 2 * w_s * w_b * rho * sd_s * sd_b
+        assert rate == pytest.approx(w_s * 0.087 + w_b * 0.031 - var_p / 2, abs=1e-12)
+        per_asset = w_s * 0.087 + w_b * 0.031 - (w_s * sd_s ** 2 + w_b * sd_b ** 2) / 2
+        assert rate > per_asset
+
+    def test_scenario_generator_is_arithmetic(self):
+        """generate_correlated_returns_for_scenario draws around the arithmetic
+        scenario mean (no per-asset drag subtracted)."""
+        import retirement_sim.account_simulation as S
+        import retirement_sim.config as cfg
+        np.random.seed(3)
+        stocks = [S.generate_correlated_returns_for_scenario("historical")[0] for _ in range(20000)]
+        p = cfg.get_return_parameters("historical")
+        assert np.mean(stocks) == pytest.approx(p["stock_return"] - cfg.INVESTMENT_FEE_RATE, abs=0.005)
 
 
 class TestCorrelatedReturns:

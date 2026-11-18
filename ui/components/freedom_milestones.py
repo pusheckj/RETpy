@@ -40,7 +40,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.household import has_partner, plan_end_ages  # type: ignore
     from ui.utils.sim_runner import _hashable  # type: ignore
 
-DEFAULT_RETURN = 0.075       # used only if the net-worth chart's table can't be read
+DEFAULT_RETURN = 0.063       # used only if the net-worth chart's rate can't be read (80/20 Historical, geometric)
 
 
 # --------------------------------------------------------------------------- text helpers
@@ -211,11 +211,10 @@ def _projection(clean: dict):
 def _real_return(clean: dict) -> float:
     try:
         try:
-            from components.net_worth_projection_chart import _SCENARIO_RETURNS
+            from components.net_worth_projection_chart import returns_for
         except ImportError:  # pragma: no cover
-            from ui.components.net_worth_projection_chart import _SCENARIO_RETURNS  # type: ignore
-        scen = str(clean.get("ACTIVE_RETURN_SCENARIO", "historical")).lower()
-        return float(_SCENARIO_RETURNS.get(scen, _SCENARIO_RETURNS["historical"])["investment"])
+            from ui.components.net_worth_projection_chart import returns_for  # type: ignore
+        return float(returns_for(clean)["investment"])
     except Exception:
         return DEFAULT_RETURN
 

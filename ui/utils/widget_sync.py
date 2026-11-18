@@ -287,7 +287,6 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sa_stock_alloc":     ("STOCK_ALLOCATION", _as_pct(80.0, 0.0, 100.0)),
     "sa_inflation":       ("EXPECTED_INFLATION", _as_pct(2.75, 0.0, 10.0)),
     "sa_fee_bps":         ("INVESTMENT_FEE_RATE", _as_bps(15, 0, 200)),
-    "sa_vol_drag":        ("APPLY_VOLATILITY_DRAG", lambda v: bool(v)),
     "sa_glide_enable":    ("GLIDE_PATH_ENABLED", lambda v: bool(v)),
     "sa_glide_start":     ("GLIDE_PATH_START_STOCK_PCT", _as_pct(cfg.GLIDE_PATH_START_STOCK_PCT * 100, 50.0, 100.0)),
     "sa_glide_end":       ("GLIDE_PATH_END_STOCK_PCT", _as_pct(cfg.GLIDE_PATH_END_STOCK_PCT * 100, 20.0, 80.0)),
