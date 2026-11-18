@@ -2164,6 +2164,9 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
     * Partner wages = PARTNER_SALARY + PARTNER_BONUS_AMOUNT + PARTNER_RSU_AMOUNT,
       grown at PARTNER_SALARY_GROWTH_RATE; plus PARTNER_OTHER_INCOME.
     * 401(k)/HSA deferrals are capped at the IRS limits and at the pay itself.
+      The HSA limit covers your deferral plus your employer's deposit
+      (YOUR_HSA_MATCH, flat in today's dollars); the deposit is extra
+      compensation, not paid from take-home (``your_hsa_employer``).
       Each employer match is dollar for dollar on the deferral, up to the match
       % of base pay -- contributing less than the match % earns less match.
     * Taxes: cfg.working_year_taxes (federal by filing status, the state's
@@ -2188,6 +2191,7 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
     your_wages = comp["wages"]
     your_other = float(getattr(cfg, "YOUR_OTHER_INCOME", 0.0) or 0.0) if you_working else 0.0
     your_401k = your_match = your_after_tax_401k = your_hsa = your_roth = 0.0
+    your_hsa_employer = 0.0
     your_401k_roth = partner_401k_roth = 0.0
     if you_working:
         limit_401k = cfg.get_401k_limit(your_age, current_year)
@@ -2208,8 +2212,14 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
         hsa_limit = cfg.get_hsa_limit(your_age, current_year, is_family=cfg.hsa_is_family())
         desired = float(getattr(cfg, "YOUR_HSA_CONTRIBUTION", hsa_limit))
         hsa_now = cfg.get_hsa_limit(cfg.YOUR_AGE, cfg.CURRENT_YEAR, is_family=cfg.hsa_is_family())
-        your_hsa = max(0.0, min(_contribution_for_year(desired, hsa_now, hsa_limit),
-                                your_wages - your_401k))
+        # The IRS limit covers your deferral AND your employer's deposit, so the
+        # employer's amount (a flat amount in today's dollars, YOUR_HSA_MATCH) comes
+        # off the room for yours. A set amount at today's room still means "the max".
+        employer = max(0.0, float(getattr(cfg, "YOUR_HSA_MATCH", 0.0) or 0.0))
+        your_hsa_employer = min(employer, hsa_limit)
+        your_hsa = max(0.0, min(_contribution_for_year(
+            desired, max(0.0, hsa_now - employer), hsa_limit - your_hsa_employer),
+            your_wages - your_401k))
         ira_limit = cfg.get_ira_limit(your_age, current_year)
         your_roth = max(0.0, _contribution_for_year(
             float(getattr(cfg, "YOUR_BACKDOOR_ROTH", ira_limit)),
@@ -2272,7 +2282,7 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
         # Only the pre-tax part of each deferral lowers taxable pay; a Roth
         # catch-up is paid from after-tax pay (it is still FICA wages).
         your_401k=your_401k - your_401k_roth, partner_401k=partner_401k - partner_401k_roth,
-        your_hsa=your_hsa,
+        your_hsa=your_hsa, your_hsa_employer=your_hsa_employer,
         your_age=your_age, partner_age=partner_age, years_from_start=years_from_start,
     )
     two = taxes["two_returns"]
@@ -2321,6 +2331,7 @@ def working_year_cashflow(your_age: int, partner_working: bool = True,
         "saved": comp["saved"],
         "your_401k": your_401k, "your_401k_roth": your_401k_roth, "your_match": your_match,
         "your_after_tax_401k": your_after_tax_401k, "your_hsa": your_hsa,
+        "your_hsa_employer": your_hsa_employer,
         "your_roth": your_roth,
         "partner_base": partner_base, "partner_wages": partner_wages,
         "partner_other": partner_other, "partner_401k": partner_401k,
@@ -2422,7 +2433,8 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
         portfolio.contribute("your_roth_ira", your_after_tax_401k)
 
     your_hsa_contribution = cf["your_hsa"]
-    portfolio.contribute("your_hsa", your_hsa_contribution)
+    # Your deferral plus your employer's deposit (not paid from take-home).
+    portfolio.contribute("your_hsa", your_hsa_contribution + cf["your_hsa_employer"])
 
     your_roth_contribution = cf["your_roth"]
 

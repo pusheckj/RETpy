@@ -2328,6 +2328,7 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
                        your_other: float = 0.0, partner_other: float = 0.0,
                        your_401k: float = 0.0, partner_401k: float = 0.0,
                        your_hsa: float = 0.0, partner_hsa: float = 0.0,
+                       your_hsa_employer: float = 0.0,
                        your_age=None, partner_age=None, status=None,
                        partner=None, state=None, flat_rate=None,
                        years_from_start: float = 0.0, children_under_17=None,
@@ -2343,6 +2344,11 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
     income without FICA. 401(k) and HSA amounts are pre-tax payroll deferrals:
     they lower federal and (unless the state says otherwise) state taxable
     income; 401(k) deferrals still pay FICA, HSA payroll contributions don't.
+
+    ``your_hsa_employer`` is your employer's HSA deposit. It is not in ``your_wages``
+    and not paid from take-home: federally it is not income and not FICA wages, but
+    a state that taxes HSA contributions (rules["hsa_taxed"], California) taxes it
+    as it taxes your own.
 
     ``your_deduction`` is an above-the-line deduction on your return (the
     student loan interest deduction): it lowers your AGI, federal and state
@@ -2373,16 +2379,17 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
         partner_age = PARTNER_AGE
     two = files_two_returns(status, partner)
 
-    def _person(wages, other, k401, hsa, age):
+    def _person(wages, other, k401, hsa, age, hsa_employer=0.0):
         wages = max(0.0, float(wages or 0.0))
         other = max(0.0, float(other or 0.0))
         k401 = min(max(0.0, float(k401 or 0.0)), wages)
         hsa = min(max(0.0, float(hsa or 0.0)), wages - k401)
         return {"wages": wages, "other": other, "k401": k401, "hsa": hsa, "age": age,
+                "hsa_employer": max(0.0, float(hsa_employer or 0.0)),
                 "agi": wages - k401 - hsa + other,
                 "federal": 0.0, "state": 0.0, "state_payroll": 0.0, "fica": 0.0}
 
-    you = _person(your_wages, your_other, your_401k, your_hsa, your_age)
+    you = _person(your_wages, your_other, your_401k, your_hsa, your_age, your_hsa_employer)
     them = _person(partner_wages, partner_other, partner_401k, partner_hsa, partner_age)
     adj = min(max(0.0, float(your_deduction or 0.0)), max(0.0, you["agi"]))
     you["agi"] -= adj
@@ -2411,6 +2418,7 @@ def working_year_taxes(your_wages: float = 0.0, partner_wages: float = 0.0, *,
         state_income = {id(p): (p["wages"] + p["other"]
                                 - (0.0 if rules["pretax_401k_taxed"] else p["k401"])
                                 - (0.0 if rules["hsa_taxed"] else p["hsa"])
+                                + (p["hsa_employer"] if rules["hsa_taxed"] else 0.0)
                                 - p.get("adj", 0.0))
                         for p in people}
         st_total = sum(state_income.values())

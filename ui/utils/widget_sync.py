@@ -236,6 +236,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sv_after_tax_401k":     ("YOUR_AFTER_TAX_401K_PCT", _as_pct(0.0, 0.0, 20.0)),
     "sv_match_pct":          ("YOUR_401K_MATCH_PCT", _as_pct(0.0, 0.0, 50.0)),
     "sv_partner_match_pct":  ("PARTNER_401K_MATCH_PCT", _as_pct(0.0, 0.0, 50.0)),
+    "sv_hsa_match":          ("YOUR_HSA_MATCH", _as_int(0, 0, 10_000)),
     "sv_manual_your_401k":   ("YOUR_401K_CONTRIBUTION", _as_int(2_700, 0, 30_000)),
     "sv_manual_your_hsa":    ("YOUR_HSA_CONTRIBUTION", _as_int(0, 0, 10_000)),
     "sv_manual_your_roth":   ("YOUR_BACKDOOR_ROTH", _as_int(0, 0, 10_000)),

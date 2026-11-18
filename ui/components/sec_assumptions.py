@@ -51,7 +51,7 @@ def render_investing_body(st) -> None:
     scen = st.radio("Return scenario", scen_options, horizontal=True, key="sa_scenario",
                     help="Real (after-inflation) stock/bond returns. Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%. "
                          "Historical is the default and the most optimistic; Conservative is closer to typical planner assumptions.")
-    set_override(st, "ACTIVE_RETURN_SCENARIO", scen.lower())
+    set_override(st, "ACTIVE_RETURN_SCENARIO", str(scen or current_label).lower())
 
     cur_stock_pct = max(0.0, min(100.0, as_fraction(get_override(st, "STOCK_ALLOCATION", 0.80), 0.80) * 100))
     ensure_default(st, "sa_stock_alloc", cur_stock_pct)
@@ -144,7 +144,13 @@ def render_investing_body(st) -> None:
             _status = _cfg.normalize_filing_status(
                 get_override(st, "FILING_STATUS", "Married filing jointly"))
             _auto = int(_cfg.ROTH_CONVERSION_TARGET_BY_STATUS[_status])
-            _defaults = {int(x) for x in _cfg.ROTH_CONVERSION_TARGET_BY_STATUS.values()}
+            try:
+                from utils.config_builder import LEGACY_ROTH_TARGETS
+            except ImportError:  # pragma: no cover
+                from ui.utils.config_builder import LEGACY_ROTH_TARGETS  # type: ignore
+            # The current defaults and the old 2024/2025 ones a saved profile may hold.
+            _defaults = ({int(x) for x in _cfg.ROTH_CONVERSION_TARGET_BY_STATUS.values()}
+                         | set(LEGACY_ROTH_TARGETS))
             _stored = get_override(st, "ROTH_CONVERSION_TARGET_BRACKET", None)
             if _stored is None or safe_int(_stored, _auto) in _defaults:
                 _stored = None

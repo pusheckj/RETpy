@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (employer HSA deposit and stale Roth-conversion targets)
+- The engine ignored your employer's HSA deposit (`YOUR_HSA_MATCH`): the simulated HSA got only your own amount, while the savings table showed both. The deposit now goes into the HSA every working year. It is not paid from take-home and is not federal income or FICA wages. California and New Jersey tax it as they tax your own HSA contributions (`working_year_taxes(..., your_hsa_employer=)`). With `YOUR_HSA_MATCH = 0` results are unchanged
+- The IRS HSA limit covers your amount and your employer's together. Your amount is now capped at the limit less the employer's, and the employer's at the limit. A set amount at today's room still means "the max" and follows the limit as you age (the 55+ catch-up included)
+- Max out for the HSA sets your amount to the limit less your employer's deposit. It used to overfund by that amount. Auto-allocate, Custom %, the sidebar tax and the net-worth projection use the same figures
+- A warning now shows next to the HSA input when your amount plus your employer's is over the limit ("Your $8,300 plus $750 from your employer is $300 over the $8,750 limit. The plan uses $8,000."). The Money check-up warns when its HSA total is over the limit
+- New Investments input: "Your employer's HSA deposit ($/yr)" (`YOUR_HSA_MATCH`)
+- A saved Roth-conversion target equal to a 2025 default (12% bracket top: joint 96,950, single 48,475, head of household 64,850) now follows the default like the 2024 ones did, so it uses the 2026 table. Any other amount is kept
+
 ### Fixed (hosted visitor safety)
 - An uploaded spending rules file can no longer freeze the shared server. Every pattern in an uploaded rules file is now plain text: a case-insensitive "contains" test, with no regular-expression syntax at all, so matching time grows only with the text length. Write `gadget.com/us`, not `GADGET\.COM/US`. The bundled default rules and the rules file in your own spending folder keep full regex syntax and behave as before. The Spending view help and the FAQ say so
 - Uploaded rules are checked before use. Each pattern must be a non-empty text value of at most 200 characters. At most 500 patterns and 20,000 pattern characters in total. Category and label values, names, `fixed_monthly` items (at most 50) and `work_trip_window_days` (0 to 31) are type-checked too. A list or object where text belongs is a clean "Using the default rules" message, never a crash
