@@ -14,7 +14,7 @@ try:
     from utils.derived import (
         KEEP_AMOUNTS_MODE, SAVINGS_MODES, SAVINGS_MODE_LABELS,
         sidebar_savings_budget, custom_pct_defaults, custom_pct_amounts, pct_widget_key,
-        auto_stored_amounts, EMPLOYER_MATCH_DEFAULT,
+        auto_stored_amounts, EMPLOYER_MATCH_DEFAULT, hsa_limit_note, hsa_family, get_limit,
     )
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.derived import (  # type: ignore
         KEEP_AMOUNTS_MODE, SAVINGS_MODES, SAVINGS_MODE_LABELS,
         sidebar_savings_budget, custom_pct_defaults, custom_pct_amounts, pct_widget_key,
-        auto_stored_amounts, EMPLOYER_MATCH_DEFAULT,
+        auto_stored_amounts, EMPLOYER_MATCH_DEFAULT, hsa_limit_note, hsa_family, get_limit,
     )
 
 try:
@@ -129,6 +129,8 @@ def render_body(st) -> None:
         _render_custom_pct(st, disposable, overrides)
     else:
         _render_manual(st, disposable, overrides)
+    if mode not in (KEEP_AMOUNTS_MODE, "Manual amounts"):
+        _hsa_limit_note(st)         # the other two modes draw it under their HSA input
 
     # ---- Inflation toggle ----
     # HONEST SCOPE: the engine does not read SAVINGS_INFLATION_ADJUST at all
@@ -201,6 +203,19 @@ def render_body(st) -> None:
         )
 
 
+def _hsa_limit_note(st) -> None:
+    """A warning under the HSA input when your amount plus your employer's is over
+    the limit. It says "over the limit" in words, so colour is not the only cue.
+    The plan uses the combined cap (engine: working_year_cashflow)."""
+    live = pm.live_overrides(st.session_state)
+    employer = max(0, safe_int(live.get("YOUR_HSA_MATCH", 0), 0))
+    employee = max(0, safe_int(live.get("YOUR_HSA_CONTRIBUTION", 0), 0))
+    age = safe_int(live.get("YOUR_AGE", 30), 30)
+    note = hsa_limit_note(employee, employer, get_limit("hsa", age, family=hsa_family(live)))
+    if note:
+        st.warning(note, icon=":material/warning:")
+
+
 def _render_employer_match(st, overrides: dict) -> None:
     """Employer 401(k) match inputs (yours, and your partner's if any)."""
     ensure_default(st, "sv_match_pct",
@@ -212,6 +227,15 @@ def _render_employer_match(st, overrides: dict) -> None:
              "contribute less than that, you get less match.",
     )
     set_override(st, "YOUR_401K_MATCH_PCT", float(v) / 100.0)
+    ensure_default(st, "sv_hsa_match",
+                   min(_CAP[pm.YOUR_HSA], safe_int(get_override(st, "YOUR_HSA_MATCH", 0), 0)))
+    v = st.number_input(
+        "Your employer's HSA deposit ($/yr)", min_value=0, max_value=_CAP[pm.YOUR_HSA],
+        step=50, key="sv_hsa_match",
+        help="Money your employer puts into your HSA each year, if any. It comes on "
+             "top of your pay, and the HSA limit covers it and your own amount together.",
+    )
+    set_override(st, "YOUR_HSA_MATCH", safe_int(v))
     if safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0:
         ensure_default(st, "sv_partner_match_pct",
                        safe_float(get_override(st, "PARTNER_401K_MATCH_PCT", EMPLOYER_MATCH_DEFAULT), EMPLOYER_MATCH_DEFAULT) * 100)
@@ -439,6 +463,7 @@ def _render_keep_amounts(st, overrides: dict) -> None:
             _manual_amount(st, "sv_manual_partner_roth", "PARTNER_ROTH_CONTRIBUTION",
                            "Partner Roth IRA ($/yr)", _CAP[pm.PARTNER_ROTH],
                            500, max_out=True)
+    _hsa_limit_note(st)
     _zero_partner_contributions(st, overrides)
     _max_out_all(st)
     set_override(st, "YOUR_BROKERAGE_CONTRIBUTION", 0)
@@ -475,6 +500,7 @@ def _render_manual(st, disposable: int, overrides: dict) -> None:
                            500, max_out=True)
             _manual_amount(st, "sv_manual_partner_brk", "PARTNER_BROKERAGE_CONTRIBUTION",
                            "Partner taxable brokerage ($/yr)", 500_000, 1_000)
+    _hsa_limit_note(st)
     _zero_partner_contributions(st, overrides)
     _max_out_all(st)
 

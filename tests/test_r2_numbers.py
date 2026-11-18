@@ -137,7 +137,8 @@ def test_a_maxed_amount_follows_the_limit_as_you_age():
     ov.update(YOUR_AGE=40, PARTNER_AGE=38, PARTNER_RETIREMENT_AGE=None,
               YOUR_401K_CONTRIBUTION=lim["401k"], PARTNER_401K_CONTRIBUTION=lim["401k"],
               YOUR_HSA_CONTRIBUTION=lim["hsa_family"], YOUR_BACKDOOR_ROTH=lim["ira"],
-              PARTNER_ROTH_CONTRIBUTION=lim["ira"], YOUR_AFTER_TAX_401K_PCT=0.0)
+              PARTNER_ROTH_CONTRIBUTION=lim["ira"], YOUR_AFTER_TAX_401K_PCT=0.0,
+              YOUR_HSA_MATCH=0)      # employer HSA money shares the limit (test_hsa_employer.py)
     with applied(ov):
         cf40 = asim.working_year_cashflow(40)
         cf51 = asim.working_year_cashflow(51)
@@ -173,8 +174,9 @@ def test_presets_and_sensitivity_grid_use_the_2026_limits():
     couple = build_config_overrides(pp.PROFILES["Mid-career couple (40, kids)"])
     assert young["YOUR_401K_CONTRIBUTION"] == couple["YOUR_401K_CONTRIBUTION"] == lim["401k"]
     assert young["YOUR_BACKDOOR_ROTH"] == lim["ira"]
-    assert young["YOUR_HSA_CONTRIBUTION"] == lim["hsa_individual"]      # single, no kids
-    assert couple["YOUR_HSA_CONTRIBUTION"] == lim["hsa_family"]
+    # single, no kids: the self-only limit less the preset's employer HSA deposit
+    assert young["YOUR_HSA_CONTRIBUTION"] == lim["hsa_individual"] - young.get("YOUR_HSA_MATCH", 0)
+    assert couple["YOUR_HSA_CONTRIBUTION"] == lim["hsa_family"] - couple.get("YOUR_HSA_MATCH", 0)
     k401 = stab._BREAK_EVEN_PARAMS["Your 401(k) contribution ($/yr)"][1]
     hsa = stab._BREAK_EVEN_PARAMS["Your HSA contribution ($/yr)"][1]
     assert lim["401k"] in k401 and lim["hsa_individual"] in hsa and lim["hsa_family"] in hsa

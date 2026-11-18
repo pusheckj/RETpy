@@ -2340,7 +2340,6 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
     if end_age <= start_age:
         return []
 
-    your_hsa_match = float(getattr(cfg, "YOUR_HSA_MATCH", 0) or 0)
     calc_529 = getattr(cfg, "calculate_529_contribution", None)
     calc_expenses = getattr(cfg, "calculate_annual_expenses", None)
     partner_spending = float(getattr(cfg, "PARTNER_ANNUAL_SPENDING", 0))
@@ -2460,7 +2459,7 @@ def _approximate_savings_contributions(retirement_age: int) -> List[SavingsContr
             "age": int(age),
             "your_401k": float(cf["your_401k"]),
             "your_employer_match": float(employer_match),
-            "your_hsa": float(cf["your_hsa"] + (your_hsa_match if you_working else 0.0)),
+            "your_hsa": float(cf["your_hsa"] + cf["your_hsa_employer"]),
             "your_roth": float(your_roth_contribution),
             "your_aftertax_roth": float(your_after_tax_401k),
             "your_brokerage": float(your_brokerage),

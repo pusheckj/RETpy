@@ -39,11 +39,15 @@ _RETIRED_KEYS = {"PARTNER_ESTIMATED_TAX_RATE", "PARTNER_401K_MATCH"}
 # override and is kept.
 LEGACY_AUTO_AFTER_TAX_RATE = 0.70
 
-# The Roth-conversion target the UI used to store for everyone (the top of the
-# 12% bracket for a JOINT return, 2024). It and the other 2024 bracket tops
-# mean "the default", which now follows the filing status and the 2026 table.
+# The Roth-conversion targets the UI used to store: the top of the 12% bracket
+# for each filing status, from the 2024 table (joint 94,300) and the 2025 table
+# (joint 96,950). Each means "the default", which now follows the filing status
+# and the 2026 table (None). Any other amount is the user's own and is kept.
 LEGACY_ROTH_TARGET_MFJ = 94_300
-LEGACY_ROTH_TARGETS = (LEGACY_ROTH_TARGET_MFJ, 47_150, 63_100)
+LEGACY_ROTH_TARGETS = (
+    LEGACY_ROTH_TARGET_MFJ, 47_150, 63_100,      # 2024: joint, single, head of household
+    96_950, 48_475, 64_850,                      # 2025: joint, single, head of household
+)
 
 # Quick-income assumptions (used when the user hasn't entered a detailed
 # income breakdown and only supplies a single household income number).

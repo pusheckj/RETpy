@@ -531,7 +531,9 @@ def draw_saving(st) -> None:
                ov.get("YOUR_HSA_CONTRIBUTION") if _from_checkup(st, "YOUR_HSA_CONTRIBUTION") else 0,
                hi=s2f.CONTRIB_MAX)
         _max_out(st, "gs_hsa_amt", pm.YOUR_HSA)
-        _cue(st, "Include anything your employer puts in.")
+        employer = int(_num(ov.get("YOUR_HSA_MATCH")))
+        _cue(st, (f"Enter only your own amount. Your employer's {money_md(employer)} is counted "
+                  "on top." if employer > 0 else "Include anything your employer puts in."))
     _money(st, "gs_ira", "How much do you put into an IRA each year?",
            ov.get("YOUR_BACKDOOR_ROTH"),
            ov.get("YOUR_BACKDOOR_ROTH") if _from_checkup(st, "YOUR_BACKDOOR_ROTH") else 0,
