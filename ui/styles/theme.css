@@ -3535,12 +3535,19 @@ html:root .st-key-mc-tile-freedom table.ms-break tr.ms-total td { font-weight: 6
     .mc-section[data-mc-fold]::before { transition: none; }
 }
 
-/* Collapse all / Expand all: two small pills (the "Max out" chip size), right-aligned. */
+/* Collapse all / Expand all: two small pills (the "Max out" chip size), right-aligned.
+   Streamlit's markdown container has a -1rem bottom margin, which pulled the
+   next tile flush against the pills. The bottom padding (not margin: it would
+   collapse into that -1rem) leaves the same 24px gap below as above. */
 .mc-fold-all {
     display: flex;
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: 8px;
+    padding-bottom: 1.5rem;
+}
+@media (max-width: 640px) {
+    .mc-fold-all { padding-bottom: 1rem; }   /* phones: 16px above, so 16px below */
 }
 .mc-fold-all a {
     display: inline-flex;
