@@ -1413,10 +1413,34 @@ def get_return_parameters(scenario: str = None) -> dict:
         scenario = 'conservative'
     return RETURN_SCENARIOS[scenario]
 
+
+def geometric_portfolio_return(stock_alloc: float, stock_return: float, bond_return: float,
+                               stock_vol: float, bond_vol: float, rho: float,
+                               fee: float = 0.0) -> float:
+    """The portfolio's expected GEOMETRIC (median, compounded) real return.
+
+    Blends the ARITHMETIC stock/bond means at ``stock_alloc`` (bonds get the
+    rest), less ``fee``, less half the blended portfolio variance:
+
+        var_p = w_s^2*sd_s^2 + w_b^2*sd_b^2 + 2*w_s*w_b*rho*sd_s*sd_b
+
+    This is the one place the volatility drag is netted. The Monte Carlo draws
+    arithmetic returns and lets compounding supply the drag, so its median
+    growth matches this rate. Deterministic projections use this rate.
+    """
+    w_s = max(0.0, min(1.0, float(stock_alloc)))
+    w_b = 1.0 - w_s
+    mean = w_s * (stock_return - fee) + w_b * (bond_return - fee)
+    var_p = (w_s ** 2 * stock_vol ** 2 + w_b ** 2 * bond_vol ** 2
+             + 2 * w_s * w_b * rho * stock_vol * bond_vol)
+    return mean - var_p / 2
+
+
 # Expected returns (real, after inflation).
 # Using HISTORICAL averages (1926-2024): Stocks 8.7%, Bonds 3.1%.
-# The simulation applies a volatility drag adjustment to convert to effective
-# geometric returns for compounding.
+# These are ARITHMETIC means. The simulation draws arithmetic returns around
+# them and compounds them, which produces the volatility drag on its own
+# (median growth ~= mean - variance/2). See geometric_portfolio_return.
 EXPECTED_STOCK_RETURN = 0.087  # 8.7% real (historical arithmetic mean)
 EXPECTED_BOND_RETURN = 0.031   # 3.1% real (historical arithmetic mean)
 
@@ -1436,9 +1460,10 @@ STOCK_BOND_CORRELATION = -0.20
 # Default 0% (no fee drag); adjust via the assumptions panel if desired.
 INVESTMENT_FEE_RATE = 0.0
 
-# Volatility drag adjustment.
-# Geometric return = Arithmetic return - (volatility^2 / 2).
-# Applied in the simulation to account for compounding effects.
+# Volatility drag: DEPRECATED, no effect. It used to subtract variance/2 from
+# the Monte Carlo draws, which counted the drag twice (compounding already
+# applies it). Kept only so saved profiles and overrides that carry the key
+# still load. Deterministic projections always use geometric_portfolio_return.
 APPLY_VOLATILITY_DRAG = True
 
 # Inflation - category-specific rates.

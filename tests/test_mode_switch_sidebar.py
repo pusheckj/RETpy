@@ -40,7 +40,7 @@ def _radio(at, key):
 def _welcome(monkeypatch):
     from streamlit.testing.v1 import AppTest
     monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "1")
-    at = AppTest.from_file(APP, default_timeout=60).run()
+    at = AppTest.from_file(APP, default_timeout=180).run()  # planner first draw runs the full simulation
     at.button(key="device_skip").click().run()
     return at
 

@@ -143,12 +143,10 @@ def generate_correlated_returns() -> Tuple[float, float]:
     1. Deduct investment fees from expected returns (fees reduce the mean)
     2. Add stochastic variation (volatility * random normal)
 
-    These are ARITHMETIC (after-fee) returns. The geometric/volatility-drag
-    correction is applied at the PORTFOLIO level in calculate_blended_return,
-    using the blended portfolio variance -- which is lower than the weighted
-    average of the component variances thanks to the stock/bond correlation.
-    Applying the drag per-asset here would over-penalize a diversified
-    portfolio by ignoring that diversification benefit.
+    These are ARITHMETIC (after-fee) returns, drawn around the arithmetic
+    means in config. No volatility-drag term is subtracted: compounding the
+    draws already produces it (median growth ~= mean - variance/2). See
+    cfg.geometric_portfolio_return for the matching single expected rate.
 
     Returns:
         Tuple of (stock_return, bond_return) for the year (arithmetic)
@@ -199,18 +197,13 @@ def generate_correlated_bond_for_stock(stock_return: float) -> float:
 
 def calculate_blended_return(stock_alloc: float, bond_alloc: float) -> float:
     """
-    Calculate blended portfolio return with proper correlation modeling.
+    One year's blended ARITHMETIC portfolio return, clamped.
 
-    The volatility-drag (geometric) correction is applied at the PORTFOLIO
-    level, not per-asset. The blended portfolio variance is
-
-        var_p = w_s^2*var_s + w_b^2*var_b + 2*w_s*w_b*rho*sd_s*sd_b
-
-    which is lower than the weighted average of the component variances when
-    rho < 1 (here rho = -0.20), so subtracting var_p/2 correctly rewards the
-    diversification benefit instead of over-penalizing per-asset. For a
-    100%-stock portfolio (w_s=1, w_b=0) this reduces to var_s/2, matching the
-    old per-asset stock drag exactly.
+    Volatility drag is NOT subtracted here. The config means are arithmetic,
+    and compounding arithmetic draws already gives a median growth of about
+    mean - blended_variance/2 (the geometric rate). Subtracting it again
+    would count the drag twice. Deterministic displays that need one expected
+    rate use cfg.geometric_portfolio_return, which nets the drag once.
 
     Args:
         stock_alloc: Fraction allocated to stocks (0-1)
@@ -220,20 +213,7 @@ def calculate_blended_return(stock_alloc: float, bond_alloc: float) -> float:
         Blended annual return for the portfolio
     """
     stock_return, bond_return = generate_correlated_returns()
-    blended = stock_alloc * stock_return + bond_alloc * bond_return
-
-    # Portfolio-level volatility-drag correction (geometric adjustment)
-    if cfg.APPLY_VOLATILITY_DRAG:
-        var_s = cfg.STOCK_VOLATILITY ** 2
-        var_b = cfg.BOND_VOLATILITY ** 2
-        cov = (cfg.STOCK_BOND_CORRELATION
-               * cfg.STOCK_VOLATILITY * cfg.BOND_VOLATILITY)
-        blended_variance = (stock_alloc ** 2 * var_s
-                            + bond_alloc ** 2 * var_b
-                            + 2 * stock_alloc * bond_alloc * cov)
-        blended -= blended_variance / 2
-
-    return clamp_return(blended)
+    return clamp_return(stock_alloc * stock_return + bond_alloc * bond_return)
 
 
 def _progressive_tax(brackets: List[Tuple[float, float]], taxable_income: float) -> float:
@@ -3671,7 +3651,7 @@ def _run_retirement_phase(portfolio, retirement_age, inflation_factors,
             annual_return = stock_alloc * stock_return + bond_alloc * bond_return
             annual_return = clamp_return(annual_return)
         else:
-            # Use correlated returns with volatility drag and fees
+            # Correlated arithmetic returns, after fees
             stock_alloc, bond_alloc = cfg.calculate_asset_allocation(current_age, retirement_age)
             annual_return = calculate_blended_return(stock_alloc, bond_alloc)
 
@@ -3810,7 +3790,7 @@ def run_detailed_simulation(
             annual_return = (cfg.STOCK_ALLOCATION * stock_return
                              + cfg.BOND_ALLOCATION * bond_return)
         else:
-            # Use correlated returns with volatility drag and fees
+            # Correlated arithmetic returns, after fees
             annual_return = calculate_blended_return(cfg.STOCK_ALLOCATION, cfg.BOND_ALLOCATION)
         annual_return = clamp_return(annual_return)
 
@@ -4045,10 +4025,12 @@ def generate_correlated_returns_for_scenario(scenario: str = None) -> Tuple[floa
     """
     Generate correlated stock and bond returns for a specific return scenario.
 
-    Order of operations (mathematically correct):
+    Order of operations:
     1. Deduct investment fees from expected returns
-    2. Apply volatility drag adjustment to net returns
-    3. Add stochastic variation
+    2. Add stochastic variation
+
+    Returns are ARITHMETIC, like generate_correlated_returns: compounding
+    them supplies the volatility drag, so none is subtracted here.
 
     Args:
         scenario: One of 'conservative', 'historical', 'pessimistic'
@@ -4068,14 +4050,7 @@ def generate_correlated_returns_for_scenario(scenario: str = None) -> Tuple[floa
     stock_mean = params['stock_return'] - cfg.INVESTMENT_FEE_RATE
     bond_mean = params['bond_return'] - cfg.INVESTMENT_FEE_RATE
 
-    # Step 2: Apply volatility drag adjustment to net returns
-    if cfg.APPLY_VOLATILITY_DRAG:
-        stock_vol_drag = (params['stock_volatility'] ** 2) / 2
-        bond_vol_drag = (params['bond_volatility'] ** 2) / 2
-        stock_mean -= stock_vol_drag
-        bond_mean -= bond_vol_drag
-
-    # Step 3: Generate returns with stochastic variation
+    # Step 2: Generate returns with stochastic variation
     stock_return = stock_mean + params['stock_volatility'] * z1
     bond_return = bond_mean + params['bond_volatility'] * z2_correlated
 

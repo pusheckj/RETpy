@@ -49,7 +49,9 @@ def render_investing_body(st) -> None:
     current_label = scen_map.get(current_scen, "Historical")
     ensure_default(st, "sa_scenario", current_label)
     scen = st.radio("Return scenario", scen_options, horizontal=True, key="sa_scenario",
-                    help="Real (after-inflation) stock/bond returns. Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%. "
+                    help="Average real (after-inflation) yearly stock/bond returns. Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%. "
+                         "Ups and downs make money grow a little slower than the average (about 6.3% a year for 80/20 Historical). "
+                         "The simulation includes that. "
                          "Historical is the default and the most optimistic; Conservative is closer to typical planner assumptions.")
     set_override(st, "ACTIVE_RETURN_SCENARIO", str(scen or current_label).lower())
 
@@ -71,12 +73,6 @@ def render_investing_body(st) -> None:
                   help="What your funds charge each year. 100 basis points (bps) = 1%. "
                        "Index ETFs run about 3-15 bps, active funds 50-100.")
     set_override(st, "INVESTMENT_FEE_RATE", v / 10_000)
-
-    ensure_default(st, "sa_vol_drag", bool(get_override(st, "APPLY_VOLATILITY_DRAG", True)))
-    v = st.toggle("Lower returns for volatility", key="sa_vol_drag",
-                    help="Bumpy returns compound slower than their average. "
-                         "When on, the plan lowers average returns to account for that.")
-    set_override(st, "APPLY_VOLATILITY_DRAG", bool(v))
 
     st.divider()
 

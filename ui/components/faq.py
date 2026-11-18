@@ -26,7 +26,10 @@ QUESTIONS: list[tuple[str, str]] = [
         "They are three sets of assumed returns, after inflation. "
         "**Historical** is the 1926-2024 US average (about 8.7% stocks, 3.1% "
         "bonds). **Conservative** is lower (about 7% and 2%). **Pessimistic** "
-        "is a stress test (about 5% and 1%). Many planners use Conservative. "
+        "is a stress test (about 5% and 1%). These are average yearly returns. "
+        "Ups and downs make money grow a little slower than the average "
+        "(about 6.3% a year for an 80/20 mix in Historical). The simulation "
+        "includes that. Many planners use Conservative. "
         "Treat a Historical result as the optimistic end of the range. "
         "Choose one under Investments.",
     ),

@@ -29,7 +29,7 @@ def _planner_can_rerun(monkeypatch):
 def _planner(monkeypatch):
     from streamlit.testing.v1 import AppTest
     monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "1")
-    at = AppTest.from_file(APP_PATH, default_timeout=90).run()
+    at = AppTest.from_file(APP_PATH, default_timeout=180).run()  # cold-cache first draw runs the full simulation
     at.button(key="device_skip").click().run()
     next(b for b in at.button if b.label == "Open the retirement planner").click().run()
     at.button(key="gs_skip").click().run()

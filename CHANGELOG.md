@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (volatility drag was counted twice)
+- The Monte Carlo drew ARITHMETIC yearly returns (the scenario means, e.g. 8.7% stocks Historical) and compounded them, which already produces the volatility drag. It then subtracted half the portfolio variance from every draw as well, so the drag was counted twice. 100% stocks at 8.7% / 19% compounded at a median of about 5.3% real instead of about 7.0% (30-year median, 20,000 paths); 80/20 at about 5.4% instead of 6.6%. The return-scenario Monte Carlo (`generate_correlated_returns_for_scenario`) had the same double count, per asset
+- The engine now draws arithmetic returns and subtracts nothing. Deterministic projections that use one expected rate (net-worth projection, Debt payoff, Freedom milestones / Coast FIRE) use the geometric rate from the new `config.geometric_portfolio_return`: arithmetic mean less fee less half the blended portfolio variance (with correlation), computed in one place. That rate matches the simulation's median growth. Freedom milestones now follow your stock allocation too (they read the default 80/20 table)
+- Results improve. Default config: earliest age 54 to 51, success at 55 86% to 95%, median final portfolio $6.2M to $13.5M (1,000 runs). Mid-career couple preset: earliest 48 to 46. Median US 25-year-old: 46 to 41
+- `APPLY_VOLATILITY_DRAG` no longer does anything. The "Lower returns for volatility" toggle is gone from Investments. Saved profiles that carry the key (on or off) still load and run the same as without it. The return-scenario help and the FAQ now say the scenario returns are averages and that compounding grows a little slower (about 6.3% for 80/20 Historical)
+
 ### Fixed (employer HSA deposit and stale Roth-conversion targets)
 - The engine ignored your employer's HSA deposit (`YOUR_HSA_MATCH`): the simulated HSA got only your own amount, while the savings table showed both. The deposit now goes into the HSA every working year. It is not paid from take-home and is not federal income or FICA wages. California and New Jersey tax it as they tax your own HSA contributions (`working_year_taxes(..., your_hsa_employer=)`). With `YOUR_HSA_MATCH = 0` results are unchanged
 - The IRS HSA limit covers your amount and your employer's together. Your amount is now capped at the limit less the employer's, and the employer's at the limit. A set amount at today's room still means "the max" and follows the limit as you age (the 55+ catch-up included)

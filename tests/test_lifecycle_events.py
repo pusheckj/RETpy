@@ -222,7 +222,13 @@ class TestLifecycleFeaturesDefaultOff:
         # lower this low-income household's taxes and pre-65 health costs; the
         # $805.80/month Medicare estimate raises costs from 65. Net: success up.
         # Previously {45: 0.105, 50: 0.539}.
-        assert results == {45: 0.1355, 50: 0.5865}   # CA SDI 1.3%; SS taxability counts gains; excess ACA premium returned
+        # REBASELINED 2026-11-17: volatility drag was counted twice. The engine
+        # draws ARITHMETIC returns and compounding already nets the drag, but it
+        # also subtracted half the portfolio variance from every draw, so 80/20
+        # compounded at a ~5.4% real median instead of ~6.6%. Removing the second
+        # subtraction raises returns, so success rises at both ages, as expected.
+        # Previously {45: 0.1355, 50: 0.5865}.
+        assert results == {45: 0.2655, 50: 0.757}   # volatility drag netted once (by compounding)
 
 
 # ==============================================================================
