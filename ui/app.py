@@ -451,11 +451,10 @@ _bc_poll = st.fragment(run_every=3)(_config_locked(_bc_poll_body)) if hasattr(st
 
 
 # Sections the phone bar can jump to: (tile key suffix, chip label).
-_JUMP_SECTIONS = [("retirement", "Retirement"), ("freedom", "Milestones"), ("fi", "Net worth"), ("swr", "Withdrawal"),
-                  ("bridge", "Bridge to 59½"), ("spending", "Spending"), ("debts", "Debts"),
-                  ("savings", "Savings"),
-                  ("income", "Income"), ("tax", "Tax"), ("lifespan", "Lifespan"),
-                  ("whatif", "What if"), ("deepdives", "Deep dives")]
+_JUMP_SECTIONS = [("retirement", "Retirement"), ("income", "Income"), ("spending", "Spending"),
+                  ("savings", "Savings"), ("debts", "Debts"), ("tax", "Tax"), ("whatif", "What if"),
+                  ("freedom", "Milestones"), ("fi", "Net worth"), ("lifespan", "Lifespan"),
+                  ("swr", "Withdrawal"), ("bridge", "Bridge to 59½"), ("deepdives", "Deep dives")]
 
 
 def _phone_bar(results, stale: bool = False) -> None:
@@ -1100,7 +1099,10 @@ def main() -> None:
                 '<a role="button" tabindex="0" data-mc-fold-all="0">Expand all</a></div>',
                 unsafe_allow_html=True)
 
-    # ============================ 1. RETIREMENT ============================
+    # Tiles run from most basic to most niche: the answer, then money in,
+    # out, saved and owed, taxes, what-ifs, then FIRE and early-retirement
+    # tools, and the deep dives last. Keep _JUMP_SECTIONS in the same order.
+    # ==================== 1. RETIREMENT ====================
     with st.container(border=True, key="mc-tile-retirement"):
         st.markdown('<div class="mc-section">Retirement</div>', unsafe_allow_html=True)
         @_as_fragment
@@ -1127,30 +1129,18 @@ def main() -> None:
         else:
             _run_hint("your earliest retirement age, chance of success and portfolio projection")
 
-    # ==================== 1a. FREEDOM MILESTONES ====================
-    # Net worth rungs, Coast FIRE / FIRE by place, and other freedom markers. The
-    # quick rule needs no simulation; each place has its own Confirm button.
-    with st.container(border=True, key="mc-tile-freedom"):
-        _safe_render("components.freedom_milestones", results=results)
+    # ==================== 2. INCOME ====================
+    @_as_fragment
+    def _tile_income():
+        with st.container(border=True, key="mc-tile-income"):
+            st.markdown('<div class="mc-section">Income</div>', unsafe_allow_html=True)
+            if st.session_state.get("_lz_income"):
+                _safe_render("components.income_over_time", results=results)
+            else:
+                _lazy_ph("income", 590)
+    _tile_income()
 
-    # ==================== 1b. NET WORTH TO RETIRE (FI number) ====================
-    # "How much do we need?" (net-worth trigger) as a complement to "when?".
-    # Self-contained: has its own button + sweep, independent of the main run.
-    with st.container(border=True, key="mc-tile-fi"):
-        _safe_render("components.fi_number_section")
-
-    # ==================== 1c. SAFE WITHDRAWAL RATE ====================
-    # Personalized 4%-rule: button-gated sweep (independent of the main run).
-    with st.container(border=True, key="mc-tile-swr"):
-        _safe_render("components.swr_curve_section", results=results)
-
-    # ==================== 1d. BRIDGE TO 59½ ====================
-    # Penalty-free liquidity through the pre-59.5 gap years (results-dependent).
-    if results:
-        with st.container(border=True, key="mc-tile-bridge"):
-            _safe_render("components.bridge_years_gauge", results=results)
-
-    # ============================ 2. SPENDING ============================
+    # ==================== 3. SPENDING ====================
     @_as_fragment
     def _tile_spending():
         with st.container(border=True, key="mc-tile-spending"):
@@ -1164,21 +1154,7 @@ def main() -> None:
                 _lazy_ph("spending", 1450)
     _tile_spending()
 
-    # ============================ 2a. DEBT PAYOFF ============================
-    # Always shown (with a one-line prompt when there are no debts) so the
-    # payoff tools and "Things to know" are easy to find. Instant: no
-    # simulation, only the payoff math; lazy like its neighbours.
-    @_as_fragment
-    def _tile_debts():
-        with st.container(border=True, key="mc-tile-debts"):
-            st.markdown('<div class="mc-section">Debt payoff</div>', unsafe_allow_html=True)
-            if st.session_state.get("_lz_debts"):
-                _safe_render("components.debt_payoff", results=results)
-            else:
-                _lazy_ph("debts", 420)
-    _tile_debts()
-
-    # ============================ 3. SAVINGS ============================
+    # ==================== 4. SAVINGS ====================
     @_as_fragment
     def _tile_savings():
         with st.container(border=True, key="mc-tile-savings"):
@@ -1195,18 +1171,21 @@ def main() -> None:
                 _lazy_ph("savings", 1170)
     _tile_savings()
 
-    # ============================ 4. INCOME ============================
+    # ==================== 5. DEBT PAYOFF ====================
+    # Always shown (with a one-line prompt when there are no debts) so the
+    # payoff tools and "Things to know" are easy to find. Instant: no
+    # simulation, only the payoff math; lazy like its neighbours.
     @_as_fragment
-    def _tile_income():
-        with st.container(border=True, key="mc-tile-income"):
-            st.markdown('<div class="mc-section">Income</div>', unsafe_allow_html=True)
-            if st.session_state.get("_lz_income"):
-                _safe_render("components.income_over_time", results=results)
+    def _tile_debts():
+        with st.container(border=True, key="mc-tile-debts"):
+            st.markdown('<div class="mc-section">Debt payoff</div>', unsafe_allow_html=True)
+            if st.session_state.get("_lz_debts"):
+                _safe_render("components.debt_payoff", results=results)
             else:
-                _lazy_ph("income", 590)
-    _tile_income()
+                _lazy_ph("debts", 420)
+    _tile_debts()
 
-    # ============================ 5. TAX ============================
+    # ==================== 6. TAX ====================
     @_as_fragment
     def _tile_tax():
         with st.container(border=True, key="mc-tile-tax"):
@@ -1220,23 +1199,8 @@ def main() -> None:
                 _lazy_ph("tax", 690)
     _tile_tax()
 
-    # ======================= LIFE EXPECTANCY =======================
-    # Placed just above What-if (per layout). Lazy: renders when scrolled near;
-    # each tile is its own fragment, so loading one doesn't touch the others.
-    @_as_fragment
-    def _tile_lifespan():
-        with st.container(border=True, key="mc-tile-lifespan"):
-            # Heading drawn here, not by the section: the tile has its heading
-            # (and so its collapse toggle) before the lazy content loads.
-            st.markdown('<div class="mc-section">Your life expectancy</div>', unsafe_allow_html=True)
-            if st.session_state.get("_lz_lifespan"):
-                _safe_render("components.life_expectancy_section", show_header=False)
-            else:
-                _lazy_ph("lifespan", 1030)
-    _tile_lifespan()
-
-    # ============================ 6. WHAT IF ============================
-    # Lazy like the tiles above: its charts render only once scrolled near.
+    # ==================== 7. WHAT IF ====================
+    # Lazy: its charts render only once scrolled near.
     @_as_fragment
     def _tile_whatif():
         with st.container(border=True, key="mc-tile-whatif"):
@@ -1253,7 +1217,45 @@ def main() -> None:
                 _lazy_ph("whatif", 500)
     _tile_whatif()
 
-    # ============================ 7. DEEP DIVES ============================
+    # ==================== 8. FREEDOM MILESTONES ====================
+    # Net worth rungs, Coast FIRE / FIRE by place, and other freedom markers. The
+    # quick rule needs no simulation; each place has its own Confirm button.
+    with st.container(border=True, key="mc-tile-freedom"):
+        _safe_render("components.freedom_milestones", results=results)
+
+    # ==================== 9. NET WORTH TO RETIRE (FI number) ====================
+    # "How much do we need?" (net-worth trigger) as a complement to "when?".
+    # Self-contained: has its own button + sweep, independent of the main run.
+    with st.container(border=True, key="mc-tile-fi"):
+        _safe_render("components.fi_number_section")
+
+    # ==================== 10. LIFE EXPECTANCY ====================
+    # Lazy: renders when scrolled near;
+    # each tile is its own fragment, so loading one doesn't touch the others.
+    @_as_fragment
+    def _tile_lifespan():
+        with st.container(border=True, key="mc-tile-lifespan"):
+            # Heading drawn here, not by the section: the tile has its heading
+            # (and so its collapse toggle) before the lazy content loads.
+            st.markdown('<div class="mc-section">Your life expectancy</div>', unsafe_allow_html=True)
+            if st.session_state.get("_lz_lifespan"):
+                _safe_render("components.life_expectancy_section", show_header=False)
+            else:
+                _lazy_ph("lifespan", 1030)
+    _tile_lifespan()
+
+    # ==================== 11. SAFE WITHDRAWAL RATE ====================
+    # Personalized 4%-rule: button-gated sweep (independent of the main run).
+    with st.container(border=True, key="mc-tile-swr"):
+        _safe_render("components.swr_curve_section", results=results)
+
+    # ==================== 12. BRIDGE TO 59½ ====================
+    # Penalty-free liquidity through the pre-59.5 gap years (results-dependent).
+    if results:
+        with st.container(border=True, key="mc-tile-bridge"):
+            _safe_render("components.bridge_years_gauge", results=results)
+
+    # ==================== 13. DEEP DIVES ====================
     @_as_fragment
     def _tile_deepdives():
         with st.container(border=True, key="mc-tile-deepdives"):

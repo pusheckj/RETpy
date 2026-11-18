@@ -86,7 +86,8 @@ def _leaves(node):
 
 def test_what_if_and_deep_dives_are_tiles_not_expanders(planner):
     tiles = _tiles(planner)
-    assert list(tiles)[-2:] == ["whatif", "deepdives"]          # last, after Life expectancy
+    # Rendered order: basic to niche (bridge needs results, so it may be absent).
+    assert [t for t in tiles if t != "bridge"] == [t for t in TILE_ORDER if t != "bridge"]
     assert not [e for e in planner.main.expander if e.label in ("What if", "Deep dives")]
     assert 'st.expander("What if"' not in APP
     assert 'key="mc-tile-whatif"' in APP and 'key="mc-tile-deepdives"' in APP
@@ -254,3 +255,15 @@ def test_collapse_all_uses_the_design_tokens():
         assert token in pill, token
     touch = FOLD_CSS[FOLD_CSS.index("@media (hover: none) and (pointer: coarse)"):]
     assert re.search(r"\.mc-fold-all a \{[^}]*min-height: 44px", touch)
+
+
+TILE_ORDER = ["retirement", "income", "spending", "savings", "debts", "tax", "whatif",
+              "freedom", "fi", "lifespan", "swr", "bridge", "deepdives"]
+
+
+def test_tiles_run_basic_to_niche_and_jump_chips_follow():
+    order = TILE_ORDER
+    found = re.findall(r'key="mc-tile-([a-z]+)"', APP[APP.index('data-mc-fold-all="1"'):])
+    assert found == order
+    chips = [k for k, _ in ast.literal_eval(re.search(r"_JUMP_SECTIONS = (\[.*?\])\n", APP, re.S).group(1))]
+    assert chips == order
