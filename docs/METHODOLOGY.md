@@ -64,9 +64,9 @@ geometric_return ≈ arithmetic_return − σ_p² / 2
 ```
 
    For 100% stocks at 8.7% / 19% that is about 6.9% real; for 80/20 `historical` about 6.3%.
-3. **Deterministic projections** (net-worth projection, Debt payoff, Freedom milestones / Coast FIRE) need one expected rate, so they use this geometric rate (`config.geometric_portfolio_return`, blended portfolio variance with correlation). Their single path then matches the simulation's median.
+3. **Deterministic projections** (net-worth projection, Debt payoff, Freedom milestones / Coast FIRE) need one expected rate, so they use this geometric rate (`config.geometric_portfolio_return`, blended portfolio variance with correlation). Their single path then about matches the simulation's median (the formula runs 0.1–0.2 points low).
 
-Earlier versions also subtracted σ_p²/2 from every draw, which counted the drag twice (100% stocks compounded at about 5.1% real). `APPLY_VOLATILITY_DRAG` is kept only so old profiles load; it has no effect.
+Earlier versions also subtracted σ_p²/2 from every draw, which counted the drag twice (100% stocks compounded at about 5.3% real in simulation). `APPLY_VOLATILITY_DRAG` is kept only so old profiles load; it has no effect.
 
 ### 3.4 Clamping
 

@@ -297,7 +297,7 @@ All returns are **real** (inflation-adjusted) **arithmetic** means. The simulati
 | `STOCK_VOLATILITY` | `0.19` | Stock std dev. Overridden when a scenario is active. |
 | `BOND_VOLATILITY` | `0.08` | Bond std dev. |
 | `STOCK_BOND_CORRELATION` | `-0.20` | Stock/bond correlation. Negative reflects post-2000 behavior (bonds rally on stock crashes). |
-| `INVESTMENT_FEE_RATE` | `0.0015` | 0.15% blended annual expense ratio. Set to `0.0003` for pure index funds, `0.01`+ for actively managed portfolios. |
+| `INVESTMENT_FEE_RATE` | `0.0` | No fee by default (set it in Assumptions). 0.15% = `0.0015` blended. Set to `0.0003` for pure index funds, `0.01`+ for actively managed portfolios. |
 | `APPLY_VOLATILITY_DRAG` | `True` | **Deprecated, no effect.** Kept so saved profiles that carry it still load. The Monte Carlo draws arithmetic returns and compounding supplies the drag; deterministic projections use `geometric_portfolio_return`. |
 
 ### Inflation

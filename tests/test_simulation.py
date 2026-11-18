@@ -607,7 +607,7 @@ class TestVolatilityDrag:
     The config means are ARITHMETIC. The Monte Carlo draws arithmetic returns
     and compounds them, which already gives a median growth of about
     mean - variance/2. It used to subtract variance/2 again, so 100% stocks
-    compounded at about mean - variance (~5.1% real instead of ~6.9%).
+    compounded at about mean - variance (~5.3% real median in simulation instead of ~6.9-7.1%).
     """
 
     @staticmethod
