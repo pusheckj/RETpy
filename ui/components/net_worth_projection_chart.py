@@ -25,14 +25,14 @@ try:
     from utils.derived import (advance_mortgage_with_extra, current_mortgage_terms,
                                mortgage_payment, housing_timeline,
                                extra_mortgage_for_age as _extra_for_age,
-                               savings_budget, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
+                               savings_budget, hsa_employer, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
     from utils.formatting import money, money_md, money_precise
 except ImportError:  # pragma: no cover
     from ui.utils.coerce import safe_int, safe_float  # type: ignore
     from ui.utils.derived import (advance_mortgage_with_extra,  # type: ignore
                                   current_mortgage_terms, mortgage_payment, housing_timeline,
                                   extra_mortgage_for_age as _extra_for_age,
-                                  savings_budget, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
+                                  savings_budget, hsa_employer, AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE)
     from ui.utils.formatting import money, money_md, money_precise  # type: ignore
 
 
@@ -454,6 +454,10 @@ def project_net_worth(user_overrides: dict) -> dict:
                 # Add employer match to Your 401(k)
                 if contrib_key == "YOUR_401K_CONTRIBUTION":
                     contribution += _employer_match(user_overrides, offset, contribution)
+                if contrib_key == "YOUR_HSA_CONTRIBUTION":
+                    # Your employer's HSA deposit (the limit covers both: derived.hsa_employer).
+                    contribution += hsa_employer(user_overrides, safe_int(
+                        user_overrides.get("YOUR_AGE", 30), 30))
                 if contrib_key == "YOUR_BROKERAGE_CONTRIBUTION" and debt_relief:
                     contribution += debt_relief[min(offset, len(debt_relief) - 1)]
             balances[label] = balances[label] * (1 + r) + contribution

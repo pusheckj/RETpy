@@ -65,8 +65,8 @@ def _working_tax_inputs(overrides: dict, pretax_savings: bool = True) -> dict:
         k401 = min(max(0, safe_int(overrides.get("YOUR_401K_CONTRIBUTION", 0), 0)),
                    cfg.get_401k_limit(your_age, year))
         hsa = min(max(0, safe_int(overrides.get("YOUR_HSA_CONTRIBUTION", 0), 0)),
-                  cfg.get_hsa_limit(your_age, year,
-                                    is_family=partner or bool(cfg.children_in(overrides))))
+                  hsa_employee_limit(overrides, your_age,
+                                     family=partner or bool(cfg.children_in(overrides))))
         if partner:
             p401 = min(max(0, safe_int(overrides.get("PARTNER_401K_CONTRIBUTION", 0), 0)),
                        cfg.get_401k_limit(partner_age, year))
@@ -95,6 +95,8 @@ def _working_tax_inputs(overrides: dict, pretax_savings: bool = True) -> dict:
         your_wages=your_wages, partner_wages=partner_wages,
         your_other=your_other, partner_other=partner_other,
         your_401k=k401, partner_401k=p401, your_hsa=hsa, your_deduction=deduction,
+        your_hsa_employer=hsa_employer(overrides, your_age, partner or bool(cfg.children_in(overrides)))
+        if pretax_savings else 0.0,
         your_age=your_age, partner_age=partner_age, status=status, partner=partner,
         state=overrides.get("STATE_CHOICE", "CA"),
         flat_rate=as_fraction(overrides.get("YOUR_MARGINAL_TAX_RATE", 0.05), 0.05),
@@ -368,6 +370,10 @@ def savings_budget(overrides: dict, custom_pcts: Dict[str, float] = None) -> Dic
         # Your amounts stay; the simulation invests the rest in the brokerage.
         kept = {k: max(0, safe_int(overrides.get(k, 0), 0)) for k in CONTRIBUTION_KEYS
                 if "BROKERAGE" not in k}
+        # The simulation holds your HSA to the limit less your employer's deposit.
+        kept["YOUR_HSA_CONTRIBUTION"] = min(
+            kept["YOUR_HSA_CONTRIBUTION"],
+            hsa_employee_limit(overrides, safe_int(overrides.get("YOUR_AGE", 30), 30)))
         if safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0:
             kept["PARTNER_ROTH_CONTRIBUTION"] = int(min(
                 kept["PARTNER_ROTH_CONTRIBUTION"], partner_roth_allowed(overrides, kept)))
@@ -384,6 +390,42 @@ def hsa_family(overrides: dict) -> bool:
     engine's rule, ``cfg.hsa_is_family``, for an overrides dict)."""
     return (safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0
             or bool(cfg.children_in(overrides)))
+
+
+def hsa_employer(overrides: dict, age: int = 30, family: bool = None) -> int:
+    """Your employer's HSA deposit (YOUR_HSA_MATCH, a flat amount in today's
+    dollars), held to the IRS limit, which covers the employer's money too."""
+    if family is None:
+        family = hsa_family(overrides)
+    match = max(0, safe_int(overrides.get("YOUR_HSA_MATCH", 0), 0))
+    return min(match, get_limit("hsa", age, family=family))
+
+
+def hsa_employee_limit(overrides: dict, age: int = 30, family: bool = None) -> int:
+    """What you can put in your own HSA: the IRS limit less your employer's
+    deposit (the engine's rule, account_simulation.working_year_cashflow)."""
+    if family is None:
+        family = hsa_family(overrides)
+    return get_limit("hsa", age, family=family) - hsa_employer(overrides, age, family)
+
+
+def hsa_limit_note(employee: float, employer: float, limit: float, plan: bool = True):
+    """A warning when your HSA amount plus your employer's is over the IRS
+    ``limit`` (markdown-safe), else None. With ``plan`` it says what the plan
+    uses instead (the Money check-up has no plan, so it leaves that out)."""
+    employee, employer, limit = max(0, int(employee)), max(0, int(employer)), int(limit)
+    over = employee + employer - limit
+    if over <= 0:
+        return None
+    if employer <= 0:
+        text, uses = f"Your \\${employee:,} is \\${over:,} over the \\${limit:,} HSA limit.", limit
+    elif employee <= 0:
+        text, uses = (f"Your employer's \\${employer:,} is \\${over:,} over the "
+                      f"\\${limit:,} HSA limit."), limit
+    else:
+        text, uses = (f"Your \\${employee:,} plus \\${employer:,} from your employer is "
+                      f"\\${over:,} over the \\${limit:,} limit."), max(0, limit - employer)
+    return f"{text} The plan uses \\${uses:,}." if plan else text
 
 
 def get_limit(name: str, age: int = 30, family: bool = True) -> int:
@@ -463,7 +505,7 @@ def custom_pct_amounts(pcts: Dict[str, float], disposable: int, overrides: dict)
     caps = {
         "YOUR_401K_CONTRIBUTION": get_limit("401k", your_age),
         "PARTNER_401K_CONTRIBUTION": get_limit("401k", partner_age) if partner_age > 0 else 0,
-        "YOUR_HSA_CONTRIBUTION": get_limit("hsa", your_age, family=hsa_family(overrides)),
+        "YOUR_HSA_CONTRIBUTION": hsa_employee_limit(overrides, your_age),
         "YOUR_BACKDOOR_ROTH": get_limit("ira", your_age),
         "PARTNER_ROTH_CONTRIBUTION": get_limit("ira", partner_age) if partner_age > 0 else 0,
     }
@@ -506,6 +548,8 @@ def sidebar_savings_budget(state) -> Dict[str, object]:
                         ("YOUR_401K_MATCH_PCT", "sv_match_pct")):
         if state.get(widget) is not None:
             overrides[key] = safe_float(state[widget], 0.0) / 100.0
+    if state.get("sv_hsa_match") is not None:     # your employer's HSA deposit
+        overrides["YOUR_HSA_MATCH"] = safe_int(state["sv_hsa_match"], 0)
     return savings_budget(overrides, custom_pcts=pcts)
 
 
@@ -651,7 +695,7 @@ def auto_allocate_savings(disposable: int, overrides: dict, set_aside: float = 0
 
     # 3. HSA (assume eligibility): the family limit with a partner or a child, else self-only
     if remaining > 0:
-        cap = get_limit("hsa", your_age, family=hsa_family(overrides))
+        cap = hsa_employee_limit(overrides, your_age)
         fill = min(cap, remaining)
         allocated["YOUR_HSA_CONTRIBUTION"] = fill
         remaining -= fill

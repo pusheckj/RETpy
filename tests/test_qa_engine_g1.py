@@ -98,7 +98,8 @@ class TestHsaLimitFollowsHousehold:
 
     def single(self, **kw):
         ov = load_sample_household()
-        ov.update(PARTNER_AGE=0, PARTNER_BASE_SALARY=0, PARTNER_SALARY=0, CHILDREN=[], YOUR_AGE=40)
+        ov.update(PARTNER_AGE=0, PARTNER_BASE_SALARY=0, PARTNER_SALARY=0, CHILDREN=[], YOUR_AGE=40,
+                  YOUR_HSA_MATCH=0)     # no employer deposit: the limit alone is under test
         ov.update(kw)
         return ov
 

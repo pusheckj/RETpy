@@ -31,12 +31,14 @@ try:
     from utils.formatting import money, money_md, money_echo, months_text
     from utils.profile_io import serialize_checkup, deserialize_checkup
     from utils.plot_theme import is_dark, style_fig
+    from utils.derived import hsa_limit_note
 except ImportError:  # pragma: no cover
     from ui.utils import simple_finance as sf  # type: ignore
     from ui.utils import simple_to_full  # type: ignore
     from ui.utils.formatting import money, money_md, money_echo, months_text  # type: ignore
     from ui.utils.profile_io import serialize_checkup, deserialize_checkup  # type: ignore
     from ui.utils.plot_theme import is_dark, style_fig  # type: ignore
+    from ui.utils.derived import hsa_limit_note  # type: ignore
 
 STATE_KEY = "simple_inputs"
 _SYNC_KEY = "_simple_inputs_synced"   # copy of what this page last wrote
@@ -292,6 +294,9 @@ def _render_inputs(st, inputs: Dict[str, Any]) -> None:
         _max_out(st, "hsa_contrib_annual", now["hsa_contrib_annual"], limits["hsa"],
                  f"Sets this to this year's {money_md(limits['hsa'])} "
                  f"{'family' if now['hsa_family'] else 'self-only'} HSA limit.")
+        over = hsa_limit_note(now["hsa_contrib_annual"], 0, limits["hsa"], plan=False)
+        if over:
+            st.warning(over, icon=":material/warning:")
 
     _group(st, "Debts")
     st.caption("Credit cards, car loans, student loans, personal loans. "

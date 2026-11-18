@@ -164,8 +164,8 @@ Make sure the table covers every age from `YOUR_AGE` through the year you plan t
 |---|---|---|
 | `YOUR_401K_CONTRIBUTION` | `$24,500` | Your annual 401(k) deferral, in today's dollars. Capped by `get_401k_limit()` for your age that year and by your pay. An amount at or above today's limit means "the max" (Auto-allocate and Max out set it) and follows the limit as you age, so the 50+ and 60-63 catch-ups apply when they start. A smaller amount stays flat. The HSA, IRA and partner amounts work the same way. |
 | `YOUR_401K_MATCH_PCT` | `0.06` | Employer match: dollar for dollar on your deferral, up to this fraction of base salary. The match is `min(your 401(k) contribution, pct x base)`, so contributing less than the match % earns less match. Set in the Savings section. |
-| `YOUR_HSA_CONTRIBUTION` | `$7,550` | Your HSA contribution. |
-| `YOUR_HSA_MATCH` | `$750` | Employer HSA contribution. |
+| `YOUR_HSA_CONTRIBUTION` | `$7,550` | Your own HSA contribution, from take-home pay. It is capped at the IRS limit **less** `YOUR_HSA_MATCH` (the limit covers your amount and your employer's together) and at your pay. An amount at or above today's room (limit less employer) means "the max" and follows the limit as you age. |
+| `YOUR_HSA_MATCH` | `$750` | Your employer's HSA deposit each working year, in today's dollars. It goes into the HSA on top of your pay. It is not paid from take-home and is not federal income or FICA wages. A state that taxes HSA contributions (California, New Jersey) taxes it too. It is held to the IRS limit and is 0 in a year you do not work. The Investments section has an input for it. |
 | `YOUR_BACKDOOR_ROTH` | `$7,500` | Annual backdoor Roth IRA conversion. |
 | `YOUR_ESPP_PCT` | `0.10` | Fraction of base salary routed through ESPP. |
 | `YOUR_ESPP_DISCOUNT` | `0.15` | ESPP purchase discount (15% is typical). |

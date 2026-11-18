@@ -9,7 +9,8 @@ How each limit is worked out (the same as the simulation and Auto-allocate):
 * 401(k): the IRS deferral limit for the person's age (catch-up from 50), and
   no more than their pay.
 * HSA: the family limit when there is a partner or a child, else the self-only
-  limit (catch-up from 55), and no more than their pay left after the 401(k).
+  limit (catch-up from 55) less your employer's HSA deposit (YOUR_HSA_MATCH; the
+  limit covers both), and no more than their pay left after the 401(k).
   (Auto-allocate and the engine use the same rule.)
 * Your Roth IRA: the IRA limit (catch-up from 50). It is modeled as a backdoor
   Roth, so there is no income limit.
@@ -96,7 +97,7 @@ def irs_limit(key: str, overrides: dict) -> int:
     if key == YOUR_401K:
         return derived.get_limit("401k", your_age)
     if key == YOUR_HSA:
-        return derived.get_limit("hsa", your_age, family=hsa_family(overrides))
+        return derived.hsa_employee_limit(overrides, your_age)
     if key == YOUR_ROTH:
         return derived.get_limit("ira", your_age)
     if partner_age <= 0:
@@ -180,6 +181,9 @@ def max_out_help(key: str, overrides: dict, target: int) -> str:
     if key in (YOUR_HSA,):
         note = (f"the 2026 {'family' if hsa_family(overrides) else 'self-only'} limit"
                 + (", with the catch-up for 55 and over" if age >= 55 else ""))
+        employer = derived.hsa_employer(overrides, age)
+        if employer > 0:
+            note += f", less \\${employer:,} from your employer"
     elif key in (YOUR_401K, PARTNER_401K):
         note = "the 2026 limit" + (", with the catch-up for 50 and over" if age >= 50 else "")
     else:
