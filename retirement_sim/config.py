@@ -1363,7 +1363,7 @@ BOND_ALLOCATION = 0.20
 # -----------------------------------------------------------------------------
 # RETURN SCENARIOS
 # -----------------------------------------------------------------------------
-# Three pre-built return scenarios. Switch between them by setting
+# Pre-built return scenarios. Switch between them by setting
 # ACTIVE_RETURN_SCENARIO or pass a scenario name into get_return_parameters().
 
 RETURN_SCENARIOS = {
@@ -1391,6 +1391,22 @@ RETURN_SCENARIOS = {
         'stock_volatility': 0.22,
         'bond_volatility': 0.10,
     },
+    # Forward-looking: the base case of a Nov 2026 survey of firms' 10-15 year
+    # capital-market forecasts (an all-stock 60% US / 40% international mix:
+    # 3.9% real geometric, 15.5% volatility; US aggregate bonds: 2.2% real,
+    # 6%; stock-bond correlation +0.10). Forecasts are geometric (median)
+    # rates; the engine draws ARITHMETIC returns, so each mean here is the
+    # geometric rate + volatility^2/2. Lower than history because today's
+    # stock prices are high relative to earnings.
+    'forward': {
+        'name': 'Forward-looking (2026 forecasts)',
+        'description': "Firms' 10-15 year forecasts, base case (Nov 2026)",
+        'stock_return': 0.051,  # 3.9% geometric + 0.155^2/2
+        'bond_return': 0.024,   # 2.2% geometric + 0.06^2/2
+        'stock_volatility': 0.155,
+        'bond_volatility': 0.06,
+        'stock_bond_correlation': 0.10,
+    },
 }
 
 # Default scenario for the simulation
@@ -1401,11 +1417,12 @@ def get_return_parameters(scenario: str = None) -> dict:
     Get return parameters for a given scenario.
 
     Args:
-        scenario: One of 'conservative', 'historical', 'pessimistic'.
+        scenario: One of 'conservative', 'historical', 'pessimistic', 'forward'.
                   If None, uses ACTIVE_RETURN_SCENARIO.
 
     Returns:
-        Dict with stock_return, bond_return, stock_volatility, bond_volatility
+        Dict with stock_return, bond_return, stock_volatility, bond_volatility,
+        and optionally stock_bond_correlation (else STOCK_BOND_CORRELATION).
     """
     if scenario is None:
         scenario = ACTIVE_RETURN_SCENARIO
@@ -3230,6 +3247,20 @@ GLIDE_PATH_END_BOND_PCT = 0.40     # 40% bonds by age 75
 # Hold steady after target age
 GLIDE_PATH_HOLD_AFTER = True
 
+# Shape of the glide path.
+#   "down": ease into bonds. Hold STOCK_ALLOCATION while working, jump to
+#           GLIDE_PATH_START at retirement, slide to GLIDE_PATH_END by
+#           GLIDE_PATH_END_AGE.
+#   "tent": bond tent (rising equity glide path). Move from STOCK_ALLOCATION to
+#           GLIDE_PATH_START over the GLIDE_PATH_TENT_RAMP_YEARS before
+#           retirement, then climb back to GLIDE_PATH_END over the first
+#           GLIDE_PATH_TENT_RISE_YEARS of retirement. Bonds are highest when a
+#           crash would hurt most (the years around retirement), and stocks
+#           grow the money left over later (Kitces & Pfau, 2014).
+GLIDE_PATH_SHAPE = "down"
+GLIDE_PATH_TENT_RAMP_YEARS = 5
+GLIDE_PATH_TENT_RISE_YEARS = 10
+
 def calculate_asset_allocation(age: int, retirement_age: int) -> tuple:
     """
     Calculate stock/bond allocation based on age and glide path.
@@ -3243,6 +3274,23 @@ def calculate_asset_allocation(age: int, retirement_age: int) -> tuple:
     """
     if not GLIDE_PATH_ENABLED:
         return (STOCK_ALLOCATION, BOND_ALLOCATION)
+
+    if GLIDE_PATH_SHAPE == "tent":
+        ramp = max(0, int(GLIDE_PATH_TENT_RAMP_YEARS))
+        rise = max(0, int(GLIDE_PATH_TENT_RISE_YEARS))
+        if age < retirement_age:
+            # Ramp from the working mix to the retirement mix.
+            years_left = retirement_age - age
+            if ramp <= 0 or years_left >= ramp:
+                stock = STOCK_ALLOCATION
+            else:
+                stock = GLIDE_PATH_START_STOCK_PCT + (STOCK_ALLOCATION - GLIDE_PATH_START_STOCK_PCT) * years_left / ramp
+        else:
+            # Climb from the retirement mix to the end mix, then hold.
+            progress = 1.0 if rise <= 0 else min(1.0, (age - retirement_age) / rise)
+            stock = GLIDE_PATH_START_STOCK_PCT + progress * (GLIDE_PATH_END_STOCK_PCT - GLIDE_PATH_START_STOCK_PCT)
+        stock = max(0.0, min(1.0, stock))
+        return (stock, 1.0 - stock)
 
     # Before retirement, use the starting allocation
     if age < retirement_age:

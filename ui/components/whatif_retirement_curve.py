@@ -29,7 +29,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.slider_input import slider_with_box  # type: ignore
 
 
-_SCENARIOS = ["conservative", "historical", "pessimistic"]
+_SCENARIOS = ["conservative", "historical", "pessimistic", "forward"]
 _SCAN_RANGE = (25, 76, 1)
 
 
@@ -123,7 +123,7 @@ def render(st, results: dict = None) -> None:
     with c1:
         st.selectbox("Return scenario", _SCENARIOS, key="wifc_scenario",
                      index=_SCENARIOS.index(base_scen),
-                     format_func=lambda s: s.capitalize(),
+                     format_func=lambda s: "Forward-looking" if s == "forward" else s.capitalize(),
                      help="Market returns used in the alternate scenario.")
         slider_with_box(st, "Stock allocation (%)", 0, 100, 5, key="wifc_stock", unit="%", value=d_stock,
                         help="More stock means higher expected returns and bigger swings.")

@@ -147,6 +147,7 @@ def _scenario_cast(v):
         "conservative": "Conservative",
         "historical": "Historical",
         "pessimistic": "Pessimistic",
+        "forward": "Forward-looking",
     }.get(s, "Historical")
 
 
@@ -289,8 +290,10 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sa_inflation":       ("EXPECTED_INFLATION", _as_pct(2.75, 0.0, 10.0)),
     "sa_fee_bps":         ("INVESTMENT_FEE_RATE", _as_bps(15, 0, 200)),
     "sa_glide_enable":    ("GLIDE_PATH_ENABLED", lambda v: bool(v)),
-    "sa_glide_start":     ("GLIDE_PATH_START_STOCK_PCT", _as_pct(cfg.GLIDE_PATH_START_STOCK_PCT * 100, 50.0, 100.0)),
-    "sa_glide_end":       ("GLIDE_PATH_END_STOCK_PCT", _as_pct(cfg.GLIDE_PATH_END_STOCK_PCT * 100, 20.0, 80.0)),
+    "sa_glide_shape":     ("GLIDE_PATH_SHAPE", lambda v: "Bond tent" if str(v) == "tent" else "Ease into bonds"),
+    "sa_glide_start":     ("GLIDE_PATH_START_STOCK_PCT", _as_pct(cfg.GLIDE_PATH_START_STOCK_PCT * 100, 30.0, 100.0)),
+    "sa_glide_end":       ("GLIDE_PATH_END_STOCK_PCT", _as_pct(cfg.GLIDE_PATH_END_STOCK_PCT * 100, 20.0, 100.0)),
+    "sa_tent_years":      ("GLIDE_PATH_TENT_RISE_YEARS", _as_int(10, 3, 25)),
     "sa_roth_enable":     ("ENABLE_ROTH_CONVERSION", lambda v: bool(v)),
     "sa_roth_target":     ("ROTH_CONVERSION_TARGET_BRACKET", _as_int(100_800, 0, 750_000)),
     "sa_roth_max":        ("ROTH_CONVERSION_MAX_ANNUAL", _as_int(100_000, 0, 500_000)),
@@ -356,6 +359,7 @@ def _derive_scenario(overrides: dict) -> str:
         "conservative": "Conservative",
         "historical": "Historical",
         "pessimistic": "Pessimistic",
+        "forward": "Forward-looking",
     }
     return mapping.get(scen, "Historical")
 

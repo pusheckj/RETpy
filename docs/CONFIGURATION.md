@@ -278,7 +278,7 @@ These are today's-dollar amounts and grow at the healthcare **real-excess** rate
 
 | Parameter | Default | Description |
 |---|---|---|
-| `ACTIVE_RETURN_SCENARIO` | `'historical'` | One of `'conservative'`, `'historical'`, `'pessimistic'`. Switches `RETURN_SCENARIOS` entry used. |
+| `ACTIVE_RETURN_SCENARIO` | `'historical'` | One of `'conservative'`, `'historical'`, `'pessimistic'`, `'forward'`. Switches `RETURN_SCENARIOS` entry used. |
 
 `RETURN_SCENARIOS` bundles stock/bond return and volatility assumptions:
 
@@ -287,6 +287,7 @@ These are today's-dollar amounts and grow at the healthcare **real-excess** rate
 | `conservative` | 7.0% | 2.0% | 19% | 8% | Prudent planning below historical averages. |
 | `historical` | 8.7% | 3.1% | 20% | 8.7% | 1926–2024 real arithmetic mean. |
 | `pessimistic` | 5.0% | 1.0% | 22% | 10% | Stress test for low-return futures. |
+| `forward` | 5.1% | 2.4% | 15.5% | 6% | Investment firms' 2026 10-15 year forecasts (base case); stock-bond correlation +0.10. |
 
 All returns are **real** (inflation-adjusted) **arithmetic** means. The simulation compounds yearly draws around them, so its median growth is lower: about mean minus half the portfolio variance (`config.geometric_portfolio_return`; about 6.3% for 80/20 `historical`).
 
@@ -478,6 +479,9 @@ Shift from stocks to bonds over retirement.
 | `GLIDE_PATH_END_STOCK_PCT` | `0.60` | Stock allocation at `GLIDE_PATH_END_AGE`. |
 | `GLIDE_PATH_END_BOND_PCT` | `0.40` | Bond allocation at `GLIDE_PATH_END_AGE`. |
 | `GLIDE_PATH_HOLD_AFTER` | `True` | Hold end allocation steady past the target age. |
+| `GLIDE_PATH_SHAPE` | `"down"` | `"down"`: ease into bonds (the rows above). `"tent"`: bond tent, stocks dip around retirement and climb back. |
+| `GLIDE_PATH_TENT_RAMP_YEARS` | `5` | Tent only: years before retirement over which stocks move from `STOCK_ALLOCATION` to `GLIDE_PATH_START_STOCK_PCT`. |
+| `GLIDE_PATH_TENT_RISE_YEARS` | `10` | Tent only: years after retirement to climb to `GLIDE_PATH_END_STOCK_PCT` (replaces `GLIDE_PATH_END_AGE`). |
 
 ---
 

@@ -369,8 +369,11 @@ class TestWidgetSyncCasts:
         assert ws._scenario_cast(raw) == expected
 
     def test_scenario_cast_covers_every_engine_scenario(self):
-        for name in cfg.RETURN_SCENARIOS:
-            assert ws._scenario_cast(name).lower() == name.lower()
+        # Every engine scenario gets its own label (none falls back to Historical).
+        labels = {name: ws._scenario_cast(name) for name in cfg.RETURN_SCENARIOS}
+        assert len(set(labels.values())) == len(labels)
+        for name, label in labels.items():
+            assert label.lower().startswith(name.lower()), (name, label)
 
 
 class TestWidgetSyncDerivations:

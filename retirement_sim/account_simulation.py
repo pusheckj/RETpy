@@ -3787,11 +3787,13 @@ def run_detailed_simulation(
             # sleeve gets a stochastic draw correlated to that stock shock,
             # rather than riding the equity return.
             bond_return = generate_correlated_bond_for_stock(stock_return)
-            annual_return = (cfg.STOCK_ALLOCATION * stock_return
-                             + cfg.BOND_ALLOCATION * bond_return)
+            stock_alloc, bond_alloc = cfg.calculate_asset_allocation(current_age, retirement_age)
+            annual_return = stock_alloc * stock_return + bond_alloc * bond_return
         else:
-            # Correlated arithmetic returns, after fees
-            annual_return = calculate_blended_return(cfg.STOCK_ALLOCATION, cfg.BOND_ALLOCATION)
+            # Correlated arithmetic returns, after fees. The working-years mix
+            # is STOCK_ALLOCATION, except a bond tent's pre-retirement ramp.
+            stock_alloc, bond_alloc = cfg.calculate_asset_allocation(current_age, retirement_age)
+            annual_return = calculate_blended_return(stock_alloc, bond_alloc)
         annual_return = clamp_return(annual_return)
 
         acc_solvent = simulate_accumulation_year(
@@ -4033,7 +4035,7 @@ def generate_correlated_returns_for_scenario(scenario: str = None) -> Tuple[floa
     them supplies the volatility drag, so none is subtracted here.
 
     Args:
-        scenario: One of 'conservative', 'historical', 'pessimistic'
+        scenario: One of 'conservative', 'historical', 'pessimistic', 'forward'
 
     Returns:
         Tuple of (stock_return, bond_return) for the year
@@ -4043,7 +4045,7 @@ def generate_correlated_returns_for_scenario(scenario: str = None) -> Tuple[floa
     z1 = np.random.standard_normal()
     z2 = np.random.standard_normal()
 
-    rho = cfg.STOCK_BOND_CORRELATION
+    rho = params.get('stock_bond_correlation', cfg.STOCK_BOND_CORRELATION)
     z2_correlated = rho * z1 + np.sqrt(1 - rho**2) * z2
 
     # Step 1: Deduct investment fees from expected returns
@@ -4102,7 +4104,8 @@ def run_monte_carlo_with_scenario(
             current_year = cfg.CURRENT_YEAR + year
 
             stock_return, bond_return = generate_correlated_returns_for_scenario(scenario)
-            annual_return = cfg.STOCK_ALLOCATION * stock_return + cfg.BOND_ALLOCATION * bond_return
+            stock_alloc, bond_alloc = cfg.calculate_asset_allocation(current_age, retirement_age)
+            annual_return = stock_alloc * stock_return + bond_alloc * bond_return
             annual_return = clamp_return(annual_return)
 
             acc_solvent = simulate_accumulation_year(

@@ -43,17 +43,21 @@ def render_investing_body(st) -> None:
     """Returns, inflation, glide path and Roth conversion (shown in Investments)."""
     # ===== Returns =====
     _section_label(st, "Returns")
-    scen_options = ["Conservative", "Historical", "Pessimistic"]
+    scen_options = ["Conservative", "Historical", "Pessimistic", "Forward-looking"]
     current_scen = str(get_override(st, "ACTIVE_RETURN_SCENARIO", "historical")).lower()
-    scen_map = {"conservative": "Conservative", "historical": "Historical", "pessimistic": "Pessimistic"}
+    scen_map = {"conservative": "Conservative", "historical": "Historical", "pessimistic": "Pessimistic",
+                "forward": "Forward-looking"}
     current_label = scen_map.get(current_scen, "Historical")
     ensure_default(st, "sa_scenario", current_label)
     scen = st.radio("Return scenario", scen_options, horizontal=True, key="sa_scenario",
                     help="Average real (after-inflation) yearly stock/bond returns. Conservative: 7%/2%. Historical: 8.7%/3.1%. Pessimistic: 5%/1%. "
+                         "Forward-looking: firms' 2026 forecasts for the next 10-15 years, about 5.1%/2.4% "
+                         "(stocks grow about 3.9% a year after the ups and downs). "
                          "Ups and downs make money grow a little slower than the average (about 6.3% a year for 80/20 Historical). "
                          "The simulation includes that. "
-                         "Historical is the default and the most optimistic; Conservative is closer to typical planner assumptions.")
-    set_override(st, "ACTIVE_RETURN_SCENARIO", str(scen or current_label).lower())
+                         "Historical is the default and the most optimistic; Conservative is closer to typical planner assumptions. "
+                         "Forward-looking is lower because stock prices are high today compared with company earnings.")
+    set_override(st, "ACTIVE_RETURN_SCENARIO", {v: k for k, v in scen_map.items()}.get(scen or current_label, "historical"))
 
     cur_stock_pct = max(0.0, min(100.0, as_fraction(get_override(st, "STOCK_ALLOCATION", 0.80), 0.80) * 100))
     ensure_default(st, "sa_stock_alloc", cur_stock_pct)
@@ -90,21 +94,43 @@ def render_investing_body(st) -> None:
     # ===== Glide path =====
     _section_label(st, "Glide path")
     ensure_default(st, "sa_glide_enable", bool(get_override(st, "GLIDE_PATH_ENABLED", True)))
-    v = st.toggle("Shift toward bonds with age (glide path)",
+    v = st.toggle("Change the stock/bond mix around retirement (glide path)",
                     key="sa_glide_enable")
     set_override(st, "GLIDE_PATH_ENABLED", bool(v))
     if st.session_state.get("sa_glide_enable", True):
-        cur_start = max(50.0, min(100.0, as_fraction(get_override(st, "GLIDE_PATH_START_STOCK_PCT", cfg.GLIDE_PATH_START_STOCK_PCT), cfg.GLIDE_PATH_START_STOCK_PCT) * 100))
+        shape_labels = {"down": "Ease into bonds", "tent": "Bond tent"}
+        cur_shape = shape_labels.get(str(get_override(st, "GLIDE_PATH_SHAPE", "down")), "Ease into bonds")
+        ensure_default(st, "sa_glide_shape", cur_shape)
+        shape = st.radio("Shape", list(shape_labels.values()), horizontal=True, key="sa_glide_shape",
+                         help="Ease into bonds: hold your mix while working, then shift toward bonds as you age. "
+                              "Bond tent: hold the most bonds in the years around retirement, when a market "
+                              "crash would hurt most, then move back into stocks. Your stocks step down over "
+                              "the 5 years before you retire and climb back over the years you choose.")
+        tent = shape == "Bond tent"
+        set_override(st, "GLIDE_PATH_SHAPE", "tent" if tent else "down")
+        cur_start = max(30.0, min(100.0, as_fraction(get_override(st, "GLIDE_PATH_START_STOCK_PCT", cfg.GLIDE_PATH_START_STOCK_PCT), cfg.GLIDE_PATH_START_STOCK_PCT) * 100))
         ensure_default(st, "sa_glide_start", cur_start)
-        v = slider_with_box(st, "Stock % at retirement", 50, 100, 5, key="sa_glide_start", unit="%",
-                            help="Your stock share on the day you retire.")
+        v = slider_with_box(st, "Stock % at retirement", 30, 100, 5, key="sa_glide_start", unit="%",
+                            help=("Your lowest stock share: the day you retire." if tent
+                                  else "Your stock share on the day you retire."))
         set_override(st, "GLIDE_PATH_START_STOCK_PCT", v / 100)
-        cur_end = max(20.0, min(80.0, as_fraction(get_override(st, "GLIDE_PATH_END_STOCK_PCT", cfg.GLIDE_PATH_END_STOCK_PCT), cfg.GLIDE_PATH_END_STOCK_PCT) * 100))
+        cur_end = max(20.0, min(100.0, as_fraction(get_override(st, "GLIDE_PATH_END_STOCK_PCT", cfg.GLIDE_PATH_END_STOCK_PCT), cfg.GLIDE_PATH_END_STOCK_PCT) * 100))
         ensure_default(st, "sa_glide_end", cur_end)
-        v = slider_with_box(st, "Stock % at age 75", 20, 80, 5, key="sa_glide_end", unit="%",
-                            help="Your stock share at age 75. It slides from the retirement "
-                                 "share to this one as you age.")
+        if tent:
+            v = slider_with_box(st, "Stock % after the climb", 20, 100, 5, key="sa_glide_end", unit="%",
+                                help="Your stock share once the climb back is done. It stays there.")
+        else:
+            v = slider_with_box(st, "Stock % at age 75", 20, 100, 5, key="sa_glide_end", unit="%",
+                                help="Your stock share at age 75. It slides from the retirement "
+                                     "share to this one as you age.")
         set_override(st, "GLIDE_PATH_END_STOCK_PCT", v / 100)
+        if tent:
+            cur_rise = max(3, min(25, safe_int(get_override(st, "GLIDE_PATH_TENT_RISE_YEARS", cfg.GLIDE_PATH_TENT_RISE_YEARS), 10)))
+            ensure_default(st, "sa_tent_years", cur_rise)
+            v = slider_with_box(st, "Years to climb back", 3, 25, 1, key="sa_tent_years", unit=" yrs",
+                                help="How many years after you retire your stocks take to climb back. "
+                                     "About 10 covers the years when a crash hurts most.")
+            set_override(st, "GLIDE_PATH_TENT_RISE_YEARS", int(v))
 
     st.divider()
 

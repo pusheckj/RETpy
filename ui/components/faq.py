@@ -22,11 +22,14 @@ QUESTIONS: list[tuple[str, str]] = [
         "90-95%. Past about 90%, each extra year of work adds very little.",
     ),
     (
-        "What do Conservative, Historical and Pessimistic mean?",
-        "They are three sets of assumed returns, after inflation. "
+        "What do Conservative, Historical, Pessimistic and Forward-looking mean?",
+        "They are four sets of assumed returns, after inflation. "
         "**Historical** is the 1926-2024 US average (about 8.7% stocks, 3.1% "
         "bonds). **Conservative** is lower (about 7% and 2%). **Pessimistic** "
-        "is a stress test (about 5% and 1%). These are average yearly returns. "
+        "is a stress test (about 5% and 1%). **Forward-looking** uses investment "
+        "firms' 2026 forecasts for the next 10-15 years (about 5.1% and 2.4%). "
+        "It is low because stock prices are high compared with company earnings. "
+        "These are average yearly returns. "
         "Ups and downs make money grow a little slower than the average "
         "(about 6.3% a year for an 80/20 mix in Historical). The simulation "
         "includes that. Many planners use Conservative. "

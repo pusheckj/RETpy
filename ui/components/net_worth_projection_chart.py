@@ -76,7 +76,7 @@ def investment_real_return(scenario: str, overrides: dict = None) -> float:
         safe_float(pick("STOCK_ALLOCATION"), 0.8),
         params["stock_return"], params["bond_return"],
         params["stock_volatility"], params["bond_volatility"],
-        safe_float(pick("STOCK_BOND_CORRELATION"), 0.0),
+        safe_float(params.get("stock_bond_correlation", pick("STOCK_BOND_CORRELATION")), 0.0),
         fee=safe_float(pick("INVESTMENT_FEE_RATE"), 0.0))
 
 
@@ -88,6 +88,8 @@ _CASH_HOME_RETURNS = {
     "conservative": {"cash": 0.005, "home": 0.005},
     "historical":   {"cash": 0.010, "home": 0.010},
     "pessimistic":  {"cash": 0.000, "home": 0.000},
+    # 2026 forecasts: cash 3.3% and homes 3.5% nominal, less 2.5% inflation.
+    "forward":      {"cash": 0.008, "home": 0.010},
 }
 
 

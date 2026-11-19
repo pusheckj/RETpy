@@ -81,8 +81,9 @@ All values below are **real** (inflation-adjusted) returns.
 | Conservative | 7.0%              | 2.0%             | 19%     | 8%     | −0.20       | 4.9%            |
 | Historical   | 8.7%              | 3.1%             | 20%     | 8.7%   | −0.20       | 6.3%            |
 | Pessimistic  | 5.0%              | 1.0%             | 22%     | 10%    | −0.20       | 2.7%            |
+| Forward-looking | 5.1%           | 2.4%             | 15.5%   | 6%     | +0.10       | 3.8%            |
 
-`ACTIVE_RETURN_SCENARIO` selects one of these at run time.
+`ACTIVE_RETURN_SCENARIO` selects one of these at run time. Forward-looking (`'forward'`) is the base case of a November 2026 survey of investment firms' 10-15 year forecasts: an all-stock mix of 60% US and 40% international at 3.9% real geometric with 15.5% volatility, US aggregate bonds at 2.2% real with 6%, and a stock-bond correlation of +0.10. Forecasts are geometric rates, so each arithmetic mean here is the geometric rate plus volatility²/2. It is the only scenario with its own correlation (`stock_bond_correlation` in its `RETURN_SCENARIOS` entry); the others use `STOCK_BOND_CORRELATION`.
 
 ---
 
@@ -307,6 +308,17 @@ When `GLIDE_PATH_ENABLED = True`, the stock/bond mix shifts with age:
 | between          | linear interpolation |
 
 Portfolio returns each year are computed as the weighted average of stock and bond draws at the age-appropriate weighting. This reduces sequence-of-returns risk late in life but costs expected return early on.
+
+`GLIDE_PATH_SHAPE` picks the shape. The table above is `"down"` (ease into bonds, the default). `"tent"` is a bond tent, also called a rising equity glide path:
+
+| Age | Stocks |
+|-----|--------|
+| until `GLIDE_PATH_TENT_RAMP_YEARS` (5) before retirement | `STOCK_ALLOCATION` |
+| ramp years | straight line down to `GLIDE_PATH_START_STOCK_PCT` at retirement |
+| first `GLIDE_PATH_TENT_RISE_YEARS` (10) of retirement | straight line up to `GLIDE_PATH_END_STOCK_PCT` |
+| after that | `GLIDE_PATH_END_STOCK_PCT` |
+
+Bonds are highest in the years around retirement, when a crash does the most damage (sequence-of-returns risk). Stocks are higher later, when the money left mostly grows the estate (Kitces & Pfau, 2014). The working-years and retirement draws use the same mix function (`config.calculate_asset_allocation`), so the allocation chart shows the ramp too. The FI-number sweep (`run_detailed_simulation_networth`) has no fixed retirement age, so it holds `STOCK_ALLOCATION` while working.
 
 ---
 

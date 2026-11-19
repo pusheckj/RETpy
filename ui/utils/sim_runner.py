@@ -227,7 +227,7 @@ def _recompute_derived(original: dict) -> None:
         "GLIDE_PATH_START_BOND_PCT", "GLIDE_PATH_END_BOND_PCT",
         # Return-scenario parameters copied from the active scenario (finding #2).
         "EXPECTED_STOCK_RETURN", "EXPECTED_BOND_RETURN",
-        "STOCK_VOLATILITY", "BOND_VOLATILITY",
+        "STOCK_VOLATILITY", "BOND_VOLATILITY", "STOCK_BOND_CORRELATION",
         # Annual health premiums derived from the monthly overrides (finding #12).
         "ACA_BASE_ANNUAL_PREMIUM", "MEDICARE_ANNUAL_PREMIUM",
         # Lifecycle preset: the explicit-dict override is cleared, the empty-nest
@@ -325,6 +325,8 @@ def _recompute_derived(original: dict) -> None:
         cfg.EXPECTED_BOND_RETURN = params["bond_return"]
         cfg.STOCK_VOLATILITY = params["stock_volatility"]
         cfg.BOND_VOLATILITY = params["bond_volatility"]
+        if "stock_bond_correlation" in params:   # only the forward-looking set has its own
+            cfg.STOCK_BOND_CORRELATION = params["stock_bond_correlation"]
 
     # config.py — YOUR_BIRTH_YEAR / PARTNER_BIRTH_YEAR = CURRENT_YEAR - age, and
     # RMD_START_AGE = get_rmd_start_age(YOUR_BIRTH_YEAR).
