@@ -1576,7 +1576,8 @@ def ss_spousal_factor(start_age: float) -> float:
 def social_security_by_person(your_age: int, claim_age: int = 67) -> dict:
     """Each person's Social Security this year, in today's dollars, before the
     earnings test: ``{"you": ..., "partner": ...}``. A spousal top-up is counted
-    with the spouse who receives it. calculate_social_security is the sum."""
+    with the spouse who receives it. Scaled by ss_payable_factor (the share paid
+    after the trust fund runs short). calculate_social_security is the sum."""
     out = {"you": 0.0, "partner": 0.0}
 
     # Primary user's SS
@@ -1584,7 +1585,7 @@ def social_security_by_person(your_age: int, claim_age: int = 67) -> dict:
         out["you"] += YOUR_SS_MONTHLY_FRA * ss_claim_factor(claim_age) * 12
 
     if not has_partner():
-        return out
+        return {k: v * ss_payable_factor(your_age) for k, v in out.items()}
 
     # Partner's SS (accounting for age difference), at their own claim age
     age_gap = YOUR_AGE - PARTNER_AGE
@@ -1605,7 +1606,8 @@ def social_security_by_person(your_age: int, claim_age: int = 67) -> dict:
             max(partner_claim_age, claim_age - age_gap))
         out["you"] += 12 * your_top_up * ss_spousal_factor(
             max(claim_age, partner_claim_age + age_gap))
-    return out
+    cut = ss_payable_factor(your_age)
+    return {k: v * cut for k, v in out.items()}
 
 
 def calculate_social_security(your_age: int, claim_age: int = 67) -> float:
@@ -1682,6 +1684,21 @@ PARTNER_SS_CLAIM_AGE = None  # When your partner starts, in their own age (None 
 # Spousal benefit for married couples (calculate_social_security). False
 # reproduces the earlier results, which paid each person only their own benefit.
 MODEL_SPOUSAL_SS_BENEFIT = True
+# Share of scheduled benefits actually paid from SS_PAYABLE_FROM_YEAR on. The
+# Social Security trust fund is projected to run short around 2033; with no fix,
+# incoming payroll taxes would pay about 77-81% of scheduled benefits (Social
+# Security Trustees). 1.0 = full benefits (assumes Congress fixes it).
+SS_PAYABLE_FRACTION = 1.0
+SS_PAYABLE_FROM_YEAR = 2033
+
+
+def ss_payable_factor(your_age: int) -> float:
+    """SS_PAYABLE_FRACTION in plan years from SS_PAYABLE_FROM_YEAR, else 1."""
+    year = CURRENT_YEAR + (int(your_age) - YOUR_AGE)
+    frac = globals().get("SS_PAYABLE_FRACTION", 1.0)
+    if frac is None or year < globals().get("SS_PAYABLE_FROM_YEAR", 2033):
+        return 1.0
+    return max(0.0, min(1.0, float(frac)))
 
 # -----------------------------------------------------------------------------
 # SOCIAL SECURITY TAXATION

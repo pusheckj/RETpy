@@ -331,6 +331,8 @@ Get personal estimates from [ssa.gov](https://www.ssa.gov) — log in and downlo
 | `SS_CLAIM_AGE` | `67` | Age you claim. 62–70. |
 | `PARTNER_SS_CLAIM_AGE` | `None` | Age your partner claims, in their own age (`None` = same as `SS_CLAIM_AGE`). |
 | `MODEL_SPOUSAL_SS_BENEFIT` | `True` | Married couples: a spouse whose own benefit is under half of the other's is topped up to half once both have claimed (reduced if claimed before 67, no delayed credit). Not for unmarried partners. `False` = each person's own benefit only. |
+| `SS_PAYABLE_FRACTION` | `1.0` | Share of scheduled benefits paid from `SS_PAYABLE_FROM_YEAR` on (both people, spousal top-up included). About 0.78 models no fix to the trust fund shortfall. |
+| `SS_PAYABLE_FROM_YEAR` | `2033` | First calendar year of the cut. |
 | `YOUR_SS_MONTHLY_FRA` | `$2,000` | Your monthly benefit at full retirement age (67). |
 | `PARTNER_SS_MONTHLY_FRA` | `$1,800` | Partner's monthly benefit at FRA. |
 | `EARLY_SS_AGE` | `62` | Earliest SS claim. ~30% benefit reduction vs FRA. |

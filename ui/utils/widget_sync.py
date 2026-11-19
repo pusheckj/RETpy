@@ -276,6 +276,7 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "rg_partner_ss_claim": ("PARTNER_SS_CLAIM_AGE", _as_int(67, 62, 70)),
     "rg_your_fra":        ("YOUR_SS_MONTHLY_FRA", _as_int(2_000, 0, 10_000)),
     "rg_partner_fra":     ("PARTNER_SS_MONTHLY_FRA", _as_int(1_800, 0, 10_000)),
+    "rg_ss_payable":      ("SS_PAYABLE_FRACTION", _as_pct(100.0, 50.0, 100.0)),
     "rg_target_success":  ("TARGET_SUCCESS_RATE", _as_pct_int(80, 70, 95)),
     # Retirement lifestyle (go-go extra and later-years drop). An unset extra
     # (None) is skipped here and the widget follows household size.

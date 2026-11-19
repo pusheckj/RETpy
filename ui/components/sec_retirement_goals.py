@@ -13,12 +13,12 @@ except ImportError:  # pragma: no cover
     cfg = None  # type: ignore
 
 try:
-    from utils.coerce import safe_int, safe_float, ensure_default
+    from utils.coerce import safe_int, safe_float, as_fraction, ensure_default
     from utils.formatting import money, money_md, pct
     from utils.household import plan_end_ages, retire_floor as _retire_floor, retire_together
     from utils.derived import RETIREMENT_SPENDING_MODES
 except ImportError:  # pragma: no cover
-    from ui.utils.coerce import safe_int, safe_float, ensure_default  # type: ignore
+    from ui.utils.coerce import safe_int, safe_float, as_fraction, ensure_default  # type: ignore
     from ui.utils.formatting import money, money_md, pct  # type: ignore
     from ui.utils.household import (plan_end_ages, retire_floor as _retire_floor,  # type: ignore
                                     retire_together)
@@ -322,6 +322,18 @@ def render_body(st) -> None:
             f"({money_md(annual_ss / 12, shorten=True)}/mo{' combined' if has_partner else ''})."
         )
     if include:
+        ensure_default(st, "rg_ss_payable",
+                       round(100 * as_fraction(get_override(st, "SS_PAYABLE_FRACTION", 1.0), 1.0)))
+        pay = slider_with_box(st, "Share of benefits paid from 2033", 50, 100, 1,
+                              key="rg_ss_payable", unit="%",
+                              help="Social Security's trust fund is projected to run short around 2033. "
+                                   "With no fix, payroll taxes would still pay about 77-81% of promised "
+                                   "benefits. 100% assumes Congress fixes it, as it has before. "
+                                   "Try about 78% to plan for no fix.")
+        set_override(st, "SS_PAYABLE_FRACTION", round(float(pay) / 100, 4))
+        if pay < 100 and annual_ss > 0:
+            st.caption(f"From 2033: about {money_md(annual_ss * pay / 100, shorten=True)}/yr "
+                       f"at {pay:.0f}% of promised benefits.")
         st.caption(
             "Full retirement age is 67 for everyone, which is right if you were born in 1960 or later. "
             "The model does not pay a survivor benefit. It assumes both of you live to the end of the plan. "

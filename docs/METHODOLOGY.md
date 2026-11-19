@@ -359,6 +359,7 @@ For users born in 1960 or later, FRA is **67**. The engine uses 67 for everyone 
 - **Delayed credits (FRA < age ≤ 70):** benefit grows by **8% per year** of delay (2/3 of 1% per month). Delaying from FRA=67 to 70 yields **124%** of PIA. No further credits accrue after 70.
 - **Each person claims at their own age:** you at `SS_CLAIM_AGE`, your partner at `PARTNER_SS_CLAIM_AGE` (in their own age; the same age by default).
 - **Spousal benefit (married couples, `MODEL_SPOUSAL_SS_BENEFIT`):** once both have claimed, a spouse whose own benefit is under half of the other's gets the difference, reduced by 25/36 of 1% per month before FRA for 36 months and 5/12 of 1% beyond (65% at 62), with no delayed credit. Unmarried partners don't qualify. Survivor benefits and benefits that depend on when you stop working are not modeled.
+- **Trust fund shortfall (`SS_PAYABLE_FRACTION`, `SS_PAYABLE_FROM_YEAR`):** from 2033 every benefit is scaled by the payable share (default 100%). The Social Security Trustees project that payroll taxes alone would pay about 77-81% of scheduled benefits after the trust fund runs short; about 78% models no fix.
 
 ### 12.3 Taxation
 
