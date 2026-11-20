@@ -27,6 +27,10 @@ Two phases share a single age axis:
 A "Today's dollars" vs "Future (nominal) dollars" toggle inflates every year's
 values by ``(1 + EXPECTED_INFLATION) ** (age - current_age)`` when future mode
 is selected — the same real-vs-nominal pattern as ``components.spending_chart``.
+
+A plot-type switch above the chart picks this chart ("Over time", the default) or
+"Where this year's pay goes", a Sankey of one working year
+(``components.income_flow_chart``).
 """
 from __future__ import annotations
 
@@ -70,6 +74,9 @@ _RETIREMENT_LABELS = [
     "HSA",
 ]
 _ALL_LABELS = _WORKING_LABELS + _RETIREMENT_LABELS
+
+# The tile's plot-type switch: this chart, or one working year as a Sankey.
+PLOT_TYPES = ["Over time", "Where this year's pay goes"]
 
 
 def _comp_lookup(comp_by_age: dict, age: int):
@@ -426,6 +433,21 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
         return
 
     def _render_body() -> None:
+        plot = st.radio(
+            "Plot type",
+            options=PLOT_TYPES,
+            horizontal=True,
+            key=f"{chart_key}_plot_type",
+            label_visibility="collapsed",
+        )
+        if plot == PLOT_TYPES[1]:
+            try:
+                from components import income_flow_chart
+            except ImportError:  # pragma: no cover
+                from ui.components import income_flow_chart  # type: ignore
+            income_flow_chart.render_body(st, overrides, chart_key)
+            return
+
         # Dollars-mode toggle (real vs nominal), keyed uniquely per chart instance.
         mode = st.radio(
             "Dollars",

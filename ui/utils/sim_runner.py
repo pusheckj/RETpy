@@ -2225,6 +2225,181 @@ def social_security_path(user_overrides: dict, ages, retirement_age: int) -> Dic
         _restore_overrides(original)
 
 
+def working_year_flows(user_overrides: dict, age: int, retirement_age: int) -> dict:
+    """Where one working year's pay goes, in today's dollars, for the Income
+    tile's "Where this year's pay goes" chart. No simulation, no randomness.
+
+    * Pay, pre-tax savings, taxes and take-home: the engine's own
+      ``account_simulation.working_year_cashflow`` (as the tax and savings
+      charts use it), so a comp row's fixed ``after_tax``, two returns for an
+      unmarried couple and the after-tax 401(k) are all handled there.
+    * Spending: the engine's own figure for that year. The working years up to
+      ``age`` are replayed with ``simulate_accumulation_year`` at a 0% return
+      (returns change balances, not what a year spends), and the year's
+      ``spending_log`` total is used: housing as the engine has it that year
+      (a housing timeline, extra principal), children, college after the 529s
+      pay their part, and debt payments. It is split into the expense
+      categories (``utils.expense_categories``); what the split can't name
+      (college after the 529s) is the remainder, so the parts add up to the
+      engine's total.
+    * Brokerage: what is left of take-home after spending and the after-tax
+      savings (Roth IRAs, after-tax 401(k), 529s), the engine's Auto sweep
+      (a brokerage floor counts). A negative remainder is ``shortfall``, the
+      amount the engine draws from savings. Manual mode invests set amounts,
+      so the rest is ``left_over`` (not invested).
+    * Employer money (401(k) match, HSA deposit, ESPP discount) is extra
+      compensation, not pay, so it is reported apart (``employer``).
+
+    Partner pay follows the partner's own retirement age, as in the engine.
+    ``coasting`` is True past a Coast FIRE age: the engine saves nothing that
+    year, so the flows above don't apply (the chart says so instead).
+    """
+    try:
+        from utils.expense_categories import CATEGORIES
+    except ImportError:  # pragma: no cover
+        from ui.utils.expense_categories import CATEGORIES  # type: ignore
+    original = _apply_overrides(build_config_overrides(user_overrides))
+    try:
+        start = int(cfg.YOUR_AGE)
+        age = max(start, int(age))
+        retirement_age = int(retirement_age)
+        has_partner = cfg.has_partner()
+        pra = getattr(cfg, "PARTNER_RETIREMENT_AGE", None)
+        gap = start - int(getattr(cfg, "PARTNER_AGE", 0) or 0)
+
+        def partner_working(a: int) -> bool:
+            if not has_partner:
+                return False
+            return a < retirement_age if pra is None else (a - gap) < int(pra)
+
+        cf = sim.working_year_cashflow(age, partner_working=partner_working(age))
+
+        # The engine's spending for the year (see the docstring).
+        portfolio = sim.create_initial_portfolio()
+        for a in range(start, age + 1):
+            sim.simulate_accumulation_year(portfolio, a, 0.0, partner_working=partner_working(a))
+        coasting = bool(getattr(portfolio, "coasting", False))
+        log = [r for r in portfolio.spending_log if int(r.get("age", -1)) == age]
+
+        if sim._mortgage_swap_active(portfolio):
+            housing = float(portfolio.housing_expense_for_age(age))
+            owns = bool(portfolio.owns_home())
+            has_loan = float(portfolio.mortgage_expense_for_age(age)) > 0
+        else:
+            housing = float(cfg.housing_annual(age))
+            owns = not cfg.is_renter()
+            has_loan = bool(cfg.has_mortgage(age))
+        housing_label = ("Mortgage" if owns and has_loan
+                         else "Property tax + insurance" if owns else "Rent")
+
+        spending: Dict[str, float] = {}
+        if cfg.granular_nonhousing_annual() is not None:
+            for c in CATEGORIES:
+                if has_partner or not c.partner_only:
+                    spending[c.label] = float(getattr(cfg, c.key, 0) or 0) * 12.0
+        else:   # the legacy bundle (no SPEND_* category set)
+            spending["Utilities"] = float(getattr(cfg, "UTILITIES_ANNUAL", 0) or 0)
+            spending["Other"] = float(getattr(cfg, "YOUR_OTHER_ANNUAL", 0) or 0)
+            if has_partner:
+                spending["Partner spending"] = float(getattr(cfg, "PARTNER_OTHER_MONTHLY", 0) or 0) * 12.0
+        # The lifecycle preset's change (food, fun) on its own category.
+        by_label = {c.key: c.label for c in CATEGORIES}
+        mults = getattr(cfg, "SPEND_LIFECYCLE_MULTIPLIERS_BY_AGE", None) or {}
+        kids_home = bool(cfg.children_at_home_ages(age))
+        for key in cfg._LIFECYCLE_CATEGORIES:
+            monthly = getattr(cfg, key, None)
+            if monthly is None or by_label.get(key) not in spending:
+                continue
+            if mults:
+                m = float((mults.get(key) or {}).get(age, 1.0))
+            else:
+                m = cfg.lifecycle_multiplier(key, age, None, None, False, kids_at_home=kids_home)
+            spending[by_label[key]] += float(monthly) * 12.0 * (m - 1.0)
+        spending[housing_label] = housing
+        spending["Children"] = float(cfg.calculate_child_expenses(age))
+        spending["Debt payments"] = float(cfg.debt_payment_for_age(age))
+        named = sum(spending.values())
+        college_bill = float(cfg.calculate_college_expenses(age)["total"])
+        if log:
+            living = float(log[-1]["living"])
+        else:   # coasting: the year is not logged
+            living = named + college_bill
+        rest = living - named
+        if college_bill > 0:
+            spending["College (after 529s)"] = max(0.0, rest)
+        elif abs(rest) > 0.5:
+            spending["Other"] = spending.get("Other", 0.0) + rest
+        spending = {k: v for k, v in spending.items() if v > 0.5}
+        spend_total = sum(spending.values())
+
+        you = float(cf["your_wages"] + cf["your_other"])
+        partner = float(cf["partner_wages"] + cf["partner_other"])
+        ss = float(cf["social_security"])
+        your_401k, partner_401k = float(cf["your_401k"]), float(cf["partner_401k"])
+        your_hsa = float(cf["your_hsa"])
+        your_take, partner_take = float(cf["your_take_home"]), float(cf["partner_take_home"])
+        # Each earner's tax is what is left of their pay after deferrals and take-home
+        # (a comp row's fixed take-home included); Social Security sits on your return.
+        you_tax = max(0.0, you + ss - your_401k - your_hsa - your_take)
+        partner_tax = max(0.0, partner - partner_401k - partner_take)
+        take_home = your_take + partner_take
+
+        roth = float(cf["your_roth"] + cf["partner_roth"])
+        after_tax_401k = float(cf["your_after_tax_401k"])
+        plan_529 = float(sum(cfg.child_529_contributions(age)))
+        electives = roth + after_tax_401k + plan_529
+        residual = take_home - living - electives
+        your_floor = getattr(cfg, "YOUR_BROKERAGE_CONTRIBUTION", None)
+        partner_floor = getattr(cfg, "PARTNER_BROKERAGE_CONTRIBUTION", None) if has_partner else None
+        auto = str(getattr(cfg, "SAVINGS_MODE", "Auto")).startswith("Auto")
+        if auto:
+            brokerage = max(residual, float(your_floor or 0) + float(partner_floor or 0), 0.0)
+        else:
+            if your_floor is not None and float(your_floor) > 0:
+                mine = float(your_floor)
+            else:
+                mine = max(0.0, float(cf["saved"]) - float(cf["your_roth"]) - plan_529 - after_tax_401k)
+            if partner_floor is not None and float(partner_floor) > 0:
+                theirs = float(partner_floor)
+            elif has_partner:
+                theirs = max(0.0, partner_take - float(cf["partner_roth"])
+                             - float(getattr(cfg, "PARTNER_ANNUAL_SPENDING", 0) or 0))
+            else:
+                theirs = 0.0
+            brokerage = mine + theirs
+        outflow = spend_total + roth + after_tax_401k + plan_529 + brokerage
+        shortfall = max(0.0, outflow - take_home)
+        left_over = max(0.0, take_home - outflow)
+
+        espp = float(cf["base_salary"]) * float(getattr(cfg, "YOUR_ESPP_PCT", 0.0) or 0.0) \
+            * float(getattr(cfg, "YOUR_ESPP_DISCOUNT", 0.0) or 0.0)
+        employer = {
+            "401(k) match": float(cf["your_match"] + cf["partner_match"]),
+            "HSA deposit": float(cf["your_hsa_employer"]),
+            "ESPP discount": espp,
+        }
+        state = str(getattr(cfg, "STATE_CHOICE", "") or "")
+        return {
+            "age": age,
+            "you": you, "partner": partner, "social_security": ss,
+            "gross": you + partner + ss,
+            "you_tax": you_tax, "partner_tax": partner_tax,
+            "federal": float(cf["federal"]), "state": float(cf["state"]), "fica": float(cf["fica"]),
+            "state_label": f"State ({state})" if len(state) == 2 else "State",
+            "two_returns": bool(cf["two_returns"]),
+            "your_401k": your_401k, "partner_401k": partner_401k, "your_hsa": your_hsa,
+            "your_take_home": your_take, "partner_take_home": partner_take,
+            "take_home": take_home,
+            "roth": roth, "after_tax_401k": after_tax_401k, "plan_529": plan_529,
+            "brokerage": brokerage, "left_over": left_over, "shortfall": shortfall,
+            "spending": spending, "spending_total": spend_total,
+            "employer": {k: v for k, v in employer.items() if v > 0.5},
+            "auto": auto, "coasting": coasting, "has_partner": has_partner,
+        }
+    finally:
+        _restore_overrides(original)
+
+
 def _approximate_income_sources(withdrawal_rows: List[dict], retirement_age: int) -> List[IncomeSourceYearRow]:
     """Per-year retirement income breakdown from the per-age median
     withdrawal rows (see ``_median_withdrawal_log_from_data``), plus Social
