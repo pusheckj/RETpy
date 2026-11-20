@@ -15,6 +15,8 @@ its internal ``from components...`` / ``from utils...`` imports resolve.
 import os
 import sys
 
+import pytest
+
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _UI = os.path.join(_ROOT, "ui")
 for _p in (_ROOT, _UI):
@@ -200,11 +202,25 @@ class _MockSt:
     def caption(self, *a, **k):
         pass
 
+    def divider(self, *a, **k):
+        pass
 
-def test_render_without_results_does_not_raise():
+
+@pytest.fixture(autouse=True)
+def _flow_recorder(monkeypatch):
+    """The pay-flow Sankey under the chart has its own tests
+    (tests/test_income_flow_chart.py); here it only has to be drawn too."""
+    from components import income_flow_chart
+    calls = []
+    monkeypatch.setattr(income_flow_chart, "render_body", lambda st, ov, key: calls.append(key))
+    return calls
+
+
+def test_render_without_results_does_not_raise(_flow_recorder):
     st = _MockSt(_overrides())
     iot.render(st, results=None, chart_key="iot_test_none")
     assert st.plotly_calls == 1  # rendered the chart
+    assert _flow_recorder == ["iot_test_none"]  # and the pay-flow chart below it
 
 
 def test_render_with_results_does_not_raise():
