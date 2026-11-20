@@ -3970,7 +3970,7 @@ section[data-testid="stSidebar"] .mc-sec-ico { color: var(--mc-teal-strong) !imp
 .mc-goal-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
 .mc-goal-title { font-size: 19px; font-weight: 700; color: var(--mc-ink); }
 .mc-goal-right, .mc-goal-note { font-size: 13px; line-height: 1.45; color: var(--mc-muted); }
-.mc-goal-note { margin-bottom: 10px; }
+.mc-goal-note { padding-bottom: 14px; }   /* padding, not margin: Streamlit's -1rem markdown margin ate the margin */
 section[data-testid="stMain"] [class*="st-key-mc-goal-row-"][class*="st-key-mc-goal-row-"] {
     flex-wrap: nowrap !important; gap: 14px !important; padding: 10px 0; border-top: 1px solid var(--mc-tile-border); }
 [class*="st-key-mc-goal-row-"] > div:has(.mc-goal-row) { flex: 1 1 0 !important; min-width: 0 !important; width: auto !important; }
