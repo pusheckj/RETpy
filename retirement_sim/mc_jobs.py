@@ -240,6 +240,60 @@ def median_year1_withdrawal(age: int, n: int = 20, seed: int = 13579) -> float:
     return float(np.median(vals)) if vals else 0.0
 
 
+def outcomes(age: int, n: int, seed: int) -> Dict[str, Any]:
+    """Each path's result at ``age``, for sweeps that compare settings.
+
+    ``bits`` has one character per path: "1" lasted, "0" ran out, "-" raised.
+    With the same ``seed`` for every setting the paths are COMMON RANDOM
+    NUMBERS, so two settings can be compared path by path (a paired standard
+    error), which is much tighter than treating them as independent runs.
+    ``finals`` and ``taxes`` (``portfolio.total_taxes_paid``: income tax and
+    penalties the portfolio paid, the same figure as
+    ``run_monte_carlo_detailed``'s ``median_taxes``) cover the paths that ran.
+    """
+    bits, finals, taxes = [], [], []
+    for i in range(int(n)):
+        try:
+            ok, pf = sim.run_detailed_simulation(int(age), verbose=False,
+                                                 random_seed=sim.path_seed(seed, i))
+        except Exception:  # noqa: BLE001 - one bad path must not kill the batch
+            bits.append("-")
+            continue
+        bits.append("1" if ok else "0")
+        finals.append(float(pf.get_total_balance()))
+        taxes.append(float(pf.total_taxes_paid))
+    return {"bits": "".join(bits), "finals": finals, "taxes": taxes}
+
+
+def replay(age: int, start_years: List[int], seed: int) -> List[Dict[str, Any]]:
+    """The plan replayed through real market history, once per start year
+    (``run_detailed_simulation(historical_start_year=...)``). Deterministic:
+    every start year uses the same ``seed`` for its non-market draws, so the
+    years differ only by the markets they lived through."""
+    out = []
+    for year in start_years:
+        data_years = sim.historical_replay_years(int(age), int(year))
+        outside = sum(1 for y in data_years
+                      if not sim.HISTORICAL_FIRST_YEAR <= y <= sim.HISTORICAL_LAST_YEAR)
+        try:
+            ok, pf = sim.run_detailed_simulation(int(age), verbose=False, random_seed=int(seed),
+                                                 historical_start_year=int(year))
+        except Exception as exc:  # noqa: BLE001
+            out.append({"year": int(year), "error": repr(exc)})
+            continue
+        hist = getattr(pf, "yearly_history", None) or []
+        at_ret = next((float(r.get("total", 0.0) or 0.0) for r in hist
+                       if int(r.get("age", -1)) == int(age)), None)
+        out.append({
+            "year": int(year), "ok": bool(ok),
+            # A failed year is not recorded, so the last record is the age it ran out.
+            "out_age": None if ok else (int(hist[-1]["age"]) if hist else int(age)),
+            "end": float(pf.get_total_balance()) if ok else 0.0,
+            "at_retirement": at_ret, "outside_data": int(outside),
+        })
+    return out
+
+
 CALLS: Dict[str, Callable[..., Any]] = {
     "batch": lambda age, n, detail, seed: mc_parallel.sim_task((age, n, detail, seed)),
     "scan": scan_age,
@@ -247,6 +301,8 @@ CALLS: Dict[str, Callable[..., Any]] = {
     "networth": networth,
     "investable": investable_at_retirement,
     "w1": median_year1_withdrawal,
+    "outcomes": outcomes,
+    "replay": replay,
 }
 
 

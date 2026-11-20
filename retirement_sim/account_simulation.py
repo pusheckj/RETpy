@@ -21,6 +21,7 @@ import numpy as np
 
 # Local application imports
 from . import config as cfg
+from . import historical_returns as _hist
 
 
 # =============================================================================
@@ -193,6 +194,50 @@ def generate_correlated_bond_for_stock(stock_return: float) -> float:
     z2_correlated = rho * z1 + np.sqrt(1 - rho**2) * z2
     bond_mean = cfg.EXPECTED_BOND_RETURN - cfg.INVESTMENT_FEE_RATE
     return bond_mean + cfg.BOND_VOLATILITY * z2_correlated
+
+
+# ---------------------------------------------------------------------------
+# Historical replay: "if you had retired in a real year"
+# ---------------------------------------------------------------------------
+# historical_returns.py holds REAL (after-inflation) stock and bond returns, so
+# they drop straight into this all-real engine with no deflating.
+HISTORICAL_FIRST_YEAR = min(_hist.HISTORICAL_RETURNS)
+HISTORICAL_LAST_YEAR = max(_hist.HISTORICAL_RETURNS)
+
+
+def historical_replay_years(retirement_age: int, start_year: int) -> List[int]:
+    """Calendar year of market data used for each simulated year of a replay.
+
+    Retirement starts in ``start_year``: the first retirement year earns
+    ``start_year``'s returns, the next year the year after, and so on to the
+    plan's end. The working years before it use the years just before
+    ``start_year`` (retiring in 1966 at 48 from age 40 works through 1958-1965).
+    Index ``i`` is simulated year ``i`` (age ``cfg.YOUR_AGE + i``).
+    """
+    retirement_age = max(int(retirement_age), int(cfg.YOUR_AGE))
+    first = int(start_year) - (retirement_age - int(cfg.YOUR_AGE))
+    return list(range(first, first + int(cfg.plan_end_age()) - int(cfg.YOUR_AGE)))
+
+
+def historical_replay_return(data_year: int, current_age: int, retirement_age: int) -> float:
+    """One year's portfolio return in a historical replay.
+
+    Inside the data (1926-2024) the stock and bond sleeves earn that year's
+    real returns, less ``cfg.INVESTMENT_FEE_RATE``, at the plan's mix for this
+    age. Real data is not clamped. Outside the data the year earns the plan's
+    expected MEDIAN (geometric) real return for the same mix, after fees, with
+    no randomness (``cfg.geometric_portfolio_return``), so the replay stays
+    deterministic.
+    """
+    stock_alloc, bond_alloc = cfg.calculate_asset_allocation(current_age, retirement_age)
+    fee = cfg.INVESTMENT_FEE_RATE
+    pair = _hist.HISTORICAL_RETURNS.get(int(data_year))
+    if pair is None:
+        return cfg.geometric_portfolio_return(
+            stock_alloc, cfg.EXPECTED_STOCK_RETURN, cfg.EXPECTED_BOND_RETURN,
+            cfg.STOCK_VOLATILITY, cfg.BOND_VOLATILITY, cfg.STOCK_BOND_CORRELATION, fee)
+    stock, bond = pair
+    return stock_alloc * (stock - fee) + bond_alloc * (bond - fee)
 
 
 def calculate_blended_return(stock_alloc: float, bond_alloc: float) -> float:
@@ -3611,7 +3656,8 @@ def simulate_retirement_year(
 
 
 def _run_retirement_phase(portfolio, retirement_age, inflation_factors,
-                          historical_returns, verbose, partner_working_at) -> bool:
+                          historical_returns, verbose, partner_working_at,
+                          replay_years: Optional[List[int]] = None) -> bool:
     """Run the decumulation phase from ``retirement_age`` to ``cfg.plan_end_age()``.
 
     Shared by ``run_detailed_simulation`` (fixed retirement age) and
@@ -3620,7 +3666,8 @@ def _run_retirement_phase(portfolio, retirement_age, inflation_factors,
     a given retirement year (for the separate-partner-retirement-age feature);
     pass ``lambda a: False`` when both retire together. Returns True while solvent,
     False the first year withdrawals can't be funded. Set the retirement baseline
-    (``portfolio.set_retirement_baseline``) before calling.
+    (``portfolio.set_retirement_baseline``) before calling. ``replay_years``
+    (``historical_replay_years``) replays real market years instead of drawing.
     """
     years_until_retirement = retirement_age - cfg.YOUR_AGE
     years_in_retirement = cfg.plan_end_age() - retirement_age
@@ -3639,7 +3686,10 @@ def _run_retirement_phase(portfolio, retirement_age, inflation_factors,
         )
 
         historical_year_index = years_until_retirement + year
-        if historical_returns and historical_year_index < len(historical_returns):
+        if replay_years is not None:
+            annual_return = historical_replay_return(
+                replay_years[historical_year_index], current_age, retirement_age)
+        elif historical_returns and historical_year_index < len(historical_returns):
             # NOTE: NOMINAL config returns deflated to REAL by the single-year general
             # inflation rate (see accumulation-phase note above for the bug this fixes).
             single_year_inflation = cfg.INFLATION_RATES['general']
@@ -3721,7 +3771,8 @@ def run_detailed_simulation(
     retirement_age: int,
     verbose: bool = False,
     historical_sequence: Optional[str] = None,
-    random_seed: Optional[int] = None
+    random_seed: Optional[int] = None,
+    historical_start_year: Optional[int] = None,
 ) -> Tuple[bool, AccountPortfolio]:
     """
     Run full simulation with all features.
@@ -3731,13 +3782,23 @@ def run_detailed_simulation(
         verbose: Print progress updates
         historical_sequence: Use historical returns sequence (e.g., 'dot_com_crisis')
         random_seed: Optional seed for reproducible results
+        historical_start_year: Replay real market history with retirement
+            starting in this calendar year (see ``historical_replay_years`` and
+            ``historical_replay_return``): every year's stock and bond returns
+            come from historical_returns.py, with no random market draws. The
+            non-market draws (healthcare inflation, long-term care) still use
+            ``random_seed``. Can't be combined with ``historical_sequence``.
     """
+    if historical_start_year is not None and historical_sequence:
+        raise ValueError("pass historical_sequence or historical_start_year, not both")
     _seed_rngs(random_seed)
 
     # Guard: if retirement_age is less than current age, clamp to current age
     # (treat as "retire right now") so the simulation doesn't rewind time.
     if retirement_age < cfg.YOUR_AGE:
         retirement_age = cfg.YOUR_AGE
+    replay_years = (historical_replay_years(retirement_age, historical_start_year)
+                    if historical_start_year is not None else None)
 
     portfolio = create_initial_portfolio()
     inflation_factors = {'general': 1.0, 'healthcare': 1.0, 'childcare': 1.0}
@@ -3774,7 +3835,11 @@ def run_detailed_simulation(
         current_age = cfg.YOUR_AGE + year
         current_year = cfg.CURRENT_YEAR + year
 
-        if historical_returns and year < len(historical_returns):
+        if replay_years is not None:
+            # Real market data: applied as is, not clamped.
+            annual_return = historical_replay_return(replay_years[year], current_age,
+                                                     retirement_age)
+        elif historical_returns and year < len(historical_returns):
             # NOTE: historical_returns from config.py HISTORICAL_RETURNS are NOMINAL
             # and must be deflated to REAL to match the all-real engine frame.
             # Subtract the SINGLE-YEAR general inflation rate (not the cumulative
@@ -3788,13 +3853,12 @@ def run_detailed_simulation(
             # rather than riding the equity return.
             bond_return = generate_correlated_bond_for_stock(stock_return)
             stock_alloc, bond_alloc = cfg.calculate_asset_allocation(current_age, retirement_age)
-            annual_return = stock_alloc * stock_return + bond_alloc * bond_return
+            annual_return = clamp_return(stock_alloc * stock_return + bond_alloc * bond_return)
         else:
             # Correlated arithmetic returns, after fees. The working-years mix
             # is STOCK_ALLOCATION, except a bond tent's pre-retirement ramp.
             stock_alloc, bond_alloc = cfg.calculate_asset_allocation(current_age, retirement_age)
-            annual_return = calculate_blended_return(stock_alloc, bond_alloc)
-        annual_return = clamp_return(annual_return)
+            annual_return = calculate_blended_return(stock_alloc, bond_alloc)  # already clamped
 
         acc_solvent = simulate_accumulation_year(
             portfolio, current_age, annual_return,
@@ -3819,7 +3883,8 @@ def run_detailed_simulation(
     portfolio.set_retirement_baseline(inflation_factors['general'])
 
     if not _run_retirement_phase(portfolio, retirement_age, inflation_factors,
-                                 historical_returns, verbose, _partner_working_at):
+                                 historical_returns, verbose, _partner_working_at,
+                                 replay_years):
         return False, portfolio
 
     return True, portfolio

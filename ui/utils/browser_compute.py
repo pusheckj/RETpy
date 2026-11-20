@@ -158,6 +158,30 @@ def submit(st, kind: str, plan, on_done: Callable[[Dict[str, Any]], None],
     _state(st)["unsent"] = True
 
 
+def run_or_submit(st, kind: str, plan, on_done: Callable[[Dict[str, Any]], None],
+                  progress_text: str) -> None:
+    """A button-gated analysis: in the visitor's browser when its workers are
+    ready, else here with a progress bar. The caller reruns afterwards."""
+    from utils import sim_runner as sr
+    if plan.result is not None:
+        on_done(plan.result)
+    elif ready(st):
+        submit(st, kind, plan, on_done)
+    else:
+        prog = st.progress(0.0, text=progress_text)
+
+        def _cb(frac, _msg):
+            try:
+                prog.progress(min(1.0, max(0.0, float(frac))), text=progress_text)
+            except Exception:
+                pass
+
+        try:
+            on_done(sr.execute_plan(plan, _cb))
+        finally:
+            prog.empty()
+
+
 def unsent(st) -> bool:
     """A job was submitted after this run drew the component, so the browser
     hasn't been given it: the caller must rerun (nothing else would)."""
@@ -208,8 +232,19 @@ def _plausible(call: List[Any], v: Any) -> bool:
     fn, _patch, args = call
     if fn in ("w1", "investable"):
         return isinstance(v, (int, float)) and not isinstance(v, bool)
+    if fn == "replay":
+        years = list(args[1])
+        return (isinstance(v, list) and len(v) == len(years)
+                and all(isinstance(r, dict) and r.get("year") == y for r, y in zip(v, years)))
     if not isinstance(v, dict):
         return False
+    if fn == "outcomes":
+        bits, finals, taxes = v.get("bits"), v.get("finals"), v.get("taxes")
+        if not (isinstance(bits, str) and len(bits) == int(args[1]) and set(bits) <= set("10-")):
+            return False
+        ran = len(bits) - bits.count("-")
+        return (isinstance(finals, list) and isinstance(taxes, list)
+                and len(finals) == ran and len(taxes) == ran)
     if fn in ("batch", "scan"):
         n, ok = v.get("n"), v.get("successes")
         if not (isinstance(n, int) and isinstance(ok, int) and 0 <= ok <= n <= int(args[1])):

@@ -2959,3 +2959,205 @@ def run_mortgage_paydown_analysis(
     return execute_plan(plan_mortgage_paydown(user_overrides, n_simulations,
                                               target_retirement_age, extra_grid),
                         progress_callback)
+
+# ---------------------------------------------------------------------------
+# Roth conversion optimizer (Deep dives -> Roth conversions)
+# ---------------------------------------------------------------------------
+_ROTH_CACHE: Dict[tuple, Any] = {}
+_SMALL_CACHES.append(_ROTH_CACHE)
+
+ROTH_SWEEP_CAPS = (50_000, 100_000, 200_000)
+# Chunks per setting: the unit handed to a pool or browser worker.
+_ROTH_CHUNKS = 4
+
+
+def _paired_se(a: str, b: str) -> float:
+    """Standard error of success(a) - success(b) over the same paths (common
+    random numbers): from the per-path differences, skipping paths that raised."""
+    d = [int(x) - int(y) for x, y in zip(a, b) if x != "-" and y != "-"]
+    if len(d) < 2:
+        return 0.0
+    return float(np.std(d, ddof=1) / np.sqrt(len(d)))
+
+
+def plan_roth_sweep(user_overrides: dict, n_simulations: int = 1000,
+                    target_retirement_age: int = 55) -> Plan:
+    """Roth conversion settings side by side at the target age: no conversions,
+    "fill the 12% / 22% / 24% bracket" x a yearly cap of $50K / $100K / $200K,
+    and your current setting. Every setting replays the same market paths (the
+    main run's seeds), so the current setting's success equals the plan's own
+    at the same run count, and settings can be compared path by path."""
+    from utils import roth_brackets as rb
+    key = (_hashable(user_overrides), int(n_simulations), int(target_retirement_age))
+    hit = _small_cache_lookup(_ROTH_CACHE, "roth_sweep", key)
+    if hit is not None:
+        return Plan("roth", key, user_overrides, result=hit)
+    # Same run count rule as the safe-withdrawal sweep.
+    n = max(300, min(int(n_simulations), 3000))
+    original = _apply_overrides(build_config_overrides(user_overrides))
+    try:
+        ra = max(int(target_retirement_age), int(cfg.YOUR_AGE))
+        status = cfg.return_status("you")
+        two_returns = cfg.files_two_returns()
+        rows = [{"rate": r, "target": t, "label": f"Fill the {r:.0%} bracket"}
+                for r, t in rb.sweep_targets(status)]
+        enabled = bool(cfg.ENABLE_ROTH_CONVERSION)
+        cur_target = int(round(cfg.roth_conversion_target(status)))
+        cur_cap = int(round(float(cfg.ROTH_CONVERSION_MAX_ANNUAL)))
+        std_ded = int(cfg.STANDARD_DEDUCTION_BY_STATUS[status])
+        base = mc_jobs.snapshot()
+    finally:
+        _restore_overrides(original)
+
+    # Settings: (key, config patch). The current setting runs on the base config.
+    settings = [("off", {"ENABLE_ROTH_CONVERSION": False})]
+    for row in rows:
+        for cap in ROTH_SWEEP_CAPS:
+            settings.append((f"{row['rate']:.2f}|{cap}", {
+                "ENABLE_ROTH_CONVERSION": True,
+                "ROTH_CONVERSION_TARGET_BRACKET": int(row["target"]),
+                "ROTH_CONVERSION_MAX_ANNUAL": int(cap)}))
+    if not enabled:
+        same_as = "off"
+    else:
+        same_as = next((k for k, p in settings[1:]
+                        if p["ROTH_CONVERSION_TARGET_BRACKET"] == cur_target
+                        and p["ROTH_CONVERSION_MAX_ANNUAL"] == cur_cap), None)
+    if same_as is None:
+        settings.append(("current", None))
+    patches = [p for _k, p in settings if p is not None]
+    calls, spans = [], []
+    for k, p in settings:
+        pi = -1 if p is None else patches.index(p)
+        first = len(calls)
+        start = 0
+        for size in _split_count(n, _ROTH_CHUNKS):
+            calls.append(["outcomes", pi, [ra, size, mc_jobs.PATH_SEED + start]])
+            start += size
+        spans.append((k, first, len(calls)))
+    job = {"base": base, "patches": patches, "calls": calls}
+    store = _small_cache_writer(_ROTH_CACHE, "roth_sweep", key)
+
+    def finish(results: List[Any]) -> Dict[str, Any]:
+        cells: Dict[str, Dict[str, Any]] = {}
+        for k, a, b in spans:
+            bits = "".join(r["bits"] for r in results[a:b])
+            finals = [f for r in results[a:b] for f in r["finals"]]
+            taxes = [t for r in results[a:b] for t in r["taxes"]]
+            ran = len(bits) - bits.count("-")
+            p = (bits.count("1") / ran) if ran else 0.0
+            patch = dict(settings)[k] or {}
+            cells[k] = {
+                "key": k, "bits": bits, "n": ran, "errors": bits.count("-"),
+                "success": p, "se": float(np.sqrt(p * (1 - p) / ran)) if ran else 0.0,
+                "median_final": float(np.median(finals)) if finals else 0.0,
+                "p10_final": float(np.percentile(finals, 10)) if finals else 0.0,
+                "median_taxes": float(np.median(taxes)) if taxes else 0.0,
+                "enabled": bool(patch.get("ENABLE_ROTH_CONVERSION", enabled)),
+                "target": patch.get("ROTH_CONVERSION_TARGET_BRACKET",
+                                    None if k == "off" else cur_target),
+                "cap": patch.get("ROTH_CONVERSION_MAX_ANNUAL", None if k == "off" else cur_cap),
+            }
+        # Best of the offered settings (not "current"): highest success, then
+        # the larger median ending balance.
+        offered = [c for k, c in cells.items() if k != "current"]
+        best = max(offered, key=lambda c: (c["success"], c["median_final"]))
+        for c in cells.values():
+            c["diff_se"] = _paired_se(best["bits"], c["bits"])
+            gap = best["success"] - c["success"]
+            # Within noise: inside 2 paired standard errors of the best (or no
+            # path differs at all).
+            c["within_noise"] = c is not best and gap <= 2.0 * c["diff_se"] + 1e-12
+        for c in cells.values():
+            c.pop("bits")
+        return {
+            "cells": cells, "rows": rows, "caps": list(ROTH_SWEEP_CAPS),
+            "best_key": best["key"], "current_key": same_as or "current",
+            "current_enabled": enabled, "current_target": cur_target, "current_cap": cur_cap,
+            "n_simulations": n, "retirement_age": ra, "status": status,
+            "standard_deduction": std_ded, "two_returns": bool(two_returns),
+        }
+
+    return Plan("roth", key, user_overrides, job, finish, store=store)
+
+
+def run_roth_sweep(user_overrides: dict, n_simulations: int = 1000,
+                   target_retirement_age: int = 55, progress_callback=None) -> Dict[str, Any]:
+    """Run ``plan_roth_sweep`` on the server."""
+    return execute_plan(plan_roth_sweep(user_overrides, n_simulations, target_retirement_age),
+                        progress_callback)
+
+
+# ---------------------------------------------------------------------------
+# Historical replay (Deep dives -> Stress tests)
+# ---------------------------------------------------------------------------
+_BACKTEST_CACHE: Dict[tuple, Any] = {}
+_SMALL_CACHES.append(_BACKTEST_CACHE)
+# Fewest start years worth showing; below it the range widens past the data.
+BACKTEST_MIN_YEARS = 10
+_BACKTEST_CHUNKS = 4
+
+
+def backtest_start_years(retirement_age: int) -> Tuple[List[int], bool]:
+    """Start years for the replay (cfg already configured) and whether every
+    year of every replay is inside the data.
+
+    Preferred: the start years whose whole plan -- working years before and
+    retirement years after -- falls in 1926-2024. A very long plan leaves fewer
+    than BACKTEST_MIN_YEARS of those; then the range runs from 1926 instead,
+    and the years outside the data use the expected return
+    (account_simulation.historical_replay_return)."""
+    first, last = sim.HISTORICAL_FIRST_YEAR, sim.HISTORICAL_LAST_YEAR
+    ra = max(int(retirement_age), int(cfg.YOUR_AGE))
+    working = ra - int(cfg.YOUR_AGE)
+    retired = int(cfg.plan_end_age()) - ra
+    lo, hi = first + working, last - retired + 1
+    if hi - lo + 1 >= BACKTEST_MIN_YEARS:
+        return list(range(lo, hi + 1)), True
+    hi = min(last, max(hi, first + BACKTEST_MIN_YEARS - 1))
+    return list(range(first, hi + 1)), False
+
+
+def plan_historical_backtest(user_overrides: dict, target_retirement_age: int = 55) -> Plan:
+    """The plan replayed through real market history, retiring at the target
+    age in each start year (``backtest_start_years``). Deterministic, so it
+    doesn't depend on the simulation count."""
+    key = (_hashable(user_overrides), int(target_retirement_age))
+    hit = _small_cache_lookup(_BACKTEST_CACHE, "backtest", key)
+    if hit is not None:
+        return Plan("backtest", key, user_overrides, result=hit)
+    original = _apply_overrides(build_config_overrides(user_overrides))
+    try:
+        ra = max(int(target_retirement_age), int(cfg.YOUR_AGE))
+        years, full = backtest_start_years(ra)
+        working = ra - int(cfg.YOUR_AGE)
+        plan_end = int(cfg.plan_end_age())
+        base = mc_jobs.snapshot()
+    finally:
+        _restore_overrides(original)
+    chunks, start = [], 0
+    for size in _split_count(len(years), _BACKTEST_CHUNKS):
+        chunks.append(years[start:start + size])
+        start += size
+    calls = [["replay", -1, [ra, c, mc_jobs.PATH_SEED]] for c in chunks]
+    job = {"base": base, "patches": [], "calls": calls}
+
+    def finish(results: List[Any]) -> Dict[str, Any]:
+        runs = sorted((r for chunk in results for r in chunk if "error" not in r),
+                      key=lambda r: r["year"])
+        return {
+            "runs": runs, "retirement_age": ra, "working_years": working,
+            "plan_end_age": plan_end, "full_data": bool(full),
+            "data_first": sim.HISTORICAL_FIRST_YEAR, "data_last": sim.HISTORICAL_LAST_YEAR,
+            "errors": sum(1 for chunk in results for r in chunk if "error" in r),
+        }
+
+    return Plan("backtest", key, user_overrides, job, finish,
+                store=_small_cache_writer(_BACKTEST_CACHE, "backtest", key))
+
+
+def run_historical_backtest(user_overrides: dict, target_retirement_age: int = 55,
+                            progress_callback=None) -> Dict[str, Any]:
+    """Run ``plan_historical_backtest`` on the server."""
+    return execute_plan(plan_historical_backtest(user_overrides, target_retirement_age),
+                        progress_callback)

@@ -182,8 +182,11 @@ def render_investing_body(st) -> None:
             v = st.number_input("Fill up to income of ($)", min_value=0, max_value=750_000,
                                 step=5_000, key="sa_roth_target",
                                 help=f"Each year, convert until your income reaches this amount. "
-                                     f"The default, ${_auto:,}, is the top of the 12% "
-                                     f"bracket for your filing status.")
+                                     f"This is income BEFORE the standard deduction "
+                                     f"(\\${int(_cfg.STANDARD_DEDUCTION_BY_STATUS[_status]):,}), "
+                                     f"so the default, \\${_auto:,}, stops short of the top of "
+                                     f"the 12% bracket. To fill a bracket, add the deduction "
+                                     f"to its top. Deep dives → Roth conversions compares plans.")
             set_override(st, "ROTH_CONVERSION_TARGET_BRACKET",
                          None if safe_int(v) == _auto else safe_int(v))
         with c6:
@@ -192,6 +195,16 @@ def render_investing_body(st) -> None:
             v = st.number_input("Max annual conversion ($)", min_value=0,
                                 max_value=500_000, step=10_000, key="sa_roth_max")
             set_override(st, "ROTH_CONVERSION_MAX_ANNUAL", safe_int(v))
+        # Which bracket the fill reaches: the box is easy to read as taxable income.
+        try:
+            from utils.roth_brackets import bracket_note
+        except ImportError:  # pragma: no cover
+            from ui.utils.roth_brackets import bracket_note  # type: ignore
+        _fill = safe_int(st.session_state.get("sa_roth_target"), _auto)
+        _note = bracket_note(_fill, _status)
+        if _note:
+            st.caption(f"Income before the \\${int(_cfg.STANDARD_DEDUCTION_BY_STATUS[_status]):,} "
+                       f"standard deduction. \\${_fill:,}: {_note}.")
         ensure_default(st, "sa_roth_stop",
                        safe_int(get_override(st, "ROTH_CONVERSION_STOP_AGE", 67), 67))
         v = slider_with_box(st, "Stop conversions at age", 50, 80, 1, key="sa_roth_stop",

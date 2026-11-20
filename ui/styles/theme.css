@@ -1635,6 +1635,86 @@ footer { display: none !important; }
 /* Browser computation (utils/browser_compute.py): a 0-height worker host, never shown. */
 [data-testid="stLayoutWrapper"]:has(> .st-key-mc-browser-compute) { display: none; }
 
+/* =========================================================
+   Deep dives: Roth conversion heat map (components/roth_optimizer_tab.py) and
+   the historical replay year grid (components/historical_backtest.py).
+   Only these two components use the .mc-roth-* / .mc-bt-* classes.
+   Text uses the theme's ink tokens, so dark mode only adds the status fills.
+   ========================================================= */
+.mc-roth-wrap { overflow-x: auto; margin: 4px 0 10px; }
+.mc-roth-grid { width: 100%; border-collapse: separate !important; border-spacing: 4px !important; table-layout: fixed; }
+/* Streamlit's markdown table borders and fills off: the cells carry the color. */
+.mc-roth-grid, .mc-roth-grid tr, .mc-roth-grid th, .mc-roth-grid td { border: 0 !important; }
+.mc-roth-grid th, .mc-roth-grid thead td { background: transparent !important; }
+.mc-roth-grid caption { caption-side: top; text-align: left; font-size: 14px; color: var(--mc-muted); padding: 0 4px 6px; }
+.mc-roth-grid thead th { font-size: 13px; font-weight: 600; color: var(--mc-muted); text-align: center; padding: 2px 4px 6px; }
+.mc-roth-grid thead td { width: 34%; }
+.mc-roth-grid tbody th { font-size: 14px; font-weight: 600; color: var(--mc-ink); text-align: left; padding: 4px 8px 4px 2px; line-height: 1.3; }
+.mc-roth-cell { text-align: center; vertical-align: middle; padding: 10px 4px; border-radius: 10px; height: 76px; }
+.mc-roth-cell > span { display: block; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-roth-pct { font-size: 20px; font-weight: 700; }
+.mc-roth-sub { font-size: 13px; opacity: .92; }
+.mc-roth-tag { font-size: 11px; font-weight: 700; letter-spacing: .05em; margin-top: 2px; }
+.mc-roth-cell.is-best { box-shadow: inset 0 0 0 3px var(--mc-ink); }
+.mc-roth-cell:focus-visible { outline: 3px solid #14b8a6; outline-offset: 2px; }
+.mc-roth-refs { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 10px; }
+.mc-roth-chip { border: 1px solid var(--mc-tile-border); border-radius: 12px; padding: 8px 12px; font-size: 14px; color: var(--mc-ink); }
+.mc-roth-chip.is-best { box-shadow: inset 0 0 0 2px var(--mc-ink); }
+.mc-roth-chip-k { display: block; font-size: 13px; color: var(--mc-muted); }
+.mc-roth-chip-tag { font-size: 11px; font-weight: 700; letter-spacing: .05em; margin-left: 8px; color: var(--mc-ink); }
+@media (max-width: 640px) {
+    .mc-roth-grid { border-spacing: 3px; }
+    .mc-roth-grid thead td { width: 28%; }
+    .mc-roth-grid thead th { font-size: 12px; }
+    .mc-roth-grid tbody th { font-size: 13px; padding-right: 4px; }
+    .mc-roth-pct { font-size: 17px; }
+    .mc-roth-sub { font-size: 12px; }
+    .mc-roth-left { display: none; }           /* the caption says "left at the end" */
+    .mc-roth-cell { padding: 8px 2px; height: 70px; }
+}
+
+.mc-bt-summary { display: flex; flex-wrap: wrap; gap: 14px 32px; align-items: flex-start; margin: 4px 0 14px; }
+.mc-bt-big { font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--mc-ink); }
+.mc-bt-cap { font-size: 14px; color: var(--mc-muted); }
+.mc-bt-hard { flex: 1 1 260px; max-width: 420px; }
+.mc-bt-hard-head { font-size: 16px; font-weight: 600; color: var(--mc-ink); margin: 2px 0 2px; }
+.mc-bt-grid { container-type: inline-size; display: grid; gap: 6px; margin: 4px 0 8px; }
+.mc-bt-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; align-items: start; }
+.mc-bt-dec { font-size: 13px; font-weight: 600; color: var(--mc-muted); text-align: right; padding-top: 18px; white-space: nowrap; }
+.mc-bt-cells { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.mc-bt-cell { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 62px; min-width: 0; border-radius: 8px; text-align: center; line-height: 1.2; cursor: default; }
+.mc-bt-cell > span { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: clip; }
+.mc-bt-ico { font-size: 14px; font-weight: 700; }
+.mc-bt-yr { font-size: 13px; font-weight: 600; }
+.mc-bt-age { font-size: 11px; }
+.mc-bt-cell.is-ok { background: #d6efe6; color: #0b5d52; }
+.mc-bt-cell.is-out { background: #f8dcd6; color: #8f2a22; }
+.mc-bt-cell.is-empty { background: transparent; }
+.mc-bt-cell:focus-visible { outline: 3px solid #14b8a6; outline-offset: 2px; }
+/* Hover / focus detail, drawn above the cell (aligned to the cell's edge at the row's ends). */
+.mc-bt-cell[data-tip]:hover::after, .mc-bt-cell[data-tip]:focus-visible::after {
+    content: attr(data-tip); position: absolute; z-index: 5; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    width: max-content; max-width: 220px; white-space: normal; padding: 6px 10px; border-radius: 8px;
+    background: var(--mc-ink); color: var(--mc-tile); font-size: 13px; font-weight: 500; line-height: 1.35;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .18); pointer-events: none; }
+.mc-bt-cells > .mc-bt-cell:nth-child(-n+2)[data-tip]:is(:hover, :focus-visible)::after { left: 0; transform: none; }
+.mc-bt-cells > .mc-bt-cell:nth-child(n+9)[data-tip]:is(:hover, :focus-visible)::after { left: auto; right: 0; transform: none; }
+.mc-bt-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--mc-muted); margin: 2px 0 8px; }
+/* Narrow: five years per row; the decade label keeps its own column. */
+@container (max-width: 560px) {
+    .mc-bt-row { grid-template-columns: 48px minmax(0, 1fr); gap: 6px; }
+    .mc-bt-cells { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .mc-bt-cells > .mc-bt-cell:nth-child(5n+1)[data-tip]:is(:hover, :focus-visible)::after { left: 0; right: auto; transform: none; }
+    .mc-bt-cells > .mc-bt-cell:nth-child(5n)[data-tip]:is(:hover, :focus-visible)::after { left: auto; right: 0; transform: none; }
+    .mc-bt-cells > .mc-bt-cell:is(:nth-child(3), :nth-child(4), :nth-child(8), :nth-child(9))[data-tip]:is(:hover, :focus-visible)::after { left: 50%; right: auto; transform: translateX(-50%); }
+}
+.stApp:has([id$="dark-theme"]) .mc-bt-cell.is-ok { background: #1f4a42; }
+.stApp:has([id$="dark-theme"]) .mc-bt-cell.is-out { background: #5a2a26; }
+.stApp:has([id$="dark-theme"]) .mc-bt-cell.is-ok, .stApp:has([id$="dark-theme"]) .mc-bt-cell.is-ok * { color: #b9f0df !important; }
+.stApp:has([id$="dark-theme"]) .mc-bt-cell.is-out, .stApp:has([id$="dark-theme"]) .mc-bt-cell.is-out * { color: #ffd2c9 !important; }
+/* -- end Deep dives: Roth heat map and historical replay -- */
+
 /* The instant before a remembered choice is restored (app._loading_screen). */
 .st-key-mc-loading { max-width: 420px; margin: 20vh auto 0; text-align: center; }
 .mc-loading { color: var(--mc-muted); font-size: 16px; }
