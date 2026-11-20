@@ -11,7 +11,7 @@ Reads ``results['primary_result']['networth_by_year']`` = per-age percentiles
 (a depleted path counts as $0 in later years). Shows how the outcome fans out
 as market returns compound over decades.
 
-Three views: Box plot (default), Point cloud (violin), and Range + milestones: a
+Three views: Range + milestones (default), Box plot, and Point cloud (violin). Range + milestones: a
 median line with 25-75% and 10-90% bands, and markers for the years the plan
 changes, taken from the user's own inputs (``milestones``). Marker labels never
 overlap: ``stagger`` gives each one the first row where it fits, and the plot keeps
@@ -315,7 +315,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
             )
         with c2:
             style = st.radio(
-                "Style", options=STYLES,
+                "Style", options=STYLES, index=STYLES.index("Range + milestones"),
                 horizontal=True, key=f"{chart_key}_style", label_visibility="collapsed",
             )
         future = str(mode).startswith("Future")

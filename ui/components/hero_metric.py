@@ -146,8 +146,8 @@ def _cushion_html(results: dict, overrides: dict, rate_age) -> str:
 
 
 def _band_html(st, results: dict) -> str:
-    """Band meter + one plain sentence + the cushion, as one full-width row of
-    the hero card. Text uses theme colors; only the zones are tinted."""
+    """Band meter + one plain sentence (left) and the cushion (right), as one
+    full-width row of the hero card; the two stack on phones. Text uses theme colors; only the zones are tinted."""
     primary = results.get("primary_result", {}) or {}
     rate = primary.get("success_rate")
     if rate is None:
@@ -172,12 +172,12 @@ def _band_html(st, results: dict) -> str:
     count = (f"{round(rate * n):,} of {n:,} simulated markets last {_ends_text(results, overrides)}."
              if n > 0 else f"{pct(rate)} of simulated markets last {_ends_text(results, overrides)}.")
     return (
-        f'<div class="mc-hero-band">'
+        f'<div class="mc-hero-band"><div class="mc-hero-band-main">'
         f'<div class="mc-band" role="img" aria-label="Chance of success {pct(rate)}: {current}. '
         f'{escape(helps)}." title="{escape(helps)}">'
         f'<div class="mc-band-track">{zones}'
         f'<div class="mc-band-marker" style="left: calc({spot:.1f}% - 8px)" title="{pct(rate)}"></div>'
         f'</div><div class="mc-band-labels">{labels}</div></div>'
-        f'<div class="mc-band-says"><b>{current}.</b> {count}</div>'
+        f'<div class="mc-band-says"><b>{current}.</b> {count}</div></div>'
         f'{_cushion_html(results, overrides, primary.get("retirement_age"))}'
         f'</div>')

@@ -190,3 +190,10 @@ def test_render_range_and_milestones_in_both_dollar_modes():
     st_box = _MockSt(_couple(), "Box plot")
     nwb.render(st_box, results={"primary_result": {"networth_by_year": rows}})
     assert st_box.charts[0].data[0].type == "box"           # the default view is unchanged
+
+
+def test_range_and_milestones_is_the_default_view():
+    import inspect
+    from components import net_worth_box_chart as nwb
+    src = inspect.getsource(nwb)
+    assert 'index=STYLES.index("Range + milestones")' in src

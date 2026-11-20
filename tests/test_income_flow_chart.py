@@ -196,7 +196,7 @@ def _script():
     income_over_time.render(st, results=None)
 
 
-def test_plot_type_switch_draws_the_sankey_and_the_age_picker_moves_it(monkeypatch):
+def test_both_income_charts_show_and_the_age_picker_moves_the_sankey(monkeypatch):
     from streamlit.testing.v1 import AppTest
     monkeypatch.setenv("IFC_TEST_UI", _UI)
     monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "0")
@@ -204,11 +204,9 @@ def test_plot_type_switch_draws_the_sankey_and_the_age_picker_moves_it(monkeypat
     at.session_state["user_overrides"] = _couple()
     at.run()
     assert not at.exception, at.exception
-    plot = at.radio(key="income_over_time_main_plot_type")
-    assert plot.value == "Over time"
-    plot.set_value("Where this year's pay goes").run()
-    assert not at.exception, at.exception
-    age = at.slider(key="income_over_time_main_flow_age")
+    assert not [r for r in at.radio if r.key == "income_over_time_main_plot_type"]   # no switch now
+    assert [r for r in at.radio if r.key == "income_over_time_main_dollars_mode"]     # over-time chart
+    age = at.slider(key="income_over_time_main_flow_age")                             # and the Sankey
     assert (age.min, age.max, age.value) == (40, 47, 40)
     age.set_value(45).run()
     assert not at.exception, at.exception

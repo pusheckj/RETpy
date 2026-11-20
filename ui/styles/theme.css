@@ -3927,8 +3927,10 @@ section[data-testid="stSidebar"] .mc-sec-ico { color: var(--mc-teal-strong) !imp
    "Ways to reach your goal" (components/goal_levers.py). Only this block styles
    them. Text uses the theme tokens; only the band zones and bars are tinted.
    ========================================================= */
-.mc-hero-band { flex: 1 0 100%; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--mc-tile-border); }
-.mc-band { position: relative; max-width: 560px; }
+.mc-hero-band { flex: 1 0 100%; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--mc-tile-border);
+    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; align-items: center; }
+.mc-hero-band-main { min-width: 0; }
+.mc-band { position: relative; }
 .mc-band-track { position: relative; display: flex; gap: 2px; height: 14px; }
 .mc-band-zone { height: 14px; }
 .mc-band-z1 { background: #f6d6d0; border-radius: 7px 0 0 7px; }
@@ -3944,9 +3946,12 @@ section[data-testid="stSidebar"] .mc-sec-ico { color: var(--mc-teal-strong) !imp
 .mc-band-label.mc-band-last { transform: none; left: auto !important; right: 0; }
 .mc-band-label.mc-band-on { color: var(--mc-ink); font-weight: 700; }
 .mc-band-says { margin-top: 10px; font-size: 15px; line-height: 1.45; color: var(--mc-ink); }
-.mc-cushion { margin-top: 10px; max-width: 640px; padding: 10px 14px; border-radius: 12px; font-size: 14px;
+.mc-cushion { margin: 0; padding: 12px 16px; border-radius: 12px; font-size: 14px;
     line-height: 1.45; color: var(--mc-ink); background: color-mix(in srgb, var(--mc-teal) 7%, var(--mc-tile)); }
 /* Phone: the four names take two staggered rows so none overlap. */
+@media (max-width: 900px) {
+    .mc-hero-band { grid-template-columns: 1fr; gap: 12px; }
+}
 @media (max-width: 640px) {
     .mc-band-labels { height: 34px; }
     .mc-band-label.mc-band-alt { top: 16px; }
