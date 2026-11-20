@@ -3842,6 +3842,99 @@ section[data-testid="stSidebar"] .mc-sec-ico { color: var(--mc-teal-strong) !imp
 .st-key-mc-tile-debts .debt-plan--current { border: 1px solid var(--debt-current-border); box-shadow: 0 0 0 1px var(--debt-current-border); }
 /* -- end Visual QA round 3 -- */
 
+/* =========================================================
+   Results headline: success band + cushion (components/hero_metric.py) and
+   "Ways to reach your goal" (components/goal_levers.py). Only this block styles
+   them. Text uses the theme tokens; only the band zones and bars are tinted.
+   ========================================================= */
+.mc-hero-band { flex: 1 0 100%; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--mc-tile-border); }
+.mc-band { position: relative; max-width: 560px; }
+.mc-band-track { position: relative; display: flex; gap: 2px; height: 14px; }
+.mc-band-zone { height: 14px; }
+.mc-band-z1 { background: #f6d6d0; border-radius: 7px 0 0 7px; }
+.mc-band-z2 { background: #f8e7c4; }
+.mc-band-z3 { background: #d6efe6; }
+.mc-band-z4 { background: #b9e3d6; border-radius: 0 7px 7px 0; }
+.mc-band-marker { position: absolute; top: -6px; width: 16px; height: 26px; box-sizing: border-box;
+    border-radius: 8px; background: var(--mc-ink); border: 3px solid var(--mc-tile);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); }
+.mc-band-labels { position: relative; height: 18px; margin-top: 6px; }
+.mc-band-label { position: absolute; top: 0; transform: translateX(-50%); font-size: 12px; font-weight: 500;
+    line-height: 1.2; color: var(--mc-muted); white-space: nowrap; }
+.mc-band-label.mc-band-last { transform: none; left: auto !important; right: 0; }
+.mc-band-label.mc-band-on { color: var(--mc-ink); font-weight: 700; }
+.mc-band-says { margin-top: 10px; font-size: 15px; line-height: 1.45; color: var(--mc-ink); }
+.mc-cushion { margin-top: 10px; max-width: 640px; padding: 10px 14px; border-radius: 12px; font-size: 14px;
+    line-height: 1.45; color: var(--mc-ink); background: color-mix(in srgb, var(--mc-teal) 7%, var(--mc-tile)); }
+/* Phone: the four names take two staggered rows so none overlap. */
+@media (max-width: 640px) {
+    .mc-band-labels { height: 34px; }
+    .mc-band-label.mc-band-alt { top: 16px; }
+    .mc-band-says { font-size: 14.5px; }
+}
+.stApp:has([id$="dark-theme"]) .mc-band-z1 { background: rgba(248, 113, 113, 0.30); }
+.stApp:has([id$="dark-theme"]) .mc-band-z2 { background: rgba(251, 191, 36, 0.30); }
+.stApp:has([id$="dark-theme"]) .mc-band-z3 { background: rgba(52, 211, 153, 0.28); }
+.stApp:has([id$="dark-theme"]) .mc-band-z4 { background: rgba(45, 212, 191, 0.48); }
+.stApp:has([id$="dark-theme"]) :is(.mc-band-label, .mc-goal-sub, .mc-goal-right, .mc-goal-note, .mc-goal-pending) { color: var(--mc-muted) !important; }
+.stApp:has([id$="dark-theme"]) .mc-band-label.mc-band-on { color: var(--mc-ink) !important; }
+
+/* Ways to reach your goal */
+.st-key-mc-goal-card { gap: 4px !important; margin: -8px 0 8px; padding: 18px 24px 8px; box-sizing: border-box;
+    border: 1px solid var(--mc-tile-border); border-radius: var(--mc-radius-card); background: var(--mc-tile); }
+.st-key-mc-goal-card:not(:has(.mc-goal-head, .mc-goal-pending, .st-key-mc-goal-undo)) { display: none; }
+/* While the levers recompute (a kept change), the old rows stay on the page,
+   faded, until the script run ends (the server computes them at its end): hide them. */
+.st-key-mc-goal-card:has(.mc-goal-pending) [data-stale="true"],
+.st-key-mc-goal-card:has(.mc-goal-pending) :is([class*="st-key-mc-goal-row-"], .st-key-mc-goal-preview) { display: none !important; }
+.mc-goal-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.mc-goal-title { font-size: 19px; font-weight: 700; color: var(--mc-ink); }
+.mc-goal-right, .mc-goal-note { font-size: 13px; line-height: 1.45; color: var(--mc-muted); }
+.mc-goal-note { margin-bottom: 10px; }
+section[data-testid="stMain"] [class*="st-key-mc-goal-row-"][class*="st-key-mc-goal-row-"] {
+    flex-wrap: nowrap !important; gap: 14px !important; padding: 10px 0; border-top: 1px solid var(--mc-tile-border); }
+[class*="st-key-mc-goal-row-"] > div:has(.mc-goal-row) { flex: 1 1 0 !important; min-width: 0 !important; width: auto !important; }
+[class*="st-key-mc-goal-row-"] > div:has(button) { flex: 0 0 auto !important; width: auto !important; }
+[class*="st-key-mc-goal-row-"] button { min-width: 88px; }
+.mc-goal-row { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 7.5em; gap: 14px; align-items: center; }
+.mc-goal-label { font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--mc-ink); }
+.mc-goal-sub { font-size: 12.5px; line-height: 1.35; color: var(--mc-muted); }
+.mc-goal-bar { position: relative; height: 30px; }
+.mc-goal-track { position: absolute; left: 0; right: 0; top: 12px; height: 6px; border-radius: 3px;
+    background: color-mix(in srgb, var(--mc-ink) 9%, var(--mc-tile)); }
+.mc-goal-fill { position: absolute; top: 12px; height: 6px; border-radius: 3px; background: #0d9488; }
+.mc-goal-line { position: absolute; top: 4px; width: 2px; height: 22px; margin-left: -1px; border-radius: 1px; background: var(--mc-ink); }
+.mc-goal-dot { position: absolute; top: 9px; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%;
+    background: #0d9488; border: 2px solid var(--mc-tile); }
+.mc-goal-value { text-align: right; white-space: nowrap; font-size: 16px; color: var(--mc-ink); }
+.mc-goal-tag { margin-left: 4px; font-size: 12px; font-weight: 700; }
+.st-key-mc-goal-preview, .st-key-mc-goal-undo { padding: 12px 14px; margin-bottom: 8px; border-radius: 12px;
+    background: color-mix(in srgb, var(--mc-teal) 8%, var(--mc-tile)); }
+.st-key-mc-goal-undo { padding: 4px 6px 4px 14px; gap: 8px !important; flex-wrap: nowrap !important; }
+.st-key-mc-goal-undo > div:has(.mc-goal-kept) { flex: 1 1 0 !important; min-width: 0 !important; }
+.mc-goal-kept { font-size: 14px; color: var(--mc-ink); }
+.st-key-mc-goal-preview-btns { gap: 8px !important; flex-wrap: wrap; }
+.mc-goal-pending { position: relative; padding: 2px 0 14px; font-size: 14px; color: var(--mc-muted); }
+.mc-goal-pending::after { content: ""; position: absolute; left: 0; bottom: 4px; width: min(260px, 70%); height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--mc-teal) 45%, transparent), transparent) 0 0 / 50% 100% no-repeat,
+                color-mix(in srgb, var(--mc-ink) 8%, transparent);
+    animation: mc-goal-wait 1.6s ease-in-out infinite; }
+@keyframes mc-goal-wait { from { background-position: -50% 0, 0 0; } to { background-position: 150% 0, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .mc-goal-pending::after { animation: none; } }
+.stApp:has([id$="dark-theme"]) :is(.mc-goal-fill, .mc-goal-dot) { background: #2dd4bf; }
+/* Phone: the change and its Try it on the first line, the bar and the value
+   across the full width below. */
+@media (max-width: 640px) {
+    .st-key-mc-goal-card { padding: 14px 14px 6px; }
+    .mc-goal-title { font-size: 17px; }
+    section[data-testid="stMain"] [class*="st-key-mc-goal-row-"][class*="st-key-mc-goal-row-"] { position: relative; display: block !important; }
+    [class*="st-key-mc-goal-row-"] > div:has(button) { position: absolute !important; top: 10px; right: 0; }
+    [class*="st-key-mc-goal-row-"] button { min-width: 72px; }
+    .mc-goal-row { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
+    .mc-goal-text { grid-column: 1 / -1; min-height: 40px; padding-right: 84px; }
+}
+/* -- end Results headline -- */
+
 /* ==========================================================================
    Top card layout. The card (.st-key-mc-topbar) holds two keyed rows built by
    app._topbar_head, each a wrapping flex row:

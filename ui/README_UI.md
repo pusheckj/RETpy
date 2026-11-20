@@ -52,7 +52,7 @@ The app opens at http://localhost:8501.
 - **Linear sidebar** (one section at a time, in advisor order): About you, Family (children, college), Income, Taxes, House (rent or mortgage, home moves, extra mortgage payments), Expenses (monthly spending, then big purchases and goals: car, retirement vacation), Debts (credit cards, student, car and other loans: balance, APR, minimum; an extra monthly payment; highest rate or smallest balance first; the mortgage stays in House), Accounts (starting balances), Investments (what you save each year, plus returns, stock/bond mix, inflation, glide path and Roth conversion), Retirement (your and your partner's retirement ages, spending, Social Security, success target, early retirement access: Rule of 55, 72(t), Roth ladder, stop saving early), Assumptions (advanced: spending rules and pre-Medicare healthcare). Each section reads and writes `st.session_state.user_overrides`.
 - **Top bar**: your household numbers, the **Run** button, the simulation count, and the **Settings** popover (privacy and Remember me, theme, profile presets, Save / Load profile, print summary, export).
 - **Results run automatically** when you change an input; Run re-runs on demand. Sections run from most basic to most niche:
-  - **Retirement**: the hero metric (earliest retirement age at your target success rate), success rate by retirement age, key stats, and the investable portfolio range over time (*Box plot*, *Point cloud (violin)* or *Range + milestones*: a median line with 50% and 80% bands and markers for retirement, mortgage payoff, college, 59½, Social Security, RMDs, debts paid off and plan end).
+  - **Retirement**: the hero metric (earliest retirement age at your target success rate) with a success band (Needs attention under 65%, Fair, Good, Strong from 90%), the success rate as a count of simulated markets, and the spending-guardrail cushion in dollars. Under it, **Ways to reach your goal**: a few changes (retire later, spend less in retirement, a partner who works longer, one year later plus a smaller cut), each its own simulation on the main run's market paths. *Try it* previews one; *Keep this change* writes it into your inputs and reruns, with *Undo*. A plan already above 95% gets *You have room* instead (how much earlier, or how much more spending, still meets your target). Then success rate by retirement age, key stats, and the investable portfolio range over time (*Box plot*, *Point cloud (violin)* or *Range + milestones*: a median line with 50% and 80% bands and markers for retirement, mortgage payoff, college, 59½, Social Security, RMDs, debts paid off and plan end).
   - **Income** (*Over time*, or *Where this year's pay goes*: a Sankey of one working year from pay to taxes, savings and spending, with an age picker), **Spending**, **Savings**, **Debt payoff** (debt-free date, interest, when each debt is paid off, avalanche vs snowball, a pay-more-each-month what-if with a balance chart, a rough effect on retirement, and *Things to know about debt*) and **Tax**.
   - **What if**: the when-can-you-retire curve, lifecycle what-ifs and scenario comparison.
   - **Freedom milestones** (net worth and invested ladders, Coast FIRE and FIRE in places you can edit, and other markers such as the emergency fund, Lean and Barista FIRE; each place has a *Confirm with simulation* button), the portfolio needed to retire, life expectancy, withdrawal rate and bridge to 59.5.
@@ -93,11 +93,13 @@ ui/
 │   ├── sec_assumptions.py
 │   ├── ...
 │   ├── hero_metric.py
+│   ├── goal_levers.py        (Ways to reach your goal, under the hero)
 │   ├── success_by_age.py
 │   └── ...
 ├── utils/
 │   ├── config_builder.py     # UI state -> simulator config
 │   ├── sim_runner.py         # Cached Monte Carlo wrapper
+│   ├── goal_levers.py        # the goal levers as a Plan + the guardrail cushion
 │   └── formatting.py         # $, %, age helpers
 ├── styles/theme.css          # Custom CSS
 └── run.sh                    # Launcher script
