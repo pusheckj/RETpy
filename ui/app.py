@@ -286,8 +286,9 @@ def _finish_main(overrides: dict, n_sims: int, target_age: int, result: dict) ->
 
 
 def _queue_extras(overrides: dict, n_sims: int, target_age: int, main_result: dict) -> None:
-    """The analyses that follow the main result: what-if baseline (lifecycle
-    toggles on), FI number, safe withdrawal rate, mortgage paydown. Each goes
+    """The analyses that follow the main result: ways to reach your goal,
+    what-if baseline (lifecycle toggles on), FI number, safe withdrawal rate,
+    mortgage paydown. Each goes
     to the browser, or -- without one -- to ``_server_extras_step``, which runs
     them here one per script run after the page is drawn, so the main result
     never waits for them."""
@@ -308,6 +309,15 @@ def _queue_extras(overrides: dict, n_sims: int, target_age: int, main_result: di
         st.session_state.whatif_results = sr.whatif_from(overrides, main_result, baseline)
 
     plans = []
+    # Ways to reach your goal (the card under the hero number) first: it sits at
+    # the top of the page. Stamped so the card shows only levers for this run.
+    try:
+        from utils import goal_levers
+        plans.append(("levers", goal_levers.plan_goal_levers(overrides, n_sims, target_age, main_result),
+                      keep(goal_levers.RESULT_KEY, True)))
+    except Exception:  # an odd input must not cost the main result its follow-ups
+        import logging
+        logging.getLogger("retirement_ui").exception("Could not plan the goal levers")
     if sr.active_lifecycle_toggles(overrides):
         plans.append(("whatif", sr.plan_full_analysis(sr.whatif_baseline_overrides(overrides),
                                                       n_sims, target_age), whatif))
@@ -1113,6 +1123,11 @@ def main() -> None:
         _safe_render("components.net_worth_projection_chart", results=results)
         if results:
             _safe_render("components.hero_metric", results=results)
+            # Ways to reach your goal: a fragment, so Try it / Cancel redraw only the card.
+            @_as_fragment
+            def _sec_goal_levers():
+                _safe_render("components.goal_levers", results=results)
+            _sec_goal_levers()
             _safe_render("components.decision_narrative", results=results)
             _safe_render("components.success_by_age", results=results)
             _safe_render("components.stats_row", results=results)
