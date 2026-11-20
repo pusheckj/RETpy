@@ -20,7 +20,8 @@ EXPORT = open(os.path.join(_ROOT, "ui", "components", "export_page.py"), encodin
 FOLD_CSS = CSS[CSS.index("Collapsible section tiles. Only this block"):CSS.index("-- end Collapsible section tiles --")]
 FOLD_JS = ANIM[ANIM.index("// ---------- collapsible section tiles ----------"):ANIM.index("// ---------- scan (debounced")]
 
-DEEP_DIVE_TABS = ["Trajectories", "Withdrawal", "Sensitivity", "Stress tests", "Mortgage paydown"]
+DEEP_DIVE_TABS = ["Trajectories", "Withdrawal", "Sensitivity", "Stress tests", "Roth conversions",
+                  "Mortgage paydown"]
 
 
 @pytest.fixture(autouse=True)

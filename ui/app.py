@@ -1261,9 +1261,11 @@ def main() -> None:
         with st.container(border=True, key="mc-tile-deepdives"):
             st.markdown('<div class="mc-section">Deep dives</div>', unsafe_allow_html=True)
             if not results:
-                _run_hint("trajectories, withdrawals, sensitivity, stress tests and mortgage paydown")
+                _run_hint("trajectories, withdrawals, sensitivity, stress tests, Roth conversions "
+                          "and mortgage paydown")
             elif st.session_state.get("_lz_deepdives"):
-                tabs = st.tabs(["Trajectories", "Withdrawal", "Sensitivity", "Stress tests", "Mortgage paydown"])
+                tabs = st.tabs(["Trajectories", "Withdrawal", "Sensitivity", "Stress tests",
+                                "Roth conversions", "Mortgage paydown"])
                 with tabs[0]:
                     _safe_render("components.trajectories_tab", results=results)
                 with tabs[1]:
@@ -1271,8 +1273,14 @@ def main() -> None:
                 with tabs[2]:
                     _safe_render("components.sensitivity_tab", results=results)
                 with tabs[3]:
+                    # The historical replay on top, then the one-click shocks.
+                    _safe_render("components.historical_backtest", results=results)
+                    st.markdown('<div class="mc-section">One-click shocks</div>',
+                                unsafe_allow_html=True)
                     _safe_render("components.stress_presets", results=results)
                 with tabs[4]:
+                    _safe_render("components.roth_optimizer_tab", results=results)
+                with tabs[5]:
                     _safe_render("components.mortgage_paydown_tab", results=results)
             else:
                 _lazy_ph("deepdives", 600)

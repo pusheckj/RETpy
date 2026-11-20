@@ -56,7 +56,7 @@ The app opens at http://localhost:8501.
   - **Income**, **Spending**, **Savings**, **Debt payoff** (debt-free date, interest, when each debt is paid off, avalanche vs snowball, a pay-more-each-month what-if with a balance chart, a rough effect on retirement, and *Things to know about debt*) and **Tax**.
   - **What if**: the when-can-you-retire curve, lifecycle what-ifs and scenario comparison.
   - **Freedom milestones** (net worth and invested ladders, Coast FIRE and FIRE in places you can edit, and other markers such as the emergency fund, Lean and Barista FIRE; each place has a *Confirm with simulation* button), the portfolio needed to retire, life expectancy, withdrawal rate and bridge to 59.5.
-  - **Deep dives** (last): tabs for trajectories, withdrawal, sensitivity, stress tests and mortgage paydown.
+  - **Deep dives** (last): tabs for trajectories, withdrawal, sensitivity, stress tests (a historical replay by start year, then one-click shocks), Roth conversions (a heat map of conversion plans with Use best / Undo) and mortgage paydown.
 - **Folding sections**: click or tap any section heading (or press Enter or Space on it) to fold it to its heading; click again to open it. *Collapse all* / *Expand all* sit above the first section. Folding happens in the browser (no rerun) and the browser remembers it across reloads.
 - **FAQ**: in the sidebar, for reference while you fill in inputs.
 

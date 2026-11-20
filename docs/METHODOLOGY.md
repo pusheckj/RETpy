@@ -85,6 +85,14 @@ All values below are **real** (inflation-adjusted) returns.
 
 `ACTIVE_RETURN_SCENARIO` selects one of these at run time. Forward-looking (`'forward'`) is the base case of a November 2026 survey of investment firms' 10-15 year forecasts: an all-stock mix of 60% US and 40% international at 3.9% real geometric with 15.5% volatility, US aggregate bonds at 2.2% real with 6%, and a stock-bond correlation of +0.10. Forecasts are geometric rates, so each arithmetic mean here is the geometric rate plus volatility²/2. It is the only scenario with its own correlation (`stock_bond_correlation` in its `RETURN_SCENARIOS` entry); the others use `STOCK_BOND_CORRELATION`.
 
+
+### 3.6 Historical replay ("If you had retired in a real year")
+
+`run_detailed_simulation(retirement_age, historical_start_year=Y)` replays real market history instead of drawing returns. The first retirement year earns year `Y`'s returns, the next year `Y+1`'s, and so on to the plan's end. The working years before use the years just before `Y` (`historical_replay_years`). Each year the stock and bond sleeves earn that year's **real** stock and bond returns from `historical_returns.py` (1926-2024, already after inflation, so nothing is deflated), less `INVESTMENT_FEE_RATE`, at the plan's mix for that age (`calculate_asset_allocation`, so glide paths and bond tents apply). Real data is not clamped (§3.4). A year outside 1926-2024 earns the plan's expected median (geometric) real return for that mix, after fees, with no randomness (`geometric_portfolio_return`). No market draws are made, so a replay is deterministic; the non-market draws (healthcare and childcare inflation, long-term care) still use `random_seed`.
+
+The Stress tests tab (`sim_runner.plan_historical_backtest`) replays the plan once per start year, with the same seed for every year so they differ only by their markets. It uses the start years whose whole plan (working years and retirement) fits inside the data. When fewer than 10 such years exist (a plan of more than about 90 years), the range starts at 1926 and the years outside the data use the expected return; the caption says how many start years that affects. The start years overlap heavily, so they are far fewer independent tests than their count suggests, and past sequences don't bound future ones.
+
+The older `historical_sequence=` mode (`SEQUENCE_TESTS`, nominal stock returns 2000-2024 deflated by the expected inflation rate, bonds drawn around each stock return) is unchanged.
 ---
 
 ## 4. Inflation
@@ -415,6 +423,8 @@ When `ENABLE_ROTH_CONVERSION = True`, the engine executes **bracket-filling** Ro
 - Conversions **stop** in the year the household reaches `SS_CLAIM_AGE`, because SS plus RMDs typically push taxable income above the 12% bracket ceiling.
 
 Conversion income is added to ordinary income for the year and taxed accordingly. The 5-year rule per conversion is not modeled — Roth earnings are assumed available after 59½ without separate tracking.
+
+**Roth conversion optimizer (Deep dives -> Roth conversions).** `sim_runner.plan_roth_sweep` runs the plan at the target age with no conversions and with nine settings: fill the 12%, 22% or 24% bracket, with a yearly cap of $50K, $100K or $200K, plus your own setting if it is not one of them. Because the engine compares the fill target with income **before** the standard deduction, "fill the X% bracket" is the bracket's top plus the standard deduction for the filing status of your return (2026 joint: $133,000 / $243,600 / $435,750; `ui/utils/roth_brackets.py`, from `FEDERAL_BRACKETS_BY_STATUS` and `STANDARD_DEDUCTION_BY_STATUS`). The 65+ extra deduction is left out, so after 65 the fill stops a little short. Each setting runs the same count as the safe-withdrawal sweep (the app's simulation count, between 300 and 3,000) on the same seeds as the main run, so your own setting's success equals the plan's. The best setting has the highest success (ties: the larger median ending balance). Because every setting sees the same market paths, a setting is compared with the best path by path: it is marked "within noise" when its gap is at most 2 paired standard errors (the standard deviation of the per-path differences over the square root of the path count). Taxes are the median of `total_taxes_paid` per path: income tax and penalties paid from the accounts in retirement, in today's dollars.
 
 ---
 
