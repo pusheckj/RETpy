@@ -14,12 +14,14 @@ from datetime import date
 
 try:
     # Preferred: package-relative import.
+    from utils.config_builder import comp_table_edited_by_hand
     from utils.profile_io import serialize_overrides, deserialize_overrides
     from utils.widget_sync import (
         sync_widgets_from_overrides,
         reset_input_widget_state,
     )
 except Exception:  # pragma: no cover - fallback for unusual sys.path configs
+    from ui.utils.config_builder import comp_table_edited_by_hand  # type: ignore
     from ui.utils.profile_io import serialize_overrides, deserialize_overrides  # type: ignore
     from ui.utils.widget_sync import (  # type: ignore
         sync_widgets_from_overrides,
@@ -35,7 +37,9 @@ def _apply_restored(st, restored: dict, source_name: str) -> None:
     # were then fed straight back into the simulation.
     reset_input_widget_state(st)
     st.session_state["user_overrides"] = dict(restored)
-    st.session_state["si_comp_customized"] = bool(restored.get("YOUR_COMPENSATION_BY_AGE"))
+    # The Income section always writes the pay table, so only a table that differs from
+    # the one built from the saved inputs counts as edited by hand.
+    st.session_state["si_comp_customized"] = comp_table_edited_by_hand(restored)
     st.session_state["profile"] = "Custom (keep current values)"
     st.session_state["results"] = None  # stale after a load
     sync_widgets_from_overrides(st)

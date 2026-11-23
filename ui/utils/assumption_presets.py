@@ -28,7 +28,7 @@ PRESET_NAMES = (TYPICAL, CONSERVATIVE)
 TITLES = {TYPICAL: "Typical", CONSERVATIVE: "Conservative"}
 
 # Every key a preset can write. Singles get no PARTNER_* keys. A hand-edited pay table
-# drops the two salary-growth keys.
+# drops YOUR_SALARY_GROWTH_RATE (a partner has no pay table, so that key stays).
 PRESET_KEYS = (
     "ACTIVE_RETURN_SCENARIO", "STOCK_ALLOCATION", "INVESTMENT_FEE_RATE", "EXPECTED_INFLATION",
     "GLIDE_PATH_ENABLED", "GLIDE_PATH_SHAPE", "GLIDE_PATH_START_STOCK_PCT",
@@ -247,7 +247,7 @@ def compute_preset(name: str, overrides: dict, comp_customized: bool = False) ->
         why = ("This plan is short enough for 2026 forecasts of lower returns."
                if typical else "Your plan is long, so it uses 2026 forecasts, which are lower than history.")
     else:
-        why = "Short plan, so it assumes a weak stretch of markets, with stocks near 1% a year after inflation."
+        why = "Short plan, so it assumes a weak stretch of markets. Stocks grow about 2.5% a year after inflation."
     put("ACTIVE_RETURN_SCENARIO", scen, why)
 
     shape, start, end, rise = glide_band(name, H)
@@ -312,17 +312,19 @@ def compute_preset(name: str, overrides: dict, comp_customized: bool = False) ->
          else "Sized to the years of care people use when they need paid care")
         + (", for two people." if couple else "."))
 
-    # Pay growth
+    # Pay growth. Your pay is a table, so a table you edited keeps its own growth. Your
+    # partner's pay has no table (the engine grows PARTNER_SALARY by the rate), so that
+    # rate is always set.
     if not comp_customized:
         put("YOUR_SALARY_GROWTH_RATE", salary_growth(name, A),
             "Real pay growth slows as people reach their mid-40s.")
-        if couple:
-            put("PARTNER_SALARY_GROWTH_RATE", salary_growth(name, P),
-                "Same rule, by your partner's age.")
+    if couple:
+        put("PARTNER_SALARY_GROWTH_RATE", salary_growth(name, P),
+            "Same rule, by your partner's age.")
 
     # Early access
     put("ROTH_LADDER_ENABLED", R < 60,
-        "You retire before 60, so the 5-year wait on converted money applies."
+        "You retire before 60, so the 5-year wait on converted money applies. It matters only if you use Roth conversions."
         if R < 60 else "Not needed. Retiring at 60 or later avoids the early-withdrawal rules.")
     put("RULE_OF_55_ENABLED", bool(typical and 55 <= R < 60),
         "You can leave your employer at 55 or later and keep the money in its plan."
@@ -424,7 +426,7 @@ COPY = {
                        "It sits between today's forecasts and long-run history."),
     "run_note": "Click Run simulation to see results with these numbers.",
     "undone": "Back to your earlier settings.",
-    "kept_pay": "Salary growth: kept, because you edited your pay table",
+    "kept_pay": "Your salary growth: kept, because you edited your pay table",
     "returns_hint": "Not sure what to pick? The Assumptions section can set these for you in one click.",
 }
 
@@ -498,15 +500,20 @@ def apply_preset(st, name: str) -> None:
     changes = [k for k in plan if _changed(shown_before[k], plan[k][0])]
     # A key missing from overrides still needs writing, so the engine sees it.
     after = {k: v for k, (v, _) in plan.items()}
-    if not changes and all(k in ov for k in plan):
-        ss["assume_last"] = {"name": name, "noop": True, "facts": facts, "before": {}, "after": after,
-                             "old": {}, "changes": [], "reasons": {}}
+    if not changes:
+        # Nothing to change, so the earlier Undo snapshot stays. Keys missing from the
+        # overrides still get written (they already hold the default) so the engine sees them.
+        for k, v in after.items():
+            ov.setdefault(k, v)
+        push_widgets(st, [k for k in after if before_all[k] is MISSING], ov)
+        ss["assume_noop"] = name
         return
     for k, v in after.items():
         ov[k] = v
     push_widgets(st, list(after), ov)
+    ss.pop("assume_noop", None)
     ss["assume_last"] = {
-        "name": name, "noop": False, "facts": facts, "before": before_all, "after": after,
+        "name": name, "facts": facts, "before": before_all, "after": after,
         "old": {k: shown_before[k] for k in changes}, "changes": changes,
         "reasons": {k: plan[k][1] for k in plan},
         "scenario": after.get("ACTIVE_RETURN_SCENARIO"),
@@ -519,7 +526,7 @@ def undo_preset(st) -> None:
     """Callback for Undo: put back exactly what the last click replaced."""
     ss = st.session_state
     last = ss.get("assume_last")
-    if not last or last.get("noop"):
+    if not last:
         return
     ov = ss.setdefault("user_overrides", {})
     for k, old in last["before"].items():
@@ -529,13 +536,14 @@ def undo_preset(st) -> None:
             ov[k] = old
     push_widgets(st, list(last["before"]), ov)
     ss.pop("assume_last", None)
+    ss.pop("assume_noop", None)
     ss["assume_undone"] = True
 
 
 def undo_available(st) -> bool:
     """Undo shows only while every key still holds the value the click wrote."""
     last = st.session_state.get("assume_last")
-    if not last or last.get("noop") or not last.get("changes"):
+    if not last or not last.get("changes"):
         return False
     ov = st.session_state.get("user_overrides") or {}
     return all(k in ov and _same(ov[k], v) for k, v in last["after"].items())
@@ -552,12 +560,15 @@ def status(st) -> Tuple[str, str]:
             return name, f"Now using: {TITLES[name]} assumptions."
     last = ss.get("assume_last")
     if last and last.get("after"):
-        after = last["after"]
+        # Only the keys the preset still sets for this household count. A single no longer
+        # has a partner's plan-until age, so a household change is not a user edit.
+        now = compute_preset(last["name"], ov, comp) if last.get("name") in PRESET_NAMES else {}
+        after = {k: v for k, v in last["after"].items() if k in now}
         off = [k for k, v in after.items() if k not in ov or not _same(ov[k], v)]
         if not off:
             title = TITLES.get(last["name"], "Preset")
-            return "outdated", (f"{title}, set for your old plan. Your retirement age or household "
-                                "changed. Click it again to update.")
+            return "outdated", (f"{title}, set for your old plan. Your situation changed. "
+                                f"Click {title} again to update.")
         names = [LABELS.get(k, k) for k in off]
         shown = " and ".join(names[:2])
         extra = len(names) - 2

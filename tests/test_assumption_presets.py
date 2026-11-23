@@ -31,6 +31,13 @@ RETIREE_66 = {"YOUR_AGE": 66, "PARTNER_AGE": 0, "TARGET_RETIREMENT_AGE": 66,
               "MORTGAGE_BALANCE": 0, "MORTGAGE_MONTHLY": 0, "DEBTS": []}
 
 
+@pytest.fixture(autouse=True)
+def _pin_the_year(monkeypatch):
+    """The Conservative Social Security share depends on today's year, so the fixtures
+    below (worked at 2026) would drift each January without this."""
+    monkeypatch.setattr(cfg, "CURRENT_YEAR", 2026)
+
+
 def _demo(name):
     return dict(PROFILES[name])
 
@@ -161,7 +168,7 @@ def test_typical_ss_share_is_78_percent_always():
 @pytest.mark.parametrize("age,end,expected", [(25, 100, 0.67), (40, 102, 0.70), (55, 102, 0.73),
                                               (65, 100, 0.75)])
 def test_conservative_ss_share_examples(age, end, expected):
-    assert ap.ss_payable("conservative", age, 67, end) == pytest.approx(expected, abs=0.011)
+    assert ap.ss_payable("conservative", age, 67, end) == pytest.approx(expected, abs=0.006)
 
 
 def test_conservative_ss_share_is_capped_and_never_rises_for_the_young():
@@ -266,9 +273,27 @@ def test_partner_growth_uses_the_partners_own_age():
 
 
 @pytest.mark.parametrize("name", ["typical", "conservative"])
-def test_hand_edited_pay_table_keeps_salary_growth(name):
+def test_hand_edited_pay_table_keeps_your_salary_growth_only(name):
+    """Your pay is a table, so editing it by hand keeps your growth rate. A partner has
+    no table (the engine grows PARTNER_SALARY by the rate), so that rate is always set."""
     p = preset(name, facts(40, 38, 55), comp=True)
-    assert "YOUR_SALARY_GROWTH_RATE" not in p and "PARTNER_SALARY_GROWTH_RATE" not in p
+    assert "YOUR_SALARY_GROWTH_RATE" not in p
+    assert val(p, "PARTNER_SALARY_GROWTH_RATE") == ap.salary_growth(name, 38)
+
+
+def test_the_pessimistic_reason_states_the_engine_numbers():
+    """Pessimistic is 5% stocks and 1% bonds (RETURN_SCENARIOS), about 2.6% a year for
+    stocks after the swings. The old copy said stocks earn 1%, which is the bond rate."""
+    plan = preset("conservative", RETIREE_66)
+    assert val(plan, "ACTIVE_RETURN_SCENARIO") == "pessimistic"
+    reason = plan["ACTIVE_RETURN_SCENARIO"][1]
+    assert "1%" not in reason
+    assert "2.5%" in reason
+
+
+def test_the_roth_ladder_reason_says_what_it_does_without_a_conversion_plan():
+    reason = preset("typical", facts(40, 0, 50))["ROTH_LADDER_ENABLED"][1]
+    assert "conversion" in reason.lower()
 
 
 @pytest.mark.parametrize("retire,ladder,rule55_typ", [
@@ -325,7 +350,7 @@ def test_worked_example_median_25_year_old():
     assert val(c, "ACTIVE_RETURN_SCENARIO") == "forward"
     assert (val(c, "GLIDE_PATH_START_STOCK_PCT"), val(c, "GLIDE_PATH_END_STOCK_PCT"),
             val(c, "GLIDE_PATH_TENT_RISE_YEARS")) == (0.4, 0.6, 15)
-    assert val(c, "SS_PAYABLE_FRACTION") == pytest.approx(0.67, abs=0.011)
+    assert val(c, "SS_PAYABLE_FRACTION") == pytest.approx(0.67, abs=0.006)
     assert val(c, "TARGET_SUCCESS_RATE") == 0.95
     assert val(c, "LTC_PROBABILITY") == pytest.approx(0.30) and val(c, "LTC_ANNUAL_COST") == 130_000
     assert val(c, "EXPECTED_INFLATION") == 0.030
@@ -341,7 +366,7 @@ def test_worked_example_young_professional():
     assert val(c, "ACTIVE_RETURN_SCENARIO") == "forward"
     assert (val(c, "GLIDE_PATH_START_STOCK_PCT"), val(c, "GLIDE_PATH_END_STOCK_PCT"),
             val(c, "GLIDE_PATH_TENT_RISE_YEARS")) == (0.5, 0.7, 15)
-    assert val(c, "SS_PAYABLE_FRACTION") == pytest.approx(0.68, abs=0.011)
+    assert val(c, "SS_PAYABLE_FRACTION") == pytest.approx(0.68, abs=0.006)
     assert val(c, "LTC_PROBABILITY") == pytest.approx(0.15)
 
 
@@ -354,7 +379,7 @@ def test_worked_example_mid_career_couple():
     assert val(t, "LTC_PROBABILITY") == pytest.approx(0.15)
     assert val(c, "ACTIVE_RETURN_SCENARIO") == "forward"
     assert val(c, "EXPECTED_INFLATION") == 0.025        # the mortgage rule
-    assert val(c, "SS_PAYABLE_FRACTION") == pytest.approx(0.70, abs=0.011)
+    assert val(c, "SS_PAYABLE_FRACTION") == pytest.approx(0.70, abs=0.006)
     assert val(c, "LTC_PROBABILITY") == pytest.approx(0.25)
 
 
@@ -367,7 +392,7 @@ def test_worked_example_near_retirement():
     assert val(t, "TARGET_SUCCESS_RATE") == 0.90 and val(t, "LTC_PROBABILITY") == pytest.approx(0.15)
     assert (val(c, "PLAN_UNTIL_AGE"), val(c, "PARTNER_PLAN_UNTIL_AGE")) == (100, 100)
     assert val(c, "ACTIVE_RETURN_SCENARIO") == "forward"
-    assert val(c, "SS_PAYABLE_FRACTION") == pytest.approx(0.73, abs=0.011)
+    assert val(c, "SS_PAYABLE_FRACTION") == pytest.approx(0.73, abs=0.006)
     assert val(c, "TARGET_SUCCESS_RATE") == 0.95 and val(c, "LTC_PROBABILITY") == pytest.approx(0.25)
 
 
@@ -562,4 +587,24 @@ def test_copy_lint_on_every_string_the_module_shows():
         assert ";" not in t and "**" not in t, t
         assert not re.search(r"[\U0001F300-\U0001FAFF☀-➿]", t), t
         for sentence in re.split(r"(?<=[.!?])\s+", t.strip()):
-            assert len(sentence.split()) <= 24, sentence
+            assert len(sentence.split()) <= 20, sentence
+
+
+# ------------------------------------------------------------------ simulation sanity
+
+@pytest.mark.slow
+@pytest.mark.parametrize("label", ["Mid-career couple (40, kids)", "Near retirement (55)"])
+def test_a_conservative_plan_never_succeeds_more_often_than_a_typical_one(label):
+    """The direction check on a real run: same household, same seeds, 300 simulations."""
+    from utils.sim_runner import run_full_analysis, clear_cache
+    base = _demo(label)
+    age = int(base["TARGET_RETIREMENT_AGE"])
+    rates = {}
+    for name in ("typical", "conservative"):
+        merged = dict(base)
+        merged.update({k: v for k, (v, _) in preset(name, base).items()})
+        clear_cache()
+        out = run_full_analysis(user_overrides=merged, n_simulations=300,
+                                target_retirement_age=age, scan_age_range=(age, age + 1, 1))
+        rates[name] = float(out["primary_result"]["success_rate"])
+    assert rates["conservative"] <= rates["typical"] + 0.01, rates

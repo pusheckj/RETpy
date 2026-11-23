@@ -20,6 +20,7 @@ for _p in (_ROOT, _UI):
         sys.path.insert(0, _p)
 
 from components.profile_picker import PROFILES  # noqa: E402
+from retirement_sim import config as cfg  # noqa: E402
 from utils import assumption_presets as ap  # noqa: E402
 from utils import widget_sync as ws  # noqa: E402
 
@@ -27,6 +28,12 @@ COUPLE = "Mid-career couple (40, kids)"
 SINGLE = "Young professional (28, single)"
 MEDIAN = "Median US 25-year-old household"
 APP = os.path.join(_UI, "app.py")
+
+
+@pytest.fixture(autouse=True)
+def _pin_the_year(monkeypatch):
+    """The Conservative Social Security share depends on the year."""
+    monkeypatch.setattr(cfg, "CURRENT_YEAR", 2026)
 
 
 def _panel():
@@ -129,8 +136,10 @@ def test_the_what_changed_count_matches_the_lines(monkeypatch):
     last = at.session_state["assume_last"]
     n = len(last["changes"])
     assert f"What changed ({n} settings)" in _text(at)
+    text = _text(at)
     for key in last["changes"]:
-        assert f"{ap.LABELS[key]}: " in _text(at) or key in ap.PRESET_KEYS
+        line = f"{ap.LABELS[key]}: {ap.format_value(key, last['old'][key])} → {ap.format_value(key, last['after'][key])}"
+        assert line in text, line
     assert n >= 5
 
 
@@ -184,9 +193,16 @@ def test_undo_pops_keys_that_were_missing(monkeypatch):
     at.session_state["assume_probe"] = 1               # keeps the state object alive across runs
     at.run()
     _click(at, "typical")
+    assert at.session_state["user_overrides"]["RULE_OF_55_ENABLED"] is True
+    assert at.toggle(key="ea_rule55").value is True
     at.button(key="assume_undo").click().run()
     assert not at.exception, at.exception
     assert "assume_last" not in at.session_state
+    # The keys that were missing are missing again, or the widgets re-seeded them to the default.
+    ov = at.session_state["user_overrides"]
+    for key in ("RULE_OF_55_ENABLED", "GLIDE_PATH_TENT_RISE_YEARS"):
+        assert key not in ov or ov[key] == getattr(cfg, key), (key, ov.get(key))
+    assert at.toggle(key="ea_rule55").value is bool(cfg.RULE_OF_55_ENABLED)
 
 
 def test_unit_undo_is_exact_without_the_page(monkeypatch):
@@ -245,6 +261,7 @@ def test_a_changed_retirement_age_marks_the_preset_as_old(monkeypatch):
     at.slider(key="ay_target_age").set_value(45).run()
     assert not at.exception, at.exception
     assert "set for your old plan" in _text(at)
+    assert "Your situation changed. Click Typical again to update." in _text(at)
     _click(at, "typical")
     ov = at.session_state["user_overrides"]
     assert ov["RULE_OF_55_ENABLED"] is False          # retiring at 45: not a Rule of 55 case
@@ -252,15 +269,63 @@ def test_a_changed_retirement_age_marks_the_preset_as_old(monkeypatch):
     assert "Now using: Typical assumptions." in _text(at)
 
 
-def test_clicking_twice_changes_nothing_the_second_time(monkeypatch):
+def test_clicking_twice_changes_nothing_and_keeps_the_undo(monkeypatch):
     at = _open(monkeypatch)
+    original = _snapshot(at)
     _click(at, "typical")
     first = dict(at.session_state["user_overrides"])
     _click(at, "typical")
     assert dict(at.session_state["user_overrides"]) == first
     text = _text(at)
     assert "Your settings already match Typical. Nothing changed." in text
-    assert "What changed" not in text
+    assert "What changed" in text and "assume_undo" in _buttons(at)       # the first click can still be undone
+    at.button(key="assume_undo").click().run()
+    assert not at.exception, at.exception
+    assert _snapshot(at)["EXPECTED_INFLATION"] == original["EXPECTED_INFLATION"]
+    assert "Back to your earlier settings." in _text(at)
+
+
+def test_unit_a_second_click_keeps_the_first_snapshot():
+    ss = {"user_overrides": {"YOUR_AGE": 40, "PARTNER_AGE": 0, "TARGET_RETIREMENT_AGE": 55}}
+    st = SimpleNamespace(session_state=ss)
+    ap.apply_preset(st, "typical")
+    snap = ss["assume_last"]
+    assert ap.undo_available(st) and "assume_noop" not in ss
+    ap.apply_preset(st, "typical")
+    assert ss["assume_last"] is snap and ap.undo_available(st)
+    assert ss["assume_noop"] == "typical"
+    ap.undo_preset(st)
+    assert "assume_noop" not in ss and "assume_last" not in ss
+    assert "EXPECTED_INFLATION" not in ss["user_overrides"]
+
+
+def test_unit_a_match_with_missing_keys_still_gives_feedback():
+    """Every value matches but a key is missing (it holds the default). The click writes
+    the key and says nothing changed. It used to show nothing at all."""
+    ss = {"user_overrides": {"YOUR_AGE": 40, "PARTNER_AGE": 0, "TARGET_RETIREMENT_AGE": 55}}
+    st = SimpleNamespace(session_state=ss)
+    ap.apply_preset(st, "typical")
+    ss.pop("assume_last")
+    plan = ap.compute_preset("typical", ss["user_overrides"], False)
+    gone = next(k for k, (v, _) in plan.items() if ap._same(ap.default_for(k), v))
+    del ss["user_overrides"][gone]
+    ap.apply_preset(st, "typical")
+    assert gone in ss["user_overrides"]
+    assert ss["assume_noop"] == "typical" and "assume_last" not in ss
+    assert ap.status(st)[0] == "typical"
+
+
+def test_the_nothing_changed_line_shows_with_missing_keys(monkeypatch):
+    at = _open(monkeypatch)
+    _click(at, "typical")
+    at.session_state["assume_last"] = None
+    ov = at.session_state["user_overrides"]
+    plan = ap.compute_preset("typical", ov, bool(at.session_state["si_comp_customized"]))
+    gone = next(k for k, (v, _) in plan.items() if ap._same(ap.default_for(k), v))
+    ov.pop(gone)
+    at.session_state["user_overrides"] = ov
+    _click(at, "typical")
+    assert "Your settings already match Typical. Nothing changed." in _text(at)
 
 
 # ------------------------------------------------------------------ situations
@@ -295,6 +360,54 @@ def test_a_couple_gets_both_partner_keys(monkeypatch):
     assert "PARTNER_PLAN_UNTIL_AGE" in after and "PARTNER_SALARY_GROWTH_RATE" in after
 
 
+def test_a_household_change_is_not_a_custom_edit(monkeypatch):
+    """Switching to Just me clears the partner's plan-until age. The user changed no
+    assumption, so the line says the preset is for the old plan."""
+    at = _open(monkeypatch)
+    _click(at, "typical")
+    at.radio(key="ay_household").set_value("Just me").run()
+    assert not at.exception, at.exception
+    assert at.session_state["user_overrides"]["PARTNER_PLAN_UNTIL_AGE"] is None
+    text = _text(at)
+    assert "set for your old plan" in text, text
+    assert "Custom:" not in text
+
+
+def test_unit_a_household_change_is_outdated_not_custom():
+    from utils import household
+    ss = {"user_overrides": {"YOUR_AGE": 40, "PARTNER_AGE": 38, "TARGET_RETIREMENT_AGE": 55}}
+    st = SimpleNamespace(session_state=ss)
+    ap.apply_preset(st, "typical")
+    assert "PARTNER_PLAN_UNTIL_AGE" in ss["assume_last"]["after"]
+    household.clear_partner(ss["user_overrides"])
+    assert ss["user_overrides"]["PARTNER_PLAN_UNTIL_AGE"] is None
+    assert ap.status(st)[0] == "outdated"
+    ss["user_overrides"]["EXPECTED_INFLATION"] = 0.05              # a real edit still shows
+    assert ap.status(st)[0] == "custom"
+
+
+def test_the_situation_line_adds_up_with_a_younger_partner():
+    from components.assumption_presets import _situation_line
+    ss = {"user_overrides": {"YOUR_AGE": 40, "PARTNER_AGE": 34, "TARGET_RETIREMENT_AGE": 55}}
+    st = SimpleNamespace(session_state=ss)
+    ap.apply_preset(st, "typical")
+    last = ss["assume_last"]
+    end = last["plan_end"]
+    assert end == 106                                    # the partner's 100 is age 106 for you
+    line = _situation_line(last)
+    assert f"money lasting until you're {end} and your partner is 100" in line
+    assert f"That is {end - 55} years of retirement." in line
+
+
+def test_a_single_situation_line_names_one_age():
+    from components.assumption_presets import _situation_line
+    ss = {"user_overrides": {"YOUR_AGE": 28, "PARTNER_AGE": 0, "TARGET_RETIREMENT_AGE": 55}}
+    st = SimpleNamespace(session_state=ss)
+    ap.apply_preset(st, "typical")
+    line = _situation_line(ss["assume_last"])
+    assert "money lasting until you're 100." in line and "That is 45 years" in line
+
+
 def test_a_hand_edited_pay_table_keeps_salary_growth(monkeypatch):
     at = _open(monkeypatch, MEDIAN)
     at.session_state["si_comp_customized"] = True
@@ -302,13 +415,12 @@ def test_a_hand_edited_pay_table_keeps_salary_growth(monkeypatch):
     growth = at.session_state["user_overrides"]["YOUR_SALARY_GROWTH_RATE"]
     _click(at, "typical")
     assert at.session_state["user_overrides"]["YOUR_SALARY_GROWTH_RATE"] == growth
-    assert "Salary growth: kept, because you edited your pay table" in _text(at)
+    assert "Your salary growth: kept, because you edited your pay table" in _text(at)
 
 
 # ------------------------------------------------------------------ persistence
 
 def test_values_loaded_from_a_profile_show_the_matching_preset(monkeypatch):
-    at = _open(monkeypatch)
     probe = _open(monkeypatch)
     plan = {k: v for k, (v, _) in ap.compute_preset("typical", probe.session_state["user_overrides"],
                                                     False).items()}
@@ -362,7 +474,7 @@ def test_copy_lint_on_the_rendered_text(monkeypatch):
         assert not re.search(r"[\U0001F300-\U0001FAFF☀-➿]", t), t
         for line in t.splitlines():
             for sentence in re.split(r"(?<=[.!?])\s+", line.strip()):
-                assert len(sentence.split()) <= 24, sentence
+                assert len(sentence.split()) <= 20, sentence
     for b in at.button:
         if b.key and b.key.startswith("assume_"):
             assert not b.label.startswith("**")
@@ -387,3 +499,24 @@ def test_planner_click_marks_results_stale_and_does_not_raise(monkeypatch):
     assert not at.exception, at.exception
     assert at.sidebar.button(key="assume_undo")
     assert any("Now using: Typical assumptions." in str(c.value) for c in at.sidebar.caption)
+
+
+# ------------------------------------------------------------------ the pay-table flag
+
+def test_a_loaded_profile_with_the_built_pay_table_is_not_edited_by_hand():
+    from components.save_load import _apply_restored
+    from utils.config_builder import comp_table_from_salary
+    base = {"YOUR_AGE": 30, "TARGET_RETIREMENT_AGE": 55, "YOUR_BASE_SALARY": 90_000,
+            "YOUR_BONUS_AMOUNT": 5_000, "YOUR_RSU_AMOUNT": 0, "YOUR_SALARY_GROWTH_RATE": 0.015}
+    built = comp_table_from_salary(30, 55, 90_000, 5_000, 0, 0.015)
+    st = SimpleNamespace(session_state={})
+    _apply_restored(st, dict(base, YOUR_COMPENSATION_BY_AGE=built), "a.json")
+    assert st.session_state["si_comp_customized"] is False
+    edited = {a: dict(r) for a, r in built.items()}
+    edited[35]["base"] += 10_000
+    _apply_restored(st, dict(base, YOUR_COMPENSATION_BY_AGE=edited), "b.json")
+    assert st.session_state["si_comp_customized"] is True
+    _apply_restored(st, dict(base), "c.json")
+    assert st.session_state["si_comp_customized"] is False
+    _apply_restored(st, {"YOUR_AGE": 30, "YOUR_COMPENSATION_BY_AGE": built}, "d.json")
+    assert st.session_state["si_comp_customized"] is True       # no inputs to rebuild it from

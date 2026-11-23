@@ -12,8 +12,10 @@ from __future__ import annotations
 
 try:
     from utils import assumption_presets as ap
+    from utils.household import plan_end_text
 except ImportError:  # pragma: no cover
     from ui.utils import assumption_presets as ap  # type: ignore
+    from ui.utils.household import plan_end_text  # type: ignore
 
 SHOW_LINES = 8
 
@@ -22,12 +24,22 @@ def _situation_line(last: dict) -> str:
     f = last["facts"]
     who = f"{f['A']}" + (f" and a partner at {f['P']}" if f["P"] > 0 else "")
     retire = ("already retired" if f["R"] <= f["A"] else f"retiring at {f['R']}")
-    until = ap.format_value("PLAN_UNTIL_AGE", last["after"].get("PLAN_UNTIL_AGE"))
-    line = f"Set for you at {who}, {retire}, money lasting to {until}."
+    line = f"Set for you at {who}, {retire}, money lasting until {_plan_end(last)}."
     horizon = int(last.get("horizon") or 0)
     if horizon > 0:
         line += f" That is {horizon} years of retirement."
     return line
+
+
+def _plan_end(last: dict) -> str:
+    """"you're 102 and your partner is 100": the plan end the simulation uses, so the
+    years of retirement below add up for a couple with a younger partner."""
+    after = last["after"]
+    f = last["facts"]
+    values = {"YOUR_AGE": f["A"], "PARTNER_AGE": f["P"],
+              "PLAN_UNTIL_AGE": after.get("PLAN_UNTIL_AGE"),
+              "PARTNER_PLAN_UNTIL_AGE": after.get("PARTNER_PLAN_UNTIL_AGE")}
+    return plan_end_text(values)
 
 
 def _change_lines(last: dict) -> list:
@@ -75,12 +87,8 @@ def render(st) -> None:
     if ss.pop("assume_undone", False):
         st.caption(ap.COPY["undone"])
         return
+    if ss.get("assume_noop") == kind:
+        st.caption(f"Your settings already match {ap.TITLES[kind]}. Nothing changed.")
     last = ss.get("assume_last")
-    if not last:
-        return
-    if last.get("noop"):
-        if kind == last["name"]:
-            st.caption(f"Your settings already match {ap.TITLES[last['name']]}. Nothing changed.")
-        return
-    if ap.undo_available(st):
+    if last and ap.undo_available(st):
         _draw_box(st, last)
