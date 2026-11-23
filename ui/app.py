@@ -795,109 +795,6 @@ def _topbar_settings(_st) -> None:
                  unsafe_allow_html=True)
 
 
-def _inject_keyboard_nav() -> None:
-    """Arrow-key navigation for the sidebar sections, injected via a 0-height
-    component iframe that reaches the parent document:
-      ArrowUp / ArrowDown  -> move the highlighted section up / down
-      ArrowRight / ArrowLeft -> expand / collapse the highlighted section
-    Ignored while typing in an input / slider / dropdown. Installed once
-    (guarded on window.parent) so reruns don't stack listeners.
-    """
-    import streamlit.components.v1 as components
-    components.html(
-        """
-        <script>
-        (function(){
-          const P = window.parent;
-          const doc = P.document;
-
-          // ---- Segmented-toggle tagging (RE-INSTALLED on every iframe load) ----
-          // Tag horizontal radio groups (flex-direction:row) so CSS renders them
-          // as soft-segmented toggles; vertical mode-radios keep their layout.
-          // This must refresh on each render: Streamlit recreates this component
-          // iframe on every full rerun, tearing down the previous iframe's JS
-          // realm and killing its MutationObserver. A one-time guard therefore
-          // left a DEAD observer after the first run, so result-area chart
-          // toggles (rendered on later runs) never got tagged. We define a fresh
-          // tagger bound to THIS live realm, disconnect/clear any stale
-          // observer+timer, and add a low-frequency interval as a safety net for
-          // fragment reruns (which don't recreate the iframe).
-          // Only inspect radiogroups that are NOT yet classified — once each is
-          // tagged .mc-seg (horizontal) or data-mc-vert (vertical), it's skipped,
-          // so the interval does ~zero work at idle (no periodic getComputedStyle
-          // forced-style-recalc, which was a source of micro-stutter).
-          function tagRadios(){
-            doc.querySelectorAll('[role="radiogroup"]:not(.mc-seg):not([data-mc-vert])').forEach(function(g){
-              try {
-                if (P.getComputedStyle(g).flexDirection === 'row') g.classList.add('mc-seg');
-                else g.setAttribute('data-mc-vert', '1');
-              } catch(e){}
-            });
-          }
-          tagRadios();
-          if (P.__mcTagInterval) { try { P.clearInterval(P.__mcTagInterval); } catch(e){} }
-          if (P.__mcTagObserver) { try { P.__mcTagObserver.disconnect(); } catch(e){} }
-          // The MutationObserver below re-tags on any DOM change (incl. fragment
-          // reruns), so no idle polling interval is needed — keeps idle at zero work.
-          try {
-            let _pending = false;
-            P.__mcTagObserver = new P.MutationObserver(function(){
-              if (_pending) return; _pending = true;
-              P.setTimeout(function(){ _pending = false; tagRadios(); }, 60);
-            });
-            P.__mcTagObserver.observe(doc.body, {childList: true, subtree: true});
-          } catch(e){}
-
-          // ---- Keyboard nav (install ONCE; one keydown listener is enough) ----
-          if (doc.__mcArrowNav) return;
-          doc.__mcArrowNav = true;
-
-          let idx = -1;
-          function expanders(){
-            const sb = doc.querySelector('[data-testid="stSidebar"]');
-            if (!sb) return [];
-            // Top-level section expanders only — skip expanders nested inside
-            // another section (they'd be hidden when their parent is collapsed).
-            return Array.from(sb.querySelectorAll('[data-testid="stExpander"]'))
-              .filter(e => !e.parentElement.closest('[data-testid="stExpander"]'));
-          }
-          function paint(list){
-            list.forEach((e,i)=> e.classList.toggle('mc-kbd-focus', i===idx));
-            if(list[idx]) list[idx].scrollIntoView({block:'nearest'});
-          }
-          function isOpen(e){ const d=e.querySelector('details'); return d ? d.open : false; }
-          function summ(e){ return e.querySelector('summary'); }
-          doc.addEventListener('keydown', function(ev){
-            const ae = doc.activeElement;
-            if (ae) {
-              const t = ae.tagName;
-              if (t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||ae.isContentEditable) return;
-              if (ae.getAttribute && ae.getAttribute('role')==='slider') return;
-              if (ae.closest && (ae.closest('[data-baseweb="select"]')||ae.closest('[data-baseweb="slider"]'))) return;
-            }
-            const k = ev.key;
-            if (k!=='ArrowUp'&&k!=='ArrowDown'&&k!=='ArrowLeft'&&k!=='ArrowRight') return;
-            const list = expanders();
-            if(!list.length) return;
-            if(idx>=list.length) idx=list.length-1;
-            if(k==='ArrowDown'){ idx = idx<0 ? 0 : Math.min(idx+1, list.length-1); }
-            else if(k==='ArrowUp'){ idx = idx<0 ? 0 : Math.max(idx-1, 0); }
-            else {
-              if(idx<0) idx=0;
-              const open = isOpen(list[idx]); const s = summ(list[idx]);
-              if(k==='ArrowRight' && !open && s){ s.click(); }
-              if(k==='ArrowLeft' && open && s){ s.click(); }
-            }
-            paint(list);
-            ev.preventDefault();
-          }, true);
-        })();
-        </script>
-        """,
-        height=0,
-    )
-
-
 def _spending_stats(st) -> list:
     """Top-card figures for the Spending view: average monthly spending and months counted."""
     try:
@@ -1300,9 +1197,6 @@ def main() -> None:
             else:
                 _lazy_ph("deepdives", 600)
     _tile_deepdives()
-
-    # Arrow-key navigation for the sidebar sections (injected once).
-    _inject_keyboard_nav()
 
     # After the page is drawn: a browser job the server must take over, then
     # the analyses queued for the server (one per run, each followed by a rerun).

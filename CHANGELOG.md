@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (page script: one iframe, lighter reruns, stuck tiles, scroll restore)
+- The sidebar arrow-key navigation moved into the page script (`components/animations.py`), which sits at the top of the page. The second hidden iframe at the bottom is gone, so a rerun no longer rebuilds it (it reloaded on 1 to 3 reruns out of every rerun). One fewer iframe on the page
+- The fold state is read from the browser once and kept in memory, and is written only when you fold or open a tile. After a rerun, tiles are re-folded once per frame, before the browser paints (it used to run on every DOM change). A folded tile still does not flash open
+- Lazy sections that stayed as grey placeholders now load. The check that loads them could stop for good once every section had loaded, and then never restarted after the next run. It restarts when new placeholders appear, waits for the load button, and retries every 2 seconds
+- The page remembers the open tab of each tab group and how far you scrolled (browser tab storage only, no rerun), and a refresh returns you to the same place when the page is tall enough
+
 ### Added (results headline: ways to reach your goal, success band, cushion)
 - Retirement tile, under the hero number: **Ways to reach 90%** (or your own target while you are below it; else the next step, 90% then 95%). Rows: retire later (the smallest later age that reaches the goal, plus the one just short of it when close), spend 5-25% less in retirement, your partner works up to 5 years longer (couples), and one year later plus the smallest spending cut. Each row is its own simulation at the main run's count (capped at 2,000) on the main run's market paths, so keeping a change gives exactly the rate shown. Rows that reach the goal are marked; the others show their real value
 - **Try it** previews a change without touching your inputs. **Keep this change** writes it into your inputs, updates the side panel and reruns the plan. **Undo** puts the old values back
