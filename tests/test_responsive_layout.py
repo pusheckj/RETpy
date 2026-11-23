@@ -78,25 +78,45 @@ def test_compact_monthly_chart_labels_every_third_month():
     assert sd.monthly_figure(_table(), [], False, compact=True).layout.xaxis.dtick == "M3"
 
 
+class _Ctx:
+    def __init__(self, calls, key):
+        calls.append(("container", key))
+
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+
+class _St:
+    def __init__(self, narrow=None):
+        self.calls = []
+        self.session_state = {"_viewport_narrow": narrow}   # None = the page does not know the width yet
+
+    def container(self, key=None): return _Ctx(self.calls, key)
+    def plotly_chart(self, fig, **kw): self.calls.append(("chart", kw["key"]))
+
+
 def test_chart_helper_draws_both_versions_with_stable_keys(monkeypatch):
-    calls = []
-
-    class _Ctx:
-        def __init__(self, key): calls.append(("container", key))
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
-
-    class _St:
-        def container(self, key=None): return _Ctx(key)
-        def plotly_chart(self, fig, **kw): calls.append(("chart", kw["key"]))
-
     built = []
-    monkeypatch.setattr(sd, "style_fig", lambda fig, st: fig)   # theme styling needs a live session
-    sd._chart(_St(), lambda compact: built.append(compact) or sd.pie_figure(_avg(), False, compact),
+    st = _St(narrow=None)
+    monkeypatch.setattr(sd, "style_fig", lambda fig, st, **kw: fig)   # theme styling needs a live session
+    sd._chart(st, lambda compact: built.append(compact) or sd.pie_figure(_avg(), False, compact),
               "sp_avg_donut", {})
     assert built == [False, True]
-    assert ("container", "mc-wide-sp_avg_donut") in calls and ("container", "mc-narrow-sp_avg_donut") in calls
-    assert ("chart", "sp_avg_donut") in calls and ("chart", "sp_avg_donut_compact") in calls
+    assert ("container", "mc-wide-sp_avg_donut") in st.calls and ("container", "mc-narrow-sp_avg_donut") in st.calls
+    assert ("chart", "sp_avg_donut") in st.calls and ("chart", "sp_avg_donut_compact") in st.calls
+
+
+def test_chart_helper_draws_one_version_once_the_width_is_known(monkeypatch):
+    import utils.plot_theme as pt
+    monkeypatch.setattr(pt, "style_fig", lambda fig, st, **kw: fig)
+    for narrow in (True, False):
+        built = []
+        st = _St(narrow=narrow)
+        sd._chart(st, lambda compact: built.append(compact) or sd.pie_figure(_avg(), False, compact),
+                  "sp_avg_donut", {})
+        assert built == [narrow]
+        assert [c for c in st.calls if c[0] == "container"] == [("container", "mc-chart-sp_avg_donut")]
+        assert [c for c in st.calls if c[0] == "chart"] == [("chart", "sp_avg_donut")]
 
 
 def test_touch_swipes_on_charts_scroll_the_page():

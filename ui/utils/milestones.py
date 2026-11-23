@@ -44,7 +44,9 @@ settings that test it (the same move, spending and tax).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import copy
+from collections import OrderedDict
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 try:
@@ -523,8 +525,7 @@ def _next_up(all_ms: Sequence[Milestone]) -> Optional[Milestone]:
     return min(coming, key=lambda m: m.age) if coming else None
 
 
-def build(inp: Inputs) -> Report:
-    """Every milestone for these inputs."""
+def _build(inp: Inputs) -> Report:
     debt = list(inp.debt) + [0.0] * max(0, len(inp.invested) - len(inp.debt))
     nw_values = [float(i) + float(h) - float(d) for i, h, d in zip(inp.invested, inp.home, debt)]
     networth, e_nw = _ladder(inp, KIND_NETWORTH, nw_values, "net worth")
@@ -543,6 +544,42 @@ def build(inp: Inputs) -> Report:
                   earlier_networth=e_nw, earlier_invested=e_inv, reached=reached,
                   total=len(flat) + e_nw + e_inv, next_up=_next_up(flat),
                   spending_known=spending_known)
+
+
+# The Freedom tile calls build() on every rerun with inputs that rarely change, and
+# build() costs ~100 ms. A small memo keyed on the frozen inputs skips the repeat.
+_BUILD_MEMO: "OrderedDict[tuple, Report]" = OrderedDict()
+_BUILD_MEMO_MAX = 32
+
+
+def _freeze(value):
+    """Hashable copy of any mix of dataclasses, mappings and sequences."""
+    if is_dataclass(value) and not isinstance(value, type):
+        return (type(value).__name__,) + tuple(_freeze(getattr(value, f.name)) for f in fields(value))
+    if isinstance(value, Mapping):
+        return tuple(sorted(((_freeze(k), _freeze(v)) for k, v in value.items()), key=repr))
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    return value
+
+
+def clear_build_cache() -> None:
+    _BUILD_MEMO.clear()
+
+
+def build(inp: Inputs) -> Report:
+    """Every milestone for these inputs. Equal inputs return an equal Report; each
+    caller gets its own copy, so editing one never changes the memo."""
+    key = _freeze(inp)
+    rep = _BUILD_MEMO.get(key)
+    if rep is None:
+        rep = _build(inp)
+        _BUILD_MEMO[key] = rep
+        while len(_BUILD_MEMO) > _BUILD_MEMO_MAX:
+            _BUILD_MEMO.popitem(last=False)
+    else:
+        _BUILD_MEMO.move_to_end(key)
+    return copy.deepcopy(rep)
 
 
 def status_word(m: Milestone) -> str:

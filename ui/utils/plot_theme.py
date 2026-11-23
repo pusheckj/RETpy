@@ -8,6 +8,7 @@ consistent in both light and dark mode.
 """
 from __future__ import annotations
 
+import copy
 import re
 
 _FONT_FAMILY = "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
@@ -671,18 +672,72 @@ def add_target_line(fig, target: float, st=None) -> None:
                             else "rgba(255,255,255,0.9)"))
 
 
-def show_chart(st, fig, key: str, config: dict | None = None) -> None:
-    """Draw a chart twice - regular and phone-compact - and let theme.css show
-    the one that fits (the server can't know a visitor's width; see
-    ``style_fig``). ``fig`` is a Figure, or ``build(compact) -> Figure`` when
-    the phone version needs different content (fewer points, shorter labels).
-    The regular chart keeps ``key``; the compact one is ``{key}_compact``.
+_FIG_CACHE_KEY = "_fig_cache"
+_FIG_CACHE_MAX = 64
+
+
+def _styled_figure(st, fig, key: str, narrow: bool, owned: bool):
+    """The styled Figure, from a small per-session memo.
+
+    style_fig costs ~15 ms a chart and most reruns draw the same figures again.
+    The memo key is the chart, its width class, the theme inputs style_fig reads
+    and a hash of the unstyled figure, so any change to the data misses. ``owned``
+    is False when ``fig`` belongs to the caller: it is copied before it is styled.
+    Streamlit only reads a Figure, so the memoised one is handed over as it is
+    (a dict would be re-validated into a Figure on every draw, ~8 ms).
     """
-    import copy
+    import hashlib
+    from collections import OrderedDict
+    try:
+        state = st.session_state
+        cache = state.get(_FIG_CACHE_KEY)
+        if cache is None:
+            cache = state[_FIG_CACHE_KEY] = OrderedDict()
+    except Exception:  # no session (stub st): style every time
+        cache = None
+    memo_key = None
+    if cache is not None:
+        memo_key = (key, narrow, is_dark(st), tuple(active_palette(st)), _font_family(st),
+                    hashlib.md5(fig.to_json().encode()).hexdigest())
+        hit = cache.get(memo_key)
+        if hit is not None:
+            cache.move_to_end(memo_key)
+            return hit
+    styled = style_fig(fig if owned else copy.deepcopy(fig), st, compact=narrow)
+    if cache is not None:
+        cache[memo_key] = styled
+        while len(cache) > _FIG_CACHE_MAX:
+            cache.popitem(last=False)
+    return styled
+
+
+def show_chart(st, fig, key: str, config: dict | None = None) -> None:
+    """Draw a chart. ``fig`` is a Figure, or ``build(compact) -> Figure`` when the
+    phone version needs different content (fewer points, shorter labels).
+
+    A figure never knows its rendered width, so it comes in a regular and a
+    phone-compact version (see ``style_fig``). Once the page knows which screen
+    it is on (``st.session_state["_viewport_narrow"]``, True on a phone) only that
+    version is built and drawn, in ``mc-chart-{key}``. Until then (first run,
+    tests) both are drawn, in ``mc-wide-{key}`` and ``mc-narrow-{key}``, and
+    theme.css shows the one that fits. The chart keeps ``key``; in the two-copy
+    case the compact one is ``{key}_compact``.
+    """
     config = PLOTLY_CONFIG if config is None else config
     build = fig if callable(fig) else (lambda compact, _f=fig: copy.deepcopy(_f))
     if not hasattr(st, "container"):  # stub st (tests / print): regular chart only
         st.plotly_chart(style_fig(build(False), st), width="stretch", config=config, key=key)
+        return
+    try:
+        narrow = st.session_state.get("_viewport_narrow")
+    except Exception:
+        narrow = None
+    if narrow is not None:
+        narrow = bool(narrow)
+        with st.container(key=f"mc-chart-{key}"):
+            st.plotly_chart(_styled_figure(st, fig(narrow) if callable(fig) else fig, key, narrow,
+                                           owned=callable(fig)),
+                            width="stretch", config=config, key=key)
         return
     with st.container(key=f"mc-wide-{key}"):
         st.plotly_chart(style_fig(build(False), st), width="stretch", config=config, key=key)
