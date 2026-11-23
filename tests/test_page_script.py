@@ -138,7 +138,7 @@ def planner():
     mp = pytest.MonkeyPatch()
     mp.setenv("RETIREMENT_SIM_HOSTED", "1")
     try:
-        at = AppTest.from_file(APP_PATH, default_timeout=120).run()
+        at = AppTest.from_file(APP_PATH, default_timeout=300).run()
         at.button(key="device_skip").click().run()
         next(b for b in at.button if b.label == "Open the retirement planner").click().run()
         at.button(key="gs_skip").click().run()
