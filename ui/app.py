@@ -588,7 +588,8 @@ def _topbar_head(_st):
         control_slots = (_st.empty(), _st.empty(), _st.empty())
     with _st.container(key="mc-topbar-foot"):
         metrics_slot = _st.empty()
-        view = _st.segmented_control("View", ["Retirement plan", "Spending"], default="Retirement plan",
+        view = _st.segmented_control("View", ["Retirement plan", "Spending"],
+                                     default=st.session_state.get("_main_view_default") or "Retirement plan",
                                      key="main_view", label_visibility="collapsed")
     title = "Spending" if view == "Spending" else "Retirement planner"
     title_slot.markdown(f'<span class="mc-topbar-title">{title}</span>', unsafe_allow_html=True)
@@ -649,10 +650,11 @@ def _loading_screen() -> None:
         _give_up_when_slow()
 
 
-def _persist_sig() -> str:
+def _persist_sig(payloads: tuple | None = None) -> str:
     """Hash of everything the app would save right now (to tell 'nothing was edited' from 'edited')."""
     from utils import device_store, persist
-    return device_store.payload_hash({"p": list(persist.build_payload(st.session_state))})
+    payloads = payloads or persist.build_payload(st.session_state)
+    return device_store.payload_hash({"p": list(payloads)})
 
 
 def _restore_from_device(store) -> None:
@@ -696,15 +698,16 @@ def _save_to_device() -> None:
         ss._view_saved = persist.mirror_view(ss)
         if "_persist_base" not in ss:
             ss._persist_base = persist.file_fp()
-        sig = _persist_sig()
+        payloads = persist.build_payload(ss)
         if ss.get("_forgot_pending") or ss.get("_forgot_sig"):
             # Forget was pressed: the tab copy stays gone until something is edited.
+            sig = _persist_sig(payloads)
             if ss.pop("_forgot_pending", False):
                 ss._forgot_sig = sig
             if ss.get("_forgot_sig") == sig:
                 return
             ss.pop("_forgot_sig", None)
-        tab, device, prefs = persist.build_payload(ss)
+        tab, device, prefs = payloads
         device_store.save(st, tab, device, prefs)
     except Exception:
         pass

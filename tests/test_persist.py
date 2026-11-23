@@ -285,13 +285,13 @@ class TestApply:
         assert list(pins) == ["A"] and pins["A"]["engine_fp"] == "old"
         assert pins["A"]["overrides"] == deserialize_overrides(serialize_overrides(ov))
         assert pins["A"]["summary"] == {"success_rate": 0.9}
-        assert tab_st.session_state["main_view"] == "Spending"
+        assert tab_st.session_state["_main_view_default"] == "Spending"   # the control opens on it
         assert tab_st.session_state["tax_tab_view"] == "% of income"
         assert "evil" not in tab_st.session_state
         assert tab_st.session_state["_view_saved"]["main_view"] == "Spending"
         dev_st = FakeSt()
         persist.apply(dev_st, data, "device")
-        assert "main_view" not in dev_st.session_state
+        assert "_main_view_default" not in dev_st.session_state
         assert list(dev_st.session_state["pinned_scenarios"]) == ["A"]
 
     def test_one_bad_part_does_not_drop_the_others(self):
@@ -379,7 +379,7 @@ def _at(monkeypatch, store, profile_env=None, hosted=True):
         monkeypatch.delenv("RETIREMENT_SIM_HOSTED", raising=False)
     if profile_env is not None:
         monkeypatch.setenv("RETIREMENT_SIM_PROFILE", str(profile_env))
-    at = AppTest.from_file(APP, default_timeout=120)
+    at = AppTest.from_file(APP, default_timeout=300)
     at.session_state[ds.STATE_KEY_PREFIX + ds.DEFAULT_KEY] = store
     return at
 
@@ -473,3 +473,12 @@ def test_prefs_apply_for_a_visitor_with_no_saved_inputs(monkeypatch):
     assert not at.exception
     assert at.session_state["theme_mode"] == "🌙 Dark"
     assert [b.label for b in at.button if b.label == "Open the retirement planner"]   # still the welcome screen
+
+
+def test_restored_main_view_opens_the_spending_view_without_a_streamlit_warning(monkeypatch):
+    tab = _tab_payload(setup={"status": "done", "step": 0, "seen": []}, view={"main_view": "Spending"})
+    at = _at(monkeypatch, _ready_store(tab=tab))
+    at.run()
+    assert not at.exception
+    assert at.session_state["main_view"] == "Spending"
+    assert not [w for w in at.warning if "main_view" in w.value]

@@ -201,7 +201,7 @@ def render(st) -> None:
             # Tab autosave (utils/persist.py): view choices, viewport, open tabs, the
             # "nothing edited yet" fingerprint and the profile file's hash at session start.
             "_view_saved", "_viewport_narrow", "_view_tabs", "_persist_seed_sig", "_persist_base",
-            "_forgot_pending", "_forgot_sig",
+            "_forgot_pending", "_forgot_sig", "_main_view_default",
             # Auto-run fires ONCE per browser session, on first page open only.
             # Without preserving this, the wildcard sweep below deletes it and a
             # profile switch silently kicks off a full (~95s cold) simulation

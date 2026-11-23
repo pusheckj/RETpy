@@ -35,7 +35,8 @@ RESTORE_FAILED = "We couldn't bring back your last inputs. You're starting fresh
 
 # Plain session keys this module relies on across a profile switch (the profile picker
 # wipes every key that is not in its preserve set).
-PRESERVED_KEYS = ("_view_saved", "_viewport_narrow", "_view_tabs", "_persist_seed_sig", "_persist_base")
+PRESERVED_KEYS = ("_view_saved", "_viewport_narrow", "_view_tabs", "_persist_seed_sig", "_persist_base",
+                  "_main_view_default")
 
 # Inputs that are not in user_overrides but belong to the visitor.
 _EXTRA_PREFIXES = ("le_",)
@@ -309,7 +310,12 @@ def _apply_view(st, data: dict, source: str) -> None:
         return
     clean = {k: v for k, v in view.items() if _is_view_key(k) and isinstance(v, str)}
     for key, value in clean.items():
-        st.session_state[key] = value
+        if key == "main_view":
+            # A segmented control with a default must not also get its value from session_state
+            # (Streamlit warns). It opens on this default instead, fixed for the whole session.
+            st.session_state["_main_view_default"] = value
+        else:
+            st.session_state[key] = value
     st.session_state["_view_saved"] = clean
 
 
