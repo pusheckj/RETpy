@@ -4,7 +4,7 @@
 #     tests/e2e/server_ctl.sh /tmp/e2e_ctl 8541 &
 # A test writes "start <profile-file-or-none> <hosted 0|1>" or "stop" to <dir>/cmd and waits for <dir>/ack.
 DIR="${1:?control dir}"; PORT="${2:-8541}"
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="${E2E_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 mkdir -p "$DIR"; rm -f "$DIR/cmd" "$DIR/ack"
 PID=""
 stop() { if [ -n "$PID" ]; then kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; PID=""; fi; }
