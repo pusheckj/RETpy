@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (speed: one chart per screen)
+- Charts draw once, not twice. When the page knows if the screen is a phone (`st.session_state["_viewport_narrow"]`), `plot_theme.show_chart` builds and sends only that version, in an `mc-chart-<key>` container that the CSS never hides. Until the page knows (first run, tests) it still draws the wide and the compact copy as before. With every tile open this halves the Plotly charts in the page and cuts the server work and bytes of each rerun
+- Styled charts are remembered per session (up to 64, keyed on the chart, screen class, theme, palette, font and a hash of the figure), so a rerun that changes nothing skips the 15 ms styling step for each chart
+- Freedom milestones: `milestones.build` remembers its last 32 results, so a rerun with the same inputs skips the rebuild. Each caller gets its own copy
+
 ### Added (results headline: ways to reach your goal, success band, cushion)
 - Retirement tile, under the hero number: **Ways to reach 90%** (or your own target while you are below it; else the next step, 90% then 95%). Rows: retire later (the smallest later age that reaches the goal, plus the one just short of it when close), spend 5-25% less in retirement, your partner works up to 5 years longer (couples), and one year later plus the smallest spending cut. Each row is its own simulation at the main run's count (capped at 2,000) on the main run's market paths, so keeping a change gives exactly the rate shown. Rows that reach the goal are marked; the others show their real value
 - **Try it** previews a change without touching your inputs. **Keep this change** writes it into your inputs, updates the side panel and reruns the plan. **Undo** puts the old values back
