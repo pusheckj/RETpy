@@ -239,7 +239,14 @@ def _ov_hash(d):
 
 try:
     import streamlit as _stc
-    _proj_cache = _stc.cache_data(show_spinner=False, max_entries=64, hash_funcs={dict: _ov_hash})
+    try:
+        from utils.sim_runner import _MEM_TTL_S
+    except ImportError:  # pragma: no cover
+        from ui.utils.sim_runner import _MEM_TTL_S  # type: ignore
+    # st.cache_data is process-wide: hosted, every visitor shares it. The ttl keeps it
+    # inside the "short time" that the Welcome and docs/HOSTING.md promise.
+    _proj_cache = _stc.cache_data(show_spinner=False, max_entries=64, ttl=_MEM_TTL_S,
+                                  hash_funcs={dict: _ov_hash})
 except Exception:  # pragma: no cover
     def _proj_cache(fn):
         return fn

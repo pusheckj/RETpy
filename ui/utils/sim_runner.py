@@ -527,7 +527,15 @@ def _mem_stamp(mk: str) -> None:
 
 
 def _mem_expire() -> None:
-    """Drop every hosted memory entry older than ``_MEM_TTL_S`` from every cache."""
+    """Drop every hosted memory entry older than ``_MEM_TTL_S`` from every cache.
+
+    Stamps are shared by digest, not per cache: if two caches ever stored the same
+    key tuple, storing it again in one would refresh the other's stamp too. Today
+    the key shapes differ, so that cannot happen.
+
+    No lock here. Cache access relies on CONFIG_LOCK (main() and every fragment run
+    under it). A background pool must not call this or _SimCache.drop from another
+    thread without taking CONFIG_LOCK first."""
     if not _MEM_STAMPS:
         return
     cutoff = _mem_now() - _MEM_TTL_S
@@ -576,6 +584,7 @@ class _SimCache:
             self._data.pop(self._order.pop(0), None)
 
     def drop(self, key: str) -> None:
+        # Not locked: relies on CONFIG_LOCK, like _mem_expire.
         if self._data.pop(key, None) is not None:
             self._order.remove(key)
 

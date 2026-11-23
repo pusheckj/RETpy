@@ -12,9 +12,8 @@ PRIVACY GUARANTEE
 
 LIMITS
     * While a session runs, the server process holds the inputs in memory, as
-      it must to compute results (and to relay a save to the browser). The inputs
-      are not kept once the session ends. Hosted, results computed from them can
-      stay in the server's memory for a short time (see sim_runner._mem_key).
+      it must to compute results (and to relay a save to the browser). Nothing
+      is kept once the session ends.
     * localStorage is not encrypted. Anyone using the same browser profile,
       extensions with access to the page, and any other code served from this
       same origin can read it.

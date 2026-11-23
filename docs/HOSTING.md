@@ -107,7 +107,8 @@ your statements folder.
   The cache is keyed on a sha256 of the inputs, so no key holds an input and a
   visitor can only fetch a result by sending the same inputs. The cached result
   itself is the plan's output: ages, starting balances and the projected paths
-  that follow from them. Nothing is written to disk. One cache is still keyed
+  that follow from them. The per-account balance projection uses Streamlit's own
+  cache with the same 30-minute limit. Nothing is written to disk. One cache is still keyed
   on the raw values: the debt payoff math in `retirement_sim/debts.py` (up to 64
   entries, no limit on age). If a browser can't
   help (old browser, blocked CDN, too slow), the server does the

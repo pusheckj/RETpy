@@ -112,6 +112,9 @@ def test_no_copy_promises_tab_persistence_without_a_tab_store():
 
 
 def test_welcome_privacy_sentence_matches_what_the_app_does():
+    if os.path.exists(os.path.join(_ROOT, "ui", "utils", "persist.py")):
+        pytest.fail("P1's tab store has landed: its Welcome rewrites this sentence. "
+                    "Update the expected sentence here to P1's wording.")
     from components import welcome
     html = welcome.privacy_html(hosted=False)
     assert ("Nothing is stored on the server. Your inputs are saved on this device only if "
@@ -166,3 +169,33 @@ def test_hosting_doc_says_what_the_shared_cache_holds():
     assert "never the inputs themselves" not in text
     assert "starting balances" in text
     assert "debts.py" in text
+
+
+def test_every_streamlit_data_cache_has_the_hosted_ttl():
+    """st.cache_data is process-wide, so hosted it is shared by every visitor. With no
+    ttl it would outlive the Welcome's "short time" and HOSTING.md's 30 minutes. No
+    ui/ module may use cache_data or cache_resource without ttl=_MEM_TTL_S."""
+    import ast
+    offenders = []
+    for folder, _dirs, files in os.walk(os.path.join(_ROOT, "ui")):
+        for name in (n for n in files if n.endswith(".py")):
+            path = os.path.join(folder, name)
+            with open(path, encoding="utf-8") as fh:
+                tree = ast.parse(fh.read())
+            for node in ast.walk(tree):
+                calls = [node] if isinstance(node, ast.Call) else []
+                # A bare "@st.cache_data" decorator is an Attribute with no Call.
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    calls += [d for d in node.decorator_list if not isinstance(d, ast.Call)]
+                for c in calls:
+                    f = c.func if isinstance(c, ast.Call) else c
+                    ident = getattr(f, "attr", getattr(f, "id", ""))
+                    kws = {k.arg for k in c.keywords} if isinstance(c, ast.Call) else set()
+                    if ident in ("cache_data", "cache_resource") and "ttl" not in kws:
+                        offenders.append(os.path.relpath(path, _ROOT))
+    assert offenders == []
+
+
+def test_net_worth_projection_cache_expires_after_the_hosted_ttl():
+    from components import net_worth_projection_chart as nw
+    assert nw.project_net_worth._info.ttl == sr._MEM_TTL_S
