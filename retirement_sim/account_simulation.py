@@ -2648,7 +2648,7 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
             # the same take-home pool, so leaving it out would double-fund it
             # (phantom dollars: contributed to Roth AND left in brokerage).
             to_brokerage = saved_after_tax - your_roth_contribution - contribution_529 - your_after_tax_401k
-        to_brokerage = max(0.0, to_brokerage) + extra_saved
+        to_brokerage = max(0.0, to_brokerage)
 
         # Disposable-income sanity clamp: an over-configured profile (e.g. huge
         # 401k + HSA + backdoor Roth) must not fund more than the year's gross
@@ -2669,6 +2669,12 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
             overshoot -= trim
             if overshoot > 0:
                 your_roth_contribution = max(0.0, your_roth_contribution - overshoot)
+
+        # Extra savings (lower spending, see above). Only the part that is new
+        # surplus: in a deficit year the lower spending already shrinks the
+        # draw from the portfolio. Added after the pay-limit trim, because this
+        # money is real (it came out of spending), so the trim must not drop it.
+        to_brokerage += min(extra_saved, max(0.0, raw_residual))
 
         portfolio.contribute("your_roth_ira", your_roth_contribution)  # Backdoor Roth
         _contribute_529s(portfolio, child_529s)

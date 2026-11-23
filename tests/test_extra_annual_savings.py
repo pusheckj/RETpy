@@ -80,3 +80,27 @@ def test_the_lever_writes_the_new_key_and_leaves_the_brokerage_override_alone():
     alt = w._alt_overrides(st, base)
     assert alt["EXTRA_ANNUAL_SAVINGS"] == 16_000
     assert alt.get("YOUR_BROKERAGE_CONTRIBUTION", 5_000) == 5_000
+
+
+@pytest.mark.parametrize("extra_spending", [0, 60_000])
+def test_the_extra_counts_once_in_surplus_and_deficit_years(monkeypatch, extra_spending):
+    """In a deficit year the lower spending first shrinks the draw from the portfolio. Manual
+    mode must not also add the full extra to the brokerage (that would count it twice)."""
+    real = cfg.calculate_annual_expenses
+    monkeypatch.setattr(cfg, "calculate_annual_expenses",
+                        lambda *a, **k: real(*a, **k) + extra_spending)
+
+    def gain(mode):
+        out = []
+        for extra in (0, 20_000):
+            monkeypatch.setattr(cfg, "SAVINGS_MODE", mode)
+            monkeypatch.setattr(cfg, "EXTRA_ANNUAL_SAVINGS", extra)
+            _, p = run_detailed_simulation(cfg.YOUR_AGE + 1, random_seed=3)
+            out.append(next(r for r in p.yearly_history if r["age"] == cfg.YOUR_AGE + 1)["total"])
+        return out[1] - out[0]
+
+    auto, manual = gain("Auto-allocate (recommended)"), gain("Manual")
+    # Each mode gains the extra plus a little tax saved on a smaller draw (the two modes
+    # fund a deficit from different accounts, so the tax part differs). Never about 2x.
+    for g in (auto, manual):
+        assert 20_000 * 0.95 <= g <= 20_000 * 1.4
