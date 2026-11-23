@@ -1,6 +1,7 @@
 """Profile picker component — top of sidebar."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import warnings
@@ -21,17 +22,19 @@ except ImportError:  # pragma: no cover
 MY_SITUATION_DEFAULT_LABEL = "My situation"
 
 
-def load_personal_profile(path: str | None = None) -> tuple[str, dict] | None:
-    """(label, overrides) for the private profile, or None when there isn't one.
-    A hosted app never offers one, even if a profile file is on the server."""
+def _read_personal_profile(path: str | None = None) -> tuple[str, dict, str] | None:
+    """(label, overrides, fingerprint) for the private profile, or None when there isn't one.
+    The fingerprint is a short hash of the bytes that were read, so it names exactly the
+    profile this process holds (see ``PERSONAL_PROFILE_FP``)."""
     if is_hosted():
         return None
     path = path or personal_profile_path()
     if not os.path.isfile(path):
         return None
     try:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        text = raw.decode("utf-8")
         overrides = deserialize_overrides(text)
         label = json.loads(text).get("label")
     except Exception as exc:  # broken file: leave the entry out, never crash the app
@@ -39,7 +42,14 @@ def load_personal_profile(path: str | None = None) -> tuple[str, dict] | None:
         return None
     if not isinstance(label, str) or not label.strip():
         label = MY_SITUATION_DEFAULT_LABEL
-    return label.strip(), overrides
+    return label.strip(), overrides, hashlib.sha256(raw).hexdigest()[:16]
+
+
+def load_personal_profile(path: str | None = None) -> tuple[str, dict] | None:
+    """(label, overrides) for the private profile, or None when there isn't one.
+    A hosted app never offers one, even if a profile file is on the server."""
+    found = _read_personal_profile(path)
+    return found[:2] if found else None
 
 
 def _load_my_situation(path: str | None = None) -> dict | None:
@@ -140,7 +150,12 @@ PROFILES = {
 # The built-in starting points (their labels are descriptions, not household names).
 PRESET_NAMES = frozenset(PROFILES)
 
-_MY_SITUATION = load_personal_profile()
+_MY_SITUATION_READ = _read_personal_profile()
+_MY_SITUATION = _MY_SITUATION_READ[:2] if _MY_SITUATION_READ else None
+# Hash of the profile file as this process read it. The planner shows these bytes until the
+# server restarts, so the browser copy's "file changed" check compares against this, not the
+# file on disk now (persist.file_fp).
+PERSONAL_PROFILE_FP = _MY_SITUATION_READ[2] if _MY_SITUATION_READ else None
 if _MY_SITUATION is not None:
     PROFILES = {_MY_SITUATION[0]: _MY_SITUATION[1], **PROFILES}
 

@@ -53,9 +53,10 @@ Status semantics (``sync`` return value: ``status``, ``tab``, ``device``,
                  (``None`` if nothing is saved, or the stored copy is
                  unreadable or from an unknown schema). ``targets`` says per
                  store whether it works ("ok", "blocked" or "failed").
-    unavailable  Neither the tab nor the device store works, or the browser
-                 never answered within ``LOAD_TIMEOUT_S``. ``error`` says why.
-                 ``save`` is a no-op.
+    unavailable  Neither the tab nor the device store works. ``error`` says why.
+                 ``save`` is a no-op. A browser that is merely slow stays "loading":
+                 the reader keeps waiting, and the app treats the wait as a Continue
+                 after ``LOAD_TIMEOUT_S`` (see ``timed_out``).
 """
 from __future__ import annotations
 
@@ -70,9 +71,10 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 DEFAULT_KEY = "retpy"
-# A load that is still waiting after this long gives up ("unavailable"). A
-# healthy load answers well under a second. The loading screen checks the clock
-# on its own timer (app._loading_screen), so a silent iframe cannot hold it forever.
+# A load that is still waiting after this long stops holding up the page (the app carries on as
+# if Continue was pressed and applies a late answer only if nothing was edited). A healthy load
+# answers well under a second. The loading screen checks the clock on its own timer
+# (app._loading_screen), so a silent iframe cannot hold it forever.
 LOAD_TIMEOUT_S = 4.0
 # One stored item (tab or device envelope, or prefs) is never written above this.
 MAX_ITEM_BYTES = 200_000
@@ -370,6 +372,12 @@ def _in_fragment() -> bool:
     return ctx is not None and getattr(ctx, "current_fragment_id", None) is not None
 
 
+def waited_too_long(st, key: str = DEFAULT_KEY) -> bool:
+    """True while the browser has still not answered after ``LOAD_TIMEOUT_S``."""
+    store = _store(st, key)
+    return store["status"] == "loading" and timed_out(store["started"])
+
+
 def in_full_run(st, key: str = DEFAULT_KEY) -> bool:
     """True when sync() already ran in this script run (a full run, not a fragment-only rerun)."""
     return _live_run(_store(st, key)) is not None
@@ -432,8 +440,6 @@ def sync(st, key: str = DEFAULT_KEY) -> dict:
             value = _component()(storage_key=key, read_token=store["read_token"], height=0,
                                  key=f"{STATE_KEY_PREFIX}{key}_read", default=None)
             _consume(store, value)
-    if store["status"] == "loading" and timed_out(store["started"]):
-        _set_unavailable(store, "timed out waiting for browser storage")
     _publish(st, store)
     return _public(store)
 

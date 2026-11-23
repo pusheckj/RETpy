@@ -450,11 +450,14 @@ def _save_after_fragment(fn):
     @functools.wraps(fn)
     def _saving(*args, **kwargs):
         from utils import device_store, persist
-        # A lazy tile first draws in a fragment rerun, which skips main(): put the saved view
-        # choices (Today's/Future $) back before its widgets are created.
-        persist.reapply_view(st.session_state)
+        full_run = device_store.in_full_run(st)
+        if not full_run:
+            # A lazy tile first draws in a fragment rerun, which skips main(): assign the restored
+            # inputs and view choices again before its widgets are created (main() did it for a
+            # full run, and widgets drawn earlier in that run can no longer be assigned).
+            persist.reapply_view(st.session_state)
         result = fn(*args, **kwargs)
-        if not device_store.in_full_run(st):
+        if not full_run:
             _save_to_device()
         return result
     return _saving
@@ -602,10 +605,11 @@ def _topbar_head(_st):
     with _st.container(key="mc-topbar-head"):
         title_slot = _st.empty()
         control_slots = (_st.empty(), _st.empty(), _st.empty())
+    from utils import persist
     with _st.container(key="mc-topbar-foot"):
         metrics_slot = _st.empty()
         view = _st.segmented_control("View", ["Retirement plan", "Spending"],
-                                     default=st.session_state.get("_main_view_default") or "Retirement plan",
+                                     default=persist.main_view_default(st.session_state),
                                      key="main_view", label_visibility="collapsed")
     title = "Spending" if view == "Spending" else "Retirement planner"
     title_slot.markdown(f'<span class="mc-topbar-title">{title}</span>', unsafe_allow_html=True)
@@ -641,7 +645,7 @@ _LOADING_CSS = (
     ".st-key-mc-loading { max-width: 420px; margin: 20vh auto 0; text-align: center; }"
     ".mc-loading { color: #64748b; font-size: 16px; opacity: 0; animation: mcLoadingIn 0.2s ease 250ms forwards; }"
     "@keyframes mcLoadingIn { to { opacity: 1; } }"
-    ".st-key-mc-loading .stButton { opacity: 0; pointer-events: none; animation: mcShowLate 0s 6s forwards; }"
+    ".st-key-mc-loading .stButton { opacity: 0; pointer-events: none; animation: mcShowLate 0s 3s forwards; }"
     "@keyframes mcShowLate { to { opacity: 1; pointer-events: auto; } }"
     "</style>"
 )
@@ -667,10 +671,11 @@ def _loading_screen() -> None:
 
 
 def _persist_sig(payloads: tuple | None = None) -> str:
-    """Hash of everything the app would save right now (to tell 'nothing was edited' from 'edited')."""
+    """Hash of the inputs the app would save right now (to tell 'nothing was edited' from 'edited').
+    Display choices are left out: a new theme is not an edit."""
     from utils import device_store, persist
     payloads = payloads or persist.build_payload(st.session_state)
-    return device_store.payload_hash({"p": list(payloads)})
+    return device_store.payload_hash({"p": list(payloads[:2])})
 
 
 def _restore_from_device(store) -> None:
@@ -759,7 +764,6 @@ def _privacy_controls(_st) -> None:
         st.session_state.pop("_view_saved", None)
         st.session_state["_forgot_pending"] = True
         st.rerun()
-    _st.caption("Display choices such as dark mode are kept in this browser.")
 
 
 MODES = {"simple": "Money check-up", "full": "Retirement planner"}
@@ -979,6 +983,8 @@ def main() -> None:
     # for run 2, so the answer reaches the page first.
     from utils import device_store
     store = device_store.sync(st)
+    if device_store.waited_too_long(st):
+        st.session_state._device_skip = True      # a slow browser counts as Continue: the reader stays
     if store["status"] == "loading" and not st.session_state.get("_device_skip"):
         _loading_screen()
         st.stop()

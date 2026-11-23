@@ -1002,7 +1002,8 @@ def render(st, **_kwargs) -> None:
     chart_end = max(end, min(sig_last).to_period("M")) if sig_last else end
     from utils import persist
     labels = ["Overview", "Trends", "Transactions", "Data"]
-    t_over, t_trend, t_tx, t_data = st.tabs(labels, default=persist.tab_default("mc-spending-tabs", labels))
+    with st.container(key="mc-spending-tabs"):      # the page script finds the open tab by this class
+        t_over, t_trend, t_tx, t_data = st.tabs(labels, default=persist.tab_default("mc-spending-tabs", labels))
 
     with t_over:
         left, right = st.columns(2)

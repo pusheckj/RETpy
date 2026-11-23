@@ -347,9 +347,6 @@ def test_b_setup_step_and_answers_survive_a_refresh(tmp_path, ctx):
 # c, d: the planner, the tab copy, the device copy
 
 
-@pytest.mark.xfail(reason="known gap: the saved Today's/Future $ choice is in the copy but the chart opens on "
-                          "Today's $ after a refresh (Streamlit drops the restored radio value in a lazy tile)",
-                   strict=False)
 def test_c2_future_dollars_choice_survives_a_refresh(tmp_path, ctx):
     with serve(tmp_path) as (base, _):
         page = ctx.new_page()
@@ -371,6 +368,27 @@ def test_c2_future_dollars_choice_survives_a_refresh(tmp_path, ctx):
         checked = page.locator('[class*="st-key-income_over_time_main_dollars_mode"] input:checked')
         checked.first.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
         assert "Future" in checked.first.locator("xpath=ancestor::label").inner_text()
+
+
+def test_c3_extras_in_lazy_tiles_show_their_restored_values_after_a_refresh(tmp_path, ctx):
+    """Life expectancy inputs sit in a lazy tile. The restored value must show in the widget, not
+    only in the code that uses it."""
+    with serve(tmp_path) as (base, _):
+        page = ctx.new_page()
+        start_planner(page, base)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        env = wait_store(page, "session", lambda v: v and v["payload"].get("full"))
+        time.sleep(3)                    # let the page's own pending writes finish first
+        env["payload"]["extra"] = {"le_sex": "Female"}
+        page.evaluate("(v) => sessionStorage.setItem('retpy', v)", json.dumps(env))
+        reload(page)
+        page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        load_tiles(page)
+        scroll_to(page, '[class*="st-key-mc-tile-lifespan"]')
+        box = page.locator('[class*="st-key-le_sex"]').first
+        box.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+        assert "Female" in box.inner_text()
 
 
 

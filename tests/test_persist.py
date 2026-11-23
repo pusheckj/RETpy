@@ -43,6 +43,26 @@ class FakeSt:
         self.session_state = State(state)
 
 
+@pytest.fixture
+def picker(monkeypatch):
+    """``picker(monkeypatch, profile_path)`` starts "a server" for the owner: the profile picker
+    is imported again, so it reads the profile file now and keeps those bytes until the next call.
+    The module is put back to a no-profile import after the test."""
+    import importlib
+    from components import profile_picker
+
+    def restart(mp, path):
+        mp.setenv("RETIREMENT_SIM_PROFILE", str(path))
+        mp.delenv("RETIREMENT_SIM_HOSTED", raising=False)
+        importlib.reload(profile_picker)
+        return profile_picker
+    yield restart
+    monkeypatch.undo()
+    monkeypatch.setenv("RETIREMENT_SIM_PROFILE", os.devnull + ".none")
+    importlib.reload(profile_picker)
+    monkeypatch.undo()
+
+
 def _planner_state(**extra):
     ov = load_sample_household()
     state = {"app_mode": "full", "user_overrides": ov, "profile": "Mid-career couple (40, kids)",
@@ -93,23 +113,34 @@ class TestPick:
 
 
 class TestFileFingerprint:
-    def test_hash_of_the_file_bytes(self, tmp_path, monkeypatch):
+    """persist.file_fp() is the hash of the bytes the picker read when the server started, not of
+    the file on disk now (the planner shows what was loaded)."""
+
+    def test_hash_of_the_bytes_the_picker_loaded(self, tmp_path, monkeypatch, picker):
         f = tmp_path / "p.json"
-        f.write_text('{"a": 1}')
-        monkeypatch.setenv("RETIREMENT_SIM_PROFILE", str(f))
-        monkeypatch.delenv("RETIREMENT_SIM_HOSTED", raising=False)
+        f.write_text(serialize_overrides(load_sample_household()))
+        picker(monkeypatch, f)
         first = persist.file_fp()
+        assert first == persist.file_fp_of(str(f))
         assert isinstance(first, str) and len(first) == 16
-        f.write_text('{"a": 2}')
+
+    def test_an_edit_while_the_server_runs_does_not_change_it(self, tmp_path, monkeypatch, picker):
+        f = tmp_path / "p.json"
+        f.write_text(serialize_overrides(load_sample_household()))
+        picker(monkeypatch, f)
+        first = persist.file_fp()
+        f.write_text(serialize_overrides(dict(load_sample_household(), TARGET_RETIREMENT_AGE=49)))
+        assert persist.file_fp() == first                     # still the loaded contents
+        picker(monkeypatch, f)                                 # a restart
         assert persist.file_fp() != first
 
-    def test_none_when_missing_or_hosted(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("RETIREMENT_SIM_PROFILE", str(tmp_path / "nope.json"))
-        monkeypatch.delenv("RETIREMENT_SIM_HOSTED", raising=False)
+    def test_none_when_missing_or_hosted(self, tmp_path, monkeypatch, picker):
+        picker(monkeypatch, tmp_path / "nope.json")
         assert persist.file_fp() is None
         f = tmp_path / "p.json"
-        f.write_text("{}")
-        monkeypatch.setenv("RETIREMENT_SIM_PROFILE", str(f))
+        f.write_text(serialize_overrides(load_sample_household()))
+        picker(monkeypatch, f)
+        assert persist.file_fp() is not None
         monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "1")
         assert persist.file_fp() is None
 
@@ -406,44 +437,133 @@ def test_tab_copy_is_back_before_the_sidebar_and_autorun(monkeypatch):
     assert not [b for b in at.button if b.label == "Open the retirement planner"]
 
 
-def test_tab_copy_in_simple_mode_beats_the_forced_full_mode_for_the_owner(monkeypatch, tmp_path):
+def _owner_file(tmp_path, age=47):
     profile = tmp_path / "owner.json"
-    profile.write_text(serialize_overrides(load_sample_household()))
-    base = persist.file_fp_of(str(profile))
-    tab = {"remember": False, "mode": "simple", "simple": {"age": 44}, "base": base}
+    profile.write_text(serialize_overrides(dict(load_sample_household(), TARGET_RETIREMENT_AGE=age)))
+    return profile
+
+
+def test_restore_runs_before_the_sidebar_draws_and_before_the_autorun_starts(monkeypatch):
+    """Setup is done, so the sidebar and the first-load simulation both run on the restore run.
+    Both must see the browser copy (target age 52), not the preset the session started from."""
+    tab = _tab_payload(setup={"status": "done", "step": 0, "seen": []}, view={})   # the planner view, not Spending
+    at = _at(monkeypatch, _ready_store(tab=tab, prefs={"n_simulations": 500}))
+    at.run()
+    assert not at.exception
+    ss = at.session_state
+    assert ss["user_overrides"]["TARGET_RETIREMENT_AGE"] == 52
+    target = [w for w in at.slider if w.key == "ay_target_age"]
+    assert target and target[0].value == 52                    # the sidebar drew the restored value
+    assert ss["_autorun_done"] is True and ss["results"] is not None
+    from utils.sim_runner import _hashable
+    assert ss["last_run_inputs_hash"] == hash((_hashable(ss["user_overrides"]), 500))   # the autorun used it
+
+
+def test_a_slow_browser_counts_as_continue_and_a_late_answer_still_restores(monkeypatch):
+    """After LOAD_TIMEOUT_S the page opens (welcome screen) but the reader stays, so an answer
+    that arrives later is used when nothing was edited. Storage is not reported as blocked."""
+    import time
+    slow = {"status": "loading", "started": time.monotonic() - 10, "read_token": "tok"}
+    at = _at(monkeypatch, slow)
+    at.run()
+    assert not at.exception
+    assert [b for b in at.button if b.label == "Open the retirement planner"]     # the page opened
+    store = at.session_state[ds.STATE_KEY_PREFIX + ds.DEFAULT_KEY]
+    assert store["status"] == "loading" and store["read_token"] == "tok"          # still listening
+    assert at.session_state["_device_skip"] is True
+    store.update(_ready_store(tab=_tab_payload(setup={"status": "done", "step": 0, "seen": []})))
+    store["read_token"] = None
+    at.run()
+    assert not at.exception
+    assert at.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] == 52
+    assert at.session_state["app_mode"] == "full"
+
+
+def test_a_theme_change_after_forget_does_not_write_the_tab_copy_again(monkeypatch):
+    at = _at(monkeypatch, _ready_store(tab=_tab_payload(setup={"status": "done", "step": 0, "seen": []}),
+                                       prefs={"n_simulations": 500}))
+    at.run()
+    assert not at.exception
+    store = at.session_state[ds.STATE_KEY_PREFIX + ds.DEFAULT_KEY]
+    at.session_state["_forgot_pending"] = True                 # what the Forget button leaves behind...
+    store["hashes"]["tab"] = None                              # ...with the browser's copy gone
+    store["op"] = None
+    at.run()
+    assert not at.exception
+    assert not (store["op"] or {}).get("tab")                  # nothing was edited: nothing is written
+    at.session_state["_appearance_saved"] = {"theme_mode": "🌙 Dark"}
+    at.run()
+    assert not at.exception
+    assert not (store["op"] or {}).get("tab")                  # a new theme is not an edit either
+
+
+def test_tab_copy_in_simple_mode_beats_the_forced_full_mode_for_the_owner(monkeypatch, tmp_path, picker):
+    profile = _owner_file(tmp_path)
+    picker(monkeypatch, profile)
+    tab = {"remember": False, "mode": "simple", "simple": {"age": 44}, "base": persist.file_fp()}
     at = _at(monkeypatch, _ready_store(tab=tab), profile_env=profile, hosted=False)
     at.run()
     assert not at.exception
     assert at.session_state["app_mode"] == "simple"
 
 
-def test_owner_base_match_keeps_the_copy_and_mismatch_loads_the_file(monkeypatch, tmp_path):
-    profile = tmp_path / "owner.json"
-    owner = load_sample_household()
-    profile.write_text(serialize_overrides(owner))
-    base = persist.file_fp_of(str(profile))
+def test_owner_base_match_keeps_the_copy_and_mismatch_loads_the_file(monkeypatch, tmp_path, picker):
+    profile = _owner_file(tmp_path, age=47)
+    picker(monkeypatch, profile)
+    base = persist.file_fp()
 
     keep = _at(monkeypatch, _ready_store(tab=_tab_payload(base=base, setup={"status": "done", "step": 0, "seen": []})),
                profile_env=profile, hosted=False).run()
     assert not keep.exception
     assert keep.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] == 52
+    assert not keep.toast
 
     stale = _at(monkeypatch, _ready_store(tab=_tab_payload(base="0123456789abcdef")),
                 profile_env=profile, hosted=False).run()
     assert not stale.exception
-    # the file wins: the browser copy's age (52) is not restored. (The profile picker reads the file
-    # when the server starts, so this in-process test cannot see the file's own numbers.)
-    assert stale.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] != 52
+    # the file wins: the browser copy's age (52) is not restored, the file's (47) is shown
+    assert stale.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] == 47
     assert stale.session_state["app_mode"] == "full"                 # the owner's own planner
     assert [t.value for t in stale.toast] == [persist.OWNER_NOTICE]
 
 
-def test_a_broken_copy_shows_the_failed_text_and_starts_fresh(monkeypatch):
+def test_a_file_edit_while_the_server_runs_keeps_the_browser_copy_until_a_restart(monkeypatch, tmp_path, picker):
+    """The planner shows the profile as the server loaded it. An edit to the file changes nothing
+    until a restart, so a refresh must keep the browser copy and must not claim the file loaded."""
+    profile = _owner_file(tmp_path, age=47)
+    picker(monkeypatch, profile)
+    tab = _tab_payload(base=persist.file_fp(), setup={"status": "done", "step": 0, "seen": []})
+
+    profile.write_text(serialize_overrides(dict(load_sample_household(), TARGET_RETIREMENT_AGE=49)))
+    running = _at(monkeypatch, _ready_store(tab=tab), profile_env=profile, hosted=False).run()
+    assert not running.exception
+    assert running.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] == 52     # browser edits kept
+    assert not running.toast                                                          # no false notice
+
+    picker(monkeypatch, profile)                                                      # restart: loads the edit
+    restarted = _at(monkeypatch, _ready_store(tab=tab), profile_env=profile, hosted=False).run()
+    assert not restarted.exception
+    assert restarted.session_state["user_overrides"]["TARGET_RETIREMENT_AGE"] == 49   # the file really loaded
+    assert [t.value for t in restarted.toast] == [persist.OWNER_NOTICE]
+
+
+def test_a_broken_copy_shows_the_failed_text_and_drops_the_tab_copy(monkeypatch):
+    # inputs are unreadable but the mode and setup parts are fine: those stay, and the toast says
+    # "all", not "fresh" (a part restored, so the visitor is told to check, not that nothing came back)
+    dropped = []
+    real_drop = ds.drop_tab
+    monkeypatch.setattr(ds, "drop_tab", lambda st, *a, **k: (dropped.append(True), real_drop(st, *a, **k))[1])
     at = _at(monkeypatch, _ready_store(tab=_tab_payload(full="{not json")))
     at.run()
     assert not at.exception
     assert [t.value for t in at.toast] == [persist.RESTORE_FAILED]
+    assert "starting fresh" not in persist.RESTORE_FAILED.lower()
     assert at.session_state["user_overrides"] != {}                 # the preset seed, not a crash
+    assert at.session_state["app_mode"] == "full"                   # the parts that restored stay
+    assert at.session_state["setup"]["step"] == 5
+    store = at.session_state[ds.STATE_KEY_PREFIX + ds.DEFAULT_KEY]
+    assert dropped == [True]                                         # the bad copy was removed...
+    assert store["tab"] is not None and store["tab"]["full"] != "{not json"   # ...and a fresh one saved
 
 
 def test_a_profile_switch_does_not_restore_twice(monkeypatch):
@@ -496,3 +616,188 @@ class TestReapplyView:
 
     def test_nothing_saved_is_fine(self):
         persist.reapply_view(State())
+
+    def test_a_restored_value_is_assigned_again_on_every_run_until_the_visitor_changes_it(self):
+        st = FakeSt()
+        persist.apply(st, {"view": {"x_dollars_mode": "Future $"}, "extra": {"le_sex": "Female"}}, "tab")
+        state = st.session_state
+        assert state["x_dollars_mode"] == "Future $" and state["le_sex"] == "Female"
+        sets = []
+
+        class Spy(State):
+            def __setitem__(self, k, v):
+                sets.append(k)
+                super().__setitem__(k, v)
+        spy = Spy(state)
+        persist.reapply_view(spy)
+        assert {"x_dollars_mode", "le_sex"} <= set(sets)          # assigned again, so the browser is told
+        spy["x_dollars_mode"] = "Today's $"                       # the visitor picked the other option
+        persist.reapply_view(spy)
+        assert spy["x_dollars_mode"] == "Today's $"               # their choice stays
+        del spy["x_dollars_mode"]                                  # Streamlit forgot it after a run without the widget
+        persist.reapply_view(spy)
+        assert spy["x_dollars_mode"] == "Today's $"               # and comes back as their choice, not the restored one
+
+    def test_a_widget_already_drawn_in_this_run_is_skipped_not_a_crash(self):
+        class Locked(State):
+            def __setitem__(self, k, v):
+                if k == "le_sex":
+                    raise RuntimeError("cannot be modified after the widget is instantiated")
+                super().__setitem__(k, v)
+        st = FakeSt()
+        persist.apply(st, {"extra": {"le_sex": "Female", "le_age": 50}}, "tab")
+        locked = Locked(st.session_state)
+        persist.reapply_view(locked)
+        assert locked["le_age"] == 50
+
+
+class TestMirrorView:
+    def test_a_choice_equal_to_the_widget_default_is_not_saved(self):
+        state = State(income_over_time_main_dollars_mode="Today's $", tax_tab_view="Dollar amount",
+                      main_view="Retirement plan")
+        assert persist.mirror_view(state) == {}
+
+    def test_going_back_to_the_default_removes_the_saved_choice(self):
+        state = State(_view_saved={"x_dollars": "Future $"}, x_dollars="Today's $")
+        assert persist.mirror_view(state) == {}
+
+    def test_a_choice_that_differs_is_saved_and_a_widget_not_drawn_keeps_its_saved_value(self):
+        state = State(_view_saved={"y_dollars": "Future $"}, tax_tab_view="% of income")
+        assert persist.mirror_view(state) == {"y_dollars": "Future $", "tax_tab_view": "% of income"}
+
+    def test_first_draw_of_a_tile_does_not_change_the_saved_payload(self):
+        before = _planner_state()
+        tab_before, _, _ = persist.build_payload(before)
+        after = _planner_state(x_dollars_mode="Today's $", tax_tab_view="Dollar amount")
+        after["_view_saved"] = persist.mirror_view(after)
+        tab_after, _, _ = persist.build_payload(after)
+        assert tab_before == tab_after and "view" not in tab_after
+
+
+class TestMainViewDefault:
+    def test_follows_the_last_choice_after_a_run_that_did_not_draw_the_control(self):
+        state = State(_view_saved={"main_view": "Spending"}, _main_view_default="Retirement plan")
+        assert persist.main_view_default(state) == "Spending"        # control gone from the session
+        state["main_view"] = "Spending"
+        state["_view_saved"] = {}                                     # saved copy changes, control still drawn
+        assert persist.main_view_default(state) == "Spending"        # default must not move while drawn
+
+    def test_default_is_the_planner_view(self):
+        assert persist.main_view_default(State()) == "Retirement plan"
+
+
+# --------------------------------------------------------------------------
+# A restored value must show in the browser, not only in the code
+# --------------------------------------------------------------------------
+
+def shown(widget):
+    """The option the browser draws for a widget. A value that was not sent with ``set_value``
+    is invisible to the browser: it draws the widget's own default."""
+    proto, options = widget.proto, list(widget.options)
+    if widget.type == "radio":
+        return options[proto.value if proto.set_value else proto.default]
+    if widget.type == "selectbox":
+        return proto.raw_value if proto.set_value else options[proto.default]
+    return list(proto.raw_values) if proto.set_value else [options[i] for i in proto.default]
+
+
+_LAZY_SCRIPT = """
+import sys
+sys.path[:0] = [{ui!r}, {root!r}]
+import streamlit as st
+from utils import persist
+st.session_state.setdefault("n", 0)
+st.session_state.n += 1
+if st.session_state.n == 1:
+    # the restore run: the lazy tile below is not drawn yet
+    persist.apply(st, {{"view": {{"x_dollars_mode": "Future $"}},
+                       "extra": {{"le_sex": "Female", "le_conditions": ["b", "c"], "wifc_stock": 30}}}}, "tab")
+    st.button("load tile")
+else:
+    persist.reapply_view(st.session_state)
+    radio = st.radio("Dollars", ["Today's $", "Future $"], key="x_dollars_mode")
+    sex = st.selectbox("Sex", ["Male", "Female"], key="le_sex")
+    conds = st.multiselect("Conditions", ["a", "b", "c"], key="le_conditions")
+    from utils.slider_input import slider_with_box
+    slider_with_box(st, "Stock allocation (%)", 0, 100, 5, key="wifc_stock", unit="%", value=80)
+    st.write("BACKEND", radio, sex, ",".join(conds))
+    st.button("again")
+"""
+
+
+class TestRestoredValuesShowInTheBrowser:
+    def _lazy_app(self):
+        from streamlit.testing.v1 import AppTest
+        at = AppTest.from_string(_LAZY_SCRIPT.format(ui=_UI, root=_ROOT), default_timeout=60)
+        at.run()
+        assert not at.exception
+        at.button[0].click().run()
+        assert not at.exception
+        return at
+
+    def test_a_lazy_tile_shows_what_the_code_uses(self):
+        at = self._lazy_app()
+        assert at.radio[0].value == shown(at.radio[0]) == "Future $"
+        assert at.selectbox[0].value == shown(at.selectbox[0]) == "Female"
+        assert at.multiselect[0].value == shown(at.multiselect[0]) == ["b", "c"]
+        slider = at.slider[0]                                  # what-if inputs (slider with a typed box)
+        assert slider.value == 30 and list(slider.proto.value) == [30] and slider.proto.set_value
+        assert at.number_input[0].value == 30
+
+    def test_the_shown_choice_survives_the_next_rerun_and_a_change_wins(self):
+        at = self._lazy_app()
+        at.button[0].click().run()                                    # "again": a rerun, nothing edited
+        assert at.radio[0].value == shown(at.radio[0]) == "Future $"
+        at.radio[0].set_value("Today's $").run()
+        assert at.radio[0].value == shown(at.radio[0]) == "Today's $"
+        at.button[0].click().run()
+        assert at.radio[0].value == "Today's $"                       # not overwritten by the restored value
+        assert at.selectbox[0].value == shown(at.selectbox[0]) == "Female"
+
+
+def _ready_planner_tab(**over):
+    """Setup finished, on the planner view (not Spending)."""
+    over.setdefault("view", {})
+    return _tab_payload(setup={"status": "done", "step": 0, "seen": []}, **over)
+
+
+def _draw_lazy_tile(at, flag, found):
+    """Open a lazy tile (the browser does this by scrolling to it). Finishing a simulation closes
+    every tile again, and the first-load queue can finish after the restore run, so ask again."""
+    for _ in range(4):
+        at.session_state[flag] = True
+        at.run()
+        assert not at.exception
+        widgets = found(at)
+        if widgets:
+            return widgets
+    return []
+
+
+def test_the_income_tile_radio_shows_future_dollars_after_a_restore(monkeypatch):
+    """The real app: the restore run does not draw the income tile; the radio draws on a later
+    run, and the browser must be told its restored value."""
+    tab = _ready_planner_tab(view={"income_over_time_main_dollars_mode": "Future $"})
+    at = _at(monkeypatch, _ready_store(tab=tab))
+    at.run()
+    assert not at.exception
+    radios = _draw_lazy_tile(at, "_lz_income",
+                             lambda a: [r for r in a.radio if r.key == "income_over_time_main_dollars_mode"])
+    assert radios, "the income tile did not draw its radio"
+    assert radios[0].value == shown(radios[0]) == "Future $"
+
+
+def test_the_life_expectancy_tile_inputs_show_the_restored_values(monkeypatch):
+    tab = _ready_planner_tab(extra={"le_sex": "Female", "le_conditions": ["Diabetes"]})
+    from components.life_expectancy_section import CONDITIONS
+    cond = next(iter(CONDITIONS))
+    tab["extra"]["le_conditions"] = [cond]
+    at = _at(monkeypatch, _ready_store(tab=tab))
+    at.run()
+    assert not at.exception
+    _draw_lazy_tile(at, "_lz_lifespan", lambda a: [w for w in a.selectbox if w.key == "le_sex"])
+    sex = [w for w in at.selectbox if w.key == "le_sex"]
+    conds = [w for w in at.multiselect if w.key == "le_conditions"]
+    assert sex and conds, "the life expectancy tile did not draw"
+    assert sex[0].value == shown(sex[0]) == "Female"
+    assert conds[0].value == shown(conds[0]) == [cond]

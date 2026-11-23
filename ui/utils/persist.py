@@ -31,12 +31,16 @@ MAX_PINS = 10
 CUSTOM_PROFILE = "Custom (keep current values)"
 
 OWNER_NOTICE = "Your profile file changed, so the planner loaded it. Your earlier browser copy was replaced."
-RESTORE_FAILED = "We couldn't bring back your last inputs. You're starting fresh."
+RESTORE_FAILED = "We couldn't bring back all of your last inputs. Please check your numbers."
 
 # Plain session keys this module relies on across a profile switch (the profile picker
 # wipes every key that is not in its preserve set).
 PRESERVED_KEYS = ("_view_saved", "_viewport_narrow", "_view_tabs", "_persist_seed_sig", "_persist_base",
                   "_main_view_default")
+
+# Restored values of widgets that are not drawn on the restore run (a lazy tile, a closed section):
+# {widget key: value}. Not preserved across a profile switch, which resets those inputs on purpose.
+PENDING_KEY = "_widget_pending"
 
 # Inputs that are not in user_overrides but belong to the visitor.
 _EXTRA_PREFIXES = ("le_",)
@@ -47,6 +51,7 @@ _VIEW_NAMES = ("main_view", "tax_tab_view")
 _VIEW_SUFFIXES = ("_dollars", "_dollars_mode")
 _APPEARANCE_KEYS = ("theme_mode", "font_choice", "palette_choice")
 _SETUP_KEYS = ("status", "step", "seen", "checkup")
+MAIN_VIEW_DEFAULT = "Retirement plan"
 
 
 # --------------------------------------------------------------------------
@@ -97,13 +102,16 @@ def file_fp_of(path: str) -> str | None:
 
 
 def file_fp() -> str | None:
-    """Short hash of the owner's profile file, or None when hosted or there is no file."""
+    """Short hash of the owner's profile as this server loaded it, or None when hosted or there
+    was no file. It is the hash of the bytes ``profile_picker`` read at start-up, not of the
+    file on disk now: the planner shows what was loaded, so an edit made while the server runs
+    changes nothing until a restart (and a browser copy made before it stays valid)."""
     try:
         from utils.hosting import is_hosted
-        from utils.profile_io import personal_profile_path
         if is_hosted():
             return None
-        return file_fp_of(personal_profile_path())
+        from components import profile_picker
+        return profile_picker.PERSONAL_PROFILE_FP
     except Exception:
         return None
 
@@ -156,21 +164,70 @@ def _is_view_key(key: Any) -> bool:
     return isinstance(key, str) and (key in _VIEW_NAMES or key.endswith(_VIEW_SUFFIXES))
 
 
+def _view_default(key: str) -> str:
+    """What the widget shows when nothing was chosen (a value equal to it is not worth saving)."""
+    if key == "main_view":
+        return MAIN_VIEW_DEFAULT
+    if key == "tax_tab_view":
+        return "Dollar amount"
+    return "Today's $"
+
+
 def mirror_view(state: Mapping) -> dict:
     """The view choices (main view, Today's/Future $ radios, tax view) as a plain dict. Streamlit
     drops a widget's value on any run that does not draw it, so the last seen value is kept here
-    and a value is replaced only when the widget is drawn with a new one."""
+    and a value is replaced only when the widget is drawn with a new one. A choice equal to the
+    widget's default is left out, so a tile that merely draws for the first time saves nothing."""
     saved = dict(state.get("_view_saved") or {})
     for key in list(state.keys()):
         if _is_view_key(key) and isinstance(state[key], str):
-            saved[key] = state[key]
+            if state[key] == _view_default(key):
+                saved.pop(key, None)
+            else:
+                saved[key] = state[key]
     return saved
 
 
+def main_view_default(state) -> str:
+    """The option the main view control opens on. A widget with a default gets a new identity
+    when the default changes, so the default only moves on a run that starts with the control
+    gone from the session (it was not drawn on the last run): then it follows the last choice."""
+    if "main_view" not in state:
+        last = (state.get("_view_saved") or {}).get("main_view")
+        state["_main_view_default"] = last if isinstance(last, str) else None
+    return state.get("_main_view_default") or MAIN_VIEW_DEFAULT
+
+
+def pend(state, key: str, value: Any) -> None:
+    """Put a restored value into a widget's key and remember it for ``reapply_view``."""
+    state[key] = value
+    pending = state.get(PENDING_KEY)
+    if not isinstance(pending, dict):
+        pending = state[PENDING_KEY] = {}
+    pending[key] = value
+
+
 def reapply_view(state) -> None:
-    """Put the saved view choices back into widgets that were not drawn on the last run (a lazy
-    tile, a closed section): Streamlit forgets a widget's value after a run that skips it. Runs
-    before the page draws, so it never touches a widget that was already created this run."""
+    """Call at the start of every script run and fragment rerun, before any widget is drawn.
+
+    A value set through ``session_state`` reaches the browser only with the run that sets it. A
+    restored value for a widget that is not drawn until later (a lazy tile) is old state by
+    then: Streamlit returns it to the code but tells the browser nothing, so the widget shows
+    its default while the code uses the restored value. So each restored value is assigned
+    again on every run until the visitor picks another one. Seeing a different value in the
+    session means they did, and that value is the one to keep from then on.
+
+    Saved view choices (``_view_saved``) whose widget lost its value after a run that skipped
+    it are put back too."""
+    pending = state.get(PENDING_KEY)
+    if isinstance(pending, dict):
+        for key in list(pending):
+            if key in state and state[key] != pending[key]:
+                pending[key] = state[key]
+            try:
+                state[key] = pending[key]
+            except Exception:           # the widget was already drawn in this run: leave it
+                pass
     saved = state.get("_view_saved")
     if not isinstance(saved, dict):
         return
@@ -280,7 +337,7 @@ def _apply_extras(st, data: dict, source: str) -> None:
     for key, value in extra.items():
         if isinstance(key, str) and (key in _EXTRA_NAMES or key.startswith(_EXTRA_PREFIXES)) \
                 and _is_scalar_or_str_list(value) and key not in st.session_state:
-            st.session_state[key] = value
+            pend(st.session_state, key, value)
 
 
 def _apply_profile(st, data: dict, source: str) -> None:
@@ -327,7 +384,7 @@ def _apply_view(st, data: dict, source: str) -> None:
             # (Streamlit warns). It opens on this default instead, fixed for the whole session.
             st.session_state["_main_view_default"] = value
         else:
-            st.session_state[key] = value
+            pend(st.session_state, key, value)
     st.session_state["_view_saved"] = clean
 
 
