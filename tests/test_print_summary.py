@@ -80,7 +80,8 @@ def test_render_offers_download_with_headline_number():
     assert len(st.download_calls) == 1
     call = st.download_calls[0]
     assert call["mime"] == "text/html"
-    html_blob = call["data"]
+    assert callable(call["data"])               # built on click, not on every rerun
+    html_blob = call["data"]()
 
     primary = results.get("primary_result", {}) or {}
     success_str = pct(primary.get("success_rate"))
@@ -100,5 +101,5 @@ def test_render_degrades_on_internal_error(monkeypatch):
     monkeypatch.setattr(print_summary, "_build_fan_chart_html", _boom)
     st = _FakeSt(results=_real_results(), user_overrides={})
     print_summary.render(st)
-    assert st.download_calls == []
-    assert any("boom" in e for e in st.errors)
+    assert callable(st.download_calls[0]["data"])
+    assert "boom" in st.download_calls[0]["data"]()   # the failure shows in the file, not as a crash
