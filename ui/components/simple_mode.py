@@ -543,7 +543,8 @@ def _render_save_load(st, inputs: Dict[str, Any]) -> None:
         st.download_button("Download my answers", data=serialize_checkup(inputs),
                            file_name=f"money_checkup_{date.today().isoformat()}.json",
                            mime="application/json", key="simple_save_download")
-        st.caption("Keep your numbers in a file, or turn on Remember me to keep them on this device.")
+        st.caption("Your numbers stay in this tab. Keep them in a file, or turn on Remember me "
+                   "to keep them after you close it.")
         up = st.file_uploader("Upload saved answers", type=["json"], key="simple_save_upload")
         if up is not None:
             try:

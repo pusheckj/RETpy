@@ -340,8 +340,9 @@ def guardrail_cushion(user_overrides: dict, retirement_age: int) -> Optional[dic
         key = (sr._hashable(user_overrides), int(retirement_age))
     except Exception:
         return None
-    if key in _CUSHION_CACHE:
-        return _CUSHION_CACHE[key]
+    mem_key = sr._mem_key(key)          # the cache is keyed on a digest, not the inputs
+    if mem_key in _CUSHION_CACHE:
+        return _CUSHION_CACHE[mem_key]
     try:
         original = sr._apply_overrides(build_config_overrides(user_overrides))
     except Exception:

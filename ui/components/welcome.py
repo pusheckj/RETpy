@@ -17,6 +17,21 @@ PATHS = [
 ]
 
 
+HOSTED_RESULTS_NOTE = ("To speed things up, recent results stay in server memory for a short "
+                       "time. They are never written to disk.")
+
+
+def privacy_html(hosted: bool) -> str:
+    """The privacy sentence under the two paths. Hosted visitors also hear that
+    results are cached in server memory (keyed on a hash of their inputs)."""
+    text = ("Nothing is stored on the server. Your inputs stay in this browser tab, so a "
+            "refresh keeps them. Closing the tab clears them unless you turn on "
+            "<b>Remember me on this device</b>.")
+    if hosted:
+        text += " " + HOSTED_RESULTS_NOTE
+    return f'<p class="mc-welcome-privacy">{text}</p>'
+
+
 def render(st) -> Optional[str]:
     """Draw the welcome screen; return the chosen mode once a path is picked."""
     st.markdown(
@@ -33,9 +48,6 @@ def render(st) -> Optional[str]:
             if st.button(cta, key=f"welcome_{mode}", width="stretch",
                          type="primary"):
                 chosen = mode
-    st.markdown(
-        '<p class="mc-welcome-privacy">Nothing is stored on the server. '
-        "Your inputs are saved on this device only if you turn on <b>Remember me on this device</b>.</p>",
-        unsafe_allow_html=True,
-    )
+    from utils.hosting import is_hosted
+    st.markdown(privacy_html(is_hosted()), unsafe_allow_html=True)
     return chosen

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (privacy wording and hosted result cache)
+- The Welcome screen, the check-up's save box and Settings now say what is kept where: inputs stay in the browser tab, closing the tab clears them unless Remember me is on, and display choices such as dark mode stay in the browser. Hosted visitors also read that recent results stay in server memory for a short time and are never written to disk (`docs/HOSTING.md` matches)
+- The server's in-memory result caches are keyed on a sha256 of the inputs (`sim_runner._mem_key`), not the inputs themselves. A repeat run still hits. The disk cache keys are unchanged. Covered by `tests/test_sim_cache_privacy.py`
+
 ### Added (results headline: ways to reach your goal, success band, cushion)
 - Retirement tile, under the hero number: **Ways to reach 90%** (or your own target while you are below it; else the next step, 90% then 95%). Rows: retire later (the smallest later age that reaches the goal, plus the one just short of it when close), spend 5-25% less in retirement, your partner works up to 5 years longer (couples), and one year later plus the smallest spending cut. Each row is its own simulation at the main run's count (capped at 2,000) on the main run's market paths, so keeping a change gives exactly the rate shown. Rows that reach the goal are marked; the others show their real value
 - **Try it** previews a change without touching your inputs. **Keep this change** writes it into your inputs, updates the side panel and reruns the plan. **Undo** puts the old values back

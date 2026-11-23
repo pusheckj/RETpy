@@ -8,6 +8,7 @@ Wraps ``retirement_sim.account_simulation.run_monte_carlo_detailed`` to:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import threading
@@ -500,33 +501,41 @@ def run_full_analysis(
 # Manual LRU cache: ``functools.lru_cache`` requires all arguments hashable
 # (dicts are not), so we keep the user-facing signature ergonomic and maintain
 # our own bounded LRU keyed on a pre-flattened tuple.
+def _mem_key(key) -> str:
+    """The in-memory cache key: a sha256 of the flattened inputs. Hosted, these
+    caches are shared by every visitor and live as long as the process, so a key
+    must never hold anyone's raw inputs. (The disk tier hashes the same way.)"""
+    return hashlib.sha256(repr(key).encode("utf-8", errors="replace")).hexdigest()
+
+
 class _SimCache:
     """Bounded LRU of full-analysis results, in front of the disk tier.
     ``functools.lru_cache`` needs hashable arguments (dicts are not), so results
-    are keyed on a pre-flattened tuple."""
+    are keyed on a sha256 of a pre-flattened tuple (``_mem_key``)."""
 
     def __init__(self, maxsize: int = 32):
         self.maxsize = maxsize
-        self._data: Dict[tuple, Dict[str, Any]] = {}
-        self._order: List[tuple] = []
+        self._data: Dict[str, Dict[str, Any]] = {}
+        self._order: List[str] = []
 
     def lookup(self, key) -> Optional[Dict[str, Any]]:
-        if key in self._data:
-            self._order.remove(key)
-            self._order.append(key)
-            return self._data[key]
+        mk = _mem_key(key)
+        if mk in self._data:
+            self._order.remove(mk)
+            self._order.append(mk)
+            return self._data[mk]
         # Disk tier: survives a process restart (Streamlit reloads the whole
         # process on any UI-file edit, which used to throw away every result).
         hit = _disk_load(_disk_key("full", key))
         if hit is not None:
-            self._remember(key, hit)
+            self._remember(mk, hit)
         return hit
 
     def store(self, key, result: Dict[str, Any]) -> None:
         _disk_store(_disk_key("full", key), result)
-        self._remember(key, result)
+        self._remember(_mem_key(key), result)
 
-    def _remember(self, key, result) -> None:
+    def _remember(self, key: str, result) -> None:
         if key in self._data:
             self._order.remove(key)
         self._data[key] = result
@@ -582,23 +591,25 @@ def clear_cache(include_disk: bool = True) -> None:
                 pass
 
 
-def _small_cache_insert(cache: Dict[tuple, Any], key: tuple, value: Any) -> None:
-    """Add to a small cache, evicting the oldest entries above the bound."""
-    cache[key] = value
+def _small_cache_insert(cache: Dict[str, Any], key: tuple, value: Any) -> None:
+    """Add to a small cache, evicting the oldest entries above the bound.
+    Entries are stored under ``_mem_key(key)``: look them up the same way."""
+    cache[_mem_key(key)] = value
     while len(cache) > _SMALL_CACHE_MAX:
         cache.pop(next(iter(cache)))
 
 
-def _small_cache_lookup(cache: Dict[tuple, Any], kind: str, key: tuple):
-    if key in cache:
-        return cache[key]
+def _small_cache_lookup(cache: Dict[str, Any], kind: str, key: tuple):
+    mk = _mem_key(key)
+    if mk in cache:
+        return cache[mk]
     hit = _disk_load(_disk_key(kind, key))
     if hit is not None:
         _small_cache_insert(cache, key, hit)
     return hit
 
 
-def _small_cache_writer(cache: Dict[tuple, Any], kind: str, key: tuple):
+def _small_cache_writer(cache: Dict[str, Any], kind: str, key: tuple):
     def store(result):
         _small_cache_insert(cache, key, result)
         _disk_store(_disk_key(kind, key), result)

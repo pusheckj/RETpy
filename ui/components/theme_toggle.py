@@ -712,3 +712,4 @@ def render(st) -> None:
         help="Colors for chart series. Success, risk and median colors stay the same. "
              "Accounts, income sources and spending buckets change.",
     )
+    st.caption("Display choices such as dark mode are kept in this browser.")
