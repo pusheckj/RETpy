@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 /* =========================================================
    Design tokens (light). Dark mode overrides these in
    components/theme_toggle.py (_DARK_CSS).
@@ -3680,14 +3678,15 @@ html:root .st-key-mc-tile-freedom table.ms-break tr.ms-total td { font-weight: 6
     gap: 0 10px !important;
     width: 100%;
 }
-[class*="st-key-sbx-"] > [data-testid="stElementContainer"]:first-child {
+[class*="st-key-sbx-"] > [data-testid="stElementContainer"] {
     flex: 1 1 120px !important;
     min-width: 0 !important;
 }
-[class*="st-key-sbx-"] > [data-testid="stElementContainer"]:last-child {
+/* The number box carries a key ending "__box" (utils/slider_input.py), so it is found by name,
+   not by its position. */
+[class*="st-key-sbx-"] > [data-testid="stElementContainer"][class*="__box"] {
     flex: 0 0 76px !important;
     width: 76px !important;
-    min-width: 0 !important;
     margin-bottom: 10px;                 /* the slider's tick labels sit below its track */
 }
 [class*="st-key-sbx-"] [data-testid="stNumberInputStepUp"],
@@ -3703,6 +3702,10 @@ html:root .st-key-mc-tile-freedom table.ms-break tr.ms-total td { font-weight: 6
 [class*="st-key-sbx-"] .stSlider { padding-bottom: 10px; }
 section[data-testid="stMain"] [class*="st-key-sbx-"] { margin-bottom: 6px; }
 /* -- end Sliders with a typed box -- */
+
+/* The bridge tile is always drawn (so the page layout does not shift when results arrive).
+   Before a run it holds nothing: no border, no height. */
+.st-key-mc-tile-bridge:not(:has(.stPlotlyChart, .stMarkdown, [data-testid="stMarkdown"])) { display: none; }
 
 /* ==========================================================================
    Debt payoff (components/debt_payoff.py) and the Debts section's rows

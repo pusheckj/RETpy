@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (speed: stable page structure, lighter theme)
+- The "inputs changed" warning, the setup banner and the Bridge to 59½ tile now always hold their place in the page. Before, each one appearing or disappearing moved everything below it, and the browser rebuilt about 45 charts (a freeze of about 2.4 s). An empty Bridge tile is hidden by CSS until a run finishes. The Retirement tile's "Run a simulation" hint has its own slot too
+- The theme CSS is sent without comments (about 70 KB less per page load, `utils/css_min.py`, cached per file version). The unused Inter web-font import is gone: the chosen font is still loaded by the theme setting
+- Slider rows find their typed box by its key instead of its position (fewer style rules to check on every page change)
+- The printable summary is built when you click Download, not on every rerun
 ### Added (results headline: ways to reach your goal, success band, cushion)
 - Retirement tile, under the hero number: **Ways to reach 90%** (or your own target while you are below it; else the next step, 90% then 95%). Rows: retire later (the smallest later age that reaches the goal, plus the one just short of it when close), spend 5-25% less in retirement, your partner works up to 5 years longer (couples), and one year later plus the smallest spending cut. Each row is its own simulation at the main run's count (capped at 2,000) on the main run's market paths, so keeping a change gives exactly the rate shown. Rows that reach the goal are marked; the others show their real value
 - **Try it** previews a change without touching your inputs. **Keep this change** writes it into your inputs, updates the side panel and reruns the plan. **Undo** puts the old values back
