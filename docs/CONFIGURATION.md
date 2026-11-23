@@ -135,6 +135,8 @@ YOUR_COMPENSATION_BY_AGE = {
 
 Keys per age: `base`, `bonus`, `rsu_gross`, `total_comp` (the wages that are taxed) and `saved` (the brokerage contribution in *Manual* savings mode only; *Auto* modes invest whatever is left after spending).
 
+`EXTRA_ANNUAL_SAVINGS` (default `0`, today's dollars) adds money to your taxable brokerage each working year on top of either savings mode. The What-if tile's *Extra annual savings* lever sets it.
+
 Take-home is **computed**, not entered: `working_year_taxes()` applies the 2026 federal brackets and standard deduction for your filing status, your state's table, FICA per earner (6.2% up to the $184,500 wage base, 1.45% Medicare, 0.9% above $200k/$250k), after your pre-tax 401(k) and HSA contributions. A row may still carry an `after_tax` value to force a known take-home (pay after taxes **and** after 401(k)/HSA deferrals); older profiles whose rows hold the app's old automatic 70% figure have it removed on load so the computed value is used.
 
 | Parameter | Default | Description |

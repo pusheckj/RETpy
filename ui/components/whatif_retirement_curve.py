@@ -75,10 +75,9 @@ def _alt_overrides(st, base: dict) -> dict:
                         if mode.startswith("%") else 1.0)
             alt["RETIREMENT_SPENDING_MODE"] = "% of today's expenses"
             alt["RETIREMENT_SPENDING_PCT"] = plan_pct * spend_pct
-    # Extra annual savings routed to the taxable brokerage on top of the plan.
+    # Extra annual savings, invested in the taxable brokerage on top of the plan.
     if extra_savings:
-        cur_brk = safe_int(base.get("YOUR_BROKERAGE_CONTRIBUTION", 0), 0)
-        alt["YOUR_BROKERAGE_CONTRIBUTION"] = cur_brk + extra_savings
+        alt["EXTRA_ANNUAL_SAVINGS"] = safe_int(base.get("EXTRA_ANNUAL_SAVINGS", 0), 0) + extra_savings
     return alt
 
 
@@ -131,7 +130,8 @@ def render(st, results: dict = None) -> None:
                         unit="%", value=100.0, help="Retirement living costs compared with your plan. 100% means the same.")
         st.number_input("Extra annual savings ($/yr)", min_value=0, max_value=200_000,
                         step=1_000, key="wifc_savings", value=0,
-                        help="Extra yearly savings, added to your taxable brokerage.")
+                        help="Extra money invested each working year, on top of what your plan already saves. "
+                             "It goes into your taxable brokerage.")
     with c2:
         slider_with_box(st, "Investment fees (bps)", 0, 150, 5, key="wifc_fee", unit=" bps", value=d_fee,
                         help="Yearly fund fees. 100 bps is 1% of your balance.")

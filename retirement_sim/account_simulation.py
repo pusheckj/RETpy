@@ -2675,6 +2675,12 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
             )
         portfolio.contribute("partner_brokerage", max(0, to_brokerage_partner))
 
+    # Extra savings on top of the plan (What-if lever). Added after both savings
+    # branches, so it is never a floor (Auto) or a replacement (Manual).
+    extra_savings = float(getattr(cfg, "EXTRA_ANNUAL_SAVINGS", 0) or 0)
+    if extra_savings > 0:
+        portfolio.contribute("your_brokerage", extra_savings)
+
     # ------------------------------------------------------------------
     # ESPP discount benefit (CONSERVATION #18c). YOUR_ESPP_PCT and
     # YOUR_ESPP_DISCOUNT were previously read by no engine function (dead inputs).
