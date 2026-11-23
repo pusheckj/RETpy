@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Added (assumption presets)
+- Assumptions: two buttons at the top, **All conservative assumptions** and **All typical assumptions**. One click sets 26 assumptions for you: the return set, stock mix, glide path, fee, inflation, plan-until ages, Social Security share paid from 2033, success target, spending guardrails, long-term care (cost and yearly chance), spend-less-later, salary growth, Rule of 55 and the Roth ladder. You no longer need to know good numbers
+- The presets read your situation. A longer retirement gets a bond tent, a higher success target and a lower-return set. A short one eases into bonds. Couples get a longer plan-until age and double the care chance. A loan keeps conservative inflation at 2.5%. Younger people get a lower Social Security share. Early retirees get the Roth ladder (and the Rule of 55 for typical). Salary growth is left alone if you edited your pay table. Rules and sources: `docs/METHODOLOGY.md`, section 15.3
+- A **What changed** box lists each old and new value, with a "Why these numbers?" list. **Undo** puts the old values back exactly, until you edit one of them. The status line says Typical, Conservative, Custom (naming what you changed) or "set for your old plan" when your retirement age or household changed. It compares your settings with both presets, so it works after Remember me, a reload or a profile load
+- The section is now titled **Assumptions** (was Assumptions (advanced)). Investments, Returns and mix points to it
+- New `ui/utils/assumption_presets.py` (pure rules and callbacks) and `ui/components/assumption_presets.py`. `assume_` is added to `widget_sync._EXTRA_INPUT_PREFIXES`. No engine change: every preset key already existed in `retirement_sim.config`
+
 ### Added (results headline: ways to reach your goal, success band, cushion)
 - Retirement tile, under the hero number: **Ways to reach 90%** (or your own target while you are below it; else the next step, 90% then 95%). Rows: retire later (the smallest later age that reaches the goal, plus the one just short of it when close), spend 5-25% less in retirement, your partner works up to 5 years longer (couples), and one year later plus the smallest spending cut. Each row is its own simulation at the main run's count (capped at 2,000) on the main run's market paths, so keeping a change gives exactly the rate shown. Rows that reach the goal are marked; the others show their real value
 - **Try it** previews a change without touching your inputs. **Keep this change** writes it into your inputs, updates the side panel and reruns the plan. **Undo** puts the old values back

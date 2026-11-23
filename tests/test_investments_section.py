@@ -1,7 +1,7 @@
 """The Investments sidebar section.
 
 It holds the old Savings section ("Saving each year") and the investing half of
-Assumptions ("Returns and mix"). Assumptions (advanced) keeps spending rules and
+Assumptions ("Returns and mix"). Assumptions keeps the presets, spending rules and
 pre-Medicare healthcare; "Retirement goals" is now "Retirement". Widget keys,
 override keys and saved-profile values did not change.
 """
@@ -24,7 +24,7 @@ from utils.derived import KEEP_AMOUNTS_MODE, MANUAL_MODE, SAVINGS_MODES  # noqa:
 from utils.widget_sync import DIRECT_MAPPINGS  # noqa: E402
 
 SECTION_ORDER = ["About you", "Family", "Income", "Taxes", "House", "Expenses", "Debts",
-                 "Accounts", "Investments", "Retirement", "Assumptions (advanced)"]
+                 "Accounts", "Investments", "Retirement", "Assumptions"]
 
 RETURNS_AND_MIX_KEYS = {"sa_scenario", "sa_stock_alloc", "sa_fee_bps",
                         "sa_inflation", "sa_glide_enable", "sa_glide_start", "sa_glide_end",
@@ -86,7 +86,7 @@ def test_section_titles_and_icons():
     comp = os.path.join(_UI, "components")
     assert _labels(os.path.join(comp, "sec_investments.py")) == [("Investments", "trending_up")]
     assert _labels(os.path.join(comp, "sec_retirement_goals.py")) == [("Retirement", "flag")]
-    assert _labels(os.path.join(comp, "sec_assumptions.py")) == [("Assumptions (advanced)", "tune")]
+    assert _labels(os.path.join(comp, "sec_assumptions.py")) == [("Assumptions", "tune")]
     assert _labels(os.path.join(comp, "account_inputs.py")) == [("Accounts", "account_balance")]
     # Savings is no longer a section of its own
     assert _labels(os.path.join(comp, "sec_savings.py")) == []

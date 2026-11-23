@@ -456,6 +456,34 @@ The planner's **Freedom milestones** section (`ui/utils/milestones.py`, `ui/util
 - **Carrying cost and insurance.** A place's carry rate (property tax + insurance, a share of the price a year) is what the plan's `HOME_CARRYING_COST_PCT` is (default 1.35%, an existing owner's), so it is used the same way and never added on top of it: a purchase replaces the plan's housing at that age (the old home's payment, tax and insurance are dropped), the new home pays its own rate, and renters pay none. The place rates run higher than the default because a new buyer's assessment resets (California about 1.15% tax, not the 0.70% average-owner rate) and 2026 insurance is dear in some states (Florida 4.2% in all). One small overlap remains: home insurance you pay outside a mortgage and enter under Other stays in Other (scaled by services prices), while the new home's carry also includes insurance. Enter home insurance with your housing cost to avoid it. Confirm passes the rate as the purchase's `carrying_pct`.
 - **Places abroad** use "no state income tax" as a placeholder. US federal tax still applies; foreign tax, treaties, visas and currency are not modeled. Health insurance abroad is a local private plan (about age 40) applied as a ratio to the pre-Medicare marketplace price; Medicare years stay as planned.
 
+## 15.3 Assumption presets (UI)
+
+The planner's **Assumptions** section starts with two buttons, **All conservative assumptions** and **All typical assumptions**. A click sets 26 assumptions at once (`ui/utils/assumption_presets.py`, `compute_preset`), so a user does not need to know what a good number is. The rules read only facts about the household and never the assumption values already set, so the same situation always gets the same preset. A "What changed" box lists each old and new value, and **Undo** puts the old values back until one of them is edited.
+
+Facts read: your age A, your partner's age P (0 for a single), the target retirement age R, the Social Security claim age, and whether there is a loan (a mortgage balance or payment, or any `DEBTS`). Derived timeline: plan end E in your age (the later of your plan-until age and your partner's, as `config.plan_end_age`), years to retirement Y = max(0, R - A), years left in the plan YL = E - A, and retirement horizon H = E - max(R, A).
+
+| Setting | Conservative | Typical | Reason |
+| --- | --- | --- | --- |
+| Plan-until age (each person, by own age) | 100 | Single: under 50 is 100, 50-84 is 95, 85+ is 100. Couple: under 50 is 100, 50-59 is 96, 60+ is 95 | Longevity research. Never below age + 1 or above the slider's 100 |
+| Return scenario | Forward-looking if YL > 35, else Pessimistic | Conservative set if YL > 35, else Forward-looking | A blend of forecasts for 10 years, then half the gap to history, averages about the Conservative set over 60 years and nearer Forward-looking over 30. The crossover is about 35 years. Historical is never used |
+| Stock % while working | Average of a standard glide schedule (anchors by years to retirement: 25+ is 90, 20 is 85, 15 is 74, 10 is 62, 5 is 56, 0 is 50) over years 1 to Y, rounded to 5, never below the share at retirement | Same | The engine holds one mix while you work, so the average is the single honest number |
+| Glide path | Always a bond tent. H up to 30: 40% to 60% over 10 years. H 31-40: 40% to 60% over 15. H over 40: 50% to 70% over 15 | H up to 30: ease into bonds, 50% at retirement to 40% at 75. H 31-40: tent 50% to 60%, 10 years. H over 40: tent 60% to 70%, 10 years | Every standard glide path de-risks near retirement. Rising equity protects against a crash at the start |
+| Investment fee | 30 bps | 10 bps | Typical index fund. The target-date average is 27 bps, rounded up to the slider step |
+| Expected inflation | 3.0%, or 2.5% with a loan | 2.5% | Higher inflation shrinks fixed loan payments, so with a loan a higher rate could flatter the plan |
+| Social Security paid from 2033 | min(75%, the Trustees path at the middle of your benefit years). The path is 78% falling 14.5 points by 2100 | 78% | About 78% stays payable with no fix |
+| Success target | 90% if H up to 35, else 95% | 85% if H up to 35, else 90% | Longer retirements have more room for bad luck |
+| Spending guardrails | On | On | People cut spending after a big drop |
+| Cut spending after down years | Off | On | A cautious plan does not count on a cut every year |
+| Spend less later | 0% from 75 | 15% from 75 | Real spending falls with age in the research. Conservative assumes flat |
+| Pre-Medicare marketplace costs | On | On | Off removes the premiums entirely, which flatters the plan. Prices are never touched |
+| Long-term care | On, from 83, $130,000 a year | On, from 83, $115,000 a year | Nursing home, private and semi-private room |
+| Chance of care each year | 2.6 expected care-years x people / years of exposure, rounded to 5% (5-100%) | 1.3 x people / years | Two people double it because the engine draws once per household year |
+| Salary growth (real, by own age) | Under 45: 0.5%. 45+: 0% | Under 35: 1.5%. 35-44: 1.0%. 45-54: 0.5%. 55+: 0% | Pay flattens after the mid-40s. Skipped when the pay table was edited by hand |
+| Roth ladder 5-year rule | On if R is under 60 | Same | Stricter and more realistic. No effect from 59.5 |
+| Rule of 55 | Off | On if 55 <= R < 60 | Works only if you leave that employer at 55 or later |
+
+Not set by a preset, because they are personal facts or strategies: balances, pay, spending, children, mortgage, Social Security claim ages and amounts, state and tax rates, Roth conversion settings, marketplace prices, the lifecycle pattern, the go-go extra, 72(t) and Coast FIRE. The Social Security on/off switch and the number of simulations are not assumptions either. The preset values are plain config values, so no engine change was needed.
+
 ---
 
 ## 16. Known limitations

@@ -464,7 +464,9 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "ay_partn
 #             user_overrides["MS_PLACES"] and load with the profile.
 #   debt_     the Debts section (one set of row widgets per debt, plus the extra payment
 #             and payoff order) and the Debt payoff tile's "pay more" amount.
-_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_")
+#   assume_   the Assumptions presets: the Undo snapshot (assume_last) belongs to the plan
+#             it was taken on, so a profile switch or JSON load must drop it.
+_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_", "assume_")
 
 
 def reset_input_widget_state(st) -> None:
