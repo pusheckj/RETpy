@@ -1000,7 +1000,9 @@ def render(st, **_kwargs) -> None:
 
     sig_last = [x["last"] for x in data["sources"] if x["rows"] >= 20]
     chart_end = max(end, min(sig_last).to_period("M")) if sig_last else end
-    t_over, t_trend, t_tx, t_data = st.tabs(["Overview", "Trends", "Transactions", "Data"])
+    from utils import persist
+    labels = ["Overview", "Trends", "Transactions", "Data"]
+    t_over, t_trend, t_tx, t_data = st.tabs(labels, default=persist.tab_default("mc-spending-tabs", labels))
 
     with t_over:
         left, right = st.columns(2)

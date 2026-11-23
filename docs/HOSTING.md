@@ -14,10 +14,13 @@ the first time; after that, every `git push` redeploys the app.
   questions each, with a "how to answer" line under every question). Anyone
   coming from the check-up starts with those answers filled in. *Skip for now*
   goes straight to the planner; a banner offers to finish later.
-- Their inputs live in their own browser session. *Remember me on this device*
-  keeps them (and how far they got in the setup) in that browser only, so
-  they're back after a reload or an app update; *Settings → Save* downloads
-  them to their computer.
+- Their inputs stay in their own browser tab (sessionStorage), so a refresh keeps
+  them, along with the open version, the setup step, pinned scenarios and the open
+  tabs. Closing the tab clears them. *Remember me on this device* also keeps the
+  inputs (and how far they got in the setup) in that browser after the tab closes
+  (localStorage), so they're back after an app update; turning it off removes that
+  copy. Display choices such as dark mode are kept in the browser too (no inputs).
+  The server stores none of it. *Settings → Save* downloads the inputs to their computer.
 - A Spending tab that analyses statements **they upload** (CSV, PDF, optional
   rules JSON). Files are parsed in memory for that session only and never
   saved. The hosted app never reads the server's folders. *Use my actual
@@ -100,7 +103,7 @@ your statements folder.
   12 MB, then cached) in parallel Web Workers. The server keeps the quick,
   detailed part of each result. Same code and same random seeds, so the numbers
   match the server's (checked: identical, or within 2 parts in 10^15 for dollar
-  medians). Nothing is stored on the server; saved data stays on the visitor's device only if they turn on *Remember me*. If a
+  medians). Nothing is stored on the server. Inputs stay in the visitor's browser tab, and after the tab closes only if they turn on *Remember me*. If a
   browser can't help (old browser, blocked CDN, too slow), the server does the
   work instead; the main result never waits for the download.
 - **Speed:** the free tier has little CPU. 500 simulations is the hosted

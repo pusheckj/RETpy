@@ -35,7 +35,8 @@ def render(st) -> Optional[str]:
                 chosen = mode
     st.markdown(
         '<p class="mc-welcome-privacy">Nothing is stored on the server. '
-        "Your inputs are saved on this device only if you turn on <b>Remember me on this device</b>.</p>",
+        "Your inputs stay in this browser tab, so a refresh keeps them. "
+        "Closing the tab clears them unless you turn on <b>Remember me on this device</b>.</p>",
         unsafe_allow_html=True,
     )
     return chosen

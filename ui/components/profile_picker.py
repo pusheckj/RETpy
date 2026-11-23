@@ -198,6 +198,10 @@ def render(st) -> None:
             "_device_store_retpy", "_device_restored", "_device_skip", "remember_device",
             "remember_device_toggle",
             "app_mode", "simple_inputs", "_full_touched", "setup",
+            # Tab autosave (utils/persist.py): view choices, viewport, open tabs, the
+            # "nothing edited yet" fingerprint and the profile file's hash at session start.
+            "_view_saved", "_viewport_narrow", "_view_tabs", "_persist_seed_sig", "_persist_base",
+            "_forgot_pending", "_forgot_sig",
             # Auto-run fires ONCE per browser session, on first page open only.
             # Without preserving this, the wildcard sweep below deletes it and a
             # profile switch silently kicks off a full (~95s cold) simulation

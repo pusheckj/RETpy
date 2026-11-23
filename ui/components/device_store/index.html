@@ -7,21 +7,31 @@
 <body>
 <script>
 /*
- * On-device storage bridge for utils/device_store.py (Streamlit custom
+ * Browser-storage bridge for utils/device_store.py (Streamlit custom
  * component, plain JS, no build step).
  *
  * This iframe is served from the Streamlit app's own origin, so
- * window.localStorage here IS the app origin's storage. It never makes a
- * network request: its only channel is postMessage to its same-origin parent
- * (the Streamlit app frame), which relays values to this browser's session.
+ * window.localStorage / window.sessionStorage here ARE the app origin's
+ * storage. It never makes a network request: its only channel is postMessage
+ * to its same-origin parent (the Streamlit app frame), which relays values to
+ * this browser's session.
+ *
+ * Four storage targets, each in its own try so one blocked store never hides
+ * the others:
+ *   tab    sessionStorage["retpy"]       this tab's inputs, always on, gone when the tab closes
+ *   device localStorage["retpy"]         "Remember me": kept after the tab closes
+ *   prefs  localStorage["retpy-prefs"]   display choices (theme, font, simulation count), no inputs
+ *   view   sessionStorage["mcView"]      read only here: {scrollY, tabs:{group: label}}, written by the page script
  *
  * Render args (from Python):
- *   storage_key  localStorage key
- *   read_token   reader instance only: read once per distinct token and
- *                post {kind:"read", token, ok, raw|error}
- *   op           writer instance only: {kind:"set", sig, value} or
- *                {kind:"remove", sig}; applied once per distinct sig.
- *                Posts {kind:"write_error", sig, error} only if it throws.
+ *   storage_key  base key ("retpy")
+ *   read_token   reader instance only: read once per distinct token and post
+ *                {kind:"read", token, ok, tab, device, prefs, view_client, narrow}
+ *                where tab/device/prefs are {ok:true, raw} or {ok:false, error}
+ *   op           writer instance only, applied once per distinct sig:
+ *                {kind:"set", sig, tab?, device?, prefs?, drop_tab?, drop_device?}   (strings are written as is)
+ *                {kind:"remove", sig, targets?}   (default: tab, device and view)
+ *                Posts {kind:"write_error", sig, target, error} for a target that throws.
  *   scope        writer instance only: per-session id for the dedupe marker
  *
  * To avoid rerun loops it posts a value ONLY for a new read token or a failed
@@ -32,9 +42,12 @@
 
   var ORIGIN = window.location.origin;
   // Same-origin only: the stored envelope must never be handed to a foreign
-  // embedding page. An opaque ("null") origin cannot touch localStorage at
-  // all, so in that case only error messages can ever be posted.
+  // embedding page. An opaque ("null") origin cannot touch storage at all, so
+  // in that case only error messages can ever be posted.
   var TARGET = ORIGIN && ORIGIN !== "null" ? ORIGIN : "*";
+  var PREFS_SUFFIX = "-prefs";
+  var VIEW_KEY = "mcView";
+  var NARROW_QUERY = "(max-width: 640px), (hover: none) and (pointer: coarse) and (max-height: 500px) and (max-width: 960px)";
 
   var readTokens = {};  // tokens already answered
   var lastSig = null;   // last op applied (or attempted)
@@ -67,35 +80,87 @@
     return String((e && (e.name || e.message)) || e || "Error");
   }
 
-  function applyOp(storageKey, op, scope) {
-    if (!op || !op.sig || op.sig === lastSig) return;
-    lastSig = op.sig;
-    var stamp = String(scope || "") + "|" + op.sig;
-    if (alreadyApplied(storageKey, stamp)) return;
+  function store(area) { return area === "session" ? window.sessionStorage : window.localStorage; }
+
+  // ---- reading -----------------------------------------------------------
+
+  function readTarget(area, key) {
+    try { return { ok: true, raw: store(area).getItem(key) }; }
+    catch (e) { return { ok: false, error: errorName(e) }; }
+  }
+
+  function readView() {
     try {
-      if (op.kind === "set") {
-        window.localStorage.setItem(storageKey, op.value);
-      } else if (op.kind === "remove") {
-        window.localStorage.removeItem(storageKey);
-      }
-      markApplied(storageKey, stamp);
-    } catch (e) {
-      setValue({ kind: "write_error", sig: op.sig, error: errorName(e) });
-    }
+      var raw = window.sessionStorage.getItem(VIEW_KEY);
+      var v = raw ? JSON.parse(raw) : null;
+      return v && typeof v === "object" ? v : null;
+    } catch (e) { return null; }
+  }
+
+  function isNarrow() {
+    try { return !!window.parent.matchMedia(NARROW_QUERY).matches; } catch (e) { return null; }
   }
 
   function read(storageKey, token) {
     if (!token || readTokens[token]) return;
     readTokens[token] = true;
-    var msg = { kind: "read", token: token };
-    try {
-      msg.raw = window.localStorage.getItem(storageKey);
-      msg.ok = true;
-    } catch (e) {
-      msg.ok = false;
-      msg.error = errorName(e);
-    }
+    var tab = readTarget("session", storageKey);
+    var device = readTarget("local", storageKey);
+    var prefs = readTarget("local", storageKey + PREFS_SUFFIX);
+    var msg = { kind: "read", token: token, tab: tab, device: device, prefs: prefs,
+                ok: !!(tab.ok || device.ok), view_client: readView(), narrow: isNarrow() };
+    if (!msg.ok) msg.error = tab.error || device.error || "storage unavailable";
     setValue(msg);
+  }
+
+  // ---- writing -----------------------------------------------------------
+
+  // A quota error retries once without the heaviest optional parts of the
+  // envelope (pins, then the view state); inputs are never dropped.
+  function slim(value) {
+    try {
+      var env = JSON.parse(value);
+      if (env && env.payload) { delete env.payload.pins; delete env.payload.view; }
+      return JSON.stringify(env);
+    } catch (e) { return value; }
+  }
+
+  function writeTarget(sig, name, area, key, value) {
+    try {
+      try {
+        store(area).setItem(key, value);
+      } catch (e) {
+        if (errorName(e).indexOf("Quota") < 0 && e && e.code !== 22) throw e;
+        store(area).setItem(key, slim(value));
+      }
+    } catch (e) {
+      setValue({ kind: "write_error", sig: sig, target: name, error: errorName(e) });
+    }
+  }
+
+  function removeTarget(sig, name, area, key) {
+    try { store(area).removeItem(key); }
+    catch (e) { setValue({ kind: "write_error", sig: sig, target: name, error: errorName(e) }); }
+  }
+
+  function applyOp(storageKey, op, scope) {
+    if (!op || !op.sig || op.sig === lastSig) return;
+    lastSig = op.sig;
+    var stamp = String(scope || "") + "|" + op.sig;
+    if (alreadyApplied(storageKey, stamp)) return;
+    if (op.kind === "set") {
+      if (typeof op.tab === "string") writeTarget(op.sig, "tab", "session", storageKey, op.tab);
+      else if (op.drop_tab) removeTarget(op.sig, "tab", "session", storageKey);
+      if (typeof op.device === "string") writeTarget(op.sig, "device", "local", storageKey, op.device);
+      else if (op.drop_device) removeTarget(op.sig, "device", "local", storageKey);
+      if (typeof op.prefs === "string") writeTarget(op.sig, "prefs", "local", storageKey + PREFS_SUFFIX, op.prefs);
+    } else if (op.kind === "remove") {
+      var targets = Array.isArray(op.targets) && op.targets.length ? op.targets : ["tab", "device", "view"];
+      if (targets.indexOf("tab") >= 0) removeTarget(op.sig, "tab", "session", storageKey);
+      if (targets.indexOf("device") >= 0) removeTarget(op.sig, "device", "local", storageKey);
+      if (targets.indexOf("view") >= 0) removeTarget(op.sig, "view", "session", VIEW_KEY);
+    }
+    markApplied(storageKey, stamp);
   }
 
   window.addEventListener("message", function (event) {

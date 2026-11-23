@@ -616,63 +616,96 @@ def _resolve_mode():
     return None
 
 
+# The only CSS the first run sends: the real stylesheet (224 KB) and the animation engine wait
+# for the browser's answer, so the answer reaches the page first. The text appears after 250 ms,
+# so a quick load never flashes "Loading…".
+_LOADING_CSS = (
+    "<style>"
+    ".st-key-mc-loading { max-width: 420px; margin: 20vh auto 0; text-align: center; }"
+    ".mc-loading { color: #64748b; font-size: 16px; opacity: 0; animation: mcLoadingIn 0.2s ease 250ms forwards; }"
+    "@keyframes mcLoadingIn { to { opacity: 1; } }"
+    ".st-key-mc-loading .stButton { opacity: 0; pointer-events: none; animation: mcShowLate 0s 6s forwards; }"
+    "@keyframes mcShowLate { to { opacity: 1; pointer-events: auto; } }"
+    "</style>"
+)
+
+
 def _loading_screen() -> None:
-    """Shown for the instant the browser takes to report saved data."""
+    """Shown for the instant the browser takes to report saved data. A timer ends it after
+    LOAD_TIMEOUT_S even when no answer ever comes (a rerun that never happens cannot check the clock)."""
+    from utils import device_store
+    started = (st.session_state.get(device_store.STATE_KEY_PREFIX + device_store.DEFAULT_KEY) or {}).get("started")
+    st.markdown(_LOADING_CSS, unsafe_allow_html=True)
     with st.container(key="mc-loading"):
         st.markdown('<div class="mc-loading">Loading…</div>', unsafe_allow_html=True)
         if st.button("Continue", key="device_skip", type="tertiary"):
             st.session_state._device_skip = True
             st.rerun()
 
+        @st.fragment(run_every=0.5)
+        def _give_up_when_slow():
+            if started is not None and device_store.timed_out(started):
+                st.rerun(scope="app")
+        _give_up_when_slow()
+
+
+def _persist_sig() -> str:
+    """Hash of everything the app would save right now (to tell 'nothing was edited' from 'edited')."""
+    from utils import device_store, persist
+    return device_store.payload_hash({"p": list(persist.build_payload(st.session_state))})
+
 
 def _restore_from_device(store) -> None:
-    """Once per session: bring back what the visitor chose to remember."""
+    """Once per session, before the sidebar and the auto-run draw: bring back this tab's inputs
+    (a refresh), or what the visitor chose to remember on this device, or the owner's profile file.
+    Display choices come back for everyone. An answer that arrives after Continue is used only if
+    nothing was edited since (otherwise the current state is the newest work)."""
     if st.session_state.get("_device_restored") or store["status"] != "ready":
         return
     st.session_state._device_restored = True
-    data = store.get("data") or {}
-    if not data.get("remember"):
+    seed = st.session_state.get("_persist_seed_sig")
+    if st.session_state.get("_device_skip") and seed is not None and seed != _persist_sig():
         return
-    st.session_state.remember_device = True
-    if data.get("mode") in ("simple", "full"):
-        st.session_state.app_mode = data["mode"]
-    try:
-        if isinstance(data.get("simple"), dict):
-            from utils.simple_finance import normalize_inputs
-            st.session_state.simple_inputs = normalize_inputs(data["simple"])
-        if isinstance(data.get("full"), str):
-            from utils.profile_io import deserialize_overrides
-            from utils.widget_sync import sync_widgets_from_overrides
-            st.session_state.user_overrides = deserialize_overrides(data["full"])
-            sync_widgets_from_overrides(st)
-        from components import guided_setup
-        setup = guided_setup.restore(data.get("setup"))
-        if setup:
-            st.session_state[guided_setup.STATE] = setup
-        elif isinstance(data.get("full"), str):
-            guided_setup.mark_done(st)           # saved before the walkthrough existed
-    except Exception:  # an unreadable saved copy must never break the app
-        pass
+    from utils import device_store, persist
+    fp = persist.file_fp()
+    st.session_state._persist_base = fp
+    persist.apply_prefs(st, store.get("prefs"), SIM_COUNT_OPTIONS)
+    source, data = persist.pick(store.get("tab"), store.get("device"), fp)
+    if source == "file":
+        st.toast(persist.OWNER_NOTICE, duration="long")
+    if data is None:
+        return
+    failed = persist.apply(st, data, source)
+    if persist.critical_failure(failed):
+        st.toast(persist.RESTORE_FAILED, duration="long")
+        if source == "tab":
+            device_store.drop_tab(st)
 
 
 def _save_to_device() -> None:
-    """If the visitor turned on Remember me, keep their inputs in their browser.
-    (device_store writes only when something changed.)"""
-    if not st.session_state.get("remember_device"):
+    """Keep the visitor's inputs in their own browser. The tab copy is always on (a refresh keeps
+    it); the device copy only while Remember me is on. device_store writes only what changed."""
+    from utils import device_store, persist
+    ss = st.session_state
+    store = ss.get(device_store.STATE_KEY_PREFIX + device_store.DEFAULT_KEY)
+    if not isinstance(store, dict) or store.get("status") != "ready":
         return
-    payload = {"remember": True, "mode": st.session_state.get("app_mode")}
-    if isinstance(st.session_state.get("simple_inputs"), dict):
-        payload["simple"] = st.session_state.simple_inputs
-    if st.session_state.get("app_mode") == "full" or st.session_state.get("_full_touched"):
-        from utils.profile_io import serialize_overrides
-        payload["full"] = serialize_overrides(st.session_state.user_overrides)
-        st.session_state._full_touched = True
-    setup = st.session_state.get("setup")
-    if isinstance(setup, dict):
-        payload["setup"] = {k: setup.get(k) for k in ("status", "step", "seen", "checkup")}
     try:
-        from utils import device_store
-        device_store.save(st, payload)
+        if ss.get("app_mode") == "full":
+            ss._full_touched = True
+        ss._view_saved = persist.mirror_view(ss)
+        if "_persist_base" not in ss:
+            ss._persist_base = persist.file_fp()
+        sig = _persist_sig()
+        if ss.get("_forgot_pending") or ss.get("_forgot_sig"):
+            # Forget was pressed: the tab copy stays gone until something is edited.
+            if ss.pop("_forgot_pending", False):
+                ss._forgot_sig = sig
+            if ss.get("_forgot_sig") == sig:
+                return
+            ss.pop("_forgot_sig", None)
+        tab, device, prefs = persist.build_payload(ss)
+        device_store.save(st, tab, device, prefs)
     except Exception:
         pass
 
@@ -681,26 +714,33 @@ def _privacy_controls(_st) -> None:
     """Remember me on this device + Forget my data (both versions)."""
     from utils import device_store
     state = st.session_state.get(device_store.STATE_KEY_PREFIX + device_store.DEFAULT_KEY) or {}
-    unavailable = state.get("status") == "unavailable"
+    targets = state.get("targets") or {}
+    unavailable = state.get("status") == "unavailable" or targets.get("device", "ok") != "ok"
+    tab_blocked = state.get("status") == "unavailable" or targets.get("tab", "ok") != "ok"
     # The setting lives in a plain session key: Streamlit drops a widget's
     # value after any run that doesn't draw it (e.g. a run cut short by the
     # first simulation), which silently switched saving off.
     if "remember_device_toggle" not in st.session_state:
         st.session_state.remember_device_toggle = bool(st.session_state.get("remember_device"))
     on = _st.toggle("Remember me on this device", key="remember_device_toggle", disabled=unavailable,
-                    help="Saves your inputs in this browser so they're here next time. "
-                         "The server doesn't store them.")
+                    help="Keeps your inputs in this browser after you close the tab. "
+                         "The server doesn't store them. Turning this off removes the saved copy.")
     st.session_state.remember_device = bool(on)
-    if unavailable:
-        _st.caption("This browser is blocking saving (private browsing?), so your inputs won't be remembered.")
+    if tab_blocked:
+        _st.caption("This browser is blocking storage (private browsing?). A refresh will lose your inputs.")
     elif on:
         _st.caption("Your inputs are saved in this browser only.")
+    else:
+        _st.caption("Your inputs are kept in this tab until you close it.")
     if _st.button("Forget my data on this device", key="device_forget", type="tertiary",
-                  icon=":material/delete:"):
+                  icon=":material/delete:", help="Removes your saved inputs from this tab and this browser."):
         device_store.forget(st)
         st.session_state.remember_device = False
         st.session_state.pop("remember_device_toggle", None)
+        st.session_state.pop("_view_saved", None)
+        st.session_state["_forgot_pending"] = True
         st.rerun()
+    _st.caption("Display choices such as dark mode are kept in this browser.")
 
 
 MODES = {"simple": "Money check-up", "full": "Retirement planner"}
@@ -913,8 +953,23 @@ def _spending_stats(st) -> list:
 
 
 def main() -> None:
-    _inject_css()
+    # Saved inputs live only in the visitor's own browser: this tab's copy always (a refresh keeps
+    # it), a device copy only with "Remember me". The first run of each session waits for the
+    # browser's one answer, so the welcome screen doesn't flash before a saved copy is restored.
+    # That run sends only a tiny loading style: the full stylesheet and the animation engine wait
+    # for run 2, so the answer reaches the page first.
+    from utils import device_store
+    store = device_store.sync(st)
+    if store["status"] == "loading" and not st.session_state.get("_device_skip"):
+        _loading_screen()
+        st.stop()
     _init_state()
+    if (store["status"] == "loading" and st.session_state.get("_device_skip")
+            and "_persist_seed_sig" not in st.session_state):
+        # Continue was pressed before the answer came: remember what "nothing edited" looks like.
+        st.session_state._persist_seed_sig = _persist_sig()
+    _restore_from_device(store)
+    _inject_css()
 
     # Dark-mode + font CSS must be injected always (not only when the Settings
     # popover is open), so it happens here at the top based on persisted state.
@@ -933,16 +988,6 @@ def main() -> None:
         inject_animations(st)
     except Exception:
         pass
-
-    # Saved inputs live only in the visitor's own browser (opt-in "Remember me").
-    # The first run of each session waits for the browser to answer, so the
-    # welcome screen doesn't flash before a remembered choice is restored.
-    from utils import device_store
-    store = device_store.sync(st)
-    if store["status"] == "loading" and not st.session_state.get("_device_skip"):
-        _loading_screen()
-        st.stop()
-    _restore_from_device(store)
 
     # Which version: the welcome screen picks; the simple check-up and the full
     # planner each render on their own (the simple one never touches the engine).
@@ -1279,8 +1324,10 @@ def main() -> None:
                 _run_hint("trajectories, withdrawals, sensitivity, stress tests, Roth conversions "
                           "and mortgage paydown")
             elif st.session_state.get("_lz_deepdives"):
-                tabs = st.tabs(["Trajectories", "Withdrawal", "Sensitivity", "Stress tests",
-                                "Roth conversions", "Mortgage paydown"])
+                labels = ["Trajectories", "Withdrawal", "Sensitivity", "Stress tests",
+                          "Roth conversions", "Mortgage paydown"]
+                from utils import persist
+                tabs = st.tabs(labels, default=persist.tab_default("mc-tile-deepdives", labels))
                 with tabs[0]:
                     _safe_render("components.trajectories_tab", results=results)
                 with tabs[1]:
