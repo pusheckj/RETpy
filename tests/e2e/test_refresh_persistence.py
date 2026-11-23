@@ -464,7 +464,8 @@ def test_e_owner_edits_survive_f5_and_a_changed_file_wins_with_a_notice(tmp_path
         page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
         open_section(page, "Retirement")
         set_number(page, ".st-key-ay_target_age__box input", 52)
-        wait_store(page, "session", lambda v: v and v["payload"].get("base"))
+        wait_store(page, "session", lambda v: v and v["payload"].get("base") and
+                   persist_has(v, "TARGET_RETIREMENT_AGE", 52))
         time.sleep(3)
         reload(page)
         page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
@@ -593,6 +594,16 @@ def test_j_quota_errors_drop_the_pins_and_keep_the_inputs(tmp_path, browser):
             assert saved["payload"]["full"]
     finally:
         context.close()
+
+
+def persist_has(envelope, key, value):
+    """The saved inputs hold ``key`` = ``value``."""
+    sys.path[:0] = [ROOT, UI]
+    from utils.profile_io import deserialize_overrides
+    try:
+        return deserialize_overrides(envelope["payload"]["full"]).get(key) == value
+    except Exception:
+        return False
 
 
 def persist_has_food(envelope, food):
