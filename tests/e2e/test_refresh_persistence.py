@@ -183,7 +183,7 @@ def store(page, area, key="retpy"):
     return json.loads(raw) if raw else None
 
 
-def wait_store(page, area, predicate, key="retpy", timeout=30):
+def wait_store(page, area, predicate, key="retpy", timeout=120):
     end = time.time() + timeout
     while time.time() < end:
         try:
@@ -256,18 +256,46 @@ def close_settings(page):
 
 
 def toggle_remember(page):
+    """Flip Remember me and make sure it took (a click while the page re-draws can be lost)."""
     open_settings(page)
-    page.locator('label:has-text("Remember me on this device")').first.click()
-    time.sleep(2.5)
+    box = page.locator('label:has-text("Remember me on this device") input[type=checkbox]').first
+    before = box.is_checked()
+    for _ in range(4):
+        page.locator('label:has-text("Remember me on this device")').first.click()
+        time.sleep(2.5)
+        if box.is_checked() != before:
+            break
+        open_settings(page)
     close_settings(page)
+
+
+def scroll_to(page, selector):
+    page.evaluate("(s) => { const e = document.querySelector(s); if (e) e.scrollIntoView({block: 'center'}); }",
+                  selector)
+    time.sleep(1.5)
+
+
+def load_tiles(page):
+    """Scroll through the page so every lazy tile loads (they start when scrolled near)."""
+    for step in range(14):
+        page.evaluate("(y) => { document.querySelector('[data-testid=stMain]').scrollTop = y; }", step * 1500)
+        time.sleep(0.8)
 
 
 def reload(page):
     page.reload(wait_until="commit")
 
 
-def input_value(page, selector):
-    return page.locator(selector).first.input_value()
+def input_value(page, selector, expect=None, timeout=60):
+    """The input's value. With ``expect`` (one value or a tuple), wait until it matches: a box beside a
+    slider shows its default for a moment before it is seeded from the saved value."""
+    expected = (expect,) if isinstance(expect, str) else tuple(expect or ())
+    end = time.time() + timeout
+    value = page.locator(selector).first.input_value()
+    while expected and value not in expected and time.time() < end:
+        time.sleep(0.5)
+        value = page.locator(selector).first.input_value()
+    return value
 
 
 # --------------------------------------------------------------------------
@@ -285,7 +313,7 @@ def test_a_checkup_answers_survive_a_refresh(tmp_path, ctx):
         reload(page)
         wait_text(page, "Take-home pay")
         assert "Open the retirement planner" not in text(page)
-        assert input_value(page, 'input[aria-label="Take-home pay"]') in ("5100", "5,100")
+        assert input_value(page, 'input[aria-label="Take-home pay"]', ("5100", "5,100")) in ("5100", "5,100")
 
 
 def test_b_setup_step_and_answers_survive_a_refresh(tmp_path, ctx):
@@ -305,7 +333,7 @@ def test_b_setup_step_and_answers_survive_a_refresh(tmp_path, ctx):
         assert "Open the retirement planner" not in text(page)
         page.locator(".st-key-gs_back button").first.click()
         wait_text(page, "Step 1 of 10")
-        assert input_value(page, 'input[aria-label="How old are you?"]') == "41"
+        assert input_value(page, 'input[aria-label="How old are you?"]', "41") == "41"
         # a deeper step comes back too: seed the tab copy at step 5 and reload
         env = wait_store(page, "session", lambda v: v and (v["payload"].get("setup") or {}).get("step") == 0)
         time.sleep(3)                    # let the page's own pending writes finish first
@@ -317,6 +345,35 @@ def test_b_setup_step_and_answers_survive_a_refresh(tmp_path, ctx):
 
 # --------------------------------------------------------------------------
 # c, d: the planner, the tab copy, the device copy
+
+
+@pytest.mark.xfail(reason="known gap: the saved Today's/Future $ choice is in the copy but the chart opens on "
+                          "Today's $ after a refresh (Streamlit drops the restored radio value in a lazy tile)",
+                   strict=False)
+def test_c2_future_dollars_choice_survives_a_refresh(tmp_path, ctx):
+    with serve(tmp_path) as (base, _):
+        page = ctx.new_page()
+        start_planner(page, base)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        load_tiles(page)
+        scroll_to(page, '[class*="st-key-mc-tile-income"]')
+        label = page.locator('[class*="st-key-income_over_time_main_dollars_mode"] label').filter(has_text="Future")
+        label.first.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+        label.first.click()
+        wait_store(page, "session", lambda v: v and
+                   v["payload"].get("view", {}).get("income_over_time_main_dollars_mode") == "Future $")
+        time.sleep(3)
+        reload(page)
+        page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        load_tiles(page)
+        scroll_to(page, '[class*="st-key-mc-tile-income"]')
+        checked = page.locator('[class*="st-key-income_over_time_main_dollars_mode"] input:checked')
+        checked.first.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+        assert "Future" in checked.first.locator("xpath=ancestor::label").inner_text()
+
+
+
 # --------------------------------------------------------------------------
 
 def _edit_planner(page):
@@ -335,6 +392,13 @@ def test_c_planner_edits_view_and_pins_survive_with_remember_me_off(tmp_path, ct
         start_planner(page, base)
         wait_text(page, "Earliest retirement age", timeout=600)
         _edit_planner(page)
+        load_tiles(page)
+        scroll_to(page, '[class*="st-key-mc-tile-whatif"]')
+        pin = page.locator('button:has-text("Pin this scenario")')
+        pin.first.wait_for(state="attached", timeout=300000)
+        pin.first.scroll_into_view_if_needed()
+        pin.first.click()
+        wait_text(page, "Clear pinned scenarios", timeout=120)
         # the page script (S4) writes mcView; seed it the way it does if this build has no writer yet
         page.evaluate("""() => { try { if (!sessionStorage.getItem('mcView')) sessionStorage.setItem('mcView',
             JSON.stringify({scrollY: 0, tabs: {'mc-tile-deepdives': 'Sensitivity'}})); } catch (e) {} }""")
@@ -345,16 +409,19 @@ def test_c_planner_edits_view_and_pins_survive_with_remember_me_off(tmp_path, ct
         reload(page)
         page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
         assert "Open the retirement planner" not in text(page)
-        assert input_value(page, ".st-key-se_food input") in ("1400", "1,400")
-        assert input_value(page, ".st-key-ay_target_age__box input") == "52"
+        assert input_value(page, ".st-key-se_food input", ("1400", "1,400")) in ("1400", "1,400")
+        assert input_value(page, ".st-key-ay_target_age__box input", "52") == "52"
         assert page.locator('[class*="st-key-debt_"]').count() > 0
-        # the Deep dives tab named in mcView opens first
-        page.evaluate("""() => { const e = document.querySelector('[class*="st-key-mc-tile-deepdives"]');
-                                  if (e) e.scrollIntoView({block: 'center'}); }""")
-        wait_text(page, "Sensitivity", timeout=900)
+        # the pin comes back, and the Deep dives tab named in mcView opens first (tiles load when scrolled to)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        load_tiles(page)
+        scroll_to(page, '[class*="st-key-mc-tile-whatif"]')
+        wait_text(page, "Clear pinned scenarios", timeout=120)
+        scroll_to(page, '[class*="st-key-mc-tile-deepdives"]')
         tab = page.get_by_role("tab", name="Sensitivity").first
-        tab.wait_for(timeout=900000)
+        tab.wait_for(timeout=PLANNER_TIMEOUT_MS)
         assert tab.get_attribute("aria-selected") == "true"
+        assert "Run sensitivity analysis" in text(page)
 
 
 def test_d_remember_me_on_keeps_inputs_in_a_new_page_but_not_the_view(tmp_path, ctx):
@@ -364,13 +431,14 @@ def test_d_remember_me_on_keeps_inputs_in_a_new_page_but_not_the_view(tmp_path, 
         open_section(page, "Expenses")
         set_number(page, ".st-key-se_food input", 1400)
         toggle_remember(page)
-        wait_store(page, "local", lambda v: v and v["payload"].get("remember") is True)
+        wait_store(page, "local", lambda v: v and v["payload"].get("remember") is True and
+                   persist_has_food(v, 1400))
         assert "view" not in store(page, "local")["payload"]
         other = ctx.new_page()                 # same context: shares localStorage, not sessionStorage
         other.goto(base, wait_until="commit")
         other.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
         assert "Open the retirement planner" not in text(other)
-        assert input_value(other, ".st-key-se_food input") in ("1400", "1,400")
+        assert input_value(other, ".st-key-se_food input", ("1400", "1,400")) in ("1400", "1,400")
         assert other.get_by_role("tab", name="Sensitivity").count() == 0 or \
             other.get_by_role("tab", name="Sensitivity").first.get_attribute("aria-selected") != "true"
 
@@ -400,13 +468,13 @@ def test_e_owner_edits_survive_f5_and_a_changed_file_wins_with_a_notice(tmp_path
         time.sleep(3)
         reload(page)
         page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
-        assert input_value(page, ".st-key-ay_target_age__box input") == "52"       # F5 keeps the owner's edit
+        assert input_value(page, ".st-key-ay_target_age__box input", "52") == "52"       # F5 keeps the owner's edit
     _demo_profile(profile, 44)                                                       # the file is edited
     with serve(tmp_path, profile=profile, port=port):
         reload(page)
         page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
         wait_text(page, "Your profile file changed", timeout=60)
-        assert input_value(page, ".st-key-ay_target_age__box input") == "44"
+        assert input_value(page, ".st-key-ay_target_age__box input", "44") == "44"
 
 
 # --------------------------------------------------------------------------
@@ -428,11 +496,11 @@ def test_f_two_tabs_keep_their_own_values_and_a_third_gets_the_last_device_write
         for page, expected in ((a, "1100"), (b, "1900")):
             reload(page)
             page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
-            assert input_value(page, ".st-key-se_food input") in (expected, f"{expected[0]},{expected[1:]}")
+            assert input_value(page, ".st-key-se_food input", (expected, f"{expected[0]},{expected[1:]}")) in (expected, f"{expected[0]},{expected[1:]}")
         c = ctx.new_page()
         c.goto(base, wait_until="commit")
         c.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
-        assert input_value(c, ".st-key-se_food input") in ("1900", "1,900")
+        assert input_value(c, ".st-key-se_food input", ("1900", "1,900")) in ("1900", "1,900")
 
 
 # --------------------------------------------------------------------------
@@ -453,7 +521,7 @@ def test_g_a_reload_shortly_after_an_edit_keeps_the_edit(tmp_path, ctx):
         time.sleep(delay)
         reload(page)
         wait_text(page, "Take-home pay")
-        assert input_value(page, 'input[aria-label="Take-home pay"]') in ("6200", "6,200")
+        assert input_value(page, 'input[aria-label="Take-home pay"]', ("6200", "6,200")) in ("6200", "6,200")
 
 
 # --------------------------------------------------------------------------

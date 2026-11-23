@@ -439,9 +439,25 @@ def _as_fragment(fn):
     distinct function name so Streamlit gives each its own fragment identity."""
     _f = getattr(st, "fragment", None)
     try:
-        return _f(_config_locked(fn)) if _f else fn
+        return _f(_save_after_fragment(_config_locked(fn))) if _f else fn
     except Exception:
         return fn
+
+
+def _save_after_fragment(fn):
+    """A fragment reruns alone (a chart's Today's/Future $ switch, Pin this scenario), so the
+    main script's save point is skipped. Save here too, so a refresh right after keeps the change."""
+    @functools.wraps(fn)
+    def _saving(*args, **kwargs):
+        from utils import device_store, persist
+        # A lazy tile first draws in a fragment rerun, which skips main(): put the saved view
+        # choices (Today's/Future $) back before its widgets are created.
+        persist.reapply_view(st.session_state)
+        result = fn(*args, **kwargs)
+        if not device_store.in_full_run(st):
+            _save_to_device()
+        return result
+    return _saving
 
 
 def _config_locked(fn):
@@ -972,6 +988,8 @@ def main() -> None:
         # Continue was pressed before the answer came: remember what "nothing edited" looks like.
         st.session_state._persist_seed_sig = _persist_sig()
     _restore_from_device(store)
+    from utils import persist
+    persist.reapply_view(st.session_state)
     _inject_css()
 
     # Dark-mode + font CSS must be injected always (not only when the Settings

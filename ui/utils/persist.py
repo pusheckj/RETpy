@@ -167,6 +167,18 @@ def mirror_view(state: Mapping) -> dict:
     return saved
 
 
+def reapply_view(state) -> None:
+    """Put the saved view choices back into widgets that were not drawn on the last run (a lazy
+    tile, a closed section): Streamlit forgets a widget's value after a run that skips it. Runs
+    before the page draws, so it never touches a widget that was already created this run."""
+    saved = state.get("_view_saved")
+    if not isinstance(saved, dict):
+        return
+    for key, value in saved.items():
+        if key != "main_view" and _is_view_key(key) and isinstance(value, str) and key not in state:
+            state[key] = value
+
+
 def build_prefs(state: Mapping) -> dict:
     saved = state.get("_appearance_saved")
     prefs = {k: saved[k] for k in _APPEARANCE_KEYS if isinstance(saved, dict) and isinstance(saved.get(k), str)}

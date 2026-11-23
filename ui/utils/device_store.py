@@ -365,6 +365,28 @@ def _render_writer(store: dict, key: str, run: dict) -> None:
     _consume(store, value)
 
 
+def _in_fragment() -> bool:
+    ctx = _ctx()
+    return ctx is not None and getattr(ctx, "current_fragment_id", None) is not None
+
+
+def in_full_run(st, key: str = DEFAULT_KEY) -> bool:
+    """True when sync() already ran in this script run (a full run, not a fragment-only rerun)."""
+    return _live_run(_store(st, key)) is not None
+
+
+def _render_writer_in_fragment(store: dict, key: str) -> None:
+    """A fragment rerun does not run sync(), so the write goes out from a hidden iframe drawn in
+    the fragment itself (the main run's slot is out of reach). The next full run sends it again."""
+    op = store["op"]
+    _note_render(store)
+    args = {k: v for k, v in op.items() if k != "renders"}
+    import streamlit as st
+    with st.container(key=f"{CONTAINER_KEY_PREFIX}-{key}-frag"):
+        _component()(storage_key=key, op=args, scope=store["scope"], height=0,
+                     key=f"{STATE_KEY_PREFIX}{key}_wf_{op['sig']}", default=None)
+
+
 def _publish(st, store: dict) -> None:
     """Hand the browser's viewport and open-tab notes to the app, once."""
     if store["published"] or store["status"] == "loading":
@@ -487,6 +509,8 @@ def save(st, tab: dict | None, device: dict | None, prefs: dict | None = None,
         _queue(store, changes)
     if store["op"] is not None and run is not None and run["sig"] != store["op"]["sig"]:
         _render_writer(store, key, run)
+    elif store["op"] is not None and run is None and changes and _in_fragment():
+        _render_writer_in_fragment(store, key)
 
 
 def drop_tab(st, key: str = DEFAULT_KEY) -> None:

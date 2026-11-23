@@ -414,3 +414,21 @@ def test_apptest_sync_save_forget_smoke(tmp_path):
     at.run()                                       # next run: forget no longer blocks saves
     store = at.session_state[ds.STATE_KEY_PREFIX + ds.DEFAULT_KEY]
     assert not at.exception and store["op"]["kind"] == "set"
+
+
+def test_apptest_in_full_run_is_true_only_after_sync(tmp_path):
+    from streamlit.testing.v1 import AppTest
+
+    script = tmp_path / "ds_full.py"
+    script.write_text(f"""
+import sys
+sys.path.insert(0, {_UI!r})
+import streamlit as st
+from utils import device_store
+before = device_store.in_full_run(st)
+device_store.sync(st)
+st.write("BEFORE", before, "AFTER", device_store.in_full_run(st))
+""")
+    at = AppTest.from_file(str(script)).run()
+    assert not at.exception
+    assert at.markdown[0].value == "BEFORE `False` AFTER `True`"

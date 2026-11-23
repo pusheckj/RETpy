@@ -482,3 +482,17 @@ def test_restored_main_view_opens_the_spending_view_without_a_streamlit_warning(
     assert not at.exception
     assert at.session_state["main_view"] == "Spending"
     assert not [w for w in at.warning if "main_view" in w.value]
+
+
+class TestReapplyView:
+    def test_puts_back_a_choice_whose_widget_was_not_drawn(self):
+        state = State(_view_saved={"income_over_time_main_dollars_mode": "Future $", "tax_tab_view": "% of income",
+                                   "main_view": "Spending", "evil": "x"})
+        state["tax_tab_view"] = "Dollar amount"          # drawn this run: left alone
+        persist.reapply_view(state)
+        assert state["income_over_time_main_dollars_mode"] == "Future $"
+        assert state["tax_tab_view"] == "Dollar amount"
+        assert "main_view" not in state and "evil" not in state
+
+    def test_nothing_saved_is_fine(self):
+        persist.reapply_view(State())
