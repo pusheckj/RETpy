@@ -119,10 +119,16 @@ def render(st, results: dict = None) -> None:
     d_ss = bool(_base_default(overrides, "INCLUDE_SOCIAL_SECURITY", True))
     d_claim = int(_base_default(overrides, "SS_CLAIM_AGE", 67))
 
+    def start(key, **default):
+        """The widget's own starting value, only while the key has none. A key that was put back
+        after a browser refresh (utils/persist.py) already holds its value, and Streamlit warns
+        when a widget has both a default and a value set through session state."""
+        return {} if key in st.session_state else default
+
     c1, c2 = st.columns(2)
     with c1:
         st.selectbox("Return scenario", _SCENARIOS, key="wifc_scenario",
-                     index=_SCENARIOS.index(base_scen),
+                     **start("wifc_scenario", index=_SCENARIOS.index(base_scen)),
                      format_func=lambda s: "Forward-looking" if s == "forward" else s.capitalize(),
                      help="Market returns used in the alternate scenario.")
         slider_with_box(st, "Stock allocation (%)", 0, 100, 5, key="wifc_stock", unit="%", value=d_stock,
@@ -130,14 +136,14 @@ def render(st, results: dict = None) -> None:
         slider_with_box(st, "Retirement spending (% of your plan)", 40, 150, 5, key="wifc_spend",
                         unit="%", value=100.0, help="Retirement living costs compared with your plan. 100% means the same.")
         st.number_input("Extra annual savings ($/yr)", min_value=0, max_value=200_000,
-                        step=1_000, key="wifc_savings", value=0,
+                        step=1_000, key="wifc_savings", **start("wifc_savings", value=0),
                         help="Extra yearly savings, added to your taxable brokerage.")
     with c2:
         slider_with_box(st, "Investment fees (bps)", 0, 150, 5, key="wifc_fee", unit=" bps", value=d_fee,
                         help="Yearly fund fees. 100 bps is 1% of your balance.")
         slider_with_box(st, "Expected inflation (%)", 0.0, 10.0, 0.25, key="wifc_infl", unit="%", value=d_infl,
                         help="Long-run inflation used in the alternate scenario.")
-        st.toggle("Include Social Security", key="wifc_ss", value=d_ss,
+        st.toggle("Include Social Security", key="wifc_ss", **start("wifc_ss", value=d_ss),
                   help="Count Social Security income in the alternate scenario.")
         if st.session_state.get("wifc_ss", True):
             slider_with_box(st, "Claim age", 62, 70, 1, key="wifc_ss_claim", value=d_claim,

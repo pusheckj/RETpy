@@ -217,23 +217,25 @@ def reapply_view(state) -> None:
     again on every run until the visitor picks another one. Seeing a different value in the
     session means they did, and that value is the one to keep from then on.
 
-    Saved view choices (``_view_saved``) whose widget lost its value after a run that skipped
-    it are put back too."""
+    Saved view choices (``_view_saved``) get the same treatment: a choice made in this session
+    is held like a restored one, so a tile that closes and opens again shows what the code uses."""
     pending = state.get(PENDING_KEY)
-    if isinstance(pending, dict):
-        for key in list(pending):
-            if key in state and state[key] != pending[key]:
-                pending[key] = state[key]
-            try:
-                state[key] = pending[key]
-            except Exception:           # the widget was already drawn in this run: leave it
-                pass
     saved = state.get("_view_saved")
-    if not isinstance(saved, dict):
+    if isinstance(saved, dict):
+        for key, value in saved.items():
+            if key != "main_view" and _is_view_key(key) and isinstance(value, str):
+                if not isinstance(pending, dict):
+                    pending = state[PENDING_KEY] = {}
+                pending.setdefault(key, value)
+    if not isinstance(pending, dict):
         return
-    for key, value in saved.items():
-        if key != "main_view" and _is_view_key(key) and isinstance(value, str) and key not in state:
-            state[key] = value
+    for key in list(pending):
+        if key in state and state[key] != pending[key]:
+            pending[key] = state[key]
+        try:
+            state[key] = pending[key]
+        except Exception:               # the widget was already drawn in this run: leave it
+            pass
 
 
 def build_prefs(state: Mapping) -> dict:

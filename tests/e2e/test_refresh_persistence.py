@@ -392,6 +392,94 @@ def test_c3_extras_in_lazy_tiles_show_their_restored_values_after_a_refresh(tmp_
 
 
 
+def _seed_tab_extras(page, extra):
+    """Put values into the tab copy the way a refresh would find them, then reload."""
+    env = wait_store(page, "session", lambda v: v and v["payload"].get("full"))
+    time.sleep(3)                        # let the page's own pending writes finish first
+    env["payload"]["extra"] = extra
+    page.evaluate("(v) => sessionStorage.setItem('retpy', v)", json.dumps(env))
+    reload(page)
+    page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
+    wait_text(page, "Earliest retirement age", timeout=1800)
+
+
+def test_c4_whatif_levers_show_after_a_refresh_with_no_streamlit_warning(tmp_path, ctx):
+    """Round-2 review, issue 3: levers saved at their defaults (and others) are assigned again on
+    every run. Streamlit must not show its yellow "default value and Session State API" warning."""
+    with serve(tmp_path) as (base, _):
+        page = ctx.new_page()
+        start_planner(page, base)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        _seed_tab_extras(page, {"wifc_ss": True, "wifc_savings": 0, "wifc_stock": 30.0,
+                                "wifc_scenario": "pessimistic"})
+        load_tiles(page)
+        scroll_to(page, '[class*="st-key-mc-tile-whatif"]')
+        savings = page.locator(".st-key-wifc_savings input")
+        savings.first.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+        box = page.locator(".st-key-wifc_stock__box input")
+        assert input_value(page, ".st-key-wifc_stock__box input", ("30", "30.0")) in ("30", "30.0")
+        assert "Pessimistic" in page.locator(".st-key-wifc_scenario").first.inner_text()
+        assert input_value(page, ".st-key-wifc_savings input", ("0", "0.00")) in ("0", "0.00")
+        time.sleep(2)
+        assert "Session State API" not in text(page)
+        # a second look after another run (the tile draws again, the keys are assigned again)
+        page.locator(".st-key-wifc_savings input").first.fill("5000")
+        page.locator(".st-key-wifc_savings input").first.press("Enter")
+        time.sleep(4)
+        assert "Session State API" not in text(page)
+        assert box.first.input_value() in ("30", "30.0")
+
+
+def test_c5_a_choice_made_in_the_session_still_shows_after_the_tiles_reload(tmp_path, ctx):
+    """Round-2 review, issue 1: a finished simulation closes the lazy tiles. The tile that draws
+    again must show the choice the chart uses (no refresh involved)."""
+    with serve(tmp_path) as (base, _):
+        page = ctx.new_page()
+        start_planner(page, base)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        load_tiles(page)
+        scroll_to(page, '[class*="st-key-mc-tile-income"]')
+        label = page.locator('[class*="st-key-income_over_time_main_dollars_mode"] label').filter(has_text="Future")
+        label.first.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+        label.first.click()
+        wait_store(page, "session", lambda v: v and
+                   v["payload"].get("view", {}).get("income_over_time_main_dollars_mode") == "Future $")
+        time.sleep(3)
+        open_section(page, "Retirement")
+        set_number(page, ".st-key-ay_target_age__box input", 53)     # reruns the simulation: tiles close
+        time.sleep(3)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        wait_idle(page, quiet=3)
+        load_tiles(page)
+        scroll_to(page, '[class*="st-key-mc-tile-income"]')
+        checked = page.locator('[class*="st-key-income_over_time_main_dollars_mode"] input:checked')
+        checked.first.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+        assert "Future" in checked.first.locator("xpath=ancestor::label").inner_text()
+        assert "Session State API" not in text(page)
+
+
+def test_c6_loading_a_file_after_a_refresh_does_not_bring_back_the_old_extras(tmp_path, ctx):
+    """Round-2 review, issue 2: Load these inputs wipes the inputs, and a restored value must not return."""
+    profile = tmp_path / "loaded.json"
+    _demo_profile(profile, age=50)
+    with serve(tmp_path) as (base, _):
+        page = ctx.new_page()
+        start_planner(page, base)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        _seed_tab_extras(page, {"le_sex": "Female"})
+        open_section(page, "Save / Load")
+        page.locator('[data-testid=stSidebar] input[type=file]').first.set_input_files(str(profile))
+        page.get_by_role("button", name="Load these inputs").first.click()
+        wait_text(page, "Loaded", timeout=120)
+        wait_text(page, "Earliest retirement age", timeout=1800)
+        wait_idle(page, quiet=3)
+        load_tiles(page)
+        scroll_to(page, '[class*="st-key-mc-tile-lifespan"]')
+        box = page.locator('[class*="st-key-le_sex"]').first
+        box.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+        assert "Male" in box.inner_text() and "Female" not in box.inner_text()
+
+
 # --------------------------------------------------------------------------
 
 def _edit_planner(page):

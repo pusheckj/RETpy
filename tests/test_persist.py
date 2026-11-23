@@ -397,8 +397,20 @@ def _tab_payload(**over):
     return payload
 
 
+def _reset_state_warning(monkeypatch):
+    """Streamlit shows its "default value and Session State API" warning once per server process.
+    Make it show again, so a test sees it whatever ran before."""
+    from streamlit.elements.lib import policies
+    monkeypatch.setattr(policies, "_shown_default_value_warning", False)
+
+
+def _state_warnings(at):
+    return [w.value for w in at.warning if "Session State API" in w.value]
+
+
 def _at(monkeypatch, store, profile_env=None, hosted=True):
     from streamlit.testing.v1 import AppTest, element_tree as et
+    _reset_state_warning(monkeypatch)
 
     def indices(self):      # AppTest cannot rerun a page that holds a segmented control; teach it
         values = [self.value] if isinstance(self.value, str) else self.value
@@ -726,6 +738,10 @@ else:
 
 
 class TestRestoredValuesShowInTheBrowser:
+    @pytest.fixture(autouse=True)
+    def _warning_visible(self, monkeypatch):
+        _reset_state_warning(monkeypatch)
+
     def _lazy_app(self):
         from streamlit.testing.v1 import AppTest
         at = AppTest.from_string(_LAZY_SCRIPT.format(ui=_UI, root=_ROOT), default_timeout=60)
@@ -785,6 +801,7 @@ def test_the_income_tile_radio_shows_future_dollars_after_a_restore(monkeypatch)
                              lambda a: [r for r in a.radio if r.key == "income_over_time_main_dollars_mode"])
     assert radios, "the income tile did not draw its radio"
     assert radios[0].value == shown(radios[0]) == "Future $"
+    assert not _state_warnings(at)
 
 
 def test_the_life_expectancy_tile_inputs_show_the_restored_values(monkeypatch):
@@ -801,3 +818,185 @@ def test_the_life_expectancy_tile_inputs_show_the_restored_values(monkeypatch):
     assert sex and conds, "the life expectancy tile did not draw"
     assert sex[0].value == shown(sex[0]) == "Female"
     assert conds[0].value == shown(conds[0]) == [cond]
+    assert not _state_warnings(at)
+
+
+def test_the_whatif_tile_shows_restored_levers_without_a_streamlit_warning(monkeypatch):
+    """The what-if levers are saved even when they equal their defaults. Assigning them again
+    before the tile draws must not trip Streamlit's "default value and Session State API" warning."""
+    from components.whatif_retirement_curve import _SCENARIOS
+    tab = _ready_planner_tab(extra={"wifc_ss": True, "wifc_savings": 0, "wifc_stock": 80.0,
+                                    "wifc_scenario": _SCENARIOS[-1]})
+    at = _at(monkeypatch, _ready_store(tab=tab))
+    at.run()
+    assert not at.exception
+    drawn = _draw_lazy_tile(at, "_lz_whatif", lambda a: [t for t in a.toggle if t.key == "wifc_ss"])
+    assert drawn, "the what-if tile did not draw"
+    assert not _state_warnings(at)
+    again = _draw_lazy_tile(at, "_lz_whatif", lambda a: [t for t in a.toggle if t.key == "wifc_ss"])
+    assert again and not _state_warnings(at)
+    box = [w for w in at.selectbox if w.key == "wifc_scenario"][0]
+    assert box.value == _SCENARIOS[-1] and shown(box) == box.format_func(_SCENARIOS[-1])
+
+
+def test_a_non_default_whatif_value_also_shows_without_a_warning(monkeypatch):
+    tab = _ready_planner_tab(extra={"wifc_savings": 5000, "wifc_ss": False})
+    at = _at(monkeypatch, _ready_store(tab=tab))
+    at.run()
+    assert not at.exception
+    _draw_lazy_tile(at, "_lz_whatif", lambda a: [t for t in a.toggle if t.key == "wifc_ss"])
+    assert not _state_warnings(at)
+    assert [n for n in at.number_input if n.key == "wifc_savings"][0].value == 5000
+    assert [t for t in at.toggle if t.key == "wifc_ss"][0].value is False
+
+
+def test_a_choice_made_in_the_session_survives_its_tile_closing_and_opening_again(monkeypatch):
+    """Finishing a simulation closes every lazy tile. Two runs later the tile opens again.
+    The browser must show the choice the code uses (round-2 review, issue 1)."""
+    key = "income_over_time_main_dollars_mode"
+    at = _at(monkeypatch, _ready_store(tab=_ready_planner_tab()))
+    at.run()
+    radios = _draw_lazy_tile(at, "_lz_income", lambda a: [r for r in a.radio if r.key == key])
+    assert radios
+    radios[0].set_value("Future $").run()
+    assert at.session_state["_view_saved"].get(key) == "Future $"
+    at.session_state["_lz_income"] = False
+    at.run()
+    at.run()
+    at.session_state["_lz_income"] = True
+    at.run()
+    radio = [r for r in at.radio if r.key == key]
+    assert radio and radio[0].value == shown(radio[0]) == "Future $"
+    assert not _state_warnings(at)
+
+
+_CLOSE_REOPEN_SCRIPT = """
+import sys
+sys.path[:0] = [{ui!r}, {root!r}]
+import streamlit as st
+from utils import persist
+persist.reapply_view(st.session_state)
+if st.checkbox("tile open", key="open", value=True):
+    st.radio("Dollars", ["Today's $", "Future $"], key="x_dollars_mode")
+st.button("rerun")
+st.session_state["_view_saved"] = persist.mirror_view(st.session_state)
+"""
+
+
+def test_close_and_reopen_a_tile_with_no_app_around_it():
+    from streamlit.testing.v1 import AppTest
+    at = AppTest.from_string(_CLOSE_REOPEN_SCRIPT.format(ui=_UI, root=_ROOT), default_timeout=60)
+    at.run()
+    at.radio[0].set_value("Future $").run()
+    at.checkbox[0].uncheck().run()
+    at.button[0].click().run()
+    at.checkbox[0].check().run()
+    assert at.radio[0].value == shown(at.radio[0]) == "Future $"
+    at.radio[0].set_value("Today's $").run()          # a change after the reopen still wins
+    at.button[0].click().run()
+    assert at.radio[0].value == shown(at.radio[0]) == "Today's $"
+
+
+# --------------------------------------------------------------------------
+# Loading a file (or switching profile) wipes the inputs, and a restored value must not return
+# --------------------------------------------------------------------------
+
+_RESET_SCRIPT = """
+import sys
+sys.path[:0] = [{ui!r}, {root!r}]
+import streamlit as st
+from utils import persist
+from utils.widget_sync import reset_input_widget_state
+st.session_state.setdefault("n", 0)
+st.session_state.n += 1
+if st.session_state.n == 1:
+    persist.apply(st, {{"view": {{"x_dollars_mode": "Future $"}},
+                       "extra": {{"le_sex": "Female", "ms_rate": 3.5, "ms_barista": 12000}}}}, "tab")
+persist.reapply_view(st.session_state)
+if st.button("load json"):
+    reset_input_widget_state(st)
+    st.rerun()
+st.selectbox("Sex", ["Male", "Female"], key="le_sex")
+st.number_input("Rate", key="ms_rate", min_value=0.0, max_value=10.0, step=0.25,
+                on_change=lambda: st.session_state.__setitem__("_rate_cb", st.session_state["ms_rate"]))
+st.number_input("Barista", key="ms_barista", min_value=0, max_value=100000, step=1000)
+st.radio("Dollars", ["Today's $", "Future $"], key="x_dollars_mode")
+"""
+
+
+def _reset_app():
+    from streamlit.testing.v1 import AppTest
+    at = AppTest.from_string(_RESET_SCRIPT.format(ui=_UI, root=_ROOT), default_timeout=60)
+    at.run()
+    at.run()
+    return at
+
+
+class TestLoadingAFileAfterARestore:
+    def test_restored_values_show_before_the_load(self):
+        at = _reset_app()
+        assert at.selectbox[0].value == "Female"
+        assert [n for n in at.number_input if n.key == "ms_rate"][0].value == 3.5
+        assert [n for n in at.number_input if n.key == "ms_barista"][0].value == 12000
+
+    def test_a_load_clears_the_restored_values_for_good(self):
+        at = _reset_app()
+        at.button[0].click().run()
+        assert at.selectbox[0].value == "Male"
+        assert "ms_rate" not in at.session_state or [n for n in at.number_input
+                                                     if n.key == "ms_rate"][0].value == 0.0
+        at.run()
+        assert at.selectbox[0].value == "Male"
+        assert [n for n in at.number_input if n.key == "ms_rate"][0].value == 0.0
+        assert at.session_state[persist.PENDING_KEY].get("le_sex") is None
+
+    def test_the_view_choice_is_not_an_input_and_stays_after_a_load(self):
+        at = _reset_app()
+        at.button[0].click().run()
+        assert at.radio[0].value == shown(at.radio[0]) == "Future $"
+
+    def test_a_typed_rate_after_the_restore_is_kept(self):
+        at = _reset_app()
+        [n for n in at.number_input if n.key == "ms_rate"][0].set_value(4.25).run()
+        assert [n for n in at.number_input if n.key == "ms_rate"][0].value == 4.25
+        assert at.session_state["_rate_cb"] == 4.25                   # its on_change callback ran
+        at.run()
+        assert [n for n in at.number_input if n.key == "ms_rate"][0].value == 4.25
+
+    def test_a_rate_the_code_writes_wins_over_the_restored_one(self):
+        """freedom_milestones writes ms_rate from a callback ("Use my safe rate")."""
+        at = _reset_app()
+        at.session_state["ms_rate"] = 5.0           # what the callback does, before the next draw
+        at.run()
+        assert [n for n in at.number_input if n.key == "ms_rate"][0].value == 5.0
+        at.run()
+        assert [n for n in at.number_input if n.key == "ms_rate"][0].value == 5.0
+
+
+def test_reset_input_widget_state_drops_pending_values_of_the_inputs_it_clears():
+    from utils.widget_sync import reset_input_widget_state
+    st = FakeSt()
+    persist.apply(st, {"view": {"x_dollars_mode": "Future $"},
+                       "extra": {"le_sex": "Female", "ms_rate": 3.5, "wifc_stock": 30}}, "tab")
+    assert set(st.session_state[persist.PENDING_KEY]) >= {"le_sex", "ms_rate", "wifc_stock", "x_dollars_mode"}
+    reset_input_widget_state(st)
+    persist.reapply_view(st.session_state)
+    for key in ("le_sex", "ms_rate", "wifc_stock"):
+        assert key not in st.session_state
+    assert st.session_state["x_dollars_mode"] == "Future $"        # a view choice is not an input
+
+
+def test_loading_a_json_file_after_a_restore_starts_clean():
+    """save_load._apply_restored is the Load button's path: the file's inputs replace the restored ones."""
+    from components import save_load
+    st = FakeSt()
+    persist.apply(st, {"view": {"income_over_time_main_dollars_mode": "Future $"},
+                       "extra": {"le_sex": "Female", "ms_rate": 3.5, "wifc_scenario": "pessimistic"}}, "tab")
+    persist.reapply_view(st.session_state)
+    assert st.session_state["le_sex"] == "Female"
+    save_load._apply_restored(st, load_sample_household(), "file.json")
+    persist.reapply_view(st.session_state)
+    persist.reapply_view(st.session_state)
+    for key in ("le_sex", "ms_rate", "wifc_scenario"):
+        assert key not in st.session_state, key
+    assert st.session_state["income_over_time_main_dollars_mode"] == "Future $"
