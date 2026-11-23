@@ -3703,10 +3703,6 @@ html:root .st-key-mc-tile-freedom table.ms-break tr.ms-total td { font-weight: 6
 section[data-testid="stMain"] [class*="st-key-sbx-"] { margin-bottom: 6px; }
 /* -- end Sliders with a typed box -- */
 
-/* The bridge tile is always drawn (so the page layout does not shift when results arrive).
-   Before a run it holds nothing: no border, no height. */
-.st-key-mc-tile-bridge:not(:has(.stPlotlyChart, .stMarkdown, [data-testid="stMarkdown"])) { display: none; }
-
 /* ==========================================================================
    Debt payoff (components/debt_payoff.py) and the Debts section's rows
    (components/sec_debts.py). Only this block styles them: the .debt-* classes

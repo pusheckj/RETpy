@@ -15,9 +15,12 @@ path.
 from __future__ import annotations
 
 import html
+import logging
 from datetime import date
 
 import plotly.graph_objects as go
+
+_log = logging.getLogger("retirement_ui")
 
 try:
     from utils.formatting import pct
@@ -178,6 +181,7 @@ def render(st) -> None:
                     narrative=_narrative_html(results, overrides),
                 )
             except Exception as exc:
+                _log.exception("Printable summary could not be built")
                 return f"<p>Couldn't prepare the summary: {html.escape(str(exc))}</p>"
 
         st.download_button(

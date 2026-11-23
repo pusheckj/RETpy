@@ -85,18 +85,49 @@ def test_stale_toggle_keeps_the_top_level_layout(planner):
     assert fresh == stale == back
 
 
-def test_setup_banner_and_bridge_tile_always_take_a_slot(planner):
+def test_setup_banner_and_bridge_slot_always_take_a_slot(planner):
     sig = _signature(planner)
     assert ("Block", "mc-setup-banner-slot") in sig
-    assert ("Block", "mc-tile-bridge") in sig
+    assert ("Block", "mc-bridge-slot") in sig
+    assert ("Block", "mc-tile-bridge") not in sig  # the tile is inside the slot
+
+
+def _block_keys(node, out=None):
+    out = [] if out is None else out
+    for c in node.children.values():
+        if type(c).__name__ == "Block":
+            ident = getattr(getattr(c, "proto", None), "id", "") or ""
+            m = re.search(r"-(mc-[a-z0-9-]+)$", ident)
+            if m:
+                out.append(m.group(1))
+            _block_keys(c, out)
+    return out
+
+
+def test_bridge_tile_is_drawn_only_with_results(planner):
+    """With no results, the slot is there but no bordered bridge tile. The phone chips look
+    for the tile element, and a bordered block is drawn in the page even when it is empty."""
+    assert "mc-tile-bridge" in _block_keys(planner.main)
+    with_results = planner.session_state["results"]
+    try:
+        planner.session_state["results"] = None
+        planner.run()
+        assert not planner.exception, planner.exception
+        keys = _block_keys(planner.main)
+        assert "mc-bridge-slot" in keys
+        assert "mc-tile-bridge" not in keys
+    finally:
+        planner.session_state["results"] = with_results
+        planner.run()
 
 
 def test_app_draws_the_slots_unconditionally():
     assert 'key="mc-setup-banner-slot"' in APP
-    assert 'key="mc-tile-bridge"' in APP
-    # No "if results:" wrapper around the bridge tile any more.
-    assert not re.search(r"if results:\s*\n\s*with st\.container\(border=True, key=\"mc-tile-bridge\"", APP)
+    # The slot is unbordered (Streamlit draws an empty one as nothing); the tile is bordered.
+    assert re.search(r'st\.container\(key="mc-bridge-slot"\)', APP)
+    assert not re.search(r'container\(border=True, key="mc-bridge-slot"', APP)
+    assert re.search(r'if results:\s*\n\s*with st\.container\(border=True, key="mc-tile-bridge"', APP)
 
 
-def test_empty_bridge_tile_has_no_box():
-    assert re.search(r"\.st-key-mc-tile-bridge:not\(:has\(", CSS)
+def test_no_css_hides_the_bridge_tile():
+    assert "st-key-mc-tile-bridge:not(" not in CSS

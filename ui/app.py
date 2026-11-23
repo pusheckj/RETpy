@@ -1129,9 +1129,6 @@ def main() -> None:
                          user_overrides=st.session_state.user_overrides, show_header=False)
         _sec_portfolio()
         _safe_render("components.net_worth_projection_chart", results=results)
-        # The run hint has its own slot, so the result elements that replace it start at
-        # the same place whether or not there are results.
-        ret_hint_slot = st.empty()
         if results:
             _safe_render("components.hero_metric", results=results)
             # Ways to reach your goal: a fragment, so Try it / Cancel redraw only the card.
@@ -1153,8 +1150,7 @@ def main() -> None:
                     _lazy_ph("ret_more", 700)
             _sec_ret_more()
         else:
-            ret_hint_slot.caption("Run a simulation to see your earliest retirement age, chance "
-                                  "of success and portfolio projection.")
+            _run_hint("your earliest retirement age, chance of success and portfolio projection")
 
     # ==================== 2. INCOME ====================
     @_as_fragment
@@ -1278,10 +1274,13 @@ def main() -> None:
 
     # ==================== 12. BRIDGE TO 59½ ====================
     # Penalty-free liquidity through the pre-59.5 gap years (results-dependent).
-    # Always drawn (empty tiles are hidden by CSS) so the page does not shift when results arrive.
-    with st.container(border=True, key="mc-tile-bridge"):
+    # The slot is an unbordered container: Streamlit draws nothing for it while it is empty, and
+    # it holds the tile's place so the page does not shift when results arrive. The bordered tile
+    # exists only with results, so the phone chips see no tile before a run.
+    with st.container(key="mc-bridge-slot"):
         if results:
-            _safe_render("components.bridge_years_gauge", results=results)
+            with st.container(border=True, key="mc-tile-bridge"):
+                _safe_render("components.bridge_years_gauge", results=results)
 
     # ==================== 13. DEEP DIVES ====================
     @_as_fragment

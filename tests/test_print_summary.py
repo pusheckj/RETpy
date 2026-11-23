@@ -93,6 +93,19 @@ def test_render_offers_download_with_headline_number():
         assert str(earliest) in html_blob
 
 
+def test_build_failure_is_logged(monkeypatch, caplog):
+    """The visitor sees the error only in the downloaded file, so operators get it in the log."""
+    def _boom(_results):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(print_summary, "_build_fan_chart_html", _boom)
+    st = _FakeSt(results=_real_results(), user_overrides={})
+    print_summary.render(st)
+    with caplog.at_level("ERROR", logger="retirement_ui"):
+        st.download_calls[0]["data"]()
+    assert any(r.name == "retirement_ui" and r.exc_info for r in caplog.records)
+
+
 def test_render_degrades_on_internal_error(monkeypatch):
     """A broken figure-builder must surface st.error, not crash the app."""
     def _boom(_results):
