@@ -139,7 +139,7 @@ def test_the_what_changed_count_matches_the_lines(monkeypatch):
     text = _text(at)
     for key in last["changes"]:
         line = f"{ap.LABELS[key]}: {ap.format_value(key, last['old'][key])} → {ap.format_value(key, last['after'][key])}"
-        assert line in text, line
+        assert line.replace("$", "\\$") in text, line
     assert n >= 5
 
 
@@ -180,7 +180,7 @@ def test_undo_restores_exactly(monkeypatch):
         assert at.session_state[key] == old, key
     assert "assume_last" not in at.session_state
     assert "assume_undo" not in _buttons(at)
-    assert "Back to your earlier settings." in _text(at)
+    assert "Back to your settings from before you picked a preset." in _text(at)
     assert "Now using: Typical" not in _text(at)
 
 
@@ -282,7 +282,7 @@ def test_clicking_twice_changes_nothing_and_keeps_the_undo(monkeypatch):
     at.button(key="assume_undo").click().run()
     assert not at.exception, at.exception
     assert _snapshot(at)["EXPECTED_INFLATION"] == original["EXPECTED_INFLATION"]
-    assert "Back to your earlier settings." in _text(at)
+    assert "Back to your settings from before you picked a preset." in _text(at)
 
 
 def test_unit_a_second_click_keeps_the_first_snapshot():
@@ -520,3 +520,52 @@ def test_a_loaded_profile_with_the_built_pay_table_is_not_edited_by_hand():
     assert st.session_state["si_comp_customized"] is False
     _apply_restored(st, {"YOUR_AGE": 30, "YOUR_COMPENSATION_BY_AGE": built}, "d.json")
     assert st.session_state["si_comp_customized"] is True       # no inputs to rebuild it from
+
+
+# ------------------------------------------------------------------ review fixes (round 2)
+
+def test_two_clicks_then_undo_go_back_to_the_settings_before_any_preset(monkeypatch):
+    at = _open(monkeypatch)
+    before = _snapshot(at)
+    scenario_before = at.session_state["sa_scenario"]
+    _click(at, "typical")
+    _click(at, "conservative")
+    at.button(key="assume_undo").click().run()
+    assert not at.exception, at.exception
+    after = _snapshot(at)
+    for key, old in before.items():
+        if old is ap.MISSING:
+            assert after[key] is ap.MISSING or key == "GLIDE_PATH_TENT_RISE_YEARS", key
+        elif isinstance(old, (str, bool)):
+            assert after[key] == old, key
+        else:
+            assert after[key] == pytest.approx(old), key
+    assert at.session_state["sa_scenario"] == scenario_before
+
+
+def test_dollar_amounts_are_escaped_for_markdown():
+    from components import assumption_presets as comp
+    last = {"changes": ["LTC_ANNUAL_COST"], "old": {"LTC_ANNUAL_COST": 120_000},
+            "after": {"LTC_ANNUAL_COST": 115_000}, "facts": {}}
+    (line,) = comp._change_lines(last)
+    assert line == "Annual care cost: \\$120,000 → \\$115,000"
+
+
+def test_the_long_plan_note_shows_only_when_the_return_set_changed(monkeypatch):
+    at = _open(monkeypatch, ACTIVE_RETURN_SCENARIO="conservative")
+    _click(at, "typical")
+    last = at.session_state["assume_last"]
+    if last["scenario"] == "conservative":
+        assert "ACTIVE_RETURN_SCENARIO" not in last["changes"]
+        assert ap.COPY["long_plan_note"] not in _text(at)
+
+
+def test_the_climb_length_is_not_listed_when_the_shape_does_not_use_it(monkeypatch):
+    # A 55-year-old couple retiring at 62 with Typical gets a short retirement: "Ease into bonds"
+    # only when the horizon is 30 years or less, so force it with a late retirement.
+    at = _open(monkeypatch, YOUR_AGE=60, PARTNER_AGE=60, TARGET_RETIREMENT_AGE=67,
+               GLIDE_PATH_TENT_RISE_YEARS=15)
+    _click(at, "typical")
+    last = at.session_state["assume_last"]
+    assert last["after"]["GLIDE_PATH_SHAPE"] == "down"
+    assert "GLIDE_PATH_TENT_RISE_YEARS" not in last["changes"]

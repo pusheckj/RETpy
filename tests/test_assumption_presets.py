@@ -219,6 +219,7 @@ def test_ltc_ordering(end):
 @pytest.mark.parametrize("extra,loan", [
     ({}, False), ({"MORTGAGE_MONTHLY": 1500}, True), ({"MORTGAGE_BALANCE": 100_000}, True),
     ({"DEBTS": [{"name": "Card", "balance": 1000}]}, True), ({"DEBTS": []}, False),
+    ({"DEBTS": [{"name": "Paid-off card", "balance": 0}]}, False),
     ({"MORTGAGE_MONTHLY": 0, "MORTGAGE_BALANCE": 0}, False),
 ])
 def test_inflation_rule(extra, loan):

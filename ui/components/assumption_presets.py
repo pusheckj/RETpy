@@ -42,12 +42,17 @@ def _plan_end(last: dict) -> str:
     return plan_end_text(values)
 
 
+def _md(text: str) -> str:
+    """Escape dollar signs, which Markdown would read as math."""
+    return text.replace("$", "\\$")
+
+
 def _change_lines(last: dict) -> list:
     lines = []
     for key in last["changes"]:
         old = ap.format_value(key, last["old"].get(key))
         new = ap.format_value(key, last["after"][key])
-        lines.append(f"{ap.LABELS[key]}: {old} → {new}")
+        lines.append(_md(f"{ap.LABELS[key]}: {old} → {new}"))
     if last["facts"].get("comp_customized"):
         lines.append(ap.COPY["kept_pay"])
     return lines
@@ -63,12 +68,14 @@ def _draw_box(st, last: dict) -> None:
         if len(lines) > SHOW_LINES:
             with st.expander("Show all"):
                 st.markdown("\n".join(f"- {line}" for line in lines[SHOW_LINES:]))
-        if last.get("name") == ap.TYPICAL and last.get("scenario") == "conservative":
+        if (last.get("name") == ap.TYPICAL and last.get("scenario") == "conservative"
+                and "ACTIVE_RETURN_SCENARIO" in last["changes"]):
             st.caption(ap.COPY["long_plan_note"])
         with st.expander("Why these numbers?"):
-            st.markdown("\n".join(f"- {ap.LABELS[k]}: {last['reasons'][k]}" for k in last["changes"]
+            st.markdown("\n".join(_md(f"- {ap.LABELS[k]}: {last['reasons'][k]}") for k in last["changes"]
                                   if k in last["reasons"]))
         st.caption(ap.COPY["run_note"])
+        st.caption("Undo puts back your settings from before you picked a preset.")
         st.button("Undo", key="assume_undo", on_click=ap.undo_preset, args=(st,), width="stretch")
 
 

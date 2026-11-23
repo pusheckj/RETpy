@@ -182,6 +182,15 @@ def _num(overrides: dict, key: str, default) -> int:
         return int(default)
 
 
+def _debt_total(debts) -> float:
+    try:
+        from retirement_sim.debts import total_owed
+        return float(total_owed(debts or []))
+    except Exception:
+        return float(sum(float((d or {}).get("balance") or 0) for d in (debts or [])
+                         if isinstance(d, dict)))
+
+
 def facts_of(overrides: dict) -> dict:
     """The facts the rules read (and the Undo note stores), from the overrides."""
     ov = overrides or {}
@@ -191,7 +200,7 @@ def facts_of(overrides: dict) -> dict:
     claim = _num(ov, "SS_CLAIM_AGE", 67)
     debts = ov.get("DEBTS", getattr(cfg, "DEBTS", []) if cfg is not None else [])
     has_loan = (_num(ov, "MORTGAGE_BALANCE", 0) > 0 or _num(ov, "MORTGAGE_MONTHLY", 0) > 0
-                or bool(debts))
+                or _debt_total(debts) > 0)
     return {"A": A, "P": P, "R": R, "claim": claim, "has_loan": has_loan}
 
 
@@ -359,7 +368,7 @@ LABELS = {
     "GLIDE_PATH_ENABLED": "Glide path",
     "GLIDE_PATH_SHAPE": "Glide path shape",
     "GLIDE_PATH_START_STOCK_PCT": "Stock % at retirement",
-    "GLIDE_PATH_END_STOCK_PCT": "Stock % after the glide",
+    "GLIDE_PATH_END_STOCK_PCT": "Stock % after the climb (or at age 75)",
     "GLIDE_PATH_TENT_RISE_YEARS": "Years to climb back",
     "PLAN_UNTIL_AGE": "Plan-until age",
     "PARTNER_PLAN_UNTIL_AGE": "Partner's plan-until age",
@@ -367,8 +376,8 @@ LABELS = {
     "TARGET_SUCCESS_RATE": "Success target",
     "DYNAMIC_SPENDING_ENABLED": "Spending guardrails",
     "RETURN_BASED_SPENDING_ENABLED": "Cut spending after down years",
-    "ACA_ENABLED": "Pre-Medicare marketplace costs",
-    "LTC_ENABLED": "Long-term care costs",
+    "ACA_ENABLED": "Include ACA subsidies before Medicare",
+    "LTC_ENABLED": "Model long-term care costs",
     "LTC_START_AGE": "Care starts around age",
     "LTC_ANNUAL_COST": "Annual care cost",
     "LTC_PROBABILITY": "Chance of needing care each year",
@@ -377,7 +386,7 @@ LABELS = {
     "YOUR_SALARY_GROWTH_RATE": "Your salary growth",
     "PARTNER_SALARY_GROWTH_RATE": "Partner salary growth",
     "RULE_OF_55_ENABLED": "Rule of 55",
-    "ROTH_LADDER_ENABLED": "Roth conversion ladder",
+    "ROTH_LADDER_ENABLED": "Enforce the 5-year conversion ladder",
 }
 
 _SCENARIO_LABELS = {"conservative": "Conservative", "historical": "Historical",
@@ -425,7 +434,7 @@ COPY = {
     "long_plan_note": ("For long plans, Typical uses the Conservative return set. "
                        "It sits between today's forecasts and long-run history."),
     "run_note": "Click Run simulation to see results with these numbers.",
-    "undone": "Back to your earlier settings.",
+    "undone": "Back to your settings from before you picked a preset.",
     "kept_pay": "Your salary growth: kept, because you edited your pay table",
     "returns_hint": "Not sure what to pick? The Assumptions section can set these for you in one click.",
 }
@@ -498,6 +507,9 @@ def apply_preset(st, name: str) -> None:
     # A missing key that already holds the default is not a change.
     shown_before = {k: (before_all[k] if before_all[k] is not MISSING else default_for(k)) for k in plan}
     changes = [k for k in plan if _changed(shown_before[k], plan[k][0])]
+    if plan["GLIDE_PATH_SHAPE"][0] != "tent":
+        # The climb length is not used with "Ease into bonds", so it is not shown as a change.
+        changes = [k for k in changes if k != "GLIDE_PATH_TENT_RISE_YEARS"]
     # A key missing from overrides still needs writing, so the engine sees it.
     after = {k: v for k, (v, _) in plan.items()}
     if not changes:
@@ -508,6 +520,13 @@ def apply_preset(st, name: str) -> None:
         push_widgets(st, [k for k in after if before_all[k] is MISSING], ov)
         ss["assume_noop"] = name
         return
+    # A second click (say Typical, then Conservative) keeps the first snapshot, so Undo
+    # still goes back to the settings from before any preset.
+    prev = ss.get("assume_last")
+    if prev and undo_available(st):
+        before_all = {k: prev["before"].get(k, before_all[k]) for k in plan}
+        for k in prev["before"]:
+            before_all.setdefault(k, prev["before"][k])
     for k, v in after.items():
         ov[k] = v
     push_widgets(st, list(after), ov)
