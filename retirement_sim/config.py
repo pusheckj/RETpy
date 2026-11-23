@@ -193,9 +193,11 @@ YOUR_HSA_MATCH = 0
 YOUR_HSA_TOTAL = YOUR_HSA_CONTRIBUTION + YOUR_HSA_MATCH
 YOUR_BACKDOOR_ROTH = 0           # Not needed at this income level
 YOUR_BROKERAGE_CONTRIBUTION = 0  # Annual after-tax savings to taxable brokerage
-# Extra money invested in your taxable brokerage each working year, on top of
-# everything the plan already saves (both savings modes). Today's dollars. The
-# What-if tile's "Extra annual savings" lever sets it.
+# Extra savings each year you work: you spend this much less and invest it in
+# your taxable brokerage, on top of what the plan saves (both savings modes).
+# Today's dollars, capped at that year's spending. Retirement spending is not
+# changed. Set only by the What-if tile's "Extra annual savings" lever; the
+# savings charts and the pay-flow chart do not read it.
 EXTRA_ANNUAL_SAVINGS = 0
 # Mega backdoor Roth: fraction of BASE salary contributed as after-tax 401(k),
 # then converted in-plan to Roth (tax-free growth). The engine caps it at the

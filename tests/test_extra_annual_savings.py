@@ -1,4 +1,4 @@
-"""EXTRA_ANNUAL_SAVINGS: extra money invested in the taxable brokerage each working year.
+"""EXTRA_ANNUAL_SAVINGS: spend this much less each working year and invest it.
 
 The What-if tile's "Extra annual savings" lever writes it. It must add to the plan in both
 savings modes. Before it existed, the lever raised YOUR_BROKERAGE_CONTRIBUTION, which is only a
@@ -36,8 +36,38 @@ def test_extra_savings_raise_the_balance_at_retirement(monkeypatch, mode):
     assert more - base >= 200_000 * 0.95
 
 
-def test_default_is_zero_and_plain_data():
+def test_default_is_zero():
     assert cfg.EXTRA_ANNUAL_SAVINGS == 0
+
+
+def _run(monkeypatch, mode, extra):
+    monkeypatch.setattr(cfg, "SAVINGS_MODE", mode)
+    monkeypatch.setattr(cfg, "EXTRA_ANNUAL_SAVINGS", extra)
+    _, portfolio = run_detailed_simulation(cfg.YOUR_AGE + 10, random_seed=7)
+    return portfolio
+
+
+@pytest.mark.parametrize("mode", ["Auto-allocate (recommended)", "Manual"])
+def test_the_money_comes_from_lower_working_year_spending(monkeypatch, mode):
+    base = _run(monkeypatch, mode, 0)
+    more = _run(monkeypatch, mode, 5_000)
+    work = [r for r in base.spending_log if r["age"] < cfg.YOUR_AGE + 10]
+    work_more = [r for r in more.spending_log if r["age"] < cfg.YOUR_AGE + 10]
+    assert work and len(work) == len(work_more)
+    for a, b in zip(work, work_more):
+        assert a["living"] - b["living"] == pytest.approx(min(5_000, a["living"]))
+
+
+def test_extra_savings_are_capped_at_spending(monkeypatch):
+    mode = "Auto-allocate (recommended)"
+    capped = _run(monkeypatch, mode, 10_000_000)
+    assert all(r["living"] >= 0 for r in capped.spending_log if r["age"] < cfg.YOUR_AGE + 10)
+    spend = sum(r["living"] for r in _run(monkeypatch, mode, 0).spending_log
+                if r["age"] < cfg.YOUR_AGE + 10)
+    gain = (next(r for r in capped.yearly_history if r["age"] == cfg.YOUR_AGE + 10)["total"]
+            - next(r for r in _run(monkeypatch, mode, 0).yearly_history if r["age"] == cfg.YOUR_AGE + 10)["total"])
+    # No more than the spending removed, plus growth (well under 2x over 10 years).
+    assert 0 < gain < 2 * spend
 
 
 def test_the_lever_writes_the_new_key_and_leaves_the_brokerage_override_alone():

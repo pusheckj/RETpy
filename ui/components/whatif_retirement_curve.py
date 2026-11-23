@@ -130,8 +130,8 @@ def render(st, results: dict = None) -> None:
                         unit="%", value=100.0, help="Retirement living costs compared with your plan. 100% means the same.")
         st.number_input("Extra annual savings ($/yr)", min_value=0, max_value=200_000,
                         step=1_000, key="wifc_savings", value=0,
-                        help="Extra money invested each working year, on top of what your plan already saves. "
-                             "It goes into your taxable brokerage.")
+                        help="Each year you work, spend this much less and invest it in your taxable brokerage. "
+                             "Your retirement spending stays as planned.")
     with c2:
         slider_with_box(st, "Investment fees (bps)", 0, 150, 5, key="wifc_fee", unit=" bps", value=d_fee,
                         help="Yearly fund fees. 100 bps is 1% of your balance.")

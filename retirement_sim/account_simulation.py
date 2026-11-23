@@ -2544,6 +2544,13 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     if debt_payment > 0:
         living += debt_payment
 
+    # Extra savings (What-if lever): you spend this much less each working year
+    # and invest it. Lower spending is the money's source, so nothing is created:
+    # the Auto sweep carries it into the brokerage by itself, and Manual mode adds
+    # it to the fixed amount below. Capped at this year's spending.
+    extra_saved = min(max(0.0, float(getattr(cfg, "EXTRA_ANNUAL_SAVINGS", 0) or 0)), max(0.0, living))
+    living -= extra_saved
+
     # Record working-year spending too (deterministic, so no cross-scenario
     # spread — it anchors the spending-range chart before retirement). Living
     # expenses already include housing/children/base, so living == total here.
@@ -2641,7 +2648,7 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
             # the same take-home pool, so leaving it out would double-fund it
             # (phantom dollars: contributed to Roth AND left in brokerage).
             to_brokerage = saved_after_tax - your_roth_contribution - contribution_529 - your_after_tax_401k
-        to_brokerage = max(0.0, to_brokerage)
+        to_brokerage = max(0.0, to_brokerage) + extra_saved
 
         # Disposable-income sanity clamp: an over-configured profile (e.g. huge
         # 401k + HSA + backdoor Roth) must not fund more than the year's gross
@@ -2674,12 +2681,6 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
                 partner_after_tax - partner_roth_contribution - cfg.PARTNER_ANNUAL_SPENDING
             )
         portfolio.contribute("partner_brokerage", max(0, to_brokerage_partner))
-
-    # Extra savings on top of the plan (What-if lever). Added after both savings
-    # branches, so it is never a floor (Auto) or a replacement (Manual).
-    extra_savings = float(getattr(cfg, "EXTRA_ANNUAL_SAVINGS", 0) or 0)
-    if extra_savings > 0:
-        portfolio.contribute("your_brokerage", extra_savings)
 
     # ------------------------------------------------------------------
     # ESPP discount benefit (CONSERVATION #18c). YOUR_ESPP_PCT and
