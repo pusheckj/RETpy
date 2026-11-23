@@ -45,6 +45,7 @@ settings that test it (the same move, spending and tax).
 from __future__ import annotations
 
 import copy
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
@@ -546,10 +547,15 @@ def _build(inp: Inputs) -> Report:
                   spending_known=spending_known)
 
 
-# The Freedom tile calls build() on every rerun with inputs that rarely change, and
-# build() costs ~100 ms. A small memo keyed on the frozen inputs skips the repeat.
+# The Freedom tile calls build() on every rerun with inputs that rarely change. A small
+# memo keyed on the frozen inputs skips the repeat. Measured on the Mid-career couple
+# demo: build() takes about 3 ms for its 9-age projection and about 16 ms for a
+# 51-age simulated timeline (a memo hit costs about 1 ms). The memo is shared by all
+# sessions of the server process, so a hosted server keeps the inputs of its last 32
+# plans in memory after those visitors leave (see docs/ARCHITECTURE.md).
 _BUILD_MEMO: "OrderedDict[tuple, Report]" = OrderedDict()
 _BUILD_MEMO_MAX = 32
+_BUILD_LOCK = threading.Lock()
 
 
 def _freeze(value):
@@ -564,21 +570,28 @@ def _freeze(value):
 
 
 def clear_build_cache() -> None:
-    _BUILD_MEMO.clear()
+    with _BUILD_LOCK:
+        _BUILD_MEMO.clear()
 
 
 def build(inp: Inputs) -> Report:
     """Every milestone for these inputs. Equal inputs return an equal Report; each
     caller gets its own copy, so editing one never changes the memo."""
-    key = _freeze(inp)
-    rep = _BUILD_MEMO.get(key)
+    try:
+        key = _freeze(inp)
+        hash(key)
+    except TypeError:  # an unhashable value (set, array): skip the memo
+        return _build(inp)
+    with _BUILD_LOCK:
+        rep = _BUILD_MEMO.get(key)
+        if rep is not None:
+            _BUILD_MEMO.move_to_end(key)
     if rep is None:
-        rep = _build(inp)
-        _BUILD_MEMO[key] = rep
-        while len(_BUILD_MEMO) > _BUILD_MEMO_MAX:
-            _BUILD_MEMO.popitem(last=False)
-    else:
-        _BUILD_MEMO.move_to_end(key)
+        rep = _build(inp)   # outside the lock: other sessions are not held up
+        with _BUILD_LOCK:
+            _BUILD_MEMO[key] = rep
+            while len(_BUILD_MEMO) > _BUILD_MEMO_MAX:
+                _BUILD_MEMO.popitem(last=False)
     return copy.deepcopy(rep)
 
 

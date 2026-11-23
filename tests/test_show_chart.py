@@ -144,7 +144,8 @@ def test_memo_is_bounded(styled):
         f = _fig()
         f.data[0].y = (i, 1, 2)
         pt.show_chart(st, f, f"k{i}")
-    assert len(st.session_state["_fig_cache"]) == 64
+    assert len(st.session_state["_fig_cache"]) == pt._FIG_CACHE_MAX
+    assert pt._FIG_CACHE_MAX == 48
 
 
 def test_the_callers_figure_is_not_changed_by_styling(styled):

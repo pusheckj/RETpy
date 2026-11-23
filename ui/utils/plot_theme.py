@@ -9,7 +9,9 @@ consistent in both light and dark mode.
 from __future__ import annotations
 
 import copy
+import hashlib
 import re
+from collections import OrderedDict
 
 _FONT_FAMILY = "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
 
@@ -672,8 +674,18 @@ def add_target_line(fig, target: float, st=None) -> None:
                             else "rgba(255,255,255,0.9)"))
 
 
+# The browser media query behind st.session_state["_viewport_narrow"] (device_store
+# index.html must carry this exact string). Every theme.css rule that swaps in the
+# compact "mc-narrow-" chart must fire only inside it: once the viewport is known,
+# show_chart draws one chart and no CSS can swap it. 1130px is the top of the tablet
+# rule (side panel docked, main pane 520-700px). It also covers phones in portrait
+# and landscape. A window that wide with the panel closed gets the plainer chart.
+NARROW_VIEWPORT_QUERY = "(max-width: 1130px)"
+
 _FIG_CACHE_KEY = "_fig_cache"
-_FIG_CACHE_MAX = 64
+# About two runs of charts (a full run draws ~23): the older figures are dead weight, and a
+# hosted server holds this per session.
+_FIG_CACHE_MAX = 48
 
 
 def _styled_figure(st, fig, key: str, narrow: bool, owned: bool):
@@ -686,8 +698,6 @@ def _styled_figure(st, fig, key: str, narrow: bool, owned: bool):
     Streamlit only reads a Figure, so the memoised one is handed over as it is
     (a dict would be re-validated into a Figure on every draw, ~8 ms).
     """
-    import hashlib
-    from collections import OrderedDict
     try:
         state = st.session_state
         cache = state.get(_FIG_CACHE_KEY)
@@ -717,7 +727,8 @@ def show_chart(st, fig, key: str, config: dict | None = None) -> None:
 
     A figure never knows its rendered width, so it comes in a regular and a
     phone-compact version (see ``style_fig``). Once the page knows which screen
-    it is on (``st.session_state["_viewport_narrow"]``, True on a phone) only that
+    it is on (``st.session_state["_viewport_narrow"]``, True when it matches
+    ``NARROW_VIEWPORT_QUERY``: a phone, or a window up to the tablet width) only that
     version is built and drawn, in ``mc-chart-{key}``. Until then (first run,
     tests) both are drawn, in ``mc-wide-{key}`` and ``mc-narrow-{key}``, and
     theme.css shows the one that fits. The chart keeps ``key``; in the two-copy
