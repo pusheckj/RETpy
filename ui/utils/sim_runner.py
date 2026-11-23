@@ -12,6 +12,7 @@ import hashlib
 import logging
 import os
 import threading
+import time
 import concurrent.futures as _cf
 import multiprocessing as _mp
 from dataclasses import dataclass
@@ -427,9 +428,9 @@ def _hashable(overrides: dict) -> tuple:
 # ---------------------------------------------------------------------------
 
 def _disk():
-    # Hosted for other people: keep NO server-side copy of anyone's numbers.
-    # (Results still cache in memory for the life of the process, keyed by the
-    # inputs, so nothing outlives a restart and nobody can read another's.)
+    # Hosted for other people: write NO server-side file of anyone's numbers.
+    # (Results still cache in memory, keyed on a sha256 of the inputs, for at most
+    # _MEM_TTL_S each, so nothing outlives a restart and no key holds raw inputs.)
     from utils.hosting import is_hosted
     if is_hosted():
         return None
@@ -503,9 +504,38 @@ def run_full_analysis(
 # our own bounded LRU keyed on a pre-flattened tuple.
 def _mem_key(key) -> str:
     """The in-memory cache key: a sha256 of the flattened inputs. Hosted, these
-    caches are shared by every visitor and live as long as the process, so a key
-    must never hold anyone's raw inputs. (The disk tier hashes the same way.)"""
+    caches are shared by every visitor, so a key must never hold anyone's raw
+    inputs. (The disk tier hashes the same way.) ``repr`` tells 1 from 1.0, so a
+    rerun whose value changes from int to float misses, as it does on disk."""
     return hashlib.sha256(repr(key).encode("utf-8", errors="replace")).hexdigest()
+
+
+# Hosted memory entries live this long, then drop on the next cache access. Locally
+# there is no limit: the disk tier already outlives the process.
+_MEM_TTL_S = 30 * 60
+_MEM_STAMPS: Dict[str, float] = {}      # digest -> when it was stored (hosted only)
+
+
+def _mem_now() -> float:
+    return time.monotonic()
+
+
+def _mem_stamp(mk: str) -> None:
+    from utils.hosting import is_hosted
+    if is_hosted():
+        _MEM_STAMPS[mk] = _mem_now()
+
+
+def _mem_expire() -> None:
+    """Drop every hosted memory entry older than ``_MEM_TTL_S`` from every cache."""
+    if not _MEM_STAMPS:
+        return
+    cutoff = _mem_now() - _MEM_TTL_S
+    for mk in [m for m, t in _MEM_STAMPS.items() if t < cutoff]:
+        del _MEM_STAMPS[mk]
+        _CACHE.drop(mk)
+        for cache in _SMALL_CACHES:
+            cache.pop(mk, None)
 
 
 class _SimCache:
@@ -519,6 +549,7 @@ class _SimCache:
         self._order: List[str] = []
 
     def lookup(self, key) -> Optional[Dict[str, Any]]:
+        _mem_expire()
         mk = _mem_key(key)
         if mk in self._data:
             self._order.remove(mk)
@@ -540,33 +571,39 @@ class _SimCache:
             self._order.remove(key)
         self._data[key] = result
         self._order.append(key)
+        _mem_stamp(key)
         if len(self._order) > self.maxsize:
             self._data.pop(self._order.pop(0), None)
+
+    def drop(self, key: str) -> None:
+        if self._data.pop(key, None) is not None:
+            self._order.remove(key)
 
     def clear(self):
         self._data.clear()
         self._order.clear()
+        _MEM_STAMPS.clear()
 
 
 _CACHE = _SimCache()
 
 # Separate small cache for the net-worth ("FI number") sweep, keyed on frozen
 # overrides + sim count + work cap.
-_NW_CACHE: Dict[tuple, Any] = {}
+_NW_CACHE: Dict[str, Any] = {}
 
 # Separate small cache for the safe-withdrawal-rate sweep.
-_SWR_CACHE: Dict[tuple, Any] = {}
+_SWR_CACHE: Dict[str, Any] = {}
 
 # Small cache for the Freedom milestones "Confirm with simulation" check.
-_PLACE_CACHE: Dict[tuple, Any] = {}
+_PLACE_CACHE: Dict[str, Any] = {}
 
 # Every small cache, for clear_cache(): a new one must be added here (the
 # mortgage cache, defined further down, appends itself) or "Recompute
 # everything" would keep serving its old results.
-_SMALL_CACHES: List[Dict[tuple, Any]] = [_NW_CACHE, _SWR_CACHE, _PLACE_CACHE]
+_SMALL_CACHES: List[Dict[str, Any]] = [_NW_CACHE, _SWR_CACHE, _PLACE_CACHE]
 # Success-by-age scans of the full analysis, which do not depend on the target
 # retirement age (see plan_full_analysis).
-_SCAN_CACHE: Dict[tuple, Any] = {}
+_SCAN_CACHE: Dict[str, Any] = {}
 _SMALL_CACHES.append(_SCAN_CACHE)
 _SMALL_CACHE_MAX = 24
 
@@ -594,12 +631,15 @@ def clear_cache(include_disk: bool = True) -> None:
 def _small_cache_insert(cache: Dict[str, Any], key: tuple, value: Any) -> None:
     """Add to a small cache, evicting the oldest entries above the bound.
     Entries are stored under ``_mem_key(key)``: look them up the same way."""
-    cache[_mem_key(key)] = value
+    mk = _mem_key(key)
+    cache[mk] = value
+    _mem_stamp(mk)
     while len(cache) > _SMALL_CACHE_MAX:
         cache.pop(next(iter(cache)))
 
 
 def _small_cache_lookup(cache: Dict[str, Any], kind: str, key: tuple):
+    _mem_expire()
     mk = _mem_key(key)
     if mk in cache:
         return cache[mk]
@@ -2816,7 +2856,7 @@ def _payoff_projection_for(overrides: dict, extra: float) -> dict:
         _restore_overrides(original)
 
 
-_MORTGAGE_CACHE: Dict[tuple, Any] = {}
+_MORTGAGE_CACHE: Dict[str, Any] = {}
 _SMALL_CACHES.append(_MORTGAGE_CACHE)
 
 
@@ -2974,7 +3014,7 @@ def run_mortgage_paydown_analysis(
 # ---------------------------------------------------------------------------
 # Roth conversion optimizer (Deep dives -> Roth conversions)
 # ---------------------------------------------------------------------------
-_ROTH_CACHE: Dict[tuple, Any] = {}
+_ROTH_CACHE: Dict[str, Any] = {}
 _SMALL_CACHES.append(_ROTH_CACHE)
 
 ROTH_SWEEP_CAPS = (50_000, 100_000, 200_000)
@@ -3102,7 +3142,7 @@ def run_roth_sweep(user_overrides: dict, n_simulations: int = 1000,
 # ---------------------------------------------------------------------------
 # Historical replay (Deep dives -> Stress tests)
 # ---------------------------------------------------------------------------
-_BACKTEST_CACHE: Dict[tuple, Any] = {}
+_BACKTEST_CACHE: Dict[str, Any] = {}
 _SMALL_CACHES.append(_BACKTEST_CACHE)
 # Fewest start years worth showing; below it the range widens past the data.
 BACKTEST_MIN_YEARS = 10

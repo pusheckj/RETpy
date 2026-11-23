@@ -14,11 +14,10 @@ the first time; after that, every `git push` redeploys the app.
   questions each, with a "how to answer" line under every question). Anyone
   coming from the check-up starts with those answers filled in. *Skip for now*
   goes straight to the planner; a banner offers to finish later.
-- Their inputs stay in their own browser tab, so a refresh keeps them. Closing
-  the tab clears them unless they turn on *Remember me on this device*. That
-  keeps the inputs (and how far they got in the setup) in that browser only, so
-  they're back after they close the tab or the app updates; *Settings → Save*
-  downloads them to their computer.
+- Their inputs live in their own browser session. *Remember me on this device*
+  keeps them (and how far they got in the setup) in that browser only, so
+  they're back after a reload or an app update; *Settings → Save* downloads
+  them to their computer.
 - A Spending tab that analyses statements **they upload** (CSV, PDF, optional
   rules JSON). Files are parsed in memory for that session only and never
   saved. The hosted app never reads the server's folders. *Use my actual
@@ -101,11 +100,16 @@ your statements folder.
   12 MB, then cached) in parallel Web Workers. The server keeps the quick,
   detailed part of each result. Same code and same random seeds, so the numbers
   match the server's (checked: identical, or within 2 parts in 10^15 for dollar
-  medians). Nothing is stored on the server. Inputs stay in the
-  visitor's browser tab, and in that browser after the tab closes only if they
-  turn on *Remember me*. To speed things up, recent results stay in server
-  memory for a short time (the cache is keyed on a sha256 of the inputs, never
-  the inputs themselves, and nothing is written to disk). If a browser can't
+  medians). Saved data stays on the
+  visitor's device only if they turn on *Remember me*. To speed things up, recent
+  results stay in server memory for a short time: each entry is dropped 30
+  minutes after it was stored, on the next cache access (`sim_runner._MEM_TTL_S`).
+  The cache is keyed on a sha256 of the inputs, so no key holds an input and a
+  visitor can only fetch a result by sending the same inputs. The cached result
+  itself is the plan's output: ages, starting balances and the projected paths
+  that follow from them. Nothing is written to disk. One cache is still keyed
+  on the raw values: the debt payoff math in `retirement_sim/debts.py` (up to 64
+  entries, no limit on age). If a browser can't
   help (old browser, blocked CDN, too slow), the server does the
   work instead; the main result never waits for the download.
 - **Speed:** the free tier has little CPU. 500 simulations is the hosted

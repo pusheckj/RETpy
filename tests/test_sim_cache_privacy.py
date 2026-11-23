@@ -87,31 +87,35 @@ def test_clear_cache_empties_the_digest_keyed_caches(hosted):
     assert _all_memory_keys() == []
 
 
-def test_old_privacy_wording_is_gone_from_the_ui():
-    old = ("saved on this device only if you turn on",
-           "keep them on this device.")
-    hits = []
+_TAB_CLAIMS = ("stay in this browser tab", "stay in this tab", "kept in this browser",
+               "a refresh keeps them")
+
+
+def _ui_text():
     for folder, _dirs, files in os.walk(os.path.join(_ROOT, "ui")):
         for name in files:
             if name.endswith((".py", ".md", ".html", ".js")):
-                with open(os.path.join(folder, name), encoding="utf-8") as fh:
-                    text = fh.read()
-                hits += [(name, s) for s in old if s in text]
+                path = os.path.join(folder, name)
+                with open(path, encoding="utf-8") as fh:
+                    yield path, re.sub(r'"\s*\n\s*"', "", fh.read())   # join adjacent literals
+
+
+def test_no_copy_promises_tab_persistence_without_a_tab_store():
+    """Welcome, check-up and Settings may say inputs survive a refresh only once
+    something writes them to the tab (ui/utils/persist.py, package P1). Until
+    then that copy is false, so it must not ship."""
+    if os.path.exists(os.path.join(_ROOT, "ui", "utils", "persist.py")):
+        pytest.skip("the tab store exists: the claim is allowed")
+    hits = [(os.path.basename(path), c) for path, text in _ui_text()
+            for c in _TAB_CLAIMS if c in text and os.path.basename(path) != "device_store.py"]
     assert hits == []
 
 
-def test_welcome_and_checkup_use_the_new_wording():
+def test_welcome_privacy_sentence_matches_what_the_app_does():
     from components import welcome
     html = welcome.privacy_html(hosted=False)
-    assert ("Nothing is stored on the server. Your inputs stay in this browser tab, so a "
-            "refresh keeps them. Closing the tab clears them unless you turn on "
-            "<b>Remember me on this device</b>.") in html
-    with open(os.path.join(_ROOT, "ui", "components", "simple_mode.py"), encoding="utf-8") as fh:
-        flat = re.sub(r'"\s*\n\s*"', "", fh.read())      # join adjacent string literals
-    assert ("Your numbers stay in this tab. Keep them in a file, or turn on "
-            "Remember me to keep them after you close it.") in flat
-    with open(os.path.join(_ROOT, "ui", "components", "theme_toggle.py"), encoding="utf-8") as fh:
-        assert "Display choices such as dark mode are kept in this browser." in fh.read()
+    assert ("Nothing is stored on the server. Your inputs are saved on this device only if "
+            "you turn on <b>Remember me on this device</b>.") in html
 
 
 def test_hosted_welcome_says_results_stay_in_server_memory(monkeypatch):
@@ -120,3 +124,45 @@ def test_hosted_welcome_says_results_stay_in_server_memory(monkeypatch):
                 "They are never written to disk.")
     assert sentence in welcome.privacy_html(hosted=True)
     assert sentence not in welcome.privacy_html(hosted=False)
+
+
+def test_memory_results_expire_after_the_hosted_ttl(hosted, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(sr, "_mem_now", lambda: clock[0])
+    sr.run_full_analysis(dict(BASE), **KW)
+    assert sr.plan_full_analysis(dict(BASE), **KW).result is not None
+    clock[0] += sr._MEM_TTL_S - 1
+    assert sr.plan_full_analysis(dict(BASE), **KW).result is not None   # still inside the TTL
+    clock[0] += 2
+    assert sr.plan_full_analysis(dict(BASE), **KW).result is None       # expired: recompute
+    assert _all_memory_keys() == []                                     # and gone from memory
+
+
+def test_small_cache_entries_expire_too(hosted, monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(sr, "_mem_now", lambda: clock[0])
+    key = ("k", 1)
+    sr._small_cache_insert(sr._NW_CACHE, key, {"x": 1})
+    clock[0] += sr._MEM_TTL_S + 1
+    assert sr._small_cache_lookup(sr._NW_CACHE, "networth", key) is None
+    assert not sr._NW_CACHE
+
+
+def test_local_memory_cache_has_no_ttl(monkeypatch):
+    monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "0")
+    clock = [0.0]
+    monkeypatch.setattr(sr, "_mem_now", lambda: clock[0])
+    sr._small_cache_insert(sr._NW_CACHE, ("local", 1), {"x": 1})
+    clock[0] += 10 * sr._MEM_TTL_S
+    assert sr._small_cache_lookup(sr._NW_CACHE, "networth", ("local", 1)) == {"x": 1}
+    sr.clear_cache(include_disk=False)
+
+
+def test_hosting_doc_says_what_the_shared_cache_holds():
+    """The cached value keeps the plan's numbers (a snapshot of ages and balances),
+    and debts.py still keys on raw values: HOSTING.md must say so."""
+    with open(os.path.join(_ROOT, "docs", "HOSTING.md"), encoding="utf-8") as fh:
+        text = " ".join(fh.read().split())
+    assert "never the inputs themselves" not in text
+    assert "starting balances" in text
+    assert "debts.py" in text
