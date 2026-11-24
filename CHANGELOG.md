@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (What-if: extra annual savings)
+- What-if tile: **Extra annual savings** now works in both savings modes. Before, it raised `YOUR_BROKERAGE_CONTRIBUTION`, which is only a floor in Auto-allocate mode (no effect while the plan already saves more) and replaced the computed amount in Manual mode (it could even lower savings). New engine key `EXTRA_ANNUAL_SAVINGS` (default 0, today's dollars): each year you work, spending drops by that amount (capped at the year's spending) and the money goes to your taxable brokerage. Retirement spending is unchanged
+
 ### Added (assumption presets)
 - Assumptions: two buttons at the top, **All conservative assumptions** and **All typical assumptions**. One click sets up to 26 assumptions for you: the return set, stock mix, glide path, fee, inflation, plan-until ages, Social Security share paid from 2033, success target, spending guardrails, long-term care (cost and yearly chance), spend-less-later, salary growth, Rule of 55 and the Roth ladder. You no longer need to know good numbers
 - The presets read your situation. A longer retirement gets a bond tent, a higher success target and a lower-return set. A short one eases into bonds. Couples get a longer plan-until age and double the care chance. A loan keeps conservative inflation at 2.5%. Younger people get a lower Social Security share. Early retirees get the Roth ladder (and the Rule of 55 for typical). Salary growth is left alone if you edited your pay table. Rules and sources: `docs/METHODOLOGY.md`, section 15.3

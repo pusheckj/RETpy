@@ -2544,6 +2544,13 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
     if debt_payment > 0:
         living += debt_payment
 
+    # Extra savings (What-if lever): you spend this much less each working year
+    # and invest it. Lower spending is the money's source, so nothing is created:
+    # the Auto sweep carries it into the brokerage by itself, and Manual mode adds
+    # it to the fixed amount below. Capped at this year's spending.
+    extra_saved = min(max(0.0, float(getattr(cfg, "EXTRA_ANNUAL_SAVINGS", 0) or 0)), max(0.0, living))
+    living -= extra_saved
+
     # Record working-year spending too (deterministic, so no cross-scenario
     # spread — it anchors the spending-range chart before retirement). Living
     # expenses already include housing/children/base, so living == total here.
@@ -2662,6 +2669,12 @@ def simulate_accumulation_year(portfolio: AccountPortfolio, your_age: int, annua
             overshoot -= trim
             if overshoot > 0:
                 your_roth_contribution = max(0.0, your_roth_contribution - overshoot)
+
+        # Extra savings (lower spending, see above). Only the part that is new
+        # surplus: in a deficit year the lower spending already shrinks the
+        # draw from the portfolio. Added after the pay-limit trim, because this
+        # money is real (it came out of spending), so the trim must not drop it.
+        to_brokerage += min(extra_saved, max(0.0, raw_residual))
 
         portfolio.contribute("your_roth_ira", your_roth_contribution)  # Backdoor Roth
         _contribute_529s(portfolio, child_529s)
