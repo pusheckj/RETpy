@@ -489,7 +489,9 @@ def test_switching_profile_with_a_job_pending_leaves_no_results(monkeypatch):
            "payload": "{}"}
     ss["_bc"] = {"status": {"state": "ready", "workers": 4, "engine": "x"}, "ack": {"boot": "b", "seq": 3},
                  "jobs": {"j1": job}, "seen": time.time()}
-    at.selectbox(key="profile_selectbox").set_value("Near retirement (55)").run()
+    from components import profile_picker as pp
+    gen = ss[pp.GEN_KEY] if pp.GEN_KEY in ss else 0          # the dropdown's current widget key
+    at.selectbox(key=f"profile_selectbox_w{int(gen or 0)}").set_value("Near retirement (55)").run()
     assert not at.exception, at.exception
     ss = at.session_state
     assert ss["profile"] == "Near retirement (55)"
