@@ -162,6 +162,20 @@ Every heavy analysis in `utils/sim_runner.py` (`plan_full_analysis`,
 - Messages are acknowledged (`{boot, seq}` / `ack`), because Streamlit keeps
   only a component's latest value.
 
+## Charts and caches that hold user data in memory
+
+- **One chart per screen.** `plot_theme.show_chart` reads `st.session_state["_viewport_narrow"]`.
+  The browser sets it from `plot_theme.NARROW_VIEWPORT_QUERY` (`max-width: 1130px`).
+  The query covers phones and the tablet band where the side panel leaves a 520-700 px main pane.
+  Once the key is set, only one chart is drawn, so no CSS can swap it. A CSS rule that shows the
+  compact `mc-narrow-` chart must stay inside the query. `tests/test_narrow_contract.py` checks this.
+- **Per-session figure memo.** `st.session_state["_fig_cache"]` keeps up to 48 styled figures.
+  They die with the session.
+- **Shared Freedom memo.** `utils/milestones._BUILD_MEMO` is one dictionary per server process.
+  It keeps the inputs and results of the last 32 plans, so on a hosted server they stay in memory
+  after those visitors leave. It is never written to disk. It holds no names or account numbers,
+  only the numbers and place choices of a plan. A server restart clears it.
+
 ## Two-copy situation: `retirement_sim/` (here) vs. the `retirement_model/` sandbox
 
 This packaged directory is

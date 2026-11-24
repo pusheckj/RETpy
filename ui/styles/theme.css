@@ -2295,7 +2295,8 @@ section[data-testid="stSidebar"] [data-testid="stElementToolbar"] { display: non
     background: none; border: 0; box-shadow: none; padding: 0; margin: 0;
 }
 [class*="st-key-mc-wide-"][class*="_category"],
-[class*="st-key-mc-narrow-"][class*="_category"] {
+[class*="st-key-mc-narrow-"][class*="_category"],
+[class*="st-key-mc-chart-"][class*="_category"] {
     box-sizing: border-box; flex: 0 0 340px; height: 340px; overflow: visible;
 }
 
@@ -2638,7 +2639,8 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
 
 @media (max-width: 640px) {
     /* K1-1: "By category" card = same width/inset as "By account" (the E1 card rule's 10px side padding is dropped). */
-    [class*="st-key-mc-narrow-"][class*="_category"] { padding-left: 0; padding-right: 0; }
+    [class*="st-key-mc-narrow-"][class*="_category"],
+    [class*="st-key-mc-chart-"][class*="_category"] { padding-left: 0; padding-right: 0; }
 }
 
 @media (max-width: 640px) {
@@ -2788,9 +2790,12 @@ section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.mc-sec-
 /* L1-3: "By category" donut: no inner side padding and a left-aligned chart, so its title
    sits at the same inset (11px) as the "By account" title next to it (was 25px). */
 @media (min-width: 641px) {
-    [class*="st-key-mc-wide-"][class*="_category"] { padding: 0 !important; }
-    [class*="st-key-mc-wide-"][class*="_category"] > [data-testid="stElementContainer"] { margin: 0 !important; }
-    [class*="st-key-mc-wide-"][class*="_category"] [data-testid="stFullScreenFrame"] { margin-left: 0 !important; }
+    [class*="st-key-mc-wide-"][class*="_category"],
+    [class*="st-key-mc-chart-"][class*="_category"] { padding: 0 !important; }
+    [class*="st-key-mc-wide-"][class*="_category"] > [data-testid="stElementContainer"],
+    [class*="st-key-mc-chart-"][class*="_category"] > [data-testid="stElementContainer"] { margin: 0 !important; }
+    [class*="st-key-mc-wide-"][class*="_category"] [data-testid="stFullScreenFrame"],
+    [class*="st-key-mc-chart-"][class*="_category"] [data-testid="stFullScreenFrame"] { margin-left: 0 !important; }
 }
 
 /* L1-5: text, number and select controls start their text at the same inner offset at every

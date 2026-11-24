@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (speed: one chart per screen)
+- Charts draw once, not twice. When the page knows if the screen is narrow (`st.session_state["_viewport_narrow"]`, true for a phone or any window up to 1130 px wide, so tablets keep their compact chart: `plot_theme.NARROW_VIEWPORT_QUERY`), `plot_theme.show_chart` builds and sends only that version, in an `mc-chart-<key>` container that the CSS never hides. Until the page knows (first run, tests) it still draws the wide and the compact copy as before. With every tile open this halves the Plotly charts in the page and cuts the server work and bytes of each rerun
+- Styled charts are remembered per session (up to 48, keyed on the chart, screen class, theme, palette, font and a hash of the figure), so a rerun that changes nothing skips the 15 ms styling step for each chart
+- Freedom milestones: `milestones.build` remembers its last 32 results, so a rerun with the same inputs skips the rebuild. Each caller gets its own copy. The memo is shared by all sessions of a server process and held in memory only (see docs/ARCHITECTURE.md)
+
 ### Changed (speed: stable page structure, lighter theme)
 - The "inputs changed" warning, the setup banner and the Bridge to 59½ tile now always hold their place in the page. Before, any of them appearing or disappearing moved everything below it. The browser then rebuilt about 45 charts, a freeze of about 2.4 s. The Bridge tile itself is drawn only after a run, inside an empty slot that takes no space
 - The theme CSS is sent without comments (about 70 KB less per page load, `utils/css_min.py`, cached per file version). The unused Inter web-font import is gone. The theme setting still loads the chosen font
