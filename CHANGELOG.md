@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (hosted result cache)
+- Hosted visitors read on the Welcome screen that recent results stay in server memory for a short time and are never written to disk. Each in-memory result is now dropped 30 minutes after it was stored (`sim_runner._MEM_TTL_S`). Local runs have no limit. `docs/HOSTING.md` says what the cache holds
+- The server's in-memory result caches are keyed on a sha256 of the inputs (`sim_runner._mem_key`), not the inputs themselves. A repeat run still hits. The disk cache keys are unchanged. Covered by `tests/test_sim_cache_privacy.py`. The debt payoff caches in `retirement_sim/debts.py` still key on raw values
+- The per-account balance projection (`st.cache_data`) now expires after the same 30 minutes. It had no limit, so hosted it kept every visitor's projection until 64 newer ones pushed it out
+
 ### Changed (page script: one iframe, lighter reruns, stuck tiles, scroll restore)
 - The sidebar arrow-key navigation moved into the page script (`components/animations.py`), which sits at the top of the page. The second hidden iframe at the bottom is gone, so a rerun no longer rebuilds it (it reloaded on 1 to 3 reruns out of every rerun). One fewer iframe on the page
 - The fold state is read from the browser once and kept in memory, and is written only when you fold or open a tile. After a rerun, tiles are re-folded once per frame, before the browser paints (it used to run on every DOM change). A folded tile still does not flash open

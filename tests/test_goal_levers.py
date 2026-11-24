@@ -220,3 +220,16 @@ def test_clear_cache_clears_the_lever_caches():
     gl._CUSHION_CACHE[("y",)] = 2
     sr.clear_cache(include_disk=False)
     assert not gl._CACHE and not gl._CUSHION_CACHE
+
+
+def test_guardrail_cushion_second_call_hits_the_cache(monkeypatch):
+    """The cache is keyed on a digest. A second call must read it, not rebuild."""
+    ov = _plan(48)
+    gl._CUSHION_CACHE.clear()
+    first = gl.guardrail_cushion(ov, 48)
+    calls = []
+    real = sr._apply_overrides
+    monkeypatch.setattr(sr, "_apply_overrides", lambda o: calls.append(1) or real(o))
+    assert gl.guardrail_cushion(ov, 48) == first
+    assert calls == []
+    gl._CUSHION_CACHE.clear()

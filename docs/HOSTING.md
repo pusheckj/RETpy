@@ -100,8 +100,18 @@ your statements folder.
   12 MB, then cached) in parallel Web Workers. The server keeps the quick,
   detailed part of each result. Same code and same random seeds, so the numbers
   match the server's (checked: identical, or within 2 parts in 10^15 for dollar
-  medians). Nothing is stored on the server; saved data stays on the visitor's device only if they turn on *Remember me*. If a
-  browser can't help (old browser, blocked CDN, too slow), the server does the
+  medians). Saved data stays on the
+  visitor's device only if they turn on *Remember me*. To speed things up, recent
+  results stay in server memory for a short time: each entry is dropped 30
+  minutes after it was stored, on the next cache access (`sim_runner._MEM_TTL_S`).
+  The cache is keyed on a sha256 of the inputs, so no key holds an input and a
+  visitor can only fetch a result by sending the same inputs. The cached result
+  itself is the plan's output: ages, starting balances and the projected paths
+  that follow from them. The per-account balance projection uses Streamlit's own
+  cache with the same 30-minute limit. Nothing is written to disk. One cache is still keyed
+  on the raw values: the debt payoff math in `retirement_sim/debts.py` (up to 64
+  entries, no limit on age). If a browser can't
+  help (old browser, blocked CDN, too slow), the server does the
   work instead; the main result never waits for the download.
 - **Speed:** the free tier has little CPU. 500 simulations is the hosted
   default; visitors can pick more and wait longer.
