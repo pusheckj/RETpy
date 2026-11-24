@@ -112,13 +112,14 @@ def test_no_copy_promises_tab_persistence_without_a_tab_store():
 
 
 def test_welcome_privacy_sentence_matches_what_the_app_does():
-    if os.path.exists(os.path.join(_ROOT, "ui", "utils", "persist.py")):
-        pytest.fail("P1's tab store has landed: its Welcome rewrites this sentence. "
-                    "Update the expected sentence here to P1's wording.")
+    """P1's tab store (ui/utils/persist.py) keeps inputs in the tab, so a refresh keeps them.
+    Only Remember me keeps them after the tab closes."""
+    assert os.path.exists(os.path.join(_ROOT, "ui", "utils", "persist.py"))
     from components import welcome
     html = welcome.privacy_html(hosted=False)
-    assert ("Nothing is stored on the server. Your inputs are saved on this device only if "
-            "you turn on <b>Remember me on this device</b>.") in html
+    assert ("Nothing is stored on the server. Your inputs stay in this browser tab, so a refresh "
+            "keeps them. They stay after you close the tab only if you turn on "
+            "<b>Remember me on this device</b>.") in html
 
 
 def test_hosted_welcome_says_results_stay_in_server_memory(monkeypatch):

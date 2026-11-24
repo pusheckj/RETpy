@@ -24,8 +24,9 @@ HOSTED_RESULTS_NOTE = ("To speed things up, recent results stay in server memory
 def privacy_html(hosted: bool) -> str:
     """The privacy sentence under the two paths. Hosted visitors also hear that
     results are cached in server memory (keyed on a hash of their inputs)."""
-    text = ("Nothing is stored on the server. Your inputs are saved on this device only if "
-            "you turn on <b>Remember me on this device</b>.")
+    text = ("Nothing is stored on the server. Your inputs stay in this browser tab, so a refresh "
+            "keeps them. They stay after you close the tab only if you turn on "
+            "<b>Remember me on this device</b>.")
     if hosted:
         text += " " + HOSTED_RESULTS_NOTE
     return f'<p class="mc-welcome-privacy">{text}</p>'

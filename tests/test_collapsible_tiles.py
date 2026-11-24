@@ -268,3 +268,12 @@ def test_tiles_run_basic_to_niche_and_jump_chips_follow():
     assert found == order
     chips = [k for k, _ in ast.literal_eval(re.search(r"_JUMP_SECTIONS = (\[.*?\])\n", APP, re.S).group(1))]
     assert chips == order
+
+
+def test_no_element_is_left_behind_at_an_old_place(planner):
+    """The planner's first run draws twice (before and after the browser job starts). If anything
+    above the tiles appears in only one of the passes, every tile moves down one place and
+    AppTest keeps the old copy, so a button shows up twice and its click is lost. In the browser
+    it rebuilds the whole page. Each conditional element above the tiles has a fixed slot."""
+    keys = [b.key for b in planner.button if b.key]
+    assert len(keys) == len(set(keys)), sorted(k for k in keys if keys.count(k) > 1)

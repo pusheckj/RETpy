@@ -937,8 +937,14 @@ def main() -> None:
     # which gives them time to download Pyodide before the first run.
     from utils import browser_compute
     browser_compute.render(st)
-    if browser_compute.pending(st) and _bc_poll is not None:
-        _bc_poll()
+    # The poll is drawn only while a browser job is pending. Its slot is always drawn, so a
+    # job that starts or ends does not move every element below it (the browser would
+    # rebuild the whole page).
+    with st.container(key="mc-bc-poll-slot"):
+        if browser_compute.pending(st) and _bc_poll is not None:
+            _bc_poll()
+        else:
+            st.empty()
 
     # New planner visitors get the guided setup first, starting from their
     # check-up answers if they used it. It replaces the planner and its side
@@ -1049,6 +1055,10 @@ def main() -> None:
     with st.container(key="mc-setup-banner-slot"):
         if guided_setup.skipped(st):
             guided_setup.render_banner(st)
+        else:
+            # Streamlit does not send an empty container, so the slot would vanish and every
+            # element below would move. An empty placeholder keeps it (it draws nothing).
+            st.empty()
 
     # -------- Main panel — organized into topic sections --------
     # Deterministic charts auto-update from sidebar inputs; results-dependent
@@ -1250,6 +1260,8 @@ def main() -> None:
         if results:
             with st.container(border=True, key="mc-tile-bridge"):
                 _safe_render("components.bridge_years_gauge", results=results)
+        else:
+            st.empty()   # keeps the slot (see the setup banner slot above)
 
     # ==================== 13. DEEP DIVES ====================
     @_as_fragment
