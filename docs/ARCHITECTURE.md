@@ -162,9 +162,9 @@ Every heavy analysis in `utils/sim_runner.py` (`plan_full_analysis`,
   which applies the plan's own config snapshot, so no `CONFIG_LOCK` is held while
   the workers compute.
   Nothing polls. When a chunk finishes, a pool thread pokes the session's waker
-  (`utils/session_wake.py`). One second later, and never within four seconds of its
-  last request, it asks Streamlit for one rerun of the session (every rerun
-  redraws the page, so late results share one), the same request `st.rerun()` makes: no widget state of its own, so
+  (`utils/session_wake.py`). Every rerun redraws the page, so it waits until every
+  pending plan is ready, or 20 seconds after the first one is, and then asks Streamlit
+  for one rerun of the session, the same request `st.rerun()` makes: no widget state of its own, so
   it merges with a visitor's pending edit and never drops it. It waits while the
   visitor's own run is going. The rerun's first step, `app._drain_extras`, stores
   finished plans through `drain_bg`. The waker reaches Streamlit's session object,

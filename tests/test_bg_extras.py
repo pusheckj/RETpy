@@ -276,26 +276,49 @@ def test_several_results_close_together_wake_the_session_once():
     assert len(fired) == 1
 
 
-def test_reruns_are_spaced_so_late_results_share_one():
-    """Each rerun redraws the whole page: four results trickling in over a few seconds
-    must not cost four reruns. After one rerun, the next waits out ``min_gap``."""
-    w, fired = _waker(delay=0.02, min_gap=0.5)
-    h1 = _Handle()
-    w.watch(h1)
+def test_the_rerun_waits_for_the_other_results():
+    """Each rerun redraws the whole page: four results that trickle in must not cost four
+    reruns. The waker waits until every watched job is ready."""
+    w, fired = _waker(max_wait=30)
+    first, second, third = _Handle(), _Handle(done=False), _Handle(done=False)
+    for h in (first, second, third):
+        w.watch(h)
+    w.poke()
+    time.sleep(0.3)
+    assert fired == []                                    # two are still computing
+    second.done = True
+    w.poke()
+    time.sleep(0.3)
+    assert fired == []
+    third.done = True
     w.poke()
     assert _until(lambda: len(fired) == 1)
-    h1.dropped = True                                     # that rerun took it
-    h2, h3 = _Handle(), _Handle()
-    w.watch(h2)
-    w.poke()                                              # a second result, soon after
+    time.sleep(0.3)
+    assert len(fired) == 1
+
+
+def test_a_ready_result_does_not_wait_for_a_slow_one_for_ever():
+    w, fired = _waker(max_wait=0.3)
+    w.watch(_Handle())
+    w.watch(_Handle(done=False))                          # never finishes
+    w.poke()
     time.sleep(0.15)
-    w.watch(h3)
-    w.poke()                                              # and a third
+    assert fired == []
+    assert _until(lambda: len(fired) == 1)
+
+
+def test_a_result_the_visitors_own_rerun_took_does_not_hold_the_others_back():
+    w, fired = _waker(max_wait=30)
+    taken, ready = _Handle(), _Handle()
+    waiting = _Handle(done=False)
+    for h in (taken, ready, waiting):
+        w.watch(h)
+    w.poke()
     time.sleep(0.2)
-    assert len(fired) == 1                                # still inside the gap
-    assert _until(lambda: len(fired) == 2)                # one rerun for both
-    time.sleep(0.8)
-    assert len(fired) == 2
+    taken.dropped = ready.dropped = True                  # a rerun of theirs stored both
+    waiting.done = True
+    w.poke()
+    assert _until(lambda: len(fired) == 1)
 
 
 def test_a_running_script_is_not_interrupted():

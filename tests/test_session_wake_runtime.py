@@ -49,7 +49,7 @@ with session_wake.running(st):
     n = st.number_input("n", key="n", value=0)
     with open(S.log, "a") as f:
         f.write(f"{{int(n)}}\\n")
-    w = session_wake.get(st, delay=0.0, retry=0.01, min_gap=0.0)
+    w = session_wake.get(st, delay=0.0, retry=0.01)
     if w is not None and not st.session_state.get("armed"):
         st.session_state["armed"] = True
         S.waker = w

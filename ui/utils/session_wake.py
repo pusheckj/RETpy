@@ -28,24 +28,25 @@ logger = logging.getLogger(__name__)
 
 KEY = "_wake"
 WAKE_DELAY_S = 1.0     # results that arrive within this long of each other share one rerun
-MIN_GAP_S = 4.0        # and a rerun is never asked for sooner than this after the last one
+MAX_WAIT_S = 20.0      # a result waits for the others at most this long
 RETRY_S = 1.0          # a script that is still running is asked again after this long
 
 
 class Waker:
     """Wakes the session once for any number of finished jobs.
 
-    ``poke()`` may be called from any thread (a pool callback). After ``delay`` seconds
-    (and at least ``min_gap`` after the previous rerun it asked for) it calls ``request()``
-    if a watched handle is ready, and waits while ``running`` is set (the visitor's own run
-    is not interrupted; its next rerun picks the results up). Every rerun redraws the page,
-    so a few late results share one."""
+    ``poke()`` may be called from any thread (a pool callback). Every rerun redraws the
+    whole page, so the waker asks for one when everything it watches is ready, or when
+    the first ready job has waited ``max_wait`` seconds for the rest. It asks at least
+    ``delay`` seconds after the poke. It calls ``request()``, and waits while ``running``
+    is set: the visitor's own run is not interrupted, and that run's own start picks up
+    whatever is ready."""
 
     def __init__(self, request: Callable[[], None], delay: float = WAKE_DELAY_S, retry: float = RETRY_S,
-                 min_gap: float = MIN_GAP_S):
+                 max_wait: float = MAX_WAIT_S):
         self.request = request
-        self.delay, self.retry, self.min_gap = delay, retry, min_gap
-        self._last = float("-inf")
+        self.delay, self.retry, self.max_wait = delay, retry, max_wait
+        self._first_ready: Optional[float] = None
         self.running = False
         self._handles: List[Any] = []
         self._lock = threading.Lock()
@@ -59,7 +60,7 @@ class Waker:
     def poke(self) -> None:
         with self._lock:
             if self._timer is None and not self._stopped:
-                self._arm(max(self.delay, self._last + self.min_gap - time.monotonic()))
+                self._arm(self.delay)
 
     def stop(self) -> None:
         with self._lock:
@@ -80,12 +81,20 @@ class Waker:
             if self._stopped:
                 return
             self._handles = [h for h in self._handles if not h.dropped]
-            if not any(h.ready() for h in self._handles):
-                return                                  # cancelled, or already taken
+            ready = [h for h in self._handles if h.ready()]
+            if not ready:
+                self._first_ready = None                # cancelled, or already taken
+                return
+            now = time.monotonic()
+            if self._first_ready is None:
+                self._first_ready = now
+            if len(ready) < len(self._handles) and now - self._first_ready < self.max_wait:
+                self._arm(self.delay)                   # the rest are coming: check again
+                return
             if self.running:
                 self._arm(self.retry)
                 return
-            self._last = time.monotonic()
+            self._first_ready = None
         try:
             self.request()
         except Exception:
