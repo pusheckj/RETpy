@@ -631,3 +631,33 @@ def test_loading_a_file_cancels_the_pool_jobs_of_the_old_inputs():
     assert handle.dropped and all(f.cancelled() for f, _fn, _a in ex.pending)
     assert "_extras_bg" not in ss and not ss.get("_extras_pending")
     assert ss["_extras_gen"] == 3
+
+
+def test_a_plain_task_error_does_not_reset_the_shared_pool(monkeypatch):
+    """One visitor's plan raising an ordinary error must not cancel other visitors' queued work.
+    Only a broken pool (BrokenProcessPool) is reset."""
+    from concurrent.futures.process import BrokenProcessPool
+    resets = []
+    monkeypatch.setattr(sr, "_bg_reset_pool", lambda ex: resets.append(ex))
+
+    class Raising:
+        def __init__(self, exc):
+            self.exc = exc
+
+        def submit(self, fn, *args):
+            fut = cf.Future()
+            fut.set_exception(self.exc)
+            return fut
+
+    plain = Raising(ValueError("bad input in one plan"))
+    monkeypatch.setattr(sr, "_bg_pool", plain)
+    handle = sr.submit_plan_bg(_fi(), generation=1, executor=plain)
+    with pytest.raises(sr.BgFailed):
+        sr.collect_bg(handle)
+    assert resets == []
+    broken = Raising(BrokenProcessPool("a worker died"))
+    monkeypatch.setattr(sr, "_bg_pool", broken)
+    handle = sr.submit_plan_bg(_fi(), generation=1, executor=broken)
+    with pytest.raises(sr.BgFailed):
+        sr.collect_bg(handle)
+    assert resets == [broken]

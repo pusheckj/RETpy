@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 import concurrent.futures as _cf
+from concurrent.futures.process import BrokenProcessPool
 import multiprocessing as _mp
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
@@ -1690,6 +1691,8 @@ def submit_plan_bg(plan: Plan, generation: int = 0, executor=None,
     # The pool pickles the job later, on its own thread. The config snapshot shares its lists
     # and dicts with the live config, which the next edit changes: send a copy.
     job = {**plan.job, "base": copy.deepcopy(plan.job["base"])}
+    if "patches" in job:
+        job["patches"] = copy.deepcopy(job["patches"])
     try:
         with _workers_skip_main():
             futures = [ex.submit(mc_jobs.run_local, job, idx) for idx in chunks if idx]
@@ -1751,7 +1754,10 @@ def collect_bg(handle: BgHandle, generation: Optional[int] = None) -> Optional[D
                 results[i] = r
     except (Exception, _cf.CancelledError) as e:        # a broken pool, a cancelled chunk, ...
         logger.warning("background pool failed for %s (%s)", plan.kind, e)
-        if handle.executor is not None and handle.executor is _bg_pool:
+        # Only a broken pool is reset. A plain error in one plan's task stays with that plan:
+        # resetting cancels every other session's queued work (they would then run inline).
+        if (isinstance(e, BrokenProcessPool) and handle.executor is not None
+                and handle.executor is _bg_pool):
             _bg_reset_pool(handle.executor)
         raise BgFailed(plan, str(e)) from e
     return finish_plan(plan, results)

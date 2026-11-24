@@ -168,6 +168,14 @@ def _validate_run_inputs(overrides: dict, target_age: int) -> list:
 
 
 
+def _drop_queued_extras() -> None:
+    """Results were cleared: follow-ups still queued or computing belong to old inputs."""
+    from utils import sim_runner as sr
+    sr.cancel_entries(st.session_state.pop("_extras_bg", None))
+    st.session_state.pop("_extras_pending", None)
+    st.session_state["_extras_gen"] = st.session_state.get("_extras_gen", 0) + 1
+
+
 def _autorun_all(progress_container=None) -> None:
     """Compute every simulation the page displays, once, on load.
 
@@ -441,6 +449,7 @@ def _run_simulation(progress_container=None) -> None:
         st.session_state.results = None
         st.session_state.whatif_results = None
         st.session_state.last_run_inputs_hash = None
+        _drop_queued_extras()
         return
 
     _pc = progress_container if progress_container is not None else st
@@ -473,6 +482,7 @@ def _run_simulation(progress_container=None) -> None:
         st.session_state.results = None
         st.session_state.whatif_results = None
         st.session_state.last_run_inputs_hash = None
+        _drop_queued_extras()
         return
     finally:
         # Always retire the progress bar — on the failure path it used to freeze
