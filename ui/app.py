@@ -264,6 +264,10 @@ def _begin_run(overrides: dict, n_sims: int, target_age: int, progress_callback=
     from utils import browser_compute as bc
     bc.cancel(st)                                   # a new run supersedes pending work
     st.session_state.pop("_extras_pending", None)
+    # Follow-ups still computing in the pool belong to the old inputs: stop what has
+    # not started and bump the generation, so a chunk that finishes later is dropped.
+    sr.cancel_entries(st.session_state.pop("_extras_bg", None))
+    st.session_state["_extras_gen"] = st.session_state.get("_extras_gen", 0) + 1
     st.session_state.pop("_main_pending", None)
     overrides = dict(overrides)
     plan = sr.plan_full_analysis(overrides, int(n_sims), int(target_age))
@@ -295,9 +299,11 @@ def _queue_extras(overrides: dict, n_sims: int, target_age: int, main_result: di
     """The analyses that follow the main result: ways to reach your goal,
     what-if baseline (lifecycle toggles on), FI number, safe withdrawal rate,
     mortgage paydown. Each goes
-    to the browser, or -- without one -- to ``_server_extras_step``, which runs
-    them here one per script run after the page is drawn, so the main result
-    never waits for them."""
+    to the browser, or -- without one -- to the background process pool (the
+    session waker asks for a rerun when they are done, ``_drain_extras`` stores
+    them), or, when the pool is off (RETIREMENT_SIM_BG_EXTRAS=0) or cannot start, to
+    ``_server_extras_step``, which runs them here one per script run after the page
+    is drawn. Either way the main result never waits for them."""
     from utils import sim_runner as sr
     from utils import browser_compute as bc
     # FI + SWR carry the fingerprint their own sections compute, so each renders
@@ -333,15 +339,31 @@ def _queue_extras(overrides: dict, n_sims: int, target_age: int, main_result: di
     # at 1k runs the binomial noise (~1.5pp) swamps the effect being measured.
     plans.append(("mortgage", sr.plan_mortgage_paydown(overrides, max(2000, n_sims), target_age),
                   keep("mortgage_paydown_result", False)))
-    server = []
+    server, pool = [], []
+    waker = None
+    if sr.bg_extras_enabled() and not bc.usable(st):
+        from utils import session_wake
+        waker = session_wake.get(st)               # None: no way to ask for the rerun
     for kind, plan, store in plans:
         if plan.result is not None:
             store(plan.result)
         elif bc.usable(st):
             bc.submit(st, kind, plan, store)
+        elif waker is not None:
+            try:
+                handle = sr.submit_plan_bg(plan, st.session_state.get("_extras_gen", 0), on_done=waker.poke)
+            except Exception:              # no pool here: the one-per-run path below
+                import logging
+                logging.getLogger("retirement_ui").exception("Background pool unavailable")
+                waker = None
+                server.append((kind, plan, store))
+            else:
+                waker.watch(handle)
+                pool.append((kind, handle, store))
         else:
             server.append((kind, plan, store))
     st.session_state["_extras_pending"] = server
+    st.session_state["_extras_bg"] = pool
 
 
 def _server_extras_step() -> None:
@@ -358,6 +380,24 @@ def _server_extras_step() -> None:
         import logging
         logging.getLogger("retirement_ui").exception("Background analysis %s failed", kind)
     st.rerun()
+
+
+def _drain_extras() -> None:
+    """Store the follow-ups the pool has finished. Runs first in every full script run,
+    so the page draws with them. The session waker asked for this run when one was ready
+    (utils/session_wake.py); an ordinary rerun of the visitor's picks them up too."""
+    entries = st.session_state.get("_extras_bg")
+    if not entries:
+        return
+    from utils import sim_runner as sr
+    arrived, remaining = sr.drain_bg(entries, st.session_state.get("_extras_gen", 0))
+    st.session_state["_extras_bg"] = remaining
+    for kind, store, result in arrived:
+        try:
+            store(result)
+        except Exception:
+            import logging
+            logging.getLogger("retirement_ui").exception("Background analysis %s failed", kind)
 
 
 def _bc_poll_body() -> None:
@@ -893,6 +933,7 @@ def main() -> None:
     _restore_from_device(store)
     from utils import persist
     persist.reapply_view(st.session_state)
+    _drain_extras()
     _inject_css()
 
     # Dark-mode + font CSS must be injected always (not only when the Settings
@@ -1308,5 +1349,6 @@ if __name__ == "__main__":
     # inputs. Reruns from cache take well under a second; a fresh simulation makes
     # other visitors wait for it to finish.
     from utils.sim_runner import CONFIG_LOCK
-    with CONFIG_LOCK:
+    from utils import session_wake
+    with CONFIG_LOCK, session_wake.running(st):
         main()

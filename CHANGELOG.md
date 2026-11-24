@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (follow-up analyses no longer block the page)
+- After a Run, the ways-to-reach-your-goal, net-worth, safe-withdrawal and mortgage sweeps now compute in a pool of background processes, not on the page's own thread. Clicks and edits answer at once while they run. Before, each sweep held the page for up to 29 seconds.
+- The page does not poll the server. When sweeps finish, the server asks for one page refresh itself (`ui/utils/session_wake.py`). Results that finish within a second of each other share one refresh. A refresh waits while your own run is going, and it keeps any edit you have just made. A new Run, or a switch of profile, cancels sweeps that are still going, so old results never show under new inputs.
+- Same numbers as before: every call seeds itself. If the server cannot reach Streamlit's session, or `RETIREMENT_SIM_BG_EXTRAS=0` is set, the sweeps run one per script run as before.
+- Fixed: after the guided setup, the profile drop-down now says "Custom" like the profile does. It used to keep a sample's name, so choosing a profile later could write that sample over your answers. A profile switch now cancels pending browser jobs too, and keeps the browser workers' status.
+- Fixed: on a hosted page, a run that Streamlit stopped for a newer one is tried again on the next refresh. It used to count as done, so no result came.
+
 ### Fixed (first automatic run, profile dropdown)
 - The Income chart's Today's/Future $ switch is saved for a refresh. It reruns only its own part of the page, which skipped the save; `persist.fragment` now saves after any partial rerun (the app's tiles and the chart's inner parts use it)
 - Skipping or finishing the guided setup no longer loads the sample household over your answers a moment later. The profile dropdown sits in the closed Settings menu, so the browser never drew it and reported its first option back; that read as a profile switch and also cleared your results. Code now starts a new dropdown whose starting choice is your plan, instead of setting the old one's value

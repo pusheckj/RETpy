@@ -25,6 +25,11 @@ import sys
 
 import pytest
 
+# The planner's follow-up analyses go to a background process pool by default.
+# Existing AppTests step through them one per script run (the fallback path), so
+# they keep that. tests/test_bg_extras.py covers the pool.
+os.environ.setdefault("RETIREMENT_SIM_BG_EXTRAS", "0")
+
 _TESTS = os.path.dirname(os.path.abspath(__file__))
 _UI = os.path.join(os.path.dirname(_TESTS), "ui")
 

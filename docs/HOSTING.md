@@ -85,6 +85,7 @@ your statements folder.
 | `RETIREMENT_SIM_HOSTED` | off locally; on automatically on Streamlit Cloud | Spending tab takes uploads only; no server folders; 500 simulations by default |
 | `RETIREMENT_SIM_MAX_WORKERS` | 8 locally, 2 hosted | Cap on parallel simulation processes (`1` = never fork) |
 | `RETIREMENT_SIM_BROWSER_COMPUTE` | on when hosted, off locally | `0`/`1`: run simulation batches in visitors' browsers |
+| `RETIREMENT_SIM_BG_EXTRAS` | on | `0`: run the follow-up analyses on the script thread, one per run, instead of in a background process pool (`RETIREMENT_SIM_MAX_WORKERS=1` also turns the pool off) |
 | `RETIREMENT_SIM_PYODIDE_URL` | jsDelivr, Pyodide 0.27.7 | Where browsers load Pyodide from (must end in `/full/`-style folder with `pyodide.js`) |
 | `RETIREMENT_SIM_BC_VERIFY` | off | `1`: the server recomputes every browser batch and logs whether it matches (diagnostics; doubles the work) |
 | `RETIREMENT_SIM_PROFILE` | `~/.config/retirement-sim/my_profile.json` | Your private profile (local only) |

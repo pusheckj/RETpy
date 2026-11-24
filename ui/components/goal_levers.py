@@ -58,7 +58,8 @@ def current_levers(st, results: dict):
 
 def pending(st) -> bool:
     """Are the levers still queued (server) or out in the browser?"""
-    if any(kind == "levers" for kind, _p, _s in (st.session_state.get("_extras_pending") or [])):
+    queued = (st.session_state.get("_extras_pending") or []) + (st.session_state.get("_extras_bg") or [])
+    if any(entry[0] == "levers" for entry in queued):
         return True
     try:
         from utils import browser_compute as bc

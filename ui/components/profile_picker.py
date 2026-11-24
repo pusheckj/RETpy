@@ -218,6 +218,16 @@ def render(st) -> None:
         preset = PROFILES.get(selected)
         if preset is None:
             return  # "Custom (keep current values)" sentinel — leave inputs as-is
+        # Whatever is still computing for the old profile (pool or browser) must not
+        # land under the new one: cancel it now. The browser keeps its status (its workers
+        # stay loaded) but no jobs; the new profile waits for an explicit Run.
+        try:
+            from utils import browser_compute as _bc, sim_runner as _sr
+            _sr.cancel_entries(st.session_state.pop("_extras_bg", None))
+            _bc.cancel(st)
+        except Exception:  # pragma: no cover
+            pass
+        st.session_state.pop("_main_pending", None)
         st.session_state["user_overrides"] = dict(preset)
         st.session_state["results"] = None
         st.session_state["whatif_results"] = None
@@ -253,6 +263,9 @@ def render(st) -> None:
             # what we don't want. Switching profiles now just clears results and
             # waits for an explicit Run.
             "_autorun_done",
+            # The browser workers' status and message counter (jobs were cancelled above):
+            # dropping them would make the page treat the loaded workers as never started.
+            "_bc",
         }
         for state_key in list(st.session_state.keys()):
             if state_key not in _PRESERVE:

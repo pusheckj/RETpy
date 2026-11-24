@@ -154,9 +154,29 @@ Every heavy analysis in `utils/sim_runner.py` (`plan_full_analysis`,
   from the server.
 - The main result's detailed calls (`Plan.local`) always run on the server. Its
   age scan goes to the browser only when the workers are already loaded.
-- The follow-up analyses (what-if baseline, FI, SWR, mortgage) go to the browser
-  when it is up, or to `app._server_extras_step` (one per run, after the page
-  is drawn) when it isn't.
+- The follow-up analyses (levers, what-if baseline, FI, SWR, mortgage) go to the
+  browser when it is up. Otherwise they go to a background process pool
+  (`sim_runner.submit_plan_bg`). The pool starts its workers with `forkserver`
+  (`spawn` where a local socket is not allowed), never by forking the threaded
+  Streamlit process, and lowers their priority. Each task runs `mc_jobs.run_local`,
+  which applies the plan's own config snapshot, so no `CONFIG_LOCK` is held while
+  the workers compute.
+  Nothing polls. When a chunk finishes, a pool thread pokes the session's waker
+  (`utils/session_wake.py`). One second later it asks Streamlit for one rerun of
+  the session, the same request `st.rerun()` makes: no widget state of its own, so
+  it merges with a visitor's pending edit and never drops it. It waits while the
+  visitor's own run is going. The rerun's first step, `app._drain_extras`, stores
+  finished plans through `drain_bg`. The waker reaches Streamlit's session object,
+  which has no public handle; when it cannot (another Streamlit version) the
+  analyses run as in the next sentence. `_begin_run` and a profile switch cancel
+  pending chunks, and `_begin_run` bumps `_extras_gen`, so a late result from old
+  inputs is dropped. With `RETIREMENT_SIM_BG_EXTRAS=0`, or if the pool cannot
+  start, they run on the script thread through `app._server_extras_step` (one per
+  run, after the page is drawn).
+- The on-load run (`app._autorun_all`) sets its once-only guard when the run
+  ends, not before. Streamlit stops a script for a newer run (the browser workers
+  report loading progress, and each report reruns the script), and a run stopped
+  that way must start again.
 - Replies are untrusted input: JSON only, size-capped, sanity-checked. Anything
   unusable, failed or past its deadline is run by the server.
 - Messages are acknowledged (`{boot, seq}` / `ack`), because Streamlit keeps

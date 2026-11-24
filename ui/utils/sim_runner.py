@@ -8,14 +8,16 @@ Wraps ``retirement_sim.account_simulation.run_monte_carlo_detailed`` to:
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import os
+import sys
 import threading
 import time
 import concurrent.futures as _cf
 import multiprocessing as _mp
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
@@ -1540,6 +1542,207 @@ def execute_plan(plan: Plan, progress_callback=None) -> Dict[str, Any]:
     if plan.result is not None:
         return plan.result
     return finish_plan(plan, run_plan_calls(plan, None, progress_callback))
+
+
+# --- Background execution of a plan (process pool, never forked from a thread) --
+# The follow-up analyses (levers, FI, SWR, mortgage) used to run on the script
+# thread, one per script run, so a click waited behind a sweep. ``submit_plan_bg``
+# sends a plan's calls to a long-lived pool of "forkserver" workers instead and
+# returns at once. A fork from the threaded Streamlit process could deadlock, and
+# a forkserver worker starts clean, so each task carries its own config snapshot
+# (``mc_jobs.run_local`` applies ``job["base"]``) and no CONFIG_LOCK is held while
+# the workers compute. ``collect_bg`` (script thread) turns finished chunks into
+# the result with ``finish_plan``, which takes the lock briefly. The numbers are the
+# same as ``execute_plan``'s: every call seeds itself.
+
+_BG_TIMEOUT_S = 900          # a plan not done by then is run here instead
+_BG_NICE = 8                 # workers yield to the page: the server stays quick to answer
+_bg_pool = None
+_bg_pool_lock = threading.Lock()
+# "forkserver" starts workers from a small clean helper process. It needs a local
+# socket; where that is not allowed (some sandboxes), the pool uses "spawn" (a
+# fresh interpreter per worker, a little slower to start).
+_bg_methods = ["forkserver", "spawn"]
+
+
+def bg_extras_enabled() -> bool:
+    """On by default. RETIREMENT_SIM_BG_EXTRAS=0 returns to the old one-analysis-
+    per-script-run path; RETIREMENT_SIM_MAX_WORKERS=1 (never start worker
+    processes) turns it off too."""
+    if os.environ.get("RETIREMENT_SIM_BG_EXTRAS", "").strip().lower() in ("0", "false", "no", "off"):
+        return False
+    return _max_workers() > 1 and hasattr(_mp, "get_context")
+
+
+def _bg_executor():
+    """The shared pool, started on first use. One worker fewer than the CPUs, so
+    the server keeps a core for the page."""
+    global _bg_pool
+    with _bg_pool_lock:
+        if _bg_pool is None:
+            import atexit
+            ctx = _mp.get_context(_bg_methods[0])
+            if _bg_methods[0] == "forkserver":
+                ctx.set_forkserver_preload(["retirement_sim.mc_jobs"])
+            n = max(1, min(_available_cpus() - 1, _max_workers()))
+            kw = {"initializer": os.nice, "initargs": (_BG_NICE,)} if hasattr(os, "nice") else {}
+            _bg_pool = _cf.ProcessPoolExecutor(max_workers=n, mp_context=ctx, **kw)
+            atexit.register(_bg_shutdown)
+        return _bg_pool
+
+
+@contextlib.contextmanager
+def _workers_skip_main():
+    """Worker processes of the spawn and forkserver kinds re-import the parent's
+    ``__main__`` file. Under ``streamlit run`` that file is app.py, and importing it
+    in every worker (bare mode, all the components) costs seconds and does nothing
+    useful: a task only needs ``retirement_sim``. Hide the file while workers start."""
+    main = sys.modules.get("__main__")
+    saved = getattr(main, "__file__", None)
+    if saved is None:
+        yield
+        return
+    try:
+        del main.__file__
+    except AttributeError:
+        yield
+        return
+    try:
+        yield
+    finally:
+        main.__file__ = saved
+
+
+def _bg_shutdown() -> None:
+    global _bg_pool
+    with _bg_pool_lock:
+        pool, _bg_pool = _bg_pool, None
+    if pool is not None:
+        _terminate_pool(pool)
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def _bg_reset_pool(broken) -> None:
+    """Forget a pool that broke, so the next submit starts a fresh one."""
+    global _bg_pool
+    with _bg_pool_lock:
+        if _bg_pool is broken:
+            _bg_pool = None
+    try:
+        broken.shutdown(wait=False, cancel_futures=True)
+    except Exception:
+        pass
+
+
+@dataclass
+class BgHandle:
+    """A plan whose calls are running in the background pool. ``generation``
+    belongs to the session: a result from an older generation is dropped."""
+    plan: "Plan"
+    futures: List[Any]
+    generation: int = 0
+    submitted: float = 0.0
+    executor: Any = None
+    chunks: List[List[int]] = field(default_factory=list)   # call indices per future
+    dropped: bool = False
+
+    def ready(self) -> bool:
+        """Every chunk has finished (or failed) and nobody has taken or dropped the plan."""
+        return not self.dropped and all(f.done() for f in self.futures)
+
+
+def submit_plan_bg(plan: Plan, generation: int = 0, executor=None,
+                   on_done: Optional[Callable[[], None]] = None) -> BgHandle:
+    """Send ``plan``'s calls to the background pool, in one chunk per worker (a
+    chunk's calls are interleaved, so the slow and quick ones spread out).
+    Returns at once. ``on_done()`` runs on a pool thread as each chunk finishes
+    (the session waker's poke; it must be quick and must not touch Streamlit).
+    Raises if the pool cannot take the work: the caller then runs the plan the
+    old way."""
+    ex = executor if executor is not None else _bg_executor()
+    n_calls = len(plan.job["calls"])
+    n_chunks = max(1, min(n_calls, getattr(ex, "_max_workers", None) or _available_cpus()))
+    chunks = [list(range(k, n_calls, n_chunks)) for k in range(n_chunks)]
+    try:
+        with _workers_skip_main():
+            futures = [ex.submit(mc_jobs.run_local, plan.job, idx) for idx in chunks if idx]
+    except Exception as e:
+        if executor is None:
+            _bg_reset_pool(ex)
+            if isinstance(e, OSError) and len(_bg_methods) > 1:     # no local socket for forkserver
+                logger.warning("background pool: %s unavailable (%s); trying %s",
+                               _bg_methods[0], e, _bg_methods[1])
+                del _bg_methods[0]
+                return submit_plan_bg(plan, generation, on_done=on_done)
+        raise
+    handle = BgHandle(plan, futures, generation, time.time(), ex, [idx for idx in chunks if idx])
+    if on_done is not None:
+        for fut in futures:
+            fut.add_done_callback(lambda _f: on_done())
+    return handle
+
+
+def cancel_bg(handle: BgHandle) -> None:
+    """Drop a plan: chunks that have not started never will. A chunk already
+    running finishes and is ignored."""
+    handle.dropped = True
+    for fut in handle.futures:
+        fut.cancel()
+
+
+def collect_bg(handle: BgHandle, generation: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """The plan's result once every chunk is done, else None. Call it on the
+    script thread. A handle of an older ``generation`` than the one given is
+    cancelled and gives None, as does a dropped handle. If the pool failed, or
+    took too long, the plan runs here instead."""
+    if handle.dropped:
+        return None
+    if generation is not None and handle.generation != generation:
+        cancel_bg(handle)
+        return None
+    if not all(f.done() for f in handle.futures):
+        if time.time() - handle.submitted <= _BG_TIMEOUT_S:
+            return None
+        logger.warning("background analysis %s timed out; running it here", handle.plan.kind)
+        cancel_bg(handle)
+        return execute_plan(handle.plan)
+    plan = handle.plan
+    handle.dropped = True                               # taken: not collected twice
+    try:
+        results: List[Any] = [None] * len(plan.job["calls"])
+        for idx, fut in zip(handle.chunks, handle.futures):
+            for i, r in zip(idx, fut.result()):
+                results[i] = r
+    except (Exception, _cf.CancelledError) as e:        # a broken pool, a cancelled chunk, ...
+        logger.warning("background pool failed for %s (%s); running it here", plan.kind, e)
+        if handle.executor is not None and handle.executor is _bg_pool:
+            _bg_reset_pool(handle.executor)
+        return execute_plan(plan)
+    return finish_plan(plan, results)
+
+
+def cancel_entries(entries) -> None:
+    """Cancel every ``(kind, handle, store)`` entry (a new run, a profile switch)."""
+    for _kind, handle, _store in entries or []:
+        cancel_bg(handle)
+
+
+def drain_bg(entries: List[tuple], generation: int):
+    """Poll ``(kind, handle, store)`` entries: ``(arrived, remaining)``, where
+    arrived is ``[(kind, store, result)]`` for plans that finished, and plans of
+    an older generation are cancelled and dropped."""
+    arrived, remaining = [], []
+    for kind, handle, store in entries:
+        try:
+            result = collect_bg(handle, generation)
+        except Exception:
+            logger.exception("Background analysis %s failed", kind)
+            continue
+        if result is not None:
+            arrived.append((kind, store, result))
+        elif not handle.dropped:
+            remaining.append((kind, handle, store))
+    return arrived, remaining
 
 
 def _terminate_pool(ex) -> None:
