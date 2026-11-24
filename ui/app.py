@@ -45,7 +45,10 @@ _install_widget_guard(st)
 def _inject_css() -> None:
     css_path = UI_DIR / "styles" / "theme.css"
     if css_path.exists():
-        st.markdown(f"<style>{css_path.read_text()}</style>", unsafe_allow_html=True)
+        # Minified (no comments) and cached per file version. The text is the same on every
+        # rerun, so Streamlit's message cache still sends it to the browser only once.
+        from utils.css_min import minified_css
+        st.markdown(f"<style>{minified_css(css_path)}</style>", unsafe_allow_html=True)
 
 
 def _init_state() -> None:
@@ -1073,8 +1076,10 @@ def main() -> None:
         _safe_render("components.spending_dashboard")
         return
 
-    if guided_setup.skipped(st):
-        guided_setup.render_banner(st)
+    # Always drawn, so the elements below keep their place whether or not the banner shows.
+    with st.container(key="mc-setup-banner-slot"):
+        if guided_setup.skipped(st):
+            guided_setup.render_banner(st)
 
     # -------- Main panel — organized into topic sections --------
     # Deterministic charts auto-update from sidebar inputs; results-dependent
@@ -1095,10 +1100,13 @@ def main() -> None:
     # own cached results.
     _phone_bar(results, stale=_results_are_stale())
 
+    # The slot is always drawn. A warning that came and went would move every element
+    # below it, and the browser would rebuild all the charts.
+    stale_slot = st.empty()
     if _results_are_stale():
-        st.warning("Your inputs changed since this simulation ran. The results "
-                   "below, including the chance of success at the top, still use the "
-                   "old inputs. Click **Run simulation** to refresh.")
+        stale_slot.warning("Your inputs changed since this simulation ran. The results "
+                           "below, including the chance of success at the top, still use the "
+                           "old inputs. Click **Run simulation** to refresh.")
 
     # Collapse all / Expand all for the section tiles below. A click on a tile's
     # heading folds that tile. The page script (components.animations,
@@ -1266,9 +1274,13 @@ def main() -> None:
 
     # ==================== 12. BRIDGE TO 59½ ====================
     # Penalty-free liquidity through the pre-59.5 gap years (results-dependent).
-    if results:
-        with st.container(border=True, key="mc-tile-bridge"):
-            _safe_render("components.bridge_years_gauge", results=results)
+    # The slot is an unbordered container: Streamlit draws nothing for it while it is empty, and
+    # it holds the tile's place so the page does not shift when results arrive. The bordered tile
+    # exists only with results, so the phone chips see no tile before a run.
+    with st.container(key="mc-bridge-slot"):
+        if results:
+            with st.container(border=True, key="mc-tile-bridge"):
+                _safe_render("components.bridge_years_gauge", results=results)
 
     # ==================== 13. DEEP DIVES ====================
     @_as_fragment

@@ -294,3 +294,11 @@ def test_partner_retirement_can_be_typed_as_years_after_you(planner_bits):
     assert at.number_input(key="ay_partner_later").value == -3
     at.number_input(key="ay_partner_later").set_value(-2).run()
     assert at.session_state["user_overrides"]["PARTNER_RETIREMENT_AGE"] == 51
+
+
+def test_row_css_finds_the_box_by_its_key_not_its_position():
+    css = open(os.path.join(_UI, "styles", "theme.css"), encoding="utf-8").read()
+    block = css[css.index('[class*="st-key-sbx-"] {'):css.index("-- end Sliders with a typed box --")]
+    assert ":first-child" not in block and ":last-child" not in block
+    assert '[class*="__box"]' in block
+    assert si.BOX == "__box"

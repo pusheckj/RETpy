@@ -14,9 +14,13 @@ path.
 """
 from __future__ import annotations
 
+import html
+import logging
 from datetime import date
 
 import plotly.graph_objects as go
+
+_log = logging.getLogger("retirement_ui")
 
 try:
     from utils.formatting import pct
@@ -159,28 +163,33 @@ def render(st) -> None:
         if not results:
             st.caption("Run a simulation first.")
             return
-        try:
-            overrides = st.session_state.get("user_overrides", {}) or {}
-            primary = results.get("primary_result", {}) or {}
-            earliest = results.get("earliest_retirement_age")
-            html_blob = _PRINT_TEMPLATE.format(
-                today=date.today().isoformat(),
-                ink=_INK, muted=_MUTED, teal=_TEAL,
-                earliest="Not achieved" if earliest is None else str(earliest),
-                target_age=primary.get("retirement_age", "—"),
-                success_str=pct(primary.get("success_rate")),
-                assumptions=_assumptions_html(overrides),
-                fan_chart=_build_fan_chart_html(results),
-                narrative=_narrative_html(results, overrides),
-            )
-            st.download_button(
-                label="⬇ Download printable summary (HTML)",
-                data=html_blob,
-                file_name=f"retirement_summary_{date.today().isoformat()}.html",
-                mime="text/html",
-                width="stretch",
-                key="print_summary_download_btn",
-            )
-            st.caption("Opens in any browser. For a PDF, print it (Cmd/Ctrl+P) and choose Save as PDF.")
-        except Exception as exc:
-            st.error(f"Couldn't prepare the summary: {exc}")
+        overrides = st.session_state.get("user_overrides", {}) or {}
+        primary = results.get("primary_result", {}) or {}
+        earliest = results.get("earliest_retirement_age")
+
+        def build_html() -> str:
+            # Runs when the visitor clicks Download, not on every rerun of the page.
+            try:
+                return _PRINT_TEMPLATE.format(
+                    today=date.today().isoformat(),
+                    ink=_INK, muted=_MUTED, teal=_TEAL,
+                    earliest="Not achieved" if earliest is None else str(earliest),
+                    target_age=primary.get("retirement_age", "—"),
+                    success_str=pct(primary.get("success_rate")),
+                    assumptions=_assumptions_html(overrides),
+                    fan_chart=_build_fan_chart_html(results),
+                    narrative=_narrative_html(results, overrides),
+                )
+            except Exception as exc:
+                _log.exception("Printable summary could not be built")
+                return f"<p>Couldn't prepare the summary: {html.escape(str(exc))}</p>"
+
+        st.download_button(
+            label="⬇ Download printable summary (HTML)",
+            data=build_html,
+            file_name=f"retirement_summary_{date.today().isoformat()}.html",
+            mime="text/html",
+            width="stretch",
+            key="print_summary_download_btn",
+        )
+        st.caption("Opens in any browser. For a PDF, print it (Cmd/Ctrl+P) and choose Save as PDF.")

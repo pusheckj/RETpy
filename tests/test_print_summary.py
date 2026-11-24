@@ -80,7 +80,8 @@ def test_render_offers_download_with_headline_number():
     assert len(st.download_calls) == 1
     call = st.download_calls[0]
     assert call["mime"] == "text/html"
-    html_blob = call["data"]
+    assert callable(call["data"])               # built on click, not on every rerun
+    html_blob = call["data"]()
 
     primary = results.get("primary_result", {}) or {}
     success_str = pct(primary.get("success_rate"))
@@ -92,6 +93,19 @@ def test_render_offers_download_with_headline_number():
         assert str(earliest) in html_blob
 
 
+def test_build_failure_is_logged(monkeypatch, caplog):
+    """The visitor sees the error only in the downloaded file, so operators get it in the log."""
+    def _boom(_results):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(print_summary, "_build_fan_chart_html", _boom)
+    st = _FakeSt(results=_real_results(), user_overrides={})
+    print_summary.render(st)
+    with caplog.at_level("ERROR", logger="retirement_ui"):
+        st.download_calls[0]["data"]()
+    assert any(r.name == "retirement_ui" and r.exc_info for r in caplog.records)
+
+
 def test_render_degrades_on_internal_error(monkeypatch):
     """A broken figure-builder must surface st.error, not crash the app."""
     def _boom(_results):
@@ -100,5 +114,5 @@ def test_render_degrades_on_internal_error(monkeypatch):
     monkeypatch.setattr(print_summary, "_build_fan_chart_html", _boom)
     st = _FakeSt(results=_real_results(), user_overrides={})
     print_summary.render(st)
-    assert st.download_calls == []
-    assert any("boom" in e for e in st.errors)
+    assert callable(st.download_calls[0]["data"])
+    assert "boom" in st.download_calls[0]["data"]()   # the failure shows in the file, not as a crash
