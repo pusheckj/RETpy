@@ -358,6 +358,20 @@ def test_b_setup_step_and_answers_survive_a_refresh(tmp_path, ctx):
 # c, d: the planner, the tab copy, the device copy
 
 
+def _pick_future_dollars(page, label):
+    """Click Future $ until the tab copy records it (a click while the page redraws is lost)."""
+    label.first.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+    want = lambda v: v and v["payload"].get("view", {}).get("income_over_time_main_dollars_mode") == "Future $"
+    for _ in range(5):
+        label.first.scroll_into_view_if_needed()
+        label.first.click()
+        try:
+            return wait_store(page, "session", want, timeout=40)
+        except TimeoutError:
+            continue
+    return wait_store(page, "session", want)
+
+
 def test_c2_future_dollars_choice_survives_a_refresh(tmp_path, ctx):
     with serve(tmp_path) as (base, _):
         page = ctx.new_page()
@@ -366,10 +380,7 @@ def test_c2_future_dollars_choice_survives_a_refresh(tmp_path, ctx):
         load_tiles(page)
         scroll_to(page, '[class*="st-key-mc-tile-income"]')
         label = page.locator('[class*="st-key-income_over_time_main_dollars_mode"] label').filter(has_text="Future")
-        label.first.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
-        label.first.click()
-        wait_store(page, "session", lambda v: v and
-                   v["payload"].get("view", {}).get("income_over_time_main_dollars_mode") == "Future $")
+        _pick_future_dollars(page, label)
         time.sleep(3)
         reload(page)
         page.wait_for_selector(".st-key-ay_your_age", state="attached", timeout=PLANNER_TIMEOUT_MS)
@@ -463,10 +474,7 @@ def test_c5_a_choice_made_in_the_session_still_shows_after_the_tiles_reload(tmp_
         load_tiles(page)
         scroll_to(page, '[class*="st-key-mc-tile-income"]')
         label = page.locator('[class*="st-key-income_over_time_main_dollars_mode"] label').filter(has_text="Future")
-        label.first.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
-        label.first.click()
-        wait_store(page, "session", lambda v: v and
-                   v["payload"].get("view", {}).get("income_over_time_main_dollars_mode") == "Future $")
+        _pick_future_dollars(page, label)
         time.sleep(3)
         open_section(page, "Retirement")
         set_number(page, ".st-key-ay_target_age__box input", 53)     # reruns the simulation: tiles close
@@ -532,9 +540,15 @@ def test_c_planner_edits_view_and_pins_survive_with_remember_me_off(tmp_path, ct
         pin.first.scroll_into_view_if_needed()
         pin.first.click()
         wait_text(page, "Clear pinned scenarios", timeout=120)
-        # the page script (S4) writes mcView; seed it the way it does if this build has no writer yet
-        page.evaluate("""() => { try { if (!sessionStorage.getItem('mcView')) sessionStorage.setItem('mcView',
-            JSON.stringify({scrollY: 0, tabs: {'mc-tile-deepdives': 'Sensitivity'}})); } catch (e) {} }""")
+        # open the Sensitivity tab the way a visitor does; the page script records it in mcView
+        scroll_to(page, '[class*="st-key-mc-tile-deepdives"]')
+        sens = page.get_by_role("tab", name="Sensitivity").first
+        sens.wait_for(timeout=PLANNER_TIMEOUT_MS)
+        for _ in range(5):
+            sens.click()
+            time.sleep(2)
+            if "Sensitivity" in (page.evaluate("() => sessionStorage.getItem('mcView') || ''") or ""):
+                break
         wait_store(page, "session", lambda v: v and v["payload"].get("full") and
                    v["payload"].get("remember") is False)
         assert store(page, "local") is None                       # nothing on the device
