@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Added (a refresh keeps your work)
+- A browser refresh now keeps your inputs, version (check-up or planner), setup step, pinned scenarios (newest 10), Today's/Future $ choices, tax view and open Deep dives tab. They live in `sessionStorage`. That is this tab only, gone when the tab closes, and never sent to the server.
+- *Remember me on this device* stays opt-in. It keeps the inputs after the tab closes. Theme, font, palette and simulation count are kept in `localStorage`, without any inputs.
+- New `utils/persist.py` builds what is saved and picks a copy at start-up: the tab copy, then the device copy, then the owner's profile file. It never saves results, uploads or widget keys that mirror the inputs. Each part is restored in its own try.
+- The envelope stays schema 1 with optional fields, so a rollback is safe.
+- An owner's browser copy wins unless the profile file changed since. Then the file loads and a notice shows. "Changed" means changed since the server started, because the planner shows the bytes it loaded.
+- `utils/device_store.py` and its component read all stores in one round trip. They report each store's status and write only a store whose content changed. Each item is capped at 200 KB, and pins and then the view are dropped first. Turning Remember me off removes the device copy.
+- A stuck loading screen now ends after 4 s and counts as *Continue*. An answer that arrives later is used only if nothing was edited. Storage is not reported as blocked just because the browser was slow.
+- A fragment rerun (Pin this scenario, a chart's Today's/Future $ switch) also saves, so a refresh right after keeps the change.
+- A restored value for a widget in a lazy tile is assigned again on every run until you pick another one. The widget then shows what the chart uses, also after the tile closes and opens again. The what-if tile gives a lever its own default only while the key has no value, so Streamlit shows no duplicate-value warning.
+- Loading a file or switching profile clears these restored input values. Your view choices stay.
+- The Money check-up and Settings show three captions: storage blocked, kept in this tab, saved in this browser only. The Deep dives and Spending tabs open on the tab the browser reports.
+- The privacy text in Settings is updated. The welcome screen, the check-up caption and `docs/HOSTING.md` are updated by the settings and welcome work package.
+- Tests: `tests/test_persist.py`, an extended `tests/test_device_store.py`, and Playwright repros in `tests/e2e/test_refresh_persistence.py` (`RUN_E2E=1`).
+
 ### Changed (hosted result cache)
 - Hosted visitors read on the Welcome screen that recent results stay in server memory for a short time and are never written to disk. Each in-memory result is now dropped 30 minutes after it was stored (`sim_runner._MEM_TTL_S`). Local runs have no limit. `docs/HOSTING.md` says what the cache holds
 - The server's in-memory result caches are keyed on a sha256 of the inputs (`sim_runner._mem_key`), not the inputs themselves. A repeat run still hits. The disk cache keys are unchanged. Covered by `tests/test_sim_cache_privacy.py`. The debt payoff caches in `retirement_sim/debts.py` still key on raw values

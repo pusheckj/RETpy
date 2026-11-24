@@ -38,6 +38,22 @@ def _extract_summary(results: dict) -> Dict[str, Any]:
     }
 
 
+OLD_MODEL_NOTE = "Saved with an older model. Run again to compare."
+
+
+def _saved_with_older_model(entry: Any) -> bool:
+    """True for a pin that came back from the browser after the model code changed (its numbers
+    are out of date). A pin made in this session has no fingerprint and counts as current."""
+    fp = entry.get("engine_fp") if isinstance(entry, dict) else None
+    if not fp:
+        return False
+    try:
+        from utils.disk_cache import engine_fingerprint
+        return fp != engine_fingerprint()
+    except Exception:
+        return False
+
+
 def _pinned(st) -> Dict[str, Any]:
     if _STATE_KEY not in st.session_state or st.session_state[_STATE_KEY] is None:
         st.session_state[_STATE_KEY] = {}
@@ -89,6 +105,7 @@ def render(st, results: dict | None) -> None:
         # Defensive fallback in case anything else ever writes the old flat
         # (pre-input-snapshot) shape directly.
         summary = entry.get("summary", entry) if isinstance(entry, dict) else entry
+        old_model = _saved_with_older_model(entry)
         with col:
             earliest = summary.get("earliest_retirement_age")
             earliest_str = str(earliest) if earliest is not None else "Not achieved"
@@ -118,6 +135,8 @@ def render(st, results: dict | None) -> None:
                 ''',
                 unsafe_allow_html=True,
             )
+            if old_model:
+                st.caption(OLD_MODEL_NOTE)
 
     _render_compare_inputs(st, pinned)
 

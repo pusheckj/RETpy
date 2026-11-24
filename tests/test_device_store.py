@@ -120,7 +120,8 @@ class TestComponentFiles:
         html = self._html()
         for needle in ("streamlit:componentReady", "apiVersion: 1", "streamlit:render",
                        "streamlit:setComponentValue", 'dataType: "json"',
-                       "streamlit:setFrameHeight", "isStreamlitMessage", "localStorage"):
+                       "streamlit:setFrameHeight", "isStreamlitMessage", "localStorage", "sessionStorage",
+                       "retpy-prefs", "mcView", "matchMedia", "write_error", "drop_device"):
             assert needle in html, needle
 
     def test_index_html_has_no_network_channel(self):
@@ -150,9 +151,23 @@ def _fresh():
     return st, ds._store(st, ds.DEFAULT_KEY)
 
 
-def _read_post(store, raw, ok=True, token=None):
-    msg = {"kind": "read", "token": token or store["read_token"], "ok": ok}
-    msg.update({"raw": raw} if ok else {"error": "SecurityError"})
+def _target(raw=None, ok=True, error="SecurityError"):
+    if not ok:
+        return {"ok": False, "error": error}
+    return {"ok": True, "raw": raw}
+
+
+def _read_post(store, tab=None, device=None, prefs=None, token=None, view_client=None, narrow=None,
+               tab_ok=True, device_ok=True, prefs_ok=True):
+    """What the reader iframe posts. tab/device are envelope dicts or JSON strings or None."""
+    def raw(v):
+        return json.dumps(v) if isinstance(v, (dict, list)) else v
+    msg = {"kind": "read", "token": token or store["read_token"],
+           "tab": _target(raw(tab), tab_ok), "device": _target(raw(device), device_ok),
+           "prefs": _target(raw(prefs), prefs_ok), "view_client": view_client, "narrow": narrow}
+    msg["ok"] = bool(tab_ok or device_ok)
+    if not msg["ok"]:
+        msg["error"] = "SecurityError"
     return msg
 
 
@@ -160,106 +175,208 @@ class TestStateMachine:
     def test_fresh_session_is_loading_and_save_cannot_clobber(self):
         st, store = _fresh()
         assert ds._public(store)["status"] == "loading"
-        ds.save(st, PAYLOAD)
+        ds.save(st, PAYLOAD, PAYLOAD, {"theme_mode": "x"})
         assert store["op"] is None
 
-    def test_read_with_saved_envelope_becomes_ready(self):
+    def test_read_message_carries_tab_device_prefs_view_and_narrow(self):
         _, store = _fresh()
-        env = ds.make_envelope(PAYLOAD)
-        ds._consume(store, _read_post(store, json.dumps(env)))
+        tab_env, dev_env = ds.make_envelope(PAYLOAD), ds.make_envelope({**PAYLOAD, "mode": "full"})
+        view = {"scrollY": 480, "tabs": {"mc-tile-deepdives": "Sensitivity"}}
+        ds._consume(store, _read_post(store, tab=tab_env, device=dev_env,
+                                      prefs={"theme_mode": "Dark", "n_simulations": 5000},
+                                      view_client=view, narrow=True))
         state = ds._public(store)
-        assert state == {"status": "ready", "data": PAYLOAD, "saved_at": env["saved_at"], "error": None}
+        assert state["status"] == "ready" and state["error"] is None
+        assert state["tab"] == PAYLOAD
+        assert state["device"] == {**PAYLOAD, "mode": "full"}
+        assert state["prefs"] == {"theme_mode": "Dark", "n_simulations": 5000}
+        assert state["view_client"] == view
+        assert state["narrow"] is True
+        assert state["targets"] == {"tab": "ok", "device": "ok", "prefs": "ok"}
+        assert state["saved_at"] == tab_env["saved_at"]
         assert store["read_token"] is None
 
-    def test_read_with_nothing_saved_is_ready_none(self):
+    def test_read_with_nothing_saved_is_ready_with_no_data(self):
         _, store = _fresh()
-        ds._consume(store, _read_post(store, None))
-        assert ds._public(store)["status"] == "ready"
-        assert ds._public(store)["data"] is None
+        ds._consume(store, _read_post(store))
+        state = ds._public(store)
+        assert state["status"] == "ready"
+        assert state["tab"] is None and state["device"] is None and state["prefs"] == {}
 
-    def test_corrupt_or_newer_stored_value_is_ready_none(self):
+    def test_corrupt_or_newer_stored_value_is_ignored_per_target(self):
         for raw in ("{oops", json.dumps({"schema": 7, "payload": {"a": 1}})):
             _, store = _fresh()
-            ds._consume(store, _read_post(store, raw))
-            assert (store["status"], store["data"]) == ("ready", None)
+            ds._consume(store, _read_post(store, tab=raw, device=ds.make_envelope(PAYLOAD), prefs="not json"))
+            assert store["status"] == "ready"
+            assert store["tab"] is None and store["device"] == PAYLOAD and store["prefs"] == {}
 
-    def test_storage_error_is_unavailable_and_blocks_save(self):
+    def test_one_blocked_target_does_not_block_the_others(self):
+        _, store = _fresh()
+        ds._consume(store, _read_post(store, tab_ok=False, device=ds.make_envelope(PAYLOAD)))
+        assert store["status"] == "ready"
+        assert store["targets"] == {"tab": "blocked", "device": "ok", "prefs": "ok"}
+        assert store["device"] == PAYLOAD
+
+    def test_all_storage_blocked_is_unavailable_and_blocks_save(self):
         st, store = _fresh()
-        ds._consume(store, _read_post(store, None, ok=False))
+        ds._consume(store, _read_post(store, tab_ok=False, device_ok=False, prefs_ok=False))
         assert store["status"] == "unavailable"
         assert store["error"] == "SecurityError"
-        ds.save(st, PAYLOAD)
+        ds.save(st, PAYLOAD, PAYLOAD)
         assert store["op"] is None
 
     def test_stale_or_repeated_posts_are_ignored(self):
         _, store = _fresh()
-        ds._consume(store, _read_post(store, None, token="someone-else"))
+        ds._consume(store, _read_post(store, token="someone-else"))
         assert store["status"] == "loading"
-        good = _read_post(store, None)
+        good = _read_post(store)
         ds._consume(store, good)
-        ds._consume(store, _read_post(store, json.dumps(ds.make_envelope(PAYLOAD)), token=good["token"]))
-        assert (store["status"], store["data"]) == ("ready", None)
+        ds._consume(store, _read_post(store, tab=ds.make_envelope(PAYLOAD), token=good["token"]))
+        assert store["tab"] is None
         for junk in (None, "x", 3, {"kind": "nope"}, {}):
             ds._consume(store, junk)
         assert store["status"] == "ready"
 
-    def test_save_queues_versioned_envelope_and_dedupes_by_hash(self):
+    def test_save_queues_only_the_targets_whose_hash_changed(self):
         st, store = _fresh()
-        ds._consume(store, _read_post(store, None))
-        ds.save(st, PAYLOAD)
+        ds._consume(store, _read_post(store))
+        ds.save(st, PAYLOAD, None, {"theme_mode": "Dark"})
         op = store["op"]
-        assert op["kind"] == "set" and op["sig"] == ds.payload_hash(PAYLOAD)
-        env = json.loads(op["value"])
+        assert op["kind"] == "set"
+        assert set(op) >= {"sig", "tab", "prefs"} and "device" not in op
+        env = json.loads(op["tab"])
         assert set(env) == {"schema", "saved_at", "payload"} and env["schema"] == 1
-        assert ds.migrate(op["value"]) == PAYLOAD
-        assert ds._public(store)["data"] == PAYLOAD
-        ds.save(st, dict(reversed(list(PAYLOAD.items()))))  # same content
-        assert store["op"] is op
-        ds.save(st, {**PAYLOAD, "mode": "advanced"})
+        assert ds.migrate(op["tab"]) == PAYLOAD
+        assert json.loads(op["prefs"]) == {"theme_mode": "Dark"}
+        same = store["op"]
+        ds.save(st, dict(reversed(list(PAYLOAD.items()))), None, {"theme_mode": "Dark"})   # same content
+        assert store["op"] is same
+        ds.save(st, {**PAYLOAD, "mode": "full"}, None, {"theme_mode": "Dark"})
+        assert set(store["op"]) >= {"tab", "prefs"}                 # unwritten older targets ride along
+        assert ds.migrate(store["op"]["tab"])["mode"] == "full"
         assert store["op"]["sig"] != op["sig"]
 
     def test_resaving_what_was_loaded_writes_nothing(self):
         st, store = _fresh()
-        ds._consume(store, _read_post(store, json.dumps(ds.make_envelope(PAYLOAD))))
-        ds.save(st, PAYLOAD)
+        ds._consume(store, _read_post(store, tab=ds.make_envelope(PAYLOAD), device=ds.make_envelope(PAYLOAD),
+                                      prefs={"a": 1}))
+        ds.save(st, PAYLOAD, PAYLOAD, {"a": 1})
+        assert store["op"] is None
+
+    def test_hashes_have_no_timestamps(self):
+        st, store = _fresh()
+        ds._consume(store, _read_post(store))
+        ds.save(st, PAYLOAD, None)
+        first = dict(store["hashes"])
+        store["op"] = None
+        ds.save(st, PAYLOAD, None)
+        assert store["op"] is None and store["hashes"] == first
+
+    def test_op_is_retired_after_three_renders(self):
+        st, store = _fresh()
+        ds._consume(store, _read_post(store))
+        ds.save(st, PAYLOAD, None)
+        assert store["op"]["renders"] == 0
+        for expected in (1, 2, 3):
+            ds._note_render(store)
+            assert store["op"]["renders"] == expected
+        ds._retire_spent_op(store)
+        assert store["op"] is None
+        ds.save(st, PAYLOAD, None)                       # unchanged: not queued again
+        assert store["op"] is None
+
+    def test_toggle_off_drops_the_device_copy_once(self):
+        st, store = _fresh()
+        ds._consume(store, _read_post(store))
+        ds.save(st, PAYLOAD, PAYLOAD)
+        assert "device" in store["op"] and not store["op"].get("drop_device")
+        store["op"] = None
+        ds.save(st, PAYLOAD, None)                       # Remember me turned off
+        op = store["op"]
+        assert op["drop_device"] is True and op["device"] is None and "tab" not in op
+        store["op"] = None
+        ds.save(st, PAYLOAD, None)                       # and only once
+        assert store["op"] is None
+
+    def test_a_device_copy_this_session_never_wrote_is_left_alone(self):
+        st, store = _fresh()
+        ds._consume(store, _read_post(store, device=ds.make_envelope(PAYLOAD)))
+        ds.save(st, PAYLOAD, None)
+        assert store["op"] is None or not store["op"].get("drop_device")
+
+    def test_over_the_cap_is_never_written(self):
+        st, store = _fresh()
+        ds._consume(store, _read_post(store))
+        ds.save(st, {"blob": "x" * (ds.MAX_ITEM_BYTES + 10)}, None)
         assert store["op"] is None
 
     def test_forget_resets_to_ready_none_and_queues_removal(self):
         st, store = _fresh()
-        ds._consume(store, _read_post(store, json.dumps(ds.make_envelope(PAYLOAD))))
+        ds._consume(store, _read_post(store, tab=ds.make_envelope(PAYLOAD), device=ds.make_envelope(PAYLOAD)))
         ds.forget(st)
-        assert ds._public(store) == {"status": "ready", "data": None, "saved_at": None, "error": None}
+        state = ds._public(store)
+        assert state["status"] == "ready" and state["tab"] is None and state["device"] is None
         assert store["op"]["kind"] == "remove"
-        assert store["forgot_pending"] is True   # outside a run: sync() will apply it
-        ds.save(st, PAYLOAD)                      # a later run may save again (no live run here)
+        assert store["forgot_pending"] is True   # outside a run: sync() applies it
+        ds.save(st, PAYLOAD, None)                # a later run may save again (no live run here)
         assert store["op"]["kind"] == "set"
 
     def test_forget_while_loading_cancels_the_read(self):
         st, store = _fresh()
         token = store["read_token"]
         ds.forget(st)
-        ds._consume(store, _read_post(store, json.dumps(ds.make_envelope(PAYLOAD)), token=token))
-        assert (store["status"], store["data"]) == ("ready", None)
+        ds._consume(store, _read_post(store, tab=ds.make_envelope(PAYLOAD), token=token))
+        assert (store["status"], store["tab"]) == ("ready", None)
 
-    def test_write_error_marks_unavailable(self):
+    def test_write_error_marks_only_that_target(self):
         st, store = _fresh()
-        ds._consume(store, _read_post(store, None))
-        ds.save(st, PAYLOAD)
-        ds._consume(store, {"kind": "write_error", "sig": "other", "error": "x"})
+        ds._consume(store, _read_post(store))
+        ds.save(st, PAYLOAD, PAYLOAD)
+        ds._consume(store, {"kind": "write_error", "sig": "other", "target": "tab", "error": "x"})
+        assert store["targets"]["tab"] == "ok"
+        ds._consume(store, {"kind": "write_error", "sig": store["op"]["sig"], "target": "device",
+                            "error": "QuotaExceededError"})
         assert store["status"] == "ready"
-        ds._consume(store, {"kind": "write_error", "sig": store["op"]["sig"], "error": "QuotaExceededError"})
-        assert (store["status"], store["error"], store["op"]) == ("unavailable", "QuotaExceededError", None)
+        assert store["targets"] == {"tab": "ok", "device": "failed", "prefs": "ok"}
+        assert store["error"] == "QuotaExceededError"
+        ds._consume(store, {"kind": "write_error", "sig": (store["op"] or {}).get("sig", "none"),
+                            "target": "tab", "error": "QuotaExceededError"})
+
+    def test_a_failed_target_is_not_written_again(self):
+        st, store = _fresh()
+        ds._consume(store, _read_post(store))
+        ds.save(st, PAYLOAD, None)
+        ds._consume(store, {"kind": "write_error", "sig": store["op"]["sig"], "target": "tab", "error": "x"})
+        ds.save(st, {**PAYLOAD, "mode": "full"}, None)
+        assert store["op"] is None or "tab" not in store["op"]
 
     def test_save_rejects_non_dict(self):
         st, _ = _fresh()
         with pytest.raises(TypeError):
-            ds.save(st, ["not", "a", "dict"])
+            ds.save(st, ["not", "a", "dict"], None)
 
     def test_public_state_is_a_copy(self):
         _, store = _fresh()
-        ds._consume(store, _read_post(store, json.dumps(ds.make_envelope(PAYLOAD))))
-        ds._public(store)["data"]["mode"] = "mutated"
-        assert store["data"]["mode"] == "simple"
+        ds._consume(store, _read_post(store, tab=ds.make_envelope(PAYLOAD)))
+        ds._public(store)["tab"]["mode"] = "mutated"
+        assert store["tab"]["mode"] == "simple"
+
+    def test_store_dict_seeded_by_a_test_gets_its_missing_fields(self):
+        st = _FakeSt()
+        st.session_state[ds.STATE_KEY_PREFIX + ds.DEFAULT_KEY] = {"status": "ready", "tab": PAYLOAD}
+        store = ds._store(st, ds.DEFAULT_KEY)
+        assert store["op"] is None and store["hashes"] and store["targets"]
+        assert ds._public(store)["tab"] == PAYLOAD
+
+
+class TestLoadTimeout:
+    def test_timeout_is_four_seconds(self):
+        assert ds.LOAD_TIMEOUT_S == 4.0
+
+    def test_pure_timeout_check(self):
+        assert ds.timed_out(started=100.0, now=103.9) is False
+        assert ds.timed_out(started=100.0, now=104.1) is True
+        assert ds.timed_out(started=100.0, now=106.0, limit=10.0) is False
 
 
 # --------------------------------------------------------------------------
@@ -273,10 +390,10 @@ import streamlit as st
 from utils import device_store
 state = device_store.sync(st)
 st.write("STATUS", state["status"])
-device_store.save(st, {{"a": 1}})
+device_store.save(st, {{"a": 1}}, None)
 if st.button("forget"):
     device_store.forget(st)
-    device_store.save(st, {{"a": 2}})   # ignored: forget wins for the rest of the run
+    device_store.save(st, {{"a": 2}}, None)   # ignored: forget wins for the rest of the run
 """
 
 
@@ -297,3 +414,21 @@ def test_apptest_sync_save_forget_smoke(tmp_path):
     at.run()                                       # next run: forget no longer blocks saves
     store = at.session_state[ds.STATE_KEY_PREFIX + ds.DEFAULT_KEY]
     assert not at.exception and store["op"]["kind"] == "set"
+
+
+def test_apptest_in_full_run_is_true_only_after_sync(tmp_path):
+    from streamlit.testing.v1 import AppTest
+
+    script = tmp_path / "ds_full.py"
+    script.write_text(f"""
+import sys
+sys.path.insert(0, {_UI!r})
+import streamlit as st
+from utils import device_store
+before = device_store.in_full_run(st)
+device_store.sync(st)
+st.write("BEFORE", before, "AFTER", device_store.in_full_run(st))
+""")
+    at = AppTest.from_file(str(script)).run()
+    assert not at.exception
+    assert at.markdown[0].value == "BEFORE `False` AFTER `True`"

@@ -45,7 +45,7 @@ include = ["retirement_sim*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
-markers = ["slow: full Monte Carlo runs"]
+markers = ["slow: full Monte Carlo runs", "e2e: browser tests (Playwright), run with RUN_E2E=1"]
 
 [tool.ruff]
 line-length = 100

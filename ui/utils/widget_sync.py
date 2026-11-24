@@ -467,6 +467,13 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "ay_partn
 _EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_")
 
 
+def _is_input_widget_key(key) -> bool:
+    """True for a key that ``reset_input_widget_state`` clears."""
+    return isinstance(key, str) and (key in DIRECT_MAPPINGS or key in DERIVED_MAPPINGS
+                                     or key in _EXTRA_INPUT_KEYS
+                                     or key.startswith(_EXTRA_INPUT_PREFIXES) or key.endswith(_BOX_SUFFIXES))
+
+
 def reset_input_widget_state(st) -> None:
     """Clear every input-widget key so a new set of overrides can repopulate.
 
@@ -487,6 +494,15 @@ def reset_input_widget_state(st) -> None:
                     if isinstance(k, str) and (k.startswith(_EXTRA_INPUT_PREFIXES)
                                                or k.endswith(_BOX_SUFFIXES))]:
             del st.session_state[key]
+    except (KeyError, AttributeError):
+        pass
+    try:
+        # Values put back after a browser refresh (utils/persist.py) are assigned again on every run.
+        # Forget the ones for inputs just cleared, or they undo this reset on the next run.
+        pending = st.session_state.get("_widget_pending")
+        if isinstance(pending, dict):
+            for key in [k for k in pending if _is_input_widget_key(k)]:
+                del pending[key]
     except (KeyError, AttributeError):
         pass
 
