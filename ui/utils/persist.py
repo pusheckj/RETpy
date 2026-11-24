@@ -22,6 +22,7 @@ flags, undo stacks, and every widget key that ``DIRECT_MAPPINGS`` already mirror
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 from typing import Any, Iterable, Mapping
@@ -476,3 +477,38 @@ def tab_default(group: str, labels: list, state: Mapping | None = None) -> str |
     tabs = state.get("_view_tabs")
     label = tabs.get(group) if isinstance(tabs, dict) else None
     return label if label in labels else None
+
+
+# The app's save point (app._save_to_device), set by app.py. A fragment rerun skips main() and
+# so skips its save, so ``fragment`` below calls this after the fragment draws.
+SAVE_HOOK = None
+
+
+def fragment(st, fn):
+    """``st.fragment(fn)`` that keeps the tab copy current.
+
+    A control inside a fragment (a chart's Today's/Future $ switch) reruns only that fragment.
+    Without a save there, a refresh right after the change lost it. Also assigns restored values
+    again first (``reapply_view``), as main() does for a full run."""
+    make = getattr(st, "fragment", None)
+    if make is None:
+        return fn
+
+    @functools.wraps(fn)
+    def _saving(*args, **kwargs):
+        try:
+            from utils import device_store
+            full_run = device_store.in_full_run(st)
+        except Exception:
+            full_run = True
+        if not full_run:
+            reapply_view(st.session_state)
+        result = fn(*args, **kwargs)
+        if not full_run and SAVE_HOOK is not None:
+            SAVE_HOOK()
+        return result
+
+    try:
+        return make(_saving)
+    except Exception:
+        return fn

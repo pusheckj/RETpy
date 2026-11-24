@@ -494,12 +494,12 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
     # Isolate the dollars toggle in a fragment so switching modes reruns only
     # this chart, not the whole app. Fall back to an inline call if the running
     # Streamlit build doesn't expose st.fragment.
-    fragment = getattr(st, "fragment", None)
-    if fragment is not None:
-        try:
-            _render_body = fragment(_render_body)
-        except Exception:  # pragma: no cover - defensive
-            pass
+    # persist.fragment also saves the choice to the tab copy (a fragment rerun skips main()'s save).
+    try:
+        from utils import persist
+    except ImportError:  # pragma: no cover
+        from ui.utils import persist  # type: ignore
+    _render_body = persist.fragment(st, _render_body)
     _render_body()
 
     # "Where this year's pay goes" (Sankey of one working year) sits under the
@@ -512,10 +512,6 @@ def render(st, results: dict = None, chart_key: str = "income_over_time_main") -
     def _render_flow() -> None:
         income_flow_chart.render_body(st, overrides, chart_key)
 
-    if fragment is not None:
-        try:
-            _render_flow = fragment(_render_flow)
-        except Exception:  # pragma: no cover - defensive
-            pass
+    _render_flow = persist.fragment(st, _render_flow)
     st.divider()
     _render_flow()

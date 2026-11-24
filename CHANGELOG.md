@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file. Format: [Ke
 ## [Unreleased]
 
 ### Fixed (first automatic run, profile dropdown)
+- The Income chart's Today's/Future $ switch is saved for a refresh. It reruns only its own part of the page, which skipped the save; `persist.fragment` now saves after any partial rerun (the app's tiles and the chart's inner parts use it)
 - Skipping or finishing the guided setup no longer loads the sample household over your answers a moment later. The profile dropdown sits in the closed Settings menu, so the browser never drew it and reported its first option back; that read as a profile switch and also cleared your results. Code now starts a new dropdown whose starting choice is your plan, instead of setting the old one's value
 - An edit made while the first automatic run was still going no longer leaves the page without results. Streamlit stops a running script when new input arrives; the run now starts again on that rerun instead of being marked done
 

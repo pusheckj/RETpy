@@ -1000,3 +1000,20 @@ def test_loading_a_json_file_after_a_restore_starts_clean():
     for key in ("le_sex", "ms_rate", "wifc_scenario"):
         assert key not in st.session_state, key
     assert st.session_state["income_over_time_main_dollars_mode"] == "Future $"
+
+
+def test_a_fragment_rerun_saves_the_tab_copy(monkeypatch):
+    """A chart's Today's/Future $ switch reruns only its fragment, which skips main()'s save.
+    persist.fragment must save after it, so a refresh right after keeps the choice."""
+    from types import SimpleNamespace
+    from utils import device_store
+    calls = []
+    st = SimpleNamespace(session_state={}, fragment=lambda fn: fn)
+    monkeypatch.setattr(device_store, "in_full_run", lambda _st: False)
+    monkeypatch.setattr(persist, "SAVE_HOOK", lambda: calls.append("saved"))
+    persist.fragment(st, lambda: calls.append("drawn"))()
+    assert calls == ["drawn", "saved"]
+    calls.clear()
+    monkeypatch.setattr(device_store, "in_full_run", lambda _st: True)   # main() saves a full run
+    persist.fragment(st, lambda: calls.append("drawn"))()
+    assert calls == ["drawn"]

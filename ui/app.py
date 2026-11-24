@@ -445,28 +445,14 @@ def _as_fragment(fn):
     distinct function name so Streamlit gives each its own fragment identity."""
     _f = getattr(st, "fragment", None)
     try:
-        return _f(_save_after_fragment(_config_locked(fn))) if _f else fn
+        from utils import persist
+        # persist.fragment saves after a fragment rerun (it skips main()'s save point) and
+        # assigns restored values again before a lazy tile's widgets are created.
+        return persist.fragment(st, _config_locked(fn)) if _f else fn
     except Exception:
         return fn
 
 
-def _save_after_fragment(fn):
-    """A fragment reruns alone (a chart's Today's/Future $ switch, Pin this scenario), so the
-    main script's save point is skipped. Save here too, so a refresh right after keeps the change."""
-    @functools.wraps(fn)
-    def _saving(*args, **kwargs):
-        from utils import device_store, persist
-        full_run = device_store.in_full_run(st)
-        if not full_run:
-            # A lazy tile first draws in a fragment rerun, which skips main(): assign the restored
-            # inputs and view choices again before its widgets are created (main() did it for a
-            # full run, and widgets drawn earlier in that run can no longer be assigned).
-            persist.reapply_view(st.session_state)
-        result = fn(*args, **kwargs)
-        if not full_run:
-            _save_to_device()
-        return result
-    return _saving
 
 
 def _config_locked(fn):
@@ -738,6 +724,14 @@ def _save_to_device() -> None:
         device_store.save(st, tab, device, prefs)
     except Exception:
         pass
+
+
+def _install_save_hook() -> None:
+    from utils import persist
+    persist.SAVE_HOOK = _save_to_device
+
+
+_install_save_hook()
 
 
 def _privacy_controls(_st) -> None:
