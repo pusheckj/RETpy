@@ -21,12 +21,14 @@ import contextlib
 import dataclasses
 import logging
 import threading
+import time
 from typing import Any, Callable, List, Optional
 
 logger = logging.getLogger(__name__)
 
 KEY = "_wake"
 WAKE_DELAY_S = 1.0     # results that arrive within this long of each other share one rerun
+MIN_GAP_S = 4.0        # and a rerun is never asked for sooner than this after the last one
 RETRY_S = 1.0          # a script that is still running is asked again after this long
 
 
@@ -34,12 +36,16 @@ class Waker:
     """Wakes the session once for any number of finished jobs.
 
     ``poke()`` may be called from any thread (a pool callback). After ``delay`` seconds
-    it calls ``request()`` if a watched handle is ready, and waits while ``running`` is
-    set (the visitor's own run is not interrupted; its next rerun picks the results up)."""
+    (and at least ``min_gap`` after the previous rerun it asked for) it calls ``request()``
+    if a watched handle is ready, and waits while ``running`` is set (the visitor's own run
+    is not interrupted; its next rerun picks the results up). Every rerun redraws the page,
+    so a few late results share one."""
 
-    def __init__(self, request: Callable[[], None], delay: float = WAKE_DELAY_S, retry: float = RETRY_S):
+    def __init__(self, request: Callable[[], None], delay: float = WAKE_DELAY_S, retry: float = RETRY_S,
+                 min_gap: float = MIN_GAP_S):
         self.request = request
-        self.delay, self.retry = delay, retry
+        self.delay, self.retry, self.min_gap = delay, retry, min_gap
+        self._last = float("-inf")
         self.running = False
         self._handles: List[Any] = []
         self._lock = threading.Lock()
@@ -53,7 +59,7 @@ class Waker:
     def poke(self) -> None:
         with self._lock:
             if self._timer is None and not self._stopped:
-                self._arm(self.delay)
+                self._arm(max(self.delay, self._last + self.min_gap - time.monotonic()))
 
     def stop(self) -> None:
         with self._lock:
@@ -79,6 +85,7 @@ class Waker:
             if self.running:
                 self._arm(self.retry)
                 return
+            self._last = time.monotonic()
         try:
             self.request()
         except Exception:

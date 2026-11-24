@@ -276,6 +276,28 @@ def test_several_results_close_together_wake_the_session_once():
     assert len(fired) == 1
 
 
+def test_reruns_are_spaced_so_late_results_share_one():
+    """Each rerun redraws the whole page: four results trickling in over a few seconds
+    must not cost four reruns. After one rerun, the next waits out ``min_gap``."""
+    w, fired = _waker(delay=0.02, min_gap=0.5)
+    h1 = _Handle()
+    w.watch(h1)
+    w.poke()
+    assert _until(lambda: len(fired) == 1)
+    h1.dropped = True                                     # that rerun took it
+    h2, h3 = _Handle(), _Handle()
+    w.watch(h2)
+    w.poke()                                              # a second result, soon after
+    time.sleep(0.15)
+    w.watch(h3)
+    w.poke()                                              # and a third
+    time.sleep(0.2)
+    assert len(fired) == 1                                # still inside the gap
+    assert _until(lambda: len(fired) == 2)                # one rerun for both
+    time.sleep(0.8)
+    assert len(fired) == 2
+
+
 def test_a_running_script_is_not_interrupted():
     """A user's run (Run, a sensitivity sweep) must finish first: the rerun that
     shows the results waits until the script is idle."""
