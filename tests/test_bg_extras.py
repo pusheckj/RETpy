@@ -148,7 +148,8 @@ def test_drain_splits_ready_stale_and_waiting_entries():
     stale = sr.submit_plan_bg(_swr(), generation=1, executor=InlineExecutor())
     waiting = sr.submit_plan_bg(_fi(), generation=2, executor=ManualExecutor())
     entries = [("fi", done, "store-fi"), ("swr", stale, "store-swr"), ("again", waiting, "store-x")]
-    arrived, remaining = sr.drain_bg(entries, generation=2)
+    arrived, remaining, failed = sr.drain_bg(entries, generation=2)
+    assert failed == []
     assert [(k, s) for k, s, _r in arrived] == [("fi", "store-fi")]
     assert isinstance(arrived[0][2], dict)
     assert remaining == [("again", waiting, "store-x")]
@@ -157,11 +158,33 @@ def test_drain_splits_ready_stale_and_waiting_entries():
 
 # ---------------------------------------------------------------- failures
 
-def test_pool_failure_falls_back_to_running_it_here():
-    whole = sr.execute_plan(_fi())
-    sr.clear_cache(include_disk=False)
-    handle = sr.submit_plan_bg(_fi(), generation=1, executor=InlineExecutor(fail=True))
-    assert sr.collect_bg(handle) == whole
+def test_pool_failure_is_handed_back_not_run_inside_the_collect(monkeypatch):
+    """A broken pool must not make the page wait: nothing runs inside collect or drain. The plan
+    comes back to the caller, who queues it for the one-per-run path."""
+    ran = []
+    real = sr.execute_plan
+    monkeypatch.setattr(sr, "execute_plan", lambda *a, **k: (ran.append(1), real(*a, **k))[1])
+    plan = _fi()
+    handle = sr.submit_plan_bg(plan, generation=1, executor=InlineExecutor(fail=True))
+    with pytest.raises(sr.BgFailed) as info:
+        sr.collect_bg(handle)
+    assert info.value.plan is plan
+    h1 = sr.submit_plan_bg(_fi(), generation=1, executor=InlineExecutor(fail=True))
+    h2 = sr.submit_plan_bg(_swr(), generation=1, executor=InlineExecutor(fail=True))
+    waiting = sr.submit_plan_bg(_fi(), generation=1, executor=ManualExecutor())
+    arrived, remaining, failed = sr.drain_bg([("fi", h1, "s1"), ("swr", h2, "s2"), ("w", waiting, "s3")], 1)
+    assert arrived == [] and [e[0] for e in remaining] == ["w"]
+    assert [(k, st) for k, _p, st in failed] == [("fi", "s1"), ("swr", "s2")]
+    assert failed[0][1] is h1.plan and not ran
+
+
+def test_a_timed_out_plan_is_handed_back_too(monkeypatch):
+    ex = ManualExecutor()
+    handle = sr.submit_plan_bg(_fi(), generation=1, executor=ex)
+    monkeypatch.setattr(sr, "_BG_TIMEOUT_S", -1)
+    arrived, remaining, failed = sr.drain_bg([("fi", handle, "s")], 1)
+    assert arrived == [] and remaining == [] and [k for k, _p, _s in failed] == ["fi"]
+    assert handle.dropped
 
 
 def test_submit_failure_is_raised_for_the_caller_to_fall_back():
@@ -221,20 +244,45 @@ def test_flag_turns_it_off(monkeypatch):
 
 
 def test_workers_do_not_re_import_the_main_script(monkeypatch):
-    """Under ``streamlit run`` the main file is app.py. Spawned workers would import
-    all of it: the file is hidden while they start, and put back after."""
+    """Under ``streamlit run`` the main file is app.py. Spawned workers would import all of it.
+    While the pool takes work, the launch data that spawn and forkserver build leaves the main
+    file out. Outside that call, and for other threads, it is unchanged. The shared __main__
+    module is never edited (another session's script may read its __file__ at any moment)."""
+    from multiprocessing import spawn
     main = sys.modules["__main__"]
     monkeypatch.setattr(main, "__file__", "/some/app.py", raising=False)
-    seen = []
+
+    def main_keys():
+        return [k for k in spawn.get_preparation_data("x") if k.startswith("init_main_from") or k == "main_path"]
+
+    assert main_keys()                                       # the control: normally it is there
+    seen, other = [], []
 
     class Spy(InlineExecutor):
         def submit(self, fn, *args):
-            seen.append(hasattr(main, "__file__"))
+            seen.append((main_keys(), hasattr(main, "__file__")))
+            t = threading.Thread(target=lambda: other.append(main_keys()))
+            t.start()
+            t.join()
             return super().submit(fn, *args)
 
     sr.submit_plan_bg(_fi(), generation=1, executor=Spy())
-    assert seen and not any(seen)
-    assert main.__file__ == "/some/app.py"
+    assert seen and all(keys == [] and has_file for keys, has_file in seen)
+    assert other and all(other)                              # another thread still gets the full data
+    assert main_keys() and main.__file__ == "/some/app.py"
+
+
+def test_the_snapshot_a_job_sends_is_a_copy():
+    """The pool pickles the job later, on its own thread. The snapshot must not share lists
+    and dicts with the live config, which the next edit changes."""
+    ex = ManualExecutor()
+    plan = _fi()
+    sr.submit_plan_bg(plan, generation=1, executor=ex)
+    sent = ex.pending[0][2][0]
+    assert sent["base"] == plan.job["base"]
+    shared = [k for k, v in sent["base"].items()
+              if isinstance(v, (list, dict)) and v is plan.job["base"][k]]
+    assert shared == []
 
 
 # ---------------------------------------------------------------- waking the session
@@ -357,17 +405,20 @@ def test_a_stopped_waker_never_fires():
     assert fired == []
 
 
-def test_rerun_request_keeps_the_pending_widget_values():
-    """The rerun carries no widget state of its own. A pending edit of the visitor's must
-    survive: hand the request to the running runner first (it merges), and start a new
-    runner only when there is none to take it."""
+def test_rerun_request_never_touches_a_live_runner():
+    """The rerun carries no widget state of its own. A runner may hold the visitor's click or
+    an edit, so a request leaves any runner alone (it is told nothing) and reports that it must
+    be asked again. A run is started only when there is no runner."""
     class Runner:
-        def __init__(self, accepts):
-            self.accepts, self.got = accepts, []
+        def __init__(self):
+            self.got, self.stopped = [], False
 
         def request_rerun(self, data):
             self.got.append(data)
-            return self.accepts
+            return True
+
+        def request_stop(self):
+            self.stopped = True
 
     class Session:
         def __init__(self, runner):
@@ -380,15 +431,33 @@ def test_rerun_request_keeps_the_pending_widget_values():
                                    context_info=None)
     assert data.widget_states is None and not data.fragment_id_queue
     assert data.cached_message_hashes == {"m"} and data.query_string == "a=1"
-    live = Session(Runner(True))
-    session_wake.request_rerun(live, data)
-    assert live._scriptrunner.got == [data] and live.created == []
-    idle = Session(Runner(False))
-    session_wake.request_rerun(idle, data)
-    assert idle.created == [data]
+    live = Session(Runner())
+    assert session_wake.request_rerun(live, data) is False
+    assert live._scriptrunner.got == [] and not live._scriptrunner.stopped and live.created == []
     none_yet = Session(None)
-    session_wake.request_rerun(none_yet, data)
+    assert session_wake.request_rerun(none_yet, data) is True
     assert none_yet.created == [data]
+
+
+def test_a_busy_script_makes_the_waker_ask_again():
+    """When the request finds a runner, the waker re-arms itself and asks again."""
+    calls = []
+
+    def request():
+        calls.append(time.monotonic())
+        if len(calls) < 3:
+            w.retry_later()                  # what _LiveRequest does on the loop when a runner exists
+
+    w = session_wake.Waker(request, delay=0.0, retry=0.02)
+    h = _Handle()
+    h.done = True
+    w.watch(h)
+    w.poke()
+    deadline = time.time() + 3
+    while len(calls) < 3 and time.time() < deadline:
+        time.sleep(0.02)
+    w.stop()
+    assert len(calls) == 3
 
 
 def test_outside_a_streamlit_session_there_is_no_waker():
@@ -521,3 +590,44 @@ def test_the_walkthrough_hands_over_a_selectbox_that_matches_the_profile():
     guided_setup._sync_planner(st)
     assert st.session_state["profile"] == "Custom (keep current values)"
     assert st.session_state["profile_selectbox"] == st.session_state["profile"]
+
+
+def test_failed_pool_plans_run_one_per_script_run_not_all_in_the_drain(monkeypatch):
+    """Two follow-ups whose pool broke: they come back as queued work. Each runs from the queue
+    (after the page is drawn), one at a time, never both inside the drain at the run's start."""
+    at = _planner(monkeypatch)
+    import streamlit as st
+    runs, stored = [], []
+    real = sr.execute_plan
+
+    def spy(plan, *a, **k):
+        runs.append(len(st.session_state.get("_extras_pending") or []))     # still waiting behind this one
+        return real(plan, *a, **k)
+
+    monkeypatch.setattr(sr, "execute_plan", spy)
+    h1 = sr.submit_plan_bg(_fi(), generation=0, executor=InlineExecutor(fail=True))
+    h2 = sr.submit_plan_bg(_swr(), generation=0, executor=InlineExecutor(fail=True))
+    ss = at.session_state
+    ss["_extras_gen"] = 0
+    ss["_extras_pending"] = []
+    ss["_extras_bg"] = [("fi", h1, lambda r: stored.append("fi")), ("swr", h2, lambda r: stored.append("swr"))]
+    at.run()
+    assert not at.exception, at.exception
+    assert sorted(stored) == ["fi", "swr"]                    # both are picked up, with no further trigger
+    assert runs == [1, 0]                                     # one at a time, from the queue
+    assert not at.session_state["_extras_bg"] and not at.session_state["_extras_pending"]
+
+
+def test_loading_a_file_cancels_the_pool_jobs_of_the_old_inputs():
+    import types
+    from components.save_load import _apply_restored
+    ex = ManualExecutor()
+    handle = sr.submit_plan_bg(_fi(), generation=2, executor=ex)
+    st = types.SimpleNamespace(session_state={"user_overrides": {}, "_extras_gen": 2,
+                                              "_extras_bg": [("fi", handle, lambda r: None)],
+                                              "_extras_pending": [("swr", None, None)]})
+    _apply_restored(st, {"YOUR_AGE": 41}, "f.json")
+    ss = st.session_state
+    assert handle.dropped and all(f.cancelled() for f, _fn, _a in ex.pending)
+    assert "_extras_bg" not in ss and not ss.get("_extras_pending")
+    assert ss["_extras_gen"] == 3

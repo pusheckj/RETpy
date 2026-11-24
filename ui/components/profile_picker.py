@@ -228,6 +228,7 @@ def render(st) -> None:
         except Exception:  # pragma: no cover
             pass
         st.session_state.pop("_main_pending", None)
+        st.session_state.pop("_extras_pending", None)
         st.session_state["user_overrides"] = dict(preset)
         st.session_state["results"] = None
         st.session_state["whatif_results"] = None

@@ -42,6 +42,15 @@ def _apply_restored(st, restored: dict, source_name: str) -> None:
     st.session_state["si_comp_customized"] = comp_table_edited_by_hand(restored)
     st.session_state["profile"] = "Custom (keep current values)"
     st.session_state["results"] = None  # stale after a load
+    # Follow-ups still computing (pool) or queued belong to the old inputs: cancel them, and
+    # bump the generation so a chunk that finishes later is dropped.
+    try:
+        from utils import sim_runner as _sr
+        _sr.cancel_entries(st.session_state.pop("_extras_bg", None))
+    except Exception:  # pragma: no cover
+        st.session_state.pop("_extras_bg", None)
+    st.session_state.pop("_extras_pending", None)
+    st.session_state["_extras_gen"] = st.session_state.get("_extras_gen", 0) + 1
     sync_widgets_from_overrides(st)
     st.session_state["_save_load_last_load"] = source_name
 

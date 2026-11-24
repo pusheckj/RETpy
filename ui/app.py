@@ -385,13 +385,18 @@ def _server_extras_step() -> None:
 def _drain_extras() -> None:
     """Store the follow-ups the pool has finished. Runs first in every full script run,
     so the page draws with them. The session waker asked for this run when one was ready
-    (utils/session_wake.py); an ordinary rerun of the visitor's picks them up too."""
+    (utils/session_wake.py); an ordinary rerun of the visitor's picks them up too. A plan
+    the pool failed goes to ``_extras_pending`` (one per run, after the page is drawn)."""
     entries = st.session_state.get("_extras_bg")
     if not entries:
         return
     from utils import sim_runner as sr
-    arrived, remaining = sr.drain_bg(entries, st.session_state.get("_extras_gen", 0))
+    arrived, remaining, failed = sr.drain_bg(entries, st.session_state.get("_extras_gen", 0))
     st.session_state["_extras_bg"] = remaining
+    if failed:
+        # The pool broke or ran too long. Nothing runs here: the plans join the one-per-run
+        # queue, which this same run works through after the page is drawn.
+        st.session_state["_extras_pending"] = (st.session_state.get("_extras_pending") or []) + failed
     for kind, store, result in arrived:
         try:
             store(result)

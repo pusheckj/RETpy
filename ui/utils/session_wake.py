@@ -6,10 +6,13 @@ browser could ask for that rerun, but every tick is a full rerun request (the wh
 widget state, about 13 KB) and a script run, many times per analysis. Here the
 server asks for the rerun itself, once, when something is ready.
 
-The request is the same one ``st.rerun()`` makes: no widget state of its own. It goes
-to the session's running script runner when there is one, which merges it with any
-edit of the visitor's that is still waiting, so no edit is lost. It starts a new
-runner only when the script is idle.
+The request is the same one ``st.rerun()`` makes: no widget state of its own. It starts
+a run only when the session has no script runner at all. If a runner exists, the
+waker leaves it alone and asks again a moment later. A runner may hold the visitor's
+click or an edit that it has not drawn yet. A request with no widget state would
+stop that runner, and Streamlit would drop the click and the edit. The ``running``
+flag cannot guard this. It is only set inside ``with running(st)``, so it is off in
+module-level code, while the run waits for a lock, and in fragment runs.
 
 This uses Streamlit's session object, which has no public handle. When it cannot be
 reached (another Streamlit version, a test), ``make_waker`` returns None and the app
@@ -39,8 +42,10 @@ class Waker:
     whole page, so the waker asks for one when everything it watches is ready, or when
     the first ready job has waited ``max_wait`` seconds for the rest. It asks at least
     ``delay`` seconds after the poke. It calls ``request()``, and waits while ``running``
-    is set: the visitor's own run is not interrupted, and that run's own start picks up
-    whatever is ready."""
+    is set. ``request()`` returns False (on the event loop, through ``retry_later``) when
+    the session still has a runner. The waker then asks again after ``retry`` seconds. The
+    visitor's own run is never interrupted, and that run's own start picks up whatever is
+    ready."""
 
     def __init__(self, request: Callable[[], None], delay: float = WAKE_DELAY_S, retry: float = RETRY_S,
                  max_wait: float = MAX_WAIT_S):
@@ -61,6 +66,12 @@ class Waker:
         with self._lock:
             if self._timer is None and not self._stopped:
                 self._arm(self.delay)
+
+    def retry_later(self) -> None:
+        """The request found the script busy: ask again after ``retry`` seconds. Safe from any thread."""
+        with self._lock:
+            if self._timer is None and not self._stopped:
+                self._arm(self.retry)
 
     def stop(self) -> None:
         with self._lock:
@@ -111,17 +122,21 @@ def rerun_data(*, query_string: str = "", page_script_hash: str = "",
     return RerunData(**{k: v for k, v in wanted.items() if k in have})
 
 
-def request_rerun(session, data) -> None:
-    """Hand ``data`` to ``session`` (on its event loop). The running runner gets it first:
-    it merges the request with a pending one and keeps that one's widget values. A new
-    runner is started only when there is none that can take it."""
+def request_rerun(session, data) -> bool:
+    """Start a run of ``session``'s script with ``data`` (call it on the session's event loop).
+
+    The loop handles the visitor's messages in order, so when the session has no script
+    runner here, no run of the visitor's is under way and nothing of theirs is waiting.
+    If a runner exists, it may hold a click or an edit that the request would drop, so it
+    is left alone: this returns False, and the caller asks again later. Returns True when
+    a run was started, or when the session is shutting down and needs no run."""
     state = getattr(session, "_state", None)
     if getattr(state, "name", None) == "SHUTDOWN_REQUESTED":
-        return
-    runner = getattr(session, "_scriptrunner", None)
-    if runner is not None and runner.request_rerun(data):
-        return
+        return True
+    if getattr(session, "_scriptrunner", None) is not None:
+        return False
     session._create_scriptrunner(data)
+    return True
 
 
 class _LiveRequest:
@@ -129,6 +144,7 @@ class _LiveRequest:
 
     def __init__(self, session, loop, ctx):
         self.session, self.loop = session, loop
+        self.waker: Optional["Waker"] = None        # set by make_waker: asked again when the script is busy
         self.bind(ctx)
 
     def bind(self, ctx) -> None:
@@ -141,7 +157,16 @@ class _LiveRequest:
 
     def __call__(self) -> None:
         data = rerun_data(**self._fields)
-        self.loop.call_soon_threadsafe(request_rerun, self.session, data)
+        self.loop.call_soon_threadsafe(self._on_loop, data)
+
+    def _on_loop(self, data) -> None:
+        try:
+            started = request_rerun(self.session, data)
+        except Exception:
+            logger.exception("Could not ask for a rerun")
+            return
+        if not started and self.waker is not None:
+            self.waker.retry_later()
 
 
 def make_waker(**kw) -> Optional[Waker]:
@@ -158,7 +183,9 @@ def make_waker(**kw) -> Optional[Waker]:
         loop = session._event_loop
         if not (hasattr(session, "_create_scriptrunner") and hasattr(session, "_scriptrunner")):
             return None
-        return Waker(_LiveRequest(session, loop, ctx), **kw)
+        request = _LiveRequest(session, loop, ctx)
+        request.waker = waker = Waker(request, **kw)
+        return waker
     except Exception:
         logger.info("Cannot reach the Streamlit session; follow-ups run on the script thread", exc_info=True)
         return None

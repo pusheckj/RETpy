@@ -9,6 +9,7 @@ Wraps ``retirement_sim.account_simulation.run_monte_carlo_detailed`` to:
 from __future__ import annotations
 
 import contextlib
+import copy
 import hashlib
 import logging
 import os
@@ -1555,7 +1556,7 @@ def execute_plan(plan: Plan, progress_callback=None) -> Dict[str, Any]:
 # the result with ``finish_plan``, which takes the lock briefly. The numbers are the
 # same as ``execute_plan``'s: every call seeds itself.
 
-_BG_TIMEOUT_S = 900          # a plan not done by then is run here instead
+_BG_TIMEOUT_S = 900          # a plan not done by then is queued for the script thread (one per run)
 _BG_NICE = 8                 # workers yield to the page: the server stays quick to answer
 _bg_pool = None
 _bg_pool_lock = threading.Lock()
@@ -1591,26 +1592,49 @@ def _bg_executor():
         return _bg_pool
 
 
+_prep_local = threading.local()
+_prep_lock = threading.Lock()
+_prep_filtered = False
+_MAIN_KEYS = ("init_main_from_name", "init_main_from_path", "main_path")
+
+
+def _install_prep_filter() -> None:
+    """Wrap ``multiprocessing.spawn.get_preparation_data`` once. The wrapper drops the
+    main-file entries only on a thread that is inside ``_workers_skip_main``; for every
+    other thread the data is what it always was."""
+    global _prep_filtered
+    with _prep_lock:
+        if _prep_filtered:
+            return
+        from multiprocessing import spawn
+        original = spawn.get_preparation_data
+
+        def get_preparation_data(name):
+            data = original(name)
+            if getattr(_prep_local, "skip_main", False):
+                for key in _MAIN_KEYS:
+                    data.pop(key, None)
+            return data
+
+        spawn.get_preparation_data = get_preparation_data
+        _prep_filtered = True
+
+
 @contextlib.contextmanager
 def _workers_skip_main():
     """Worker processes of the spawn and forkserver kinds re-import the parent's
     ``__main__`` file. Under ``streamlit run`` that file is app.py, and importing it
     in every worker (bare mode, all the components) costs seconds and does nothing
-    useful: a task only needs ``retirement_sim``. Hide the file while workers start."""
-    main = sys.modules.get("__main__")
-    saved = getattr(main, "__file__", None)
-    if saved is None:
-        yield
-        return
-    try:
-        del main.__file__
-    except AttributeError:
-        yield
-        return
+    useful: a task only needs ``retirement_sim``. While this thread starts workers,
+    leave the main file out of their launch data. ``sys.modules["__main__"]`` is shared
+    by every session (another session's script reads its ``__file__``), so it is not edited."""
+    _install_prep_filter()
+    previous = getattr(_prep_local, "skip_main", False)
+    _prep_local.skip_main = True
     try:
         yield
     finally:
-        main.__file__ = saved
+        _prep_local.skip_main = previous
 
 
 def _bg_shutdown() -> None:
@@ -1663,9 +1687,12 @@ def submit_plan_bg(plan: Plan, generation: int = 0, executor=None,
     n_calls = len(plan.job["calls"])
     n_chunks = max(1, min(n_calls, getattr(ex, "_max_workers", None) or _available_cpus()))
     chunks = [list(range(k, n_calls, n_chunks)) for k in range(n_chunks)]
+    # The pool pickles the job later, on its own thread. The config snapshot shares its lists
+    # and dicts with the live config, which the next edit changes: send a copy.
+    job = {**plan.job, "base": copy.deepcopy(plan.job["base"])}
     try:
         with _workers_skip_main():
-            futures = [ex.submit(mc_jobs.run_local, plan.job, idx) for idx in chunks if idx]
+            futures = [ex.submit(mc_jobs.run_local, job, idx) for idx in chunks if idx]
     except Exception as e:
         if executor is None:
             _bg_reset_pool(ex)
@@ -1690,11 +1717,20 @@ def cancel_bg(handle: BgHandle) -> None:
         fut.cancel()
 
 
+class BgFailed(Exception):
+    """The pool failed or took too long for ``plan``. The caller decides where to run it."""
+
+    def __init__(self, plan: "Plan", reason: str = ""):
+        super().__init__(f"{plan.kind}: {reason}")
+        self.plan = plan
+
+
 def collect_bg(handle: BgHandle, generation: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """The plan's result once every chunk is done, else None. Call it on the
     script thread. A handle of an older ``generation`` than the one given is
     cancelled and gives None, as does a dropped handle. If the pool failed, or
-    took too long, the plan runs here instead."""
+    took too long, this raises ``BgFailed`` (the handle is dropped) and runs nothing:
+    the caller queues the plan, so a broken pool never blocks a page."""
     if handle.dropped:
         return None
     if generation is not None and handle.generation != generation:
@@ -1703,9 +1739,9 @@ def collect_bg(handle: BgHandle, generation: Optional[int] = None) -> Optional[D
     if not all(f.done() for f in handle.futures):
         if time.time() - handle.submitted <= _BG_TIMEOUT_S:
             return None
-        logger.warning("background analysis %s timed out; running it here", handle.plan.kind)
+        logger.warning("background analysis %s timed out", handle.plan.kind)
         cancel_bg(handle)
-        return execute_plan(handle.plan)
+        raise BgFailed(handle.plan, "timed out")
     plan = handle.plan
     handle.dropped = True                               # taken: not collected twice
     try:
@@ -1714,10 +1750,10 @@ def collect_bg(handle: BgHandle, generation: Optional[int] = None) -> Optional[D
             for i, r in zip(idx, fut.result()):
                 results[i] = r
     except (Exception, _cf.CancelledError) as e:        # a broken pool, a cancelled chunk, ...
-        logger.warning("background pool failed for %s (%s); running it here", plan.kind, e)
+        logger.warning("background pool failed for %s (%s)", plan.kind, e)
         if handle.executor is not None and handle.executor is _bg_pool:
             _bg_reset_pool(handle.executor)
-        return execute_plan(plan)
+        raise BgFailed(plan, str(e)) from e
     return finish_plan(plan, results)
 
 
@@ -1728,13 +1764,17 @@ def cancel_entries(entries) -> None:
 
 
 def drain_bg(entries: List[tuple], generation: int):
-    """Poll ``(kind, handle, store)`` entries: ``(arrived, remaining)``, where
-    arrived is ``[(kind, store, result)]`` for plans that finished, and plans of
-    an older generation are cancelled and dropped."""
-    arrived, remaining = [], []
+    """Poll ``(kind, handle, store)`` entries: ``(arrived, remaining, failed)``.
+    ``arrived`` is ``[(kind, store, result)]`` for plans that finished. ``failed`` is
+    ``[(kind, plan, store)]`` for plans the pool could not do (the caller queues them
+    to run later). Plans of an older generation are cancelled and dropped."""
+    arrived, remaining, failed = [], [], []
     for kind, handle, store in entries:
         try:
             result = collect_bg(handle, generation)
+        except BgFailed as e:
+            failed.append((kind, e.plan, store))
+            continue
         except Exception:
             logger.exception("Background analysis %s failed", kind)
             continue
@@ -1742,7 +1782,7 @@ def drain_bg(entries: List[tuple], generation: int):
             arrived.append((kind, store, result))
         elif not handle.dropped:
             remaining.append((kind, handle, store))
-    return arrived, remaining
+    return arrived, remaining, failed
 
 
 def _terminate_pool(ex) -> None:
