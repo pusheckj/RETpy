@@ -30,6 +30,7 @@ def render_body(st) -> None:
     sec_savings.render_body(st)
     st.divider()
     _group_label(st, "Returns and mix")
+    st.caption("Not sure what to pick? The Assumptions section can set these for you in one click.")
     sec_assumptions.render_investing_body(st)
 
 

@@ -1,4 +1,4 @@
-"""Section 7: Assumptions (advanced) — spending rules and pre-Medicare healthcare.
+"""Section 7: Assumptions — one-click presets, spending rules and pre-Medicare healthcare.
 
 The investing assumptions (returns, inflation, glide path, Roth conversion) are
 drawn by ``render_investing_body`` inside the Investments section
@@ -213,6 +213,13 @@ def render_investing_body(st) -> None:
 
 
 def render_body(st) -> None:
+    try:
+        from components import assumption_presets
+    except ImportError:  # pragma: no cover
+        from ui.components import assumption_presets  # type: ignore
+    assumption_presets.render(st)        # "All conservative / typical assumptions" + What changed + Undo
+    st.divider()
+
     overrides = st.session_state.get("user_overrides", {}) or {}
 
     # ===== Dynamic spending =====
@@ -273,5 +280,5 @@ def render_body(st) -> None:
 
 
 def render(st) -> None:
-    with section_expander(st, "Assumptions (advanced)", "tune"):
+    with section_expander(st, "Assumptions", "tune"):
         render_body(st)

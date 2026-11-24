@@ -231,6 +231,33 @@ def comp_table_from_salary(start_age: int, target_age: int, base: int, bonus: in
     return table
 
 
+def comp_table_edited_by_hand(overrides: Dict[str, Any]) -> bool:
+    """True when ``YOUR_COMPENSATION_BY_AGE`` differs from the table the Income section
+    builds from the base, bonus, RSU and raise in ``overrides``. The Income section
+    always writes the table, so its mere presence (a loaded profile) is not an edit."""
+    table = overrides.get("YOUR_COMPENSATION_BY_AGE")
+    if not table:
+        return False
+    if "YOUR_BASE_SALARY" not in overrides:
+        return True                      # nothing to rebuild it from, so keep it
+    from retirement_sim import config as cfg
+
+    def rows(t):
+        return {int(age): (_whole(r.get("base")), _whole(r.get("bonus")), _whole(r.get("rsu_gross")))
+                for age, r in t.items()}
+    try:
+        built = comp_table_from_salary(
+            start_age=_whole(overrides.get("YOUR_AGE", cfg.YOUR_AGE)),
+            target_age=_whole(overrides.get("TARGET_RETIREMENT_AGE", 60)),
+            base=_whole(overrides["YOUR_BASE_SALARY"]),
+            bonus=_whole(overrides.get("YOUR_BONUS_AMOUNT", 0)),
+            rsu=_whole(overrides.get("YOUR_RSU_AMOUNT", 0)),
+            growth=float(overrides.get("YOUR_SALARY_GROWTH_RATE", 0.02) or 0.0))
+        return rows(table) != rows(built)
+    except (TypeError, ValueError, AttributeError):
+        return True
+
+
 def _whole(value: Any) -> int:
     """A whole number from an override value (an int, a float or a numeric string)."""
     try:

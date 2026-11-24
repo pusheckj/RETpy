@@ -18,7 +18,7 @@ from playwright.sync_api import sync_playwright   # noqa: E402
 
 JS = (Path(__file__).parent / "vr_audit.js").read_text()
 SECTIONS = ["About you", "Family", "Income", "Taxes", "House", "Expenses", "Debts", "Accounts",
-            "Investments", "Retirement", "Assumptions (advanced)"]
+            "Investments", "Retirement", "Assumptions"]
 
 
 def fill(loc, value):
