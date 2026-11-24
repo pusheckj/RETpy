@@ -350,7 +350,8 @@ def _apply_profile(st, data: dict, source: str) -> None:
         customized = bool((st.session_state.get("user_overrides") or {}).get("YOUR_COMPENSATION_BY_AGE"))
     st.session_state["si_comp_customized"] = customized
     st.session_state["profile"] = CUSTOM_PROFILE
-    st.session_state["profile_selectbox"] = CUSTOM_PROFILE
+    from components.profile_picker import seed_selectbox
+    seed_selectbox(st.session_state, CUSTOM_PROFILE)
 
 
 def _apply_pins(st, data: dict, source: str) -> None:

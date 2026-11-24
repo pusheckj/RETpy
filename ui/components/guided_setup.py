@@ -932,6 +932,13 @@ def _sync_planner(st) -> None:
         from ui.utils.widget_sync import sync_widgets_from_overrides  # type: ignore
     sync_widgets_from_overrides(st)
     st.session_state["profile"] = "Custom (keep current values)"   # theirs, not the sample's
+    # The selectbox must follow now, not on its next draw: a stale sample name left in it
+    # read as a profile switch that wiped these answers and the results.
+    try:
+        from components.profile_picker import seed_selectbox
+    except ImportError:  # pragma: no cover
+        from ui.components.profile_picker import seed_selectbox  # type: ignore
+    seed_selectbox(st.session_state, "Custom (keep current values)")
     st.session_state["si_comp_customized"] = False   # pay table follows the new salary
     st.session_state["results"] = None
     st.session_state.pop("_autorun_done", None)

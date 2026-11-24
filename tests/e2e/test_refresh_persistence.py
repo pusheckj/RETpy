@@ -399,6 +399,11 @@ def test_c3_extras_in_lazy_tiles_show_their_restored_values_after_a_refresh(tmp_
         scroll_to(page, '[class*="st-key-mc-tile-lifespan"]')
         box = page.locator('[class*="st-key-le_sex"]').first
         box.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+        # The tile draws with the default first; the restored value reaches the browser on the
+        # next run (persist.reapply_view), a few seconds later on a busy machine.
+        end = time.time() + 60
+        while "Female" not in box.inner_text() and time.time() < end:
+            time.sleep(1)
         assert "Female" in box.inner_text()
 
 
@@ -485,8 +490,11 @@ def test_c6_loading_a_file_after_a_refresh_does_not_bring_back_the_old_extras(tm
         start_planner(page, base)
         wait_text(page, "Earliest retirement age", timeout=1800)
         _seed_tab_extras(page, {"le_sex": "Female"})
-        open_section(page, "Save / Load")
-        page.locator('[data-testid=stSidebar] input[type=file]').first.set_input_files(str(profile))
+        # Save / Load profile sits in the planner's Settings popover (top right).
+        open_settings(page)
+        page.locator("summary").filter(has_text="Save / Load profile").first.click()
+        page.locator('input[type=file]').first.wait_for(state="attached", timeout=30000)
+        page.locator('input[type=file]').first.set_input_files(str(profile))
         page.get_by_role("button", name="Load these inputs").first.click()
         wait_text(page, "Loaded", timeout=120)
         wait_text(page, "Earliest retirement age", timeout=1800)
@@ -495,6 +503,7 @@ def test_c6_loading_a_file_after_a_refresh_does_not_bring_back_the_old_extras(tm
         scroll_to(page, '[class*="st-key-mc-tile-lifespan"]')
         box = page.locator('[class*="st-key-le_sex"]').first
         box.wait_for(state="attached", timeout=PLANNER_TIMEOUT_MS)
+        time.sleep(8)                    # long enough for a wrongly kept restored value to show
         assert "Male" in box.inner_text() and "Female" not in box.inner_text()
 
 

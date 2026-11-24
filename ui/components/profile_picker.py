@@ -163,6 +163,29 @@ if _MY_SITUATION is not None:
 DEFAULT_PROFILE = next(iter(PROFILES))
 
 
+GEN_KEY = "_profile_selectbox_gen"
+
+
+def widget_key(state) -> str:
+    """The selectbox's widget key. It changes each time code (not the visitor) sets the profile."""
+    return f"profile_selectbox_w{int(state.get(GEN_KEY, 0) or 0)}"
+
+
+def seed_selectbox(state, value) -> None:
+    """Point the profile selectbox at ``value`` from code (not a user pick).
+
+    The selectbox sits in the closed Settings popover, so the browser may never draw it. A value
+    put into its session_state key then never reaches the browser, which reports the list's
+    first option (the sample household) on a later rerun. Streamlit read that as a pick and
+    fired ``_apply_profile``: the sample replaced the visitor's guided-setup answers and their
+    results. So code never writes the widget's key. It starts a new widget (new key) whose
+    ``index`` is the new value; the browser's default is then right even if it never draws it.
+    ``profile_selectbox`` mirrors the shown value for the rest of the app."""
+    if state.get("profile_selectbox") != value:
+        state[GEN_KEY] = int(state.get(GEN_KEY, 0) or 0) + 1
+        state["profile_selectbox"] = value
+
+
 def render(st) -> None:
     st.markdown('<div style="font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Start from</div>', unsafe_allow_html=True)
     names = list(PROFILES.keys())
@@ -177,14 +200,20 @@ def render(st) -> None:
     if current_profile not in names:
         current_profile = names[0]
     if st.session_state.get("profile_selectbox") != current_profile:
-        st.session_state["profile_selectbox"] = current_profile
+        seed_selectbox(st.session_state, current_profile)
+    wkey = widget_key(st.session_state)
 
     def _apply_profile() -> None:
         """Fired only on a real user selection. Applies the chosen profile and
         resets every input so the whole app refreshes to the new values."""
-        selected = st.session_state.get("profile_selectbox")
+        if wkey != widget_key(st.session_state):
+            # A value for a selectbox that code has since replaced (the browser still showed
+            # the old one): not a pick on the selectbox the visitor sees now.
+            return
+        selected = st.session_state.get(wkey)
         if selected is None or selected == st.session_state.get("profile"):
             return
+        st.session_state["profile_selectbox"] = selected
         st.session_state["profile"] = selected
         preset = PROFILES.get(selected)
         if preset is None:
@@ -204,7 +233,7 @@ def render(st) -> None:
         # user_overrides). Preserve only app-control keys. This runs in the
         # callback (before the widgets re-instantiate), so deletes are safe.
         _PRESERVE = {
-            "profile", "profile_selectbox", "user_overrides", "results",
+            "profile", "profile_selectbox", GEN_KEY, "user_overrides", "results",
             "whatif_results", "si_comp_customized", "theme_mode",
             "font_choice", "palette_choice", "_appearance_saved", "n_simulations", "_n_simulations_saved", "pinned_scenarios",
             "_anim_epoch",
@@ -225,10 +254,10 @@ def render(st) -> None:
             # waits for an explicit Run.
             "_autorun_done",
         }
-        for widget_key in list(st.session_state.keys()):
-            if widget_key not in _PRESERVE:
+        for state_key in list(st.session_state.keys()):
+            if state_key not in _PRESERVE:
                 try:
-                    del st.session_state[widget_key]
+                    del st.session_state[state_key]
                 except Exception:
                     pass
         try:
@@ -252,6 +281,7 @@ def render(st) -> None:
         "Start from",
         options=names,
         label_visibility="collapsed",
-        key="profile_selectbox",
+        index=names.index(current_profile),
+        key=wkey,
         on_change=_apply_profile,
     )
