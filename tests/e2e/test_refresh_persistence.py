@@ -59,14 +59,19 @@ def _free_port():
     return int(os.environ.get("E2E_PORT", "8541"))
 
 
+def _listening(port, timeout=1):
+    """True when a process listens on the port. Uses lsof, not a socket: on some macOS setups a
+    Python process may not open a socket even where a shell-started tool can."""
+    r = subprocess.run(["lsof", "-ti", f"tcp:{port}", "-sTCP:LISTEN"], capture_output=True, text=True)
+    return bool(r.stdout.strip())
+
+
 def _wait_port_free(port, timeout=30):
     end = time.time() + timeout
     while time.time() < end:
-        try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-                time.sleep(0.5)       # something still listens: the last server is shutting down
-        except OSError:
+        if not _listening(port, 0.5):
             return
+        time.sleep(0.5)       # something still listens: the last server is shutting down
     raise RuntimeError(f"port {port} is in use")
 
 
@@ -91,6 +96,14 @@ def serve(tmp_path, profile=None, hosted=False, port=None):
     Normally the test starts it itself. With E2E_CTL=<dir> it asks tests/e2e/server_ctl.sh to do it
     (for machines where the test process cannot open sockets)."""
     port = port or _free_port()
+    external = os.environ.get("E2E_EXTERNAL_URL")
+    if external:
+        # A visitor server started outside the test (machines where a test process may not open
+        # sockets). Only the default visitor setup can use it.
+        if profile is not None or hosted:
+            pytest.skip("needs its own server (owner profile or hosted); not available with E2E_EXTERNAL_URL")
+        yield external.rstrip("/"), int(external.rstrip("/").rsplit(":", 1)[1])
+        return
     ctl = os.environ.get("E2E_CTL")
     if ctl:
         _ctl_request(ctl, f"start {profile or 'none'} {1 if hosted else 0}")
@@ -112,11 +125,9 @@ def serve(tmp_path, profile=None, hosted=False, port=None):
     try:
         deadline = time.time() + 90
         while time.time() < deadline:
-            try:
-                with socket.create_connection(("127.0.0.1", port), timeout=1):
-                    break
-            except OSError:
-                time.sleep(0.5)
+            if _listening(port):
+                break
+            time.sleep(0.5)
         else:
             raise RuntimeError("the app did not start")
         yield f"http://localhost:{port}", port
