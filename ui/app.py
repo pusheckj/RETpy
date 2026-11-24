@@ -219,10 +219,11 @@ def _autorun_all(progress_container=None) -> None:
         st.session_state["_autorun_done"] = True
         return
 
-    # Set the guard BEFORE computing so a mid-run exception can't turn into a
-    # retry loop on the next rerun.
-    st.session_state["_autorun_done"] = True
-
+    # The guard is set once the run has finished, or failed with an exception (so a
+    # failure can't turn into a retry loop on every rerun). A run that Streamlit
+    # stops for a newer one (an edit, or a browser-worker report) raises a
+    # BaseException, not an Exception, so it leaves the guard unset and starts again
+    # on that rerun. Before, an edit during the first run left the page with no results.
     n_sims = int(st.session_state.get("n_simulations", SIM_COUNT_DEFAULT))
     _pc = progress_container if progress_container is not None else st
     prog = _pc.progress(0.0, text="Preparing your plan… starting simulations")
@@ -240,7 +241,9 @@ def _autorun_all(progress_container=None) -> None:
         # The main result first; the what-if baseline and the net-worth, safe-
         # withdrawal and mortgage sweeps fill in after it (_queue_extras).
         _begin_run(overrides, n_sims, target_age, _seg(0.0, 1.0, "Running the main simulation"))
+        st.session_state["_autorun_done"] = True
     except Exception as e:
+        st.session_state["_autorun_done"] = True
         import logging
         logging.getLogger("retirement_ui").exception("Auto-run failed")
         st.warning(

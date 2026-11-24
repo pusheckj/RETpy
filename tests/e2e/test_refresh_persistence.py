@@ -388,7 +388,7 @@ def test_c3_extras_in_lazy_tiles_show_their_restored_values_after_a_refresh(tmp_
         page = ctx.new_page()
         start_planner(page, base)
         wait_text(page, "Earliest retirement age", timeout=1800)
-        env = wait_store(page, "session", lambda v: v and v["payload"].get("full"))
+        env = wait_store(page, "session", _skip_saved)
         time.sleep(3)                    # let the page's own pending writes finish first
         env["payload"]["extra"] = {"le_sex": "Female"}
         page.evaluate("(v) => sessionStorage.setItem('retpy', v)", json.dumps(env))
@@ -403,9 +403,16 @@ def test_c3_extras_in_lazy_tiles_show_their_restored_values_after_a_refresh(tmp_
 
 
 
+def _skip_saved(v):
+    """The tab copy holds the planner inputs and the skipped setup. It is written a moment after
+    the page changes, so a copy read too early still says the setup is on step 1."""
+    return bool(v and v["payload"].get("full")
+                and (v["payload"].get("setup") or {}).get("status") == "skipped")
+
+
 def _seed_tab_extras(page, extra):
     """Put values into the tab copy the way a refresh would find them, then reload."""
-    env = wait_store(page, "session", lambda v: v and v["payload"].get("full"))
+    env = wait_store(page, "session", _skip_saved)
     time.sleep(3)                        # let the page's own pending writes finish first
     env["payload"]["extra"] = extra
     page.evaluate("(v) => sessionStorage.setItem('retpy', v)", json.dumps(env))

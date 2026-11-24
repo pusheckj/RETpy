@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (first automatic run)
+- An edit made while the first automatic run was still going no longer leaves the page without results. Streamlit stops a running script when new input arrives; the run now starts again on that rerun instead of being marked done
+
 ### Fixed (What-if: extra annual savings)
 - What-if tile: **Extra annual savings** now works in both savings modes. Before, it raised `YOUR_BROKERAGE_CONTRIBUTION`, which is only a floor in Auto-allocate mode (no effect while the plan already saves more) and replaced the computed amount in Manual mode (it could even lower savings). New engine key `EXTRA_ANNUAL_SAVINGS` (default 0, today's dollars): each year you work, spending drops by that amount (capped at the year's spending) and the money goes to your taxable brokerage. Retirement spending is unchanged
 

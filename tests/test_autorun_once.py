@@ -117,3 +117,44 @@ def test_sidebar_payoff_projection_is_memoised():
         "the sidebar payoff projection is not memoised -- it mutates global "
         "engine state on every keystroke"
     )
+
+
+# ---------------------------------------------------------------------------
+# A first run that Streamlit stops (an edit arrived) starts again
+# ---------------------------------------------------------------------------
+
+def test_a_stopped_first_run_starts_again_on_the_next_rerun(monkeypatch):
+    """Streamlit stops a running script when new input arrives. The stop is a BaseException, so
+    the guard must stay unset and the next rerun must run the plan. Before, an edit during the
+    first automatic run left the page without results for the whole session."""
+    from streamlit.testing.v1 import AppTest
+    from streamlit.runtime.scriptrunner_utils.exceptions import StopException
+    from streamlit.testing.v1 import element_tree as et
+    from utils import sim_runner as sr
+
+    def indices(self):            # AppTest reads a segmented control's single choice as a list
+        values = [self.value] if isinstance(self.value, str) else self.value
+        return [self.options.index(self.format_func(v)) for v in values]
+    monkeypatch.setattr(et.ButtonGroup, "indices", property(indices))
+    monkeypatch.setenv("RETIREMENT_SIM_PROFILE", "/nonexistent/retirement-sim-test-profile.json")
+    monkeypatch.delenv("RETIREMENT_SIM_HOSTED", raising=False)
+    real = sr.plan_full_analysis
+    calls = {"n": 0}
+
+    def stopped_once(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise StopException()
+        return real(*a, **k)
+
+    at = AppTest.from_file(os.path.join(_UI, "app.py"), default_timeout=300).run()
+    at.button(key="device_skip").click().run()
+    next(b for b in at.button if b.label == "Open the retirement planner").click().run()
+    monkeypatch.setattr(sr, "plan_full_analysis", stopped_once)
+    at.button(key="gs_skip").click().run()
+    assert calls["n"] >= 1
+    if at.session_state["results"] is None:                 # the stopped run left nothing
+        assert not at.session_state[GUARD] if GUARD in at.session_state else True
+        at.run()
+    assert at.session_state["results"] is not None
+    assert calls["n"] >= 2
