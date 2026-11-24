@@ -973,7 +973,7 @@ def _skip(st) -> None:
 
 
 # Marks the row-style radios (Yes/No, Rent/Own) so theme.css draws them as pills. The
-# planner's own tagger (app.py::_inject_keyboard_nav) only runs at the end of the
+# planner's own tagger (the page script in animations.py) used to run only at the end of the
 # planner page, which the walkthrough replaces, so a visitor who arrived here
 # first saw plain circles until they had opened the planner.
 _TAG_PILLS = """<script>

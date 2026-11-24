@@ -538,15 +538,16 @@ _ANIM_JS = """
       // run, when many fragments reset at once). A one-shot latch left the
       // section shimmering forever with no recovery, so re-arm on a timer and
       // stop only once the placeholder is actually gone from the DOM.
+      var btn = D.querySelector('.st-key-_lzb_' + key + ' button');
+      if(!btn) return;      // the button arrives a moment after the placeholder: don't spend a try yet
       var now = P.performance ? P.performance.now() : 0;
-      if(ph.__lzAt && (now - ph.__lzAt) < 700) return;    // a click is still in flight
-      // After 12 quick tries (a busy server drops some), keep trying but only every 4s: giving up
+      if(ph.__lzAt && (now - ph.__lzAt) < 2000) return;   // a click is still in flight
+      // After 3 tries (a busy server drops some), keep trying but only every 4s: giving up
       // for good left the section shimmering forever.
-      if(ph.__lzTries >= 12 && ph.__lzAt && (now - ph.__lzAt) < 4000) return;
+      if(ph.__lzTries >= 3 && ph.__lzAt && (now - ph.__lzAt) < 4000) return;
       ph.__lzTries = (ph.__lzTries || 0) + 1;
       ph.__lzAt = now;
-      var btn = D.querySelector('.st-key-_lzb_' + key + ' button');
-      if(btn){ try{ btn.click(); }catch(err){} }
+      try{ btn.click(); }catch(err){}
     });
   }
   var _lzPend = false;
@@ -562,10 +563,16 @@ _ANIM_JS = """
   // Reliable fallback: a light poll that loads near-viewport sections and
   // SELF-TERMINATES once no placeholders remain (rect reads only, no writes/
   // mutations). Guarantees lazy sections load even if a scroll event is missed.
-  if(P.__mcLazyPoll){ try{ P.clearInterval(P.__mcLazyPoll); }catch(e){} }
-  P.__mcLazyPoll = P.setInterval(function(){
-    try{ checkLazy(); if(!D.querySelector('[data-lazy]')){ P.clearInterval(P.__mcLazyPoll); P.__mcLazyPoll = null; } }catch(e){}
-  }, 350);
+  // scan() starts it again when new placeholders appear (every run resets the
+  // lazy sections, and the iframe no longer reloads on a rerun to restart it).
+  function lazyPoll(){
+    if(P.__mcLazyPoll) return;
+    P.__mcLazyPoll = P.setInterval(function(){
+      try{ checkLazy(); if(!D.querySelector('[data-lazy]')){ P.clearInterval(P.__mcLazyPoll); P.__mcLazyPoll = null; } }catch(e){}
+    }, 350);
+  }
+  if(P.__mcLazyPoll){ try{ P.clearInterval(P.__mcLazyPoll); }catch(e){} P.__mcLazyPoll = null; }
+  lazyPoll();
 
   // ---------- chart draw-in (per Plotly trace type) ----------
   function drawScan(){
@@ -767,19 +774,26 @@ _ANIM_JS = """
   // skips elements with no offsetParent) until the tile is opened.
   var FOLD_KEY = 'mcFoldedTiles';
   var FOLD_TILES = '[class*="st-key-mc-tile-"]:not([class*="st-key-mc-tile-simple-"])';
-  function foldMap(){
-    try{ var m = JSON.parse(P.localStorage.getItem(FOLD_KEY) || '{}'); return (m && typeof m === 'object') ? m : {}; }
-    catch(e){ return {}; }
+  // The fold map lives in memory: localStorage is read once per install (and when
+  // another tab changes it) and written only on a toggle, never on a DOM change.
+  var FOLD = {};
+  function foldLoad(){
+    try{ var m = JSON.parse(P.localStorage.getItem(FOLD_KEY) || '{}'); FOLD = (m && typeof m === 'object') ? m : {}; }
+    catch(e){ FOLD = {}; }
   }
-  function foldStore(m){ try{ P.localStorage.setItem(FOLD_KEY, JSON.stringify(m)); }catch(e){} }
+  function foldMap(){ return FOLD; }
+  function foldStore(m){ FOLD = m; try{ P.localStorage.setItem(FOLD_KEY, JSON.stringify(m)); }catch(e){} }
+  foldLoad();
   function tileName(t){ var m = /(?:^|\\s)st-key-mc-tile-([a-z0-9-]+)/.exec(t.className || ''); return m ? m[1] : null; }
   function tileHead(t){ var row = t.firstElementChild; return row ? row.querySelector('.mc-section') : null; }
   function applyFold(){
     var m = foldMap(), anyFolded = false, anyOpen = false;
     D.querySelectorAll(FOLD_TILES).forEach(function(t){
       var name = tileName(t), h = tileHead(t), folded = false;
+      // A tile that is re-added arrives before its heading row does: fold it by name
+      // right away, so it never shows open for a frame.
+      if(name) folded = !!m[name];
       if(name && h){
-        folded = !!m[name];
         if(h.getAttribute('data-mc-fold') !== name){
           h.setAttribute('data-mc-fold', name); h.setAttribute('role', 'button'); h.setAttribute('tabindex', '0');
         }
@@ -835,14 +849,170 @@ _ANIM_JS = """
   };
   D.addEventListener('click', P.__mcFoldClick, true);
   D.addEventListener('keydown', P.__mcFoldKey, true);
+  // Another tab folded or opened a tile: follow it.
+  if(P.__mcFoldStorage){ try{ P.removeEventListener('storage', P.__mcFoldStorage); }catch(e){} }
+  P.__mcFoldStorage = function(ev){
+    if(ev.key === FOLD_KEY || ev.key === null){ foldLoad(); try{ applyFold(); }catch(e){} }
+  };
+  P.addEventListener('storage', P.__mcFoldStorage);
+
+  // ---------- segmented-toggle tagging ----------
+  // Horizontal radio groups (flex-direction:row) get .mc-seg so CSS draws them as
+  // soft-segmented toggles; vertical ones are marked data-mc-vert. Only groups
+  // that are not yet classified are inspected, so an idle page does no style reads.
+  // Runs from scan() (on every real DOM change, fragment reruns included).
+  function tagRadios(){
+    D.querySelectorAll('[role="radiogroup"]:not(.mc-seg):not([data-mc-vert])').forEach(function(g){
+      try {
+        if (P.getComputedStyle(g).flexDirection === 'row') g.classList.add('mc-seg');
+        else g.setAttribute('data-mc-vert', '1');
+      } catch(e){}
+    });
+  }
+  if(P.__mcTagInterval){ try{ P.clearInterval(P.__mcTagInterval); }catch(e){} P.__mcTagInterval = null; }
+  if(P.__mcTagObserver){ try{ P.__mcTagObserver.disconnect(); }catch(e){} P.__mcTagObserver = null; }
+
+  // ---------- keyboard navigation of the sidebar sections ----------
+  //   ArrowUp / ArrowDown     -> move the highlighted section up / down
+  //   ArrowRight / ArrowLeft  -> expand / collapse the highlighted section
+  // Ignored while typing in an input / slider / dropdown. One listener at a time:
+  // the previous load's is removed first (its realm may be gone).
+  (function(){
+    if(P.__mcKbdKey){ try{ D.removeEventListener('keydown', P.__mcKbdKey, true); }catch(e){} }
+    function expanders(){
+      var sb = D.querySelector('[data-testid="stSidebar"]');
+      if(!sb) return [];
+      // Top-level section expanders only: nested ones are hidden when their parent is collapsed.
+      return Array.from(sb.querySelectorAll('[data-testid="stExpander"]'))
+        .filter(function(e){ return !e.parentElement.closest('[data-testid="stExpander"]'); });
+    }
+    function paint(list, idx){
+      list.forEach(function(e, i){ e.classList.toggle('mc-kbd-focus', i === idx); });
+      if(list[idx]) list[idx].scrollIntoView({block: 'nearest'});
+    }
+    P.__mcKbdKey = function(ev){
+      var ae = D.activeElement;
+      if(ae){
+        var tn = ae.tagName;
+        if(tn === 'INPUT' || tn === 'TEXTAREA' || tn === 'SELECT' || ae.isContentEditable) return;
+        if(ae.getAttribute && ae.getAttribute('role') === 'slider') return;
+        if(ae.closest && (ae.closest('[data-baseweb="select"]') || ae.closest('[data-baseweb="slider"]'))) return;
+      }
+      var k = ev.key;
+      if(k !== 'ArrowUp' && k !== 'ArrowDown' && k !== 'ArrowLeft' && k !== 'ArrowRight') return;
+      var list = expanders();
+      if(!list.length) return;
+      var idx = P.__mcKbdIdx == null ? -1 : P.__mcKbdIdx;
+      if(idx >= list.length) idx = list.length - 1;
+      if(k === 'ArrowDown'){ idx = idx < 0 ? 0 : Math.min(idx + 1, list.length - 1); }
+      else if(k === 'ArrowUp'){ idx = idx < 0 ? 0 : Math.max(idx - 1, 0); }
+      else {
+        if(idx < 0) idx = 0;
+        var d = list[idx].querySelector('details'), sm = list[idx].querySelector('summary');
+        var open = d ? d.open : false;
+        if(k === 'ArrowRight' && !open && sm) sm.click();
+        if(k === 'ArrowLeft' && open && sm) sm.click();
+      }
+      P.__mcKbdIdx = idx;
+      paint(list, idx);
+      ev.preventDefault();
+    };
+    D.addEventListener('keydown', P.__mcKbdKey, true);
+  })();
+
+  // ---------- view state kept for a refresh (sessionStorage 'mcView') ----------
+  // {scrollY, tabs:{group: label}}: the open tab of each tab group and how far the
+  // page is scrolled. Written here with no rerun (the server cannot see either);
+  // read back by the Python side on the next page load, and scrollY by restoreScroll
+  // below. 'group' is the nearest keyed tile (or the spending view) around the tabs.
+  var VIEW_KEY = 'mcView';
+  function viewRead(){
+    try{ var v = JSON.parse(P.sessionStorage.getItem(VIEW_KEY) || '{}'); return (v && typeof v === 'object') ? v : {}; }
+    catch(e){ return {}; }
+  }
+  function viewWrite(patch){
+    try{
+      var v = viewRead();
+      if(patch.scrollY != null) v.scrollY = patch.scrollY;
+      if(patch.tab){ v.tabs = (v.tabs && typeof v.tabs === 'object') ? v.tabs : {}; v.tabs[patch.tab[0]] = patch.tab[1]; }
+      P.sessionStorage.setItem(VIEW_KEY, JSON.stringify(v));
+    }catch(e){}
+  }
+  function tabGroup(list){
+    var m = /(?:^|\\s)st-key-(mc-tile-[a-z0-9-]+|mc-spending-tabs)(?:\\s|$)/;
+    for(var n = list; n && n !== D.body; n = n.parentElement){
+      var g = m.exec(typeof n.className === 'string' ? n.className : '');
+      if(g) return g[1];
+    }
+    return 'mc-spending-tabs';        // the Spending view's tabs sit outside any tile
+  }
+  function noteTab(ev){
+    try{
+      var el = ev.target && ev.target.closest ? ev.target.closest('[role="tab"]') : null;
+      if(!el) return;
+      var list = el.closest('[role="tablist"]'); if(!list) return;
+      P.requestAnimationFrame(function(){      // after the click (or arrow key) has moved the selection
+        var sel = list.querySelector('[role="tab"][aria-selected="true"]');
+        if(sel) viewWrite({tab: [tabGroup(list), (sel.textContent || '').trim()]});
+      });
+    }catch(e){}
+  }
+  if(P.__mcTabClick){ try{ D.removeEventListener('click', P.__mcTabClick, true);
+    D.removeEventListener('keyup', P.__mcTabClick, true); }catch(e){} }
+  P.__mcTabClick = noteTab;
+  D.addEventListener('click', P.__mcTabClick, true);
+  D.addEventListener('keyup', P.__mcTabClick, true);
+
+  // Scroll position: the main scroll container, at most every 500 ms and on page hide.
+  // Not saved while a restore is pending, or a refresh during loading would erase it.
+  function noteScroll(){
+    var m = mainEl();
+    if(m && !P.__mcRestoring) viewWrite({scrollY: Math.round(m.scrollTop)});
+  }
+  if(P.__mcScrollFn){ try{ D.removeEventListener('scroll', P.__mcScrollFn, true);
+    P.removeEventListener('pagehide', P.__mcScrollHide); }catch(e){} }
+  P.__mcScrollFn = function(ev){
+    if(P.__mcScrollTimer || !ev.target || ev.target !== mainEl()) return;
+    P.__mcScrollTimer = P.setTimeout(function(){ P.__mcScrollTimer = null; noteScroll(); }, 500);
+  };
+  P.__mcScrollHide = noteScroll;
+  D.addEventListener('scroll', P.__mcScrollFn, true);
+  P.addEventListener('pagehide', P.__mcScrollHide);
+
+  // Scroll restore, once per page load: wait until the page is tall enough (tiles
+  // keep their skeleton heights, so the target holds still), then jump there. A
+  // visitor who scrolls first keeps their own place. Gives up after 6 s.
+  (function(){
+    if(P.__mcScrollRestored) return;
+    P.__mcScrollRestored = true;
+    var target = viewRead().scrollY;
+    if(!(target > 0)) return;
+    var t0 = P.performance.now(), touched = false;
+    P.__mcRestoring = true;
+    var done = function(){
+      P.__mcRestoring = false;
+      ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function(n){ D.removeEventListener(n, mine, true); });
+    };
+    var mine = function(){ touched = true; };
+    ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function(n){ D.addEventListener(n, mine, true); });
+    (function step(){
+      if(touched || P.performance.now() - t0 > 6000){ done(); return; }
+      var m = mainEl();
+      if(m && m.scrollHeight >= target + m.clientHeight){
+        m.scrollTo({top: target, behavior: 'auto'}); done(); return;
+      }
+      P.requestAnimationFrame(step);
+    })();
+  })();
 
   // ---------- scan (debounced, on real DOM changes only) ----------
   function scan(){ try{ odometer(); entrance(); segAll(); checkCelebrate(); checkLazy(); drawScan(); runFan();
-                         phoneBar(); showResultsLabel(); foldText(); applyFold(); }catch(e){} }
+                         phoneBar(); showResultsLabel(); foldText(); applyFold(); tagRadios();
+                         if(!P.__mcLazyPoll && D.querySelector('[data-lazy]')) lazyPoll(); }catch(e){} }
   scan();
   if(P.__mcAnimObs){ try{ P.__mcAnimObs.disconnect(); }catch(e){} }
   if(P.__mcAnimTimer){ try{ P.clearInterval(P.__mcAnimTimer); }catch(e){} P.__mcAnimTimer=null; }
-  var pend=false;
+  var pend=false, foldQ=false;
   P.__mcAnimObs = new P.MutationObserver(function(muts){
     // Plotly emits a stream of DOM mutations on every hover/relayout; those must
     // NOT trigger our scan (offset reads / reflows) or interacting with charts
@@ -857,10 +1027,15 @@ _ANIM_JS = """
       relevant = true; break;
     }
     if(!relevant) return;
-    // Re-fold right away (a microtask, before the browser paints): a rerun
-    // replaces tile and heading nodes, and waiting for the debounced scan would
-    // flash a folded tile open.
-    try{ applyFold(); }catch(e){}
+    // A rerun re-adds tile nodes (and a tile's class can land after its node), so
+    // re-fold before the browser paints, or a folded tile flashes open.
+    // requestAnimationFrame callbacks run before the next paint, and one call covers
+    // every mutation batch of the frame. With the fold map in memory this is one
+    // short selector query. The heavier work waits for the debounced scan below.
+    if(!foldQ){
+      foldQ = true;
+      P.requestAnimationFrame(function(){ foldQ = false; try{ applyFold(); }catch(e){} });
+    }
     if(pend) return; pend=true;
     P.setTimeout(function(){ pend=false; scan(); }, 90);
   });

@@ -197,9 +197,9 @@ def test_page_script_folds_tile_headings():
 def test_fold_state_persists_in_local_storage():
     assert "var FOLD_KEY = 'mcFoldedTiles'" in FOLD_JS
     assert "P.localStorage.getItem(FOLD_KEY)" in FOLD_JS and "P.localStorage.setItem(FOLD_KEY" in FOLD_JS
-    # re-applied on every rerun: synchronously in the DOM observer (no flash) and in scan()
+    # re-applied on every rerun: before the next paint when tiles are added (no flash), and in scan()
     obs = ANIM[ANIM.index("P.__mcAnimObs = new P.MutationObserver"):]
-    assert obs.index("applyFold()") < obs.index("if(pend) return")
+    assert obs.index("P.requestAnimationFrame(function(){ foldQ = false; try{ applyFold(); }") < obs.index("if(pend) return")
     assert re.search(r"function scan\(\)\{[^}]*applyFold\(\)", ANIM)
 
 

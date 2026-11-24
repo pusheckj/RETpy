@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (page script: one iframe, lighter reruns, stuck tiles, scroll restore)
+- The sidebar arrow-key navigation moved into the page script (`components/animations.py`), which sits at the top of the page. The second hidden iframe at the bottom is gone, so a rerun no longer rebuilds it (it reloaded on 1 to 3 reruns out of every rerun). One fewer iframe on the page
+- The fold state is read from the browser once and kept in memory, and is written only when you fold or open a tile. After a rerun, tiles are re-folded once per frame, before the browser paints (it used to run on every DOM change). A folded tile still does not flash open
+- Lazy sections that stayed as grey placeholders now load. The check that loads them could stop for good once every section had loaded, and then never restarted after the next run. It restarts when new placeholders appear, waits for the load button, and retries every 2 seconds
+- The page remembers the open tab of each tab group and how far you scrolled (browser tab storage only, no rerun), and a refresh returns you to the same place when the page is tall enough
+
 ### Changed (speed: one chart per screen)
 - Charts draw once, not twice. When the page knows if the screen is narrow (`st.session_state["_viewport_narrow"]`, true for a phone or any window up to 1130 px wide, so tablets keep their compact chart: `plot_theme.NARROW_VIEWPORT_QUERY`), `plot_theme.show_chart` builds and sends only that version, in an `mc-chart-<key>` container that the CSS never hides. Until the page knows (first run, tests) it still draws the wide and the compact copy as before. With every tile open this halves the Plotly charts in the page and cuts the server work and bytes of each rerun
 - Styled charts are remembered per session (up to 48, keyed on the chart, screen class, theme, palette, font and a hash of the figure), so a rerun that changes nothing skips the 15 ms styling step for each chart
