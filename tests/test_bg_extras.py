@@ -29,7 +29,10 @@ SINGLE = {"YOUR_AGE": 30, "PARTNER_AGE": 0, "FILING_STATUS": "Single", "YOUR_BAS
 
 
 @pytest.fixture(autouse=True)
-def _no_disk_cache(monkeypatch):
+def _no_disk_cache(monkeypatch, tmp_path):
+    """No result from an earlier run (these tests need cache misses) and none left behind."""
+    from utils import disk_cache
+    monkeypatch.setattr(disk_cache, "cache_dir", lambda: str(tmp_path / "simcache"))
     monkeypatch.setattr(sr, "_disk", lambda: None)
     sr.clear_cache(include_disk=False)
     yield
