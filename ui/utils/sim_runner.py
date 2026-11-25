@@ -30,6 +30,7 @@ from retirement_sim import config as cfg
 from retirement_sim import mc_parallel as _mcp
 from retirement_sim import mc_jobs
 
+from utils import health_cliff
 from utils.config_builder import build_config_overrides
 from utils.config_builder import _UI_ONLY_KEYS as _BUILDER_UI_ONLY_KEYS
 
@@ -991,13 +992,33 @@ def retirement_spending_basis(user_overrides: dict, retirement_age: int) -> dict
             "housing": float(cfg.housing_annual(age)),
             "pre_medicare": age < int(getattr(cfg, "MEDICARE_AGE", 65)),
             "health_knobs": {
-                "ACA_BENCHMARK_MONTHLY_AT_40": getattr(cfg, "ACA_BENCHMARK_MONTHLY_AT_40", None),
-                "ACA_CHILD_MONTHLY": getattr(cfg, "ACA_CHILD_MONTHLY", None),
+                "ACA_BENCHMARK_MONTHLY_AT_40": _price_in_use("ACA_BENCHMARK_MONTHLY_AT_40", 40),
+                "ACA_CHILD_MONTHLY": _price_in_use("ACA_CHILD_MONTHLY", 10),
                 "HEALTHCARE_COSTS_BY_AGE": dict(bands) if isinstance(bands, dict) else None,
             },
         }
     finally:
         _restore_overrides(original)
+
+
+def _price_in_use(key: str, age: int):
+    """The marketplace price box ``key`` as the engine prices it now: with an area set that is
+    the area's own price at ``age``, not whatever the box holds (the box may be absent or
+    stale). A place then scales it, and ``health_area_overrides`` reads the scaled figure
+    back as a rescaling of the area's prices."""
+    table = getattr(cfg, "ACA_AREA_SILVER_MONTHLY", None)
+    tiers = getattr(cfg, "ACA_AREA_TIERS", None)
+    if table:
+        return float(table[age])
+    if tiers:
+        return float(tiers["single"]) if key == "ACA_BENCHMARK_MONTHLY_AT_40" else getattr(cfg, key, None)
+    return getattr(cfg, key, None)
+
+
+_AREA_HEALTH_KEYS = ("ACA_AREA_SILVER_MONTHLY", "ACA_AREA_TIERS", "ACA_AREA_PLAN_RATIO",
+                     "ACA_AREA_OOP_ANNUAL", "ACA_PREMIUM_GROWTH_NOMINAL",
+                     "ACA_APPLICABLE_PCT_BANDS", "ACA_FPL_FIRST_PERSON",
+                     "ACA_FPL_PER_ADDITIONAL_PERSON", "ACA_SUBSIDY_CLIFF_PCT")
 
 
 def _health_params(age: int, core: float) -> dict:
@@ -1056,7 +1077,11 @@ def _health_params(age: int, core: float) -> dict:
             "SPEND_HEALTH_MONTHLY": float(getattr(cfg, "SPEND_HEALTH_MONTHLY", 0) or 0),
             "HEALTHCARE_COSTS_BY_AGE": dict(bands) if isinstance(bands, dict) else {},
             "ACA_BASE_ANNUAL_PREMIUM": float(getattr(cfg, "ACA_BASE_ANNUAL_PREMIUM", 0) or 0),
+            # Healthcare by area: the plan's own prices, credit table and poverty line.
+            **{k: copy.deepcopy(getattr(cfg, k, None)) for k in _AREA_HEALTH_KEYS},
+            "INFLATION_REAL_EXCESS": dict(getattr(cfg, "INFLATION_REAL_EXCESS", {}) or {}),
         },
+        "years": max(0, age - int(cfg.YOUR_AGE)),
     }
 
 
@@ -2059,6 +2084,8 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
                 v for v in vals if v == v and abs(v) != float("inf"))
         for age, vals in (r.get("health_by_age") or {}).items():
             health_by_age.setdefault(int(age), []).extend(vals)
+    aca_cliff_by_year = health_cliff.compact(
+        health_cliff.merge(r.get("aca_cliff_by_age") for r in chunks))
 
     if n == 0:
         # Nothing ran (all errored) — defer to the legacy serial path.
@@ -2128,6 +2155,9 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
         "spending_by_year": spending_by_year,
         "health_by_year": health_by_year,
         "spending_cut_stats": spending_cut_stats(cuts_by_run),
+
+        # Per age: runs on the marketplace, runs over the 400% FPL cliff, median credit lost.
+        "aca_cliff_by_year": aca_cliff_by_year,
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, logs, retirement_age),
     }
@@ -2281,6 +2311,8 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
         "health_by_year": health_by_year,
         "spending_cut_stats": spending_cut_stats(
             [_mcp.run_cuts(log) for log in spending_logs]),
+
+        "aca_cliff_by_year": health_cliff.from_spending_logs(spending_logs),
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, wlogs, retirement_age),
     }

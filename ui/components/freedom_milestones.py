@@ -31,6 +31,7 @@ try:
     from utils.formatting import money
     from utils.household import has_partner, plan_end_ages
     from utils.sim_runner import _hashable
+    from utils import health_area
 except ImportError:  # pragma: no cover
     from ui.utils import milestones as ms  # type: ignore
     from ui.utils import place_costs as pc  # type: ignore
@@ -39,6 +40,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.formatting import money  # type: ignore
     from ui.utils.household import has_partner, plan_end_ages  # type: ignore
     from ui.utils.sim_runner import _hashable  # type: ignore
+    from ui.utils import health_area  # type: ignore
 
 DEFAULT_RETURN = 0.063       # used only if the net-worth chart's rate can't be read (80/20 Historical, geometric)
 
@@ -152,15 +154,18 @@ def place_html(pr: "ms.PlaceResult", end_age, next_keys, ret_age=None, owns_home
             f'<ul class="ms-list ms-list-place">{rows}</ul>{note}')
 
 
-def breakdown_html(pr: "ms.PlaceResult", here: "ms.PlaceCost", home_name: str) -> str:
-    """Monthly spending now and there, line by line, so you see what scales."""
+def breakdown_html(pr: "ms.PlaceResult", here: "ms.PlaceCost", home_name: str,
+                   health_year: str = "") -> str:
+    """Monthly spending now and there, line by line, so you see what scales. ``health_year`` is the
+    plan year of the health prices (for example "2027 plan year")."""
     c = pr.cost
     if c is None:
         return ""
     now_by = {k: v for k, v, _ in here.categories}
     rows = [("Housing", here.housing, c.housing)]
     rows += [(pc.LABELS.get(k, k), now_by.get(k, v_now), v_there) for k, v_now, v_there in c.categories]
-    rows.append(("Health insurance and care", here.health, c.health))
+    rows.append((f"Health insurance and care ({health_year})" if health_year else "Health insurance and care",
+                 here.health, c.health))
     if c.other > 0.5:
         rows.append(("Children and other planned costs", here.other, c.other))
     rows.append(("Total", here.spend, c.spend))
@@ -516,7 +521,9 @@ def _place_cards(st, rep, inp, basis, sale, state, clean, results, n_sims, targe
 def _edit_place(st, state: dict, p, pr, here_cost, home: str) -> None:
     """The place's costs line by line, and its settings (saved as you change them)."""
     with st.expander("Costs and settings", expanded=False):
-        st.markdown(breakdown_html(pr, here_cost, pc.get(home).name), unsafe_allow_html=True)
+        st.markdown(breakdown_html(pr, here_cost, pc.get(home).name,
+                                   health_area.year_phrase(st.session_state.get("user_overrides") or {})),
+                    unsafe_allow_html=True)
         pid = p.id
         args = lambda f: (st, pid, f)  # noqa: E731
         if p.custom:
@@ -639,7 +646,9 @@ def _how_it_works(st, inp, rate: float, basis: dict, source: str, end_age) -> No
             "keep the state you live in now.\n\n"
             "**Where the numbers come from.** Everyday price levels are the US Bureau of Economic "
             "Analysis regional price parities (2024). Health prices are KFF's 2026 benchmark marketplace "
-            "premiums. Home values are Zillow (September and October 2026) and rents are Zillow "
+            "premiums. If you set a ZIP code or state under Assumptions, your own plan uses that area's "
+            "2027 plan year instead. The places scale from those prices. "
+            "Home values are Zillow (September and October 2026) and rents are Zillow "
             "single-family rents (October 2026); a state's rent is modeled from its metros. Property tax "
             "is what a new buyer pays, plus 2026 homeowners insurance. Places abroad use Numbeo "
             "estimates from November 2026. These are typical figures for an area, not your own quote, "

@@ -99,6 +99,9 @@ def sim_task(args) -> Dict[str, Any]:
     ``cuts_by_run`` lists, for every sim in run order, the yearly dollars the
     spending rules trimmed in each retirement year with a trim (``run_cuts``).
 
+    ``aca_cliff_by_age`` has, for each year somebody is on the marketplace, one entry per
+    run: the credit lost (dollars) if that run's income was over the 400% FPL cliff, else None.
+
     A simulation that RAISES is dropped from both ``successes`` and ``finals``,
     which silently shrinks the denominator the caller divides by — a config that
     made 30% of paths crash would report a confident success rate over the
@@ -115,6 +118,8 @@ def sim_task(args) -> Dict[str, Any]:
     spending_by_age: Dict[int, List[float]] = {}
     health_by_age: Dict[int, List[float]] = {}
     cuts_by_run: List[List[float]] = []
+
+    aca_cliff_by_age: Dict[int, List[Any]] = {}
     for i in range(int(n_sims)):
         try:
             success, portfolio = sim.run_detailed_simulation(
@@ -131,6 +136,9 @@ def sim_task(args) -> Dict[str, Any]:
         for row in (getattr(portfolio, "spending_log", None) or []):
             spending_by_age.setdefault(int(row["age"]), []).append(float(row.get("living", 0.0)))
             health_by_age.setdefault(int(row["age"]), []).append(float(row.get("health", 0.0)))
+            if "aca_over" in row:      # a marketplace year: the credit lost if income cleared the cliff
+                aca_cliff_by_age.setdefault(int(row["age"]), []).append(
+                    float(row["aca_lost"]) if row["aca_over"] else None)
         cuts_by_run.append(run_cuts(getattr(portfolio, "spending_log", None)))
         if len(details) < detail_k:
             traj = _trajectory_from_portfolio(portfolio)
@@ -145,4 +153,5 @@ def sim_task(args) -> Dict[str, Any]:
     return {"age": age, "n": len(finals), "successes": successes, "finals": finals,
             "details": details, "spending_by_age": spending_by_age,
             "health_by_age": health_by_age, "cuts_by_run": cuts_by_run,
+            "aca_cliff_by_age": aca_cliff_by_age,
             "errors": errors, "first_error": first_error}

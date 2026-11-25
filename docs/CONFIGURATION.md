@@ -460,6 +460,12 @@ Applied in addition to guardrails.
 | `ACA_OOP_PER_PERSON_ANNUAL` | `$1,500` | Out-of-pocket per marketplace member, net of `SPEND_HEALTH_MONTHLY` so it isn't counted twice. |
 | `PARTNER_EMPLOYER_HEALTH_COVERAGE` | `True` | While a partner keeps working after you retire, their employer plan covers the household: no marketplace cost. Put the payroll premium in the living-expense base. |
 | `ACA_BASE_MONTHLY_PREMIUM` | `$2,000` | Legacy path only: unsubsidized household premium. |
+| `ACA_AREA_SILVER_MONTHLY` | `None` | Healthcare by area (2027 plan year). Benchmark Silver price a month at each age 0-64. Set by the app from a ZIP code or state (`HEALTH_AREA`, a UI-only key like `AL:3`; the ZIP is never stored). `None` = the two price inputs above and the 3:1 curve, as before. |
+| `ACA_AREA_TIERS` | `None` | New York and Vermont: `{"single", "spk", "fam"}`, one community rate and its family-tier multiples, in place of the age table. |
+| `ACA_AREA_PLAN_RATIO` | `1.0` | Plan bought / Silver price: 1.0 for Benchmark Silver, the area's Bronze-to-Silver ratio for lowest-cost Bronze (`HEALTH_PLAN`). The credit always follows Silver. |
+| `ACA_AREA_OOP_ANNUAL` | `None` | Out-of-pocket a year at each age 0-64 (Bronze x1.30 included). `None` = `ACA_OOP_PER_PERSON_ANNUAL` per member. |
+| `ACA_PREMIUM_GROWTH_NOMINAL` | `0.06` | Pre-65 marketplace premium growth, nominal, with or without an area (3.25%/yr above inflation, `METHODOLOGY.md` §11). The full price grows before the credit. `None` = premiums grow with healthcare (1.75%/yr above inflation). Medicare, care and out-of-pocket are not affected. |
+| (with an area) | | The app also sets `ACA_APPLICABLE_PCT_BANDS` (Rev. Proc. 2026-26) and `ACA_FPL_FIRST_PERSON` / `ACA_FPL_PER_ADDITIONAL_PERSON` (2026 HHS guidelines; Alaska and Hawaii differ), so the credit table and poverty line move to the 2027 plan year with the prices. |
 
 ### Long-term care
 

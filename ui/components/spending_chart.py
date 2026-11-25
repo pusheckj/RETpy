@@ -37,8 +37,10 @@ except ImportError:  # pragma: no cover
 
 try:
     from utils.plot_theme import style_fig, show_chart, assign_colors, series_color, PLOTLY_CONFIG, is_dark, _lighten
+    from utils import health_area, health_cliff
 except ImportError:  # pragma: no cover
     from ui.utils.plot_theme import style_fig, show_chart, assign_colors, series_color, PLOTLY_CONFIG, is_dark, _lighten
+    from ui.utils import health_area, health_cliff  # type: ignore
 
 
 # Category keys in stacking order (housing first, then declared spending
@@ -464,7 +466,7 @@ def build_category_series(ages, overrides, multipliers, retirement_age,
     if health_by_age:
         health_series = _apply([health_by_age.get(int(a), 0.0) for a in ages])
         if any(v > 0 for v in health_series):
-            series.append(("Health insurance (ACA, Medicare)",
+            series.append((f"Health insurance (ACA {health_area.coverage_year(overrides)} prices, Medicare)",
                            _lighten(category_colors["SPEND_HEALTH_MONTHLY"], 0.35), health_series))
 
     return series, payoff_age
@@ -792,6 +794,8 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
             "leaves out car purchases and long-term care."
         )
         base_caption += _health_gap_note(health_by_age, retirement_age, overrides)
+        base_caption += (f" ACA prices are for the {health_area.year_phrase(overrides)}, grown each year "
+                         "to age 65.")
         if future:
             st.caption(
                 base_caption + " Shown in **future dollars**: each year is "
@@ -803,6 +807,9 @@ def render(st, results: dict = None, chart_key: str = "spending_main") -> None:
                 base_caption + " Shown in **today's dollars** (constant buying "
                 "power)."
             )
+        # The 400% FPL cliff, from the engine's own yearly income (results of this run only).
+        health_cliff.render_note(st, results, overrides,
+                                 current_year=int(getattr(cfg, "CURRENT_YEAR", 2026)))
 
     # Rendered directly (not in an st.fragment): a fragment isolates the toggle
     # rerun but its execution context doesn't see the session theme, so is_dark()

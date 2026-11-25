@@ -36,3 +36,14 @@ def test_engine_edit_changes_the_fingerprint(tmp_path, monkeypatch):
 def test_same_source_same_fingerprint(tmp_path, monkeypatch):
     root = _tree(tmp_path)
     assert _fp(monkeypatch, root) == _fp(monkeypatch, root)
+
+
+def test_a_data_table_edit_changes_the_fingerprint(tmp_path, monkeypatch):
+    """Healthcare prices by area live in JSON under retirement_sim/data: new vintage, new results."""
+    root = _tree(tmp_path)
+    data = root / "retirement_sim" / "data" / "healthcare" / "2027"
+    data.mkdir(parents=True)
+    (data / "age_factors.json").write_text('{"0": 0.765}')
+    before = _fp(monkeypatch, root)
+    (data / "age_factors.json").write_text('{"0": 0.8}')
+    assert _fp(monkeypatch, root) != before

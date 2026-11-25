@@ -347,7 +347,7 @@ def health_cost(params: Mapping, spend_magi: float, price_scale: float = 1.0) ->
             float(spend_magi) + float(params.get("income", 0.0)) + float(params.get("conversion", 0.0)),
             params.get("adult_ages") or (),
             params.get("kid_ages") or (), float(params.get("factor", 1.0)), float(price_scale),
-            source=params.get("source"))
+            source=params.get("source"), years=int(params.get("years", 0)))
     return max(0.0, float(params.get("medicare", 0.0)) + float(market))
 
 

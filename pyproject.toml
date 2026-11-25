@@ -42,6 +42,9 @@ Issues = "https://github.com/pusheckj/RETpy/issues"
 [tool.setuptools.packages.find]
 include = ["retirement_sim*"]
 
+[tool.setuptools.package-data]
+retirement_sim = ["data/healthcare/*/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
