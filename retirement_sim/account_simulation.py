@@ -3594,6 +3594,9 @@ def simulate_retirement_year(
     adjusted_expenses = _apply_spending_guardrails(
         portfolio, expenses, annual_return, your_age, inflation_factor
     )
+    # What the rules took off this year (today's dollars, 0 if they raised spending
+    # or changed nothing), taken before debt payments are added back.
+    guardrail_cut = max(0.0, float(expenses) - float(adjusted_expenses))
     # Consumer debts still owed in retirement: their payments (today's dollars,
     # cfg.debt_payment_for_age) are withdrawn like other spending. Added after
     # the guardrails: a loan payment can't be trimmed in a bad year.
@@ -3627,6 +3630,9 @@ def simulate_retirement_year(
         "age": int(your_age),
         "living": float(adjusted_expenses),
         "total": float(adjusted_expenses + health_insurance + ltc_cost + car_cost),
+        # How much the portfolio and return rules trimmed this year (retirement
+        # years only), for the "chance you ever cut spending" figure.
+        "cut": guardrail_cut,
         # The premium (ACA before 65, Medicare after), so the spending chart can
         # show what the engine really pays. Trued up from actual MAGI in
         # _fund_net_expenses.

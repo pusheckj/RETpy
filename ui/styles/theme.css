@@ -3952,6 +3952,8 @@ section[data-testid="stSidebar"] .mc-sec-ico { color: var(--mc-teal-strong) !imp
 .mc-band-says { margin-top: 10px; font-size: 15px; line-height: 1.45; color: var(--mc-ink); }
 .mc-cushion { margin: 0; padding: 12px 16px; border-radius: 12px; font-size: 14px;
     line-height: 1.45; color: var(--mc-ink); background: color-mix(in srgb, var(--mc-teal) 7%, var(--mc-tile)); }
+.mc-cushion-sub { margin-top: 8px; font-size: 13px; line-height: 1.4; color: var(--mc-muted); }
+.mc-cushion-sub:first-child { margin-top: 0; }
 /* Phone: the four names take two staggered rows so none overlap. */
 @media (max-width: 900px) {
     .mc-hero-band { grid-template-columns: 1fr; gap: 12px; }

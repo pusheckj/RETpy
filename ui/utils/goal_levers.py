@@ -356,11 +356,28 @@ def guardrail_cushion(user_overrides: dict, retirement_age: int) -> Optional[dic
         housing = float(cfg.housing_annual(age)) if getattr(
             cfg, "MODEL_GUARDRAILS_EXCLUDE_HOUSING", False) else 0.0
         flexible = max(0.0, core - min(core, housing)) * float(cfg.DISCRETIONARY_EXPENSE_RATIO)
+        r = dict(getattr(cfg, "RETURN_BASED_SPENDING_RULES", {}) or {})
+        poor_cut, bad_cut = float(r.get("poor_spending_cut", 0.0)), float(r.get("bad_spending_cut", 0.0))
         out = {
             "enabled": bool(getattr(cfg, "DYNAMIC_SPENDING_ENABLED", False)),
             "drop": 1.0 - float(g.get("floor_trigger", 0.70)),
             "cut": float(g.get("floor_reduction", 0.15)),
             "trim_year": float(g.get("floor_reduction", 0.15)) * flexible,
+            "floor_trigger": float(g.get("floor_trigger", 0.70)),
+            "ceiling_trigger": float(g.get("ceiling_trigger", 1.30)),
+            "ceiling_increase": float(g.get("ceiling_increase", 0.0)),
+            "flexible_share": float(cfg.DISCRETIONARY_EXPENSE_RATIO),
+            "housing_excluded": bool(getattr(cfg, "MODEL_GUARDRAILS_EXCLUDE_HOUSING", False)),
+            "min_factor": float(getattr(cfg, "GUARDRAIL_MIN_DISCRETIONARY_FACTOR", 0.60)),
+            "max_factor": float(getattr(cfg, "GUARDRAIL_MAX_DISCRETIONARY_FACTOR", 1.40)),
+            "return_rule": {
+                "enabled": bool(getattr(cfg, "RETURN_BASED_SPENDING_ENABLED", False))
+                           and (poor_cut > 0 or bad_cut > 0),
+                "poor_threshold": float(r.get("poor_return_threshold", 0.0)),
+                "poor_cut": poor_cut,
+                "bad_threshold": float(r.get("bad_return_threshold", -0.10)),
+                "bad_cut": bad_cut,
+            },
         }
     except Exception:
         out = None
@@ -368,3 +385,72 @@ def guardrail_cushion(user_overrides: dict, retirement_age: int) -> Optional[dic
         sr._restore_overrides(original)
     sr._small_cache_insert(_CUSHION_CACHE, key, out)
     return out
+
+
+def _p(x: float) -> str:
+    """0.15 -> "15%" (12.5% stays "12.5%")."""
+    return f"{x * 100:g}%"
+
+
+def _below(threshold: float) -> str:
+    """The return a rule fires under, in words: "a loss", "a loss over 10%"."""
+    if threshold == 0:
+        return "a loss"
+    return f"a loss over {_p(abs(threshold))}" if threshold < 0 else f"a return below {_p(threshold)}"
+
+
+def return_rule_text(rule: dict, also: bool = True) -> str:
+    """The return rule as one short sentence, from ``guardrail_cushion``'s
+    ``return_rule`` ('' when it is off). ``also``: it comes after the portfolio rule."""
+    if not rule or not rule.get("enabled"):
+        return ""
+    lead = f"A year with {_below(rule['poor_threshold'])}" if rule["poor_cut"] > 0 else \
+        f"A year with {_below(rule['bad_threshold'])}"
+    verb = "also trims" if also else "trims"
+    if rule["poor_cut"] > 0 and rule["bad_cut"] > 0:
+        return (f"{lead} {verb} fun money {_p(rule['poor_cut'])} that year, "
+                f"or {_p(rule['bad_cut'])} with {_below(rule['bad_threshold'])}.")
+    return f"{lead} {verb} fun money {_p(rule['poor_cut'] or rule['bad_cut'])} that year."
+
+
+def return_rule_row(rule: dict) -> Optional[tuple]:
+    """``(when, what)`` for a table row: "A year with a loss" and the trim it makes,
+    in a few words. None when the return rule is off."""
+    if not rule or not rule.get("enabled"):
+        return None
+    poor = rule["poor_cut"] > 0
+    when = f"A year with {_below(rule['poor_threshold'] if poor else rule['bad_threshold'])}"
+    if poor and rule["bad_cut"] > 0:
+        what = (f"Fun money trimmed {_p(rule['poor_cut'])} that year "
+                f"({_p(rule['bad_cut'])} with {_below(rule['bad_threshold'])})")
+    else:
+        what = f"Fun money trimmed {_p(rule['poor_cut'] or rule['bad_cut'])} that year"
+    return when, what
+
+
+def rule_text(c: dict) -> str:
+    """The engine's spending rules in plain words, from ``guardrail_cushion``'s
+    numbers, for the caption under the chart's trim line."""
+    sentences = []
+    if c.get("enabled"):
+        housing = " other than housing" if c["housing_excluded"] else ""
+        sentences.append("Each year the plan compares your portfolio with what you had when "
+                         "you retired, in today's dollars.")
+        sentences.append(f"Below {_p(c['floor_trigger'])} of that, fun money "
+                         f"({_p(c['flexible_share'])} of spending{housing}) is trimmed {_p(c['cut'])}.")
+        if c["housing_excluded"]:
+            sentences.append("Housing is never cut.")
+        if c["ceiling_increase"] > 0:
+            sentences.append(f"Above {_p(c['ceiling_trigger'])} of that, fun money rises {_p(c['ceiling_increase'])}.")
+        else:
+            sentences.append(f"Above {_p(c['ceiling_trigger'])} of that, fun money stays at plan.")
+    rr = return_rule_text(c.get("return_rule"), also=bool(c.get("enabled")))
+    if rr:
+        sentences.append(rr)
+    if sentences and (c.get("enabled") or rr):
+        both = c.get("enabled") and rr
+        sentences.append(("When both apply, the trims stack. " if both else "")
+                         + f"Fun money never goes below {_p(c['min_factor'])} "
+                           f"or above {_p(c['max_factor'])} of plan.")
+        sentences.append("Spending goes back to plan as soon as the rules no longer apply.")
+    return " ".join(sentences)

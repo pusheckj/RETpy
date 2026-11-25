@@ -178,6 +178,9 @@ class _MockSt:
     def caption(self, text, **k):
         self.captions.append(text)
 
+    def dataframe(self, df, **k):
+        pass
+
 
 def test_render_range_and_milestones_in_both_dollar_modes():
     rows = [{"age": a, "p10": 1e5 * i, "p25": 2e5 * i, "p50": 3e5 * i, "p75": 4e5 * i,

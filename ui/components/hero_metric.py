@@ -114,35 +114,70 @@ def _ends_text(results: dict, overrides: dict) -> str:
     return f"until you turn {end}"
 
 
+_NEVER_ADJUSTS = ('<div class="mc-cushion"><b>Spending never adjusts.</b> Your plan keeps '
+                  'spending the same, even after markets fall.</div>')
+
+
+def _cut_line(stats) -> str:
+    """'Chance you ever trim spending' from the primary result's ``spending_cut_stats``."""
+    if not stats or not stats.get("n"):
+        return ""
+    share = float(stats["share"])
+    chance = "under 1%" if 0 < share < 0.005 else f"{share:.0%}"
+    line = f'Chance you ever trim spending: <b>{chance}</b>.'
+    if share > 0 and stats.get("median_monthly", 0) > 0:
+        years = max(1, round(float(stats["median_years"])))
+        line += (f' In those markets the typical trim is about '
+                 f'<b>{money(stats["median_monthly"])} a month</b> for about '
+                 f'{years} year{"" if years == 1 else "s"}.')
+    return f'<div class="mc-cushion-sub">{line}</div>'
+
+
 def _cushion_html(results: dict, overrides: dict, rate_age) -> str:
-    """The guardrail cushion line ('' when it can't be worked out)."""
+    """The guardrail cushion line ('' when it can't be worked out). It names both
+    spending rules the engine applies: the portfolio rule (fun money is trimmed
+    after a big fall from the retirement balance) and the return rule (a losing
+    year trims it that year)."""
     try:
-        from utils.goal_levers import guardrail_cushion, monthly_text
+        from utils.goal_levers import guardrail_cushion, monthly_text, return_rule_text
     except ImportError:  # pragma: no cover
-        from ui.utils.goal_levers import guardrail_cushion, monthly_text  # type: ignore
+        from ui.utils.goal_levers import guardrail_cushion, monthly_text, return_rule_text  # type: ignore
     snap = results.get("config_snapshot") or {}
-    if snap.get("DYNAMIC_SPENDING_ENABLED") is False:
-        return ('<div class="mc-cushion"><b>Spending never adjusts.</b> Your plan keeps '
-                'spending the same, even after markets fall.</div>')
-    rows = (results.get("primary_result") or {}).get("networth_by_year") or []
-    at_ret = next((r for r in rows if r.get("age") == rate_age), None)
-    if not at_ret or not overrides or rate_age in (None, "—"):
+    primary = results.get("primary_result") or {}
+    c = None
+    if overrides and rate_age not in (None, "—"):
+        c = guardrail_cushion(overrides, int(rate_age))
+    portfolio_on = snap.get("DYNAMIC_SPENDING_ENABLED")
+    if portfolio_on is None:
+        portfolio_on = bool(c and c["enabled"])
+    return_rule = (c or {}).get("return_rule") or {}
+    return_on = snap.get("RETURN_BASED_SPENDING_ENABLED")
+    if return_on is None:
+        return_on = bool(return_rule.get("enabled"))
+    if not portfolio_on and not return_on:
+        return _NEVER_ADJUSTS
+    rr = return_rule_text(return_rule, also=bool(portfolio_on)) if return_on else ""
+    parts = []
+    if not portfolio_on:
+        if rr:
+            parts.append(f"<b>Spending still adjusts in down years.</b> {rr}")
+    else:
+        rows = primary.get("networth_by_year") or []
+        at_ret = next((r for r in rows if r.get("age") == rate_age), None)
+        invested = float((at_ret or {}).get("p50") or 0.0)
+        if c and c["enabled"] and invested > 0 and c["trim_year"] > 0:
+            fall = round(invested * c["drop"], -4)
+            rule = "The portfolio rule" if rr else "Your spending rule"
+            parts.append(
+                f'<b>Your cushion:</b> on a typical path you\'d retire with '
+                f'about <b>{money(invested, shorten=True)}</b> invested. {rule} trims '
+                f'fun money by about <b>{monthly_text(c["trim_year"])} a month</b> once the '
+                f'portfolio falls about <b>{money(fall)}</b> ({c["drop"]:.0%}) below that.'
+                + (f" {rr}" if rr else ""))
+    cut = _cut_line(primary.get("spending_cut_stats"))
+    if not parts and not cut:
         return ""
-    c = guardrail_cushion(overrides, int(rate_age))
-    if not c:
-        return ""
-    if not c["enabled"]:
-        return ('<div class="mc-cushion"><b>Spending never adjusts.</b> Your plan keeps '
-                'spending the same, even after markets fall.</div>')
-    invested = float(at_ret.get("p50") or 0.0)
-    if invested <= 0 or c["trim_year"] <= 0:
-        return ""
-    fall = round(invested * c["drop"], -4)
-    return _dollars(
-        f'<div class="mc-cushion"><b>Your cushion:</b> on a typical path you\'d retire with '
-        f'about <b>{money(invested, shorten=True)}</b> invested. It could fall about '
-        f'<b>{money(fall)}</b> ({c["drop"]:.0%}) below that before your spending rule trims '
-        f'fun money by about <b>{monthly_text(c["trim_year"])} a month</b>.</div>')
+    return _dollars(f'<div class="mc-cushion">{"".join(parts)}{cut}</div>')
 
 
 def _band_html(st, results: dict) -> str:
@@ -171,6 +206,9 @@ def _band_html(st, results: dict) -> str:
     helps = ". ".join(_zone_help(name, lo, hi) for name, lo, hi in _ZONES)
     count = (f"{round(rate * n):,} of {n:,} simulated markets last {_ends_text(results, overrides)}."
              if n > 0 else f"{pct(rate)} of simulated markets last {_ends_text(results, overrides)}.")
+    if rate >= 1.0 - 1e-9:
+        # Every simulated market lasted. That is a result of the model, not a promise.
+        count += " That is not a promise: real markets can do worse than the ones simulated."
     return (
         f'<div class="mc-hero-band"><div class="mc-hero-band-main">'
         f'<div class="mc-band" role="img" aria-label="Chance of success {pct(rate)}: {current}. '
