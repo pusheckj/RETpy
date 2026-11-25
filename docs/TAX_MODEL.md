@@ -7,7 +7,7 @@ This document describes every tax rule encoded in the simulator, with bracket ta
 ## 1. Scope
 
 - **Jurisdictions modeled:** US federal income tax, federal long-term capital gains tax, the Net Investment Income Tax (NIIT), Medicare IRMAA surcharges, payroll taxes on wages (FICA, plus California SDI), and **state income tax for all 50 states + DC** (`retirement_sim/state_tax_data.py`).
-- **Tax year baseline:** **2026** for every federal figure (brackets, standard deduction and its 65+ add-on, the OBBBA senior deduction, LTCG thresholds, contribution limits, the Social Security wage base and earnings test, the Roth IRA and student-loan phase-outs, the child tax credit), for Medicare IRMAA (2026 CMS tiers), for ACA credits (Rev. Proc. 2025-25) and for **California**. The other state tables are still **2024**. Every 2026 figure was checked against primary sources in November 2026; the report, with quotes and links, is [`docs/data_sources/2026_verification.md`](data_sources/2026_verification.md).
+- **Tax year baseline:** **2026** for every federal figure (brackets, standard deduction and its 65+ add-on, the OBBBA senior deduction, LTCG thresholds, contribution limits, the Social Security wage base and earnings test, the Roth IRA and student-loan phase-outs, the child tax credit), for Medicare IRMAA (2026 CMS tiers), for ACA credits (Rev. Proc. 2025-25) and for **every state table** (all 50 states and DC). Sources and the rows that differ from them on purpose are in [`DATA_SOURCES.md`](DATA_SOURCES.md). Every 2026 figure was checked against primary sources in November 2026; the report, with quotes and links, is [`docs/data_sources/2026_verification.md`](data_sources/2026_verification.md).
 - **Real frame:** the engine runs in an **all-real (today's-dollars) frame**: statutory items that are CPI-indexed in reality (federal ordinary/LTCG brackets, standard deduction and its 65+ add-on, contribution limits, the Social Security wage base, IRMAA tiers, ACA percentages, state tables) are held **flat at their real values**. Amounts that are *not* indexed in reality — **NIIT** ($250k/$200k), the **Additional Medicare Tax** ($250k/$200k), the **Social Security taxation** thresholds, the child-tax-credit phase-out, the $2,500 student-loan cap and the **senior deduction** ($6,000 and its $75k/$150k phase-out start) — decay in real terms over the horizon (`real_frozen_threshold`; a conservative, realistic bias). See `METHODOLOGY.md` §4.
 - **Granularity:** working-year pay is taxed once per year by `working_year_taxes` (§2.4); retirement-year taxes are computed incrementally as income is recognized (withdrawals, RMDs, conversions, Social Security), each stacked on the income already on the return.
 - **Filing status:** `FILING_STATUS` — **Married filing jointly**, **Single** or **Head of household** — selects every status-dependent table below, for the whole plan. An **unmarried couple** (a partner in the plan with a status other than MFJ) files **two returns**: you on `FILING_STATUS`, your partner as Single, each person's wages, withdrawals, RMDs, conversions, gains and Social Security on their own return (`files_two_returns()`, `return_status()`). Married filing separately and qualifying widow(er) are not modeled.
@@ -107,7 +107,7 @@ On a withdrawal of size `W` from taxable brokerage, the gain is `W × (1 − cos
 
 ---
 
-## 4. State income tax (all states + DC; 2024 tables, California 2026)
+## 4. State income tax (all states + DC; 2026 tables)
 
 `STATE_CHOICE` is a two-letter code (or `"DC"`). `config.state_tax_rules(code, status)` reads the state's row in `state_tax_data.py`:
 
@@ -118,7 +118,7 @@ On a withdrawal of size `W` from taxable brokerage, the gain is `W × (1 − cos
 - **Wage quirks**: Pennsylvania taxes 401(k) deferrals; California and New Jersey tax HSA contributions; California State Disability Insurance (1.3% of all wages, the 2026 rate) is counted with state tax.
 - **Exemption credits and surtax** (rows with `exemption_credits` / `surtax`; today only California): `config.state_income_tax` takes the nonrefundable credits off the bracket tax and adds the surtax on top.
 
-Each row carries its **tax year** and a **confidence**: `high` (complete within rounding for a typical household), `medium` (rates and brackets right; a credit, phase-out or local tax left out — see the row's note), or `approx` (simplified or uncertain; the app labels the state approximate). As of this version: approximate �� Alabama, Arkansas, Hawaii, Nebraska, Wisconsin. City and county income taxes (Maryland counties, NYC, Ohio/Pennsylvania/Michigan cities, Indiana counties…) are **not** included. `docs/state_tax_research_prompt.md` lists exactly what to verify.
+Each row carries its **tax year** and a **confidence**: `high` (complete within rounding for a typical household), `medium` (rates and brackets right; a credit, phase-out or local tax left out — see the row's note), or `approx` (simplified or uncertain; the app labels the state approximate). As of this version: approximate: Alabama, Arkansas, Hawaii, Nebraska, South Carolina, Wisconsin. City and county income taxes (Maryland counties, NYC, Ohio/Pennsylvania/Michigan cities, Indiana counties…) are **not** included. `docs/state_tax_research_prompt.md` lists exactly what to verify.
 
 Legacy values: `"No state tax"` (zero) and `"Other"` (flat `YOUR_MARGINAL_TAX_RATE` above the federal standard deduction, Social Security exempt). Unknown values fall back to `"CA"`. `MODEL_CA_EXEMPTS_SOCIAL_SECURITY = False` (historical name) turns every state's Social Security exemption off.
 
@@ -341,7 +341,7 @@ $2,200 per child under 17 (One Big Beautiful Bill Act, 2025; indexed later, so f
 - **SSA POMS RS 00605 and RS 00615** — PIA computation and actuarial adjustments for early/delayed claiming
 - **CMS 2026 Medicare Parts B premiums and deductibles fact sheet** — standard premium and IRMAA tiers
 - **California Franchise Tax Board, Tax News October 2026** — 2026 brackets, standard deduction, exemption credits; Behavioral Health Services Tax
-- **State revenue department 2024 forms and rate schedules** — the other state rows in `state_tax_data.py` (each row's `confidence` and `note` say how complete it is)
+- **BiggerPockets Money Income Tax Projection Calculator (v1.11.2, captured 2026-11-25) and the state agencies it cites** — the 2026 brackets and standard deductions of the other state rows in `state_tax_data.py` ([`DATA_SOURCES.md`](DATA_SOURCES.md); each row's `confidence` and `note` say how complete it is)
 - **IRS Publication 15 / Topic 560** — FICA rates, the Additional Medicare Tax; **SSA 2026 COLA fact sheet** — the $184,500 wage base and the $24,480 / $65,160 earnings-test limits
 - **IRS Publication 970** — student loan interest deduction (2026 phase-out from Rev. Proc. 2025-32)
 - **SECURE Act 2.0 (2022)** — RMD start-age increases

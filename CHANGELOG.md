@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (state income tax now uses 2026 tables)
+- State income tax for all 50 states and DC now uses 2026 brackets and standard deductions. It used 2024 figures before, except California. 31 states changed. Examples: Iowa is a flat 3.8%, Louisiana a flat 3%, Georgia 4.99% with a $15,000 deduction, North Carolina 3.99%, Colorado 4.40%, and Maryland's top rate is 6.5%. If you live in one of them, your tax and your retirement age will shift a little.
+- The tables come from the BiggerPockets Money tax calculator (v1.11.2) and the state agencies it cites. Credit and the full list of what was taken and what was not are in `docs/DATA_SOURCES.md`. Only brackets and standard deductions were updated. Personal exemptions, retirement-income and Social Security rules, and California are as before.
+- A few rows differ from the source on purpose (Arizona's deduction, Alabama and Wisconsin's deduction, Kentucky joint returns, Louisiana's old exemption, head of household in seven states). Ohio, Arkansas, Utah and South Carolina are approximated with one set of brackets. South Carolina is now labelled approximate. The reasons are in `docs/DATA_SOURCES.md` and in each row's note.
+- New dev-only cross-check in `tools/tax_crosscheck/`. It runs the same returns through the BiggerPockets Money engine and through RETpy and compares them to the cent. It is not part of the app. Its report (`REPORT.md`) shows federal tables and state tables agree, and lists engine findings: gains are taxed before Social Security is added to income, and unused standard deduction does not shelter gains. Those are not fixed here because they change simulation results.
+- New tests: `tests/test_state_tax_2026.py` pins state results to the cent without Node. `tests/test_tax_crosscheck_harness.py` runs the cross-check when Node and the BiggerPockets Money page are available.
+- The Taxes panel and the docs say 2026 for state tables.
+
 ### Changed (follow-up analyses no longer block the page)
 - After a Run, the ways-to-reach-your-goal, net-worth, safe-withdrawal and mortgage sweeps now compute in a pool of background processes, not on the page's own thread. Clicks and edits answer at once while they run. Before, each sweep held the page for up to 29 seconds.
 - The page does not poll the server. When sweeps finish, the server asks for one page refresh itself (`ui/utils/session_wake.py`). The server waits until all of them are done, or for 20 seconds after the first, so a Run costs one or two refreshes. Any edit or click you make in the meantime shows what has finished. The server never interrupts a run of yours: if the page is busy in any way (even a click inside a tile), it waits and asks again a moment later, so a click or edit is never lost. A new Run, a profile switch or a loaded file cancels sweeps that are still going, so old results never show under new inputs.
