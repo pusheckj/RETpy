@@ -415,9 +415,9 @@ def _freeze(value: Any) -> Any:
     return value
 
 
-# Saved UI state that never reaches the engine (Freedom milestones' places): leaving it
-# out of the cache keys keeps editing a place from marking the plan's results stale.
-_HASH_IGNORED_KEYS = frozenset({"MS_PLACES"})
+# Saved UI state that never reaches the engine (Freedom milestones' places, the budget
+# area): leaving it out of the cache keys keeps editing it from marking the plan's results stale.
+_HASH_IGNORED_KEYS = frozenset({"MS_PLACES", "BENCH_AREA"})
 
 
 def _hashable(overrides: dict) -> tuple:

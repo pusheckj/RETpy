@@ -319,12 +319,15 @@ def _sync_children(st, overrides: dict) -> None:
     kids = cfg.children_in(overrides)[:6]
     ss = st.session_state
     ss["se_kids_n"] = len(kids)
+    for key in ("se_kid_area", "se_kid_area_spend"):   # the area pickers redraw from BENCH_AREA
+        ss.pop(key, None)
     for i, kid in enumerate(kids):
         p, yub = f"se_kid{i}_", int(kid["years_until_birth"])
         ss[p + "born"] = yub <= 0
         ss[p + "age" if yub <= 0 else p + "in"] = _clamp(abs(yub), 0 if yub <= 0 else 1, 30)
         ss[p + "leaves"] = _as_int(18, 16, 30)(kid["leaves_home_age"])
         ss[p + "cost"] = _as_int(0, 0, 10_000)(kid["monthly_cost"])
+        ss[p + "care"] = _as_int(0, 0, 10_000)(kid["childcare_monthly"])
         ss[p + "college"] = _clamp(int(round(100 * float(kid["college_funding_pct"]))), 0, 100)
     funded = [k for k in kids if k["college_funding_pct"] > 0]
     if funded:

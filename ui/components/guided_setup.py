@@ -29,7 +29,8 @@ try:
     from utils.expense_categories import CATEGORIES
     from utils.formatting import money, money_md, money_echo
     from utils.derived import (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL, KEEP_AMOUNTS_LABEL,
-                               get_limit, children_at_home_now, compute_total_income, compute_taxes,
+                               get_limit, children_at_home_now, child_monthly_now,
+                               compute_total_income, compute_taxes,
                                compute_expenses_today)
     from utils import simple_to_full as s2f
     from utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH, household_of,
@@ -42,7 +43,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.formatting import money, money_md, money_echo  # type: ignore
     from ui.utils.derived import (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL,  # type: ignore
                                   KEEP_AMOUNTS_LABEL, get_limit, children_at_home_now,
-                                  compute_total_income, compute_taxes, compute_expenses_today)
+                                  child_monthly_now, compute_total_income, compute_taxes, compute_expenses_today)
     from ui.utils import simple_to_full as s2f  # type: ignore
     from ui.utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH,  # type: ignore
                                     household_of, clear_partner, forget_partner_widgets)
@@ -833,7 +834,7 @@ def review_lines(ov: Dict[str, Any]) -> List[str]:
                 + (_PARTNER_ACCOUNTS if partner else []))
     housing = _num(ov.get("MORTGAGE_MONTHLY")) or _num(ov.get("SPEND_RENT_MONTHLY"))
     spend = sum(_num(ov.get(c.key)) for c in CATEGORIES if partner or not c.partner_only)
-    kids_now = sum(_num(k["monthly_cost"]) for k in children_at_home_now(ov))
+    kids_now = sum(child_monthly_now(k) for k in children_at_home_now(ov))
     yearly = sum(_num(ov.get(k)) for k in ("YOUR_401K_CONTRIBUTION", "YOUR_HSA_CONTRIBUTION",
                                            "YOUR_BACKDOOR_ROTH"))
     ss = (f"Social Security {money_md(_num(ov.get('YOUR_SS_MONTHLY_FRA')))}/month"

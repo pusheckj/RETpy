@@ -19,10 +19,14 @@ except ImportError:  # pragma: no cover
 
 try:
     from utils.overrides import set_override
-    from utils.derived import children_at_home_now
+    from utils.derived import children_at_home_now, child_monthly_now
+    from utils import childcare_cost
+    from components import budget_area
 except ImportError:  # pragma: no cover
     from ui.utils.overrides import set_override  # type: ignore
-    from ui.utils.derived import children_at_home_now  # type: ignore
+    from ui.utils.derived import children_at_home_now, child_monthly_now  # type: ignore
+    from ui.utils import childcare_cost  # type: ignore
+    from ui.components import budget_area  # type: ignore
 
 from retirement_sim import config as cfg
 
@@ -50,8 +54,14 @@ def _new_child(earlier: list) -> dict:
             "monthly_cost": _NEW_CHILD_COST[1 if earlier else 0]}
 
 
-def _child_row(st, i: int, kid: dict) -> dict:
-    """One child's inputs; returns the child's CHILDREN entry."""
+def _use_childcare(st, key: str, monthly: int) -> None:
+    """Button callback: the childcare box takes the typical figure."""
+    st.session_state[key] = monthly
+
+
+def _child_row(st, i: int, kid: dict, typical: int = 0) -> dict:
+    """One child's inputs; returns the child's CHILDREN entry. ``typical`` is the
+    suggested childcare a month for the household's area (0 = no suggestion)."""
     p = f"se_kid{i}_"
     yub = int(kid["years_until_birth"])
     st.markdown(f"**Child {i + 1}**")
@@ -63,10 +73,27 @@ def _child_row(st, i: int, kid: dict) -> dict:
             yub = -_kid_number(st, p + "age", "Age today", -yub if yub <= 0 else 0, 0, 30, 1)
         else:
             yub = _kid_number(st, p + "in", "Born in (years)", yub if yub > 0 else 1, 1, 30, 1)
+    care_key = p + "care"
     with c2:
+        has_care = safe_int(st.session_state.get(care_key, kid["childcare_monthly"]), 0) > 0
         cost = _kid_number(st, p + "cost", "Monthly cost ($)", kid["monthly_cost"], 0, 10_000, 100,
+                           "Food, clothes and activities while they live with you, in today's "
+                           "dollars. Childcare is in the box below." if has_care else
                            "Childcare, food, clothes and activities while they live with you, "
-                           "in today's dollars.")
+                           "in today's dollars. To price childcare by area, use the box below "
+                           "and lower this by the same amount.")
+    c5, c6 = st.columns(2, vertical_alignment="bottom")
+    with c5:
+        care = _kid_number(st, care_key, "Childcare until age 5 ($/mo)", kid["childcare_monthly"],
+                           0, 10_000, 50,
+                           "Paid childcare in the first five years, in today's dollars. It comes "
+                           "on top of the monthly cost above.")
+    with c6:
+        if typical > 0:
+            st.button(f"Use typical {money_md(typical)}/mo", key=p + "use_care",
+                      on_click=_use_childcare, args=(st, care_key, typical),
+                      disabled=care == typical,
+                      help="Sets this child's childcare to the typical figure for your area.")
     c3, c4 = st.columns(2, vertical_alignment="bottom")
     with c3:
         leaves = _kid_number(st, p + "leaves", "Leaves home at", kid["leaves_home_age"], 16, 30, 1,
@@ -76,8 +103,22 @@ def _child_row(st, i: int, kid: dict) -> dict:
                           round(100 * float(kid["college_funding_pct"])), 0, 100, 5,
                           "Share of college you plan to pay. It's saved in a 529 from birth "
                           "and paid out at college. 0 means none.")
-    return {**kid, "years_until_birth": yub, "monthly_cost": cost, "leaves_home_age": leaves,
-            "college_funding_pct": pct / 100.0}
+    return {**kid, "years_until_birth": yub, "monthly_cost": cost, "childcare_monthly": care,
+            "leaves_home_age": leaves, "college_funding_pct": pct / 100.0}
+
+
+def _typical_childcare(st, n_children: int) -> int:
+    """Draw the area picker and the "typical childcare here" line; return the typical
+    childcare a month for one child (0 with no children)."""
+    if n_children <= 0:
+        return 0
+    ov = st.session_state.get("user_overrides", {}) or {}
+    # The household as it will be with this many children (the box may not be saved yet).
+    est, where = childcare_cost.for_household({**ov, "CHILDREN": [{}] * n_children})
+    budget_area.render(st, "se_kid_area")
+    st.caption(f"Typical childcare in {where}: {money_md(est.per_child)}/yr per child "
+               f"(2026 dollars). Source: {childcare_cost.SOURCE}")
+    return round(est.per_child / 12)
 
 
 def _children(st) -> list:
@@ -87,8 +128,9 @@ def _children(st) -> list:
     n = st.number_input("Number of children", min_value=0, max_value=MAX_CHILDREN, step=1,
                         key="se_kids_n", help="Children you have now or plan to have.")
     out: list = []
+    typical = _typical_childcare(st, safe_int(n))
     for i in range(safe_int(n)):
-        out.append(_child_row(st, i, kids[i] if i < len(kids) else _new_child(out)))
+        out.append(_child_row(st, i, kids[i] if i < len(kids) else _new_child(out), typical))
     if any(c["college_funding_pct"] > 0 for c in out):
         # College prices: one pair for every child.
         first = next(c for c in out if c["college_funding_pct"] > 0)
@@ -115,7 +157,7 @@ def family_summary(overrides: dict) -> dict:
     last = max((your_age + k["years_until_birth"] + k["leaves_home_age"] for k in kids),
                default=None)
     return {"children": len(kids), "at_home": len(home),
-            "monthly_cost": sum(safe_int(k["monthly_cost"], 0) for k in home),
+            "monthly_cost": sum(child_monthly_now(k) for k in home),
             "last_leaves_age": last, "your_age": your_age}
 
 

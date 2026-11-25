@@ -44,6 +44,7 @@ try:
     from utils.derived import compute_expenses_today
     from utils.expense_categories import (CATEGORIES, HOUSING, HOUSING_KEYS, HOUSING_STATEMENT,
                                           INPUTS, MIRRORS)
+    from components import spending_benchmark
 except ImportError:  # pragma: no cover
     from ui.utils.spending_parsers import load_files, load_folder, statement_files, coverage  # type: ignore
     from ui.utils.spending_rules import (load_rules, parse_rules, classify, merchant_key,  # type: ignore
@@ -55,6 +56,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.derived import compute_expenses_today  # type: ignore
     from ui.utils.expense_categories import (CATEGORIES, HOUSING, HOUSING_KEYS,  # type: ignore
                                              HOUSING_STATEMENT, INPUTS, MIRRORS)
+    from ui.components import spending_benchmark  # type: ignore
 
 SETTINGS_PATH = os.path.expanduser("~/.config/retirement-sim/spending.json")
 RULES_FILENAME = "spending_rules.json"
@@ -923,6 +925,7 @@ def render(st, **_kwargs) -> None:
                 else "Choose the folder with your statements, or upload them, to see your spending.")
         _settings_form(st, data_dir, False)          # renders nothing when hosted
         _upload_panel(st, store)
+        spending_benchmark.render(st)                # needs only the plan's inputs
         return
     tx = data["tx"]
     if tx.empty:
@@ -1058,6 +1061,7 @@ def render(st, **_kwargs) -> None:
                "sp_monthly", PLOTLY_CONFIG)
         st.caption("Each bar is purchases minus refunds and minus what people paid "
                    "you back. The average skips shaded months (missing statements).")
+        spending_benchmark.render(st, session_actual(st, data))
 
     with t_trend:
         choices = list(sel)

@@ -32,6 +32,7 @@ try:
     from utils.profile_io import serialize_checkup, deserialize_checkup
     from utils.plot_theme import is_dark, style_fig
     from utils.derived import hsa_limit_note
+    from utils import budget_compare as bc
 except ImportError:  # pragma: no cover
     from ui.utils import simple_finance as sf  # type: ignore
     from ui.utils import simple_to_full  # type: ignore
@@ -39,6 +40,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.profile_io import serialize_checkup, deserialize_checkup  # type: ignore
     from ui.utils.plot_theme import is_dark, style_fig  # type: ignore
     from ui.utils.derived import hsa_limit_note  # type: ignore
+    from ui.utils import budget_compare as bc  # type: ignore
 
 STATE_KEY = "simple_inputs"
 _SYNC_KEY = "_simple_inputs_synced"   # copy of what this page last wrote
@@ -509,7 +511,7 @@ def _render_payoff(st, payoff: Dict[str, Any], inputs: Dict[str, Any], start: da
         _payoff_chart(st, av, sb, start)
 
 
-def _render_budget(st, buckets: List[sf.BudgetBucket]) -> None:
+def _render_budget(st, buckets: List[sf.BudgetBucket], inputs: Dict[str, Any]) -> None:
     with st.container(border=True, key="mc-tile-simple-budget"):
         _section(st, "The 50/30/20 check",
                  "A popular guide for take-home pay: about 50% on needs, 30% on wants, and "
@@ -529,6 +531,14 @@ def _render_budget(st, buckets: List[sf.BudgetBucket]) -> None:
         st.markdown("".join(rows), unsafe_allow_html=True)
         st.caption("The tick on each bar marks the guide. Minimum debt payments count as "
                    "needs; extra debt payments count as savings.")
+        cmp = bc.checkup_compare(inputs)
+        if cmp:
+            st.caption(f"For comparison, households your age in the {cmp.group} income group "
+                       f"typically spend about {money_md(cmp.typical)} a month on everyday costs, at "
+                       f"US average prices. Your needs and wants add up to {money_md(cmp.you)}. A "
+                       "statistical average, not advice. Open the Retirement planner's Spending tab "
+                       "to compare by category and area. Source: BLS Consumer Expenditure 2025, "
+                       "method from BiggerPockets Money.")
 
 
 def _load_checkup(ss, answers: Dict[str, Any]) -> None:
@@ -605,5 +615,5 @@ def render(st) -> None:
     _render_headline(st, res["savings_rate"], res["emergency_fund"])
     _render_ladder(st, res["ladder"])
     _render_payoff(st, res["payoff"], inputs, today)
-    _render_budget(st, res["budget"])
+    _render_budget(st, res["budget"], inputs)
     _render_save_load(st, inputs)

@@ -206,6 +206,7 @@ The app's *Family* section sets these.
 | `CHILDREN` | two children (below) | One entry per child, born or planned; `[]` = child-free. Each entry's fields are below; a field left out takes its `CHILD_DEFAULTS` value. |
 | `years_until_birth` | `3`, `6` | Years from now until the child is born; negative = already born (`-5` is a 5-year-old today). |
 | `monthly_cost` | `$2,100`, `$1,400` | What the child costs each month while living at home (today's dollars, grows with the childcare factor). |
+| `childcare_monthly` | `0` | Paid childcare each month while the child is under `CHILDCARE_END_AGE` (5), on top of `monthly_cost` (today's dollars, grows with the childcare factor). The Family section can suggest a figure for your area (METHODOLOGY 15.4). |
 | `leaves_home_age` | `18` | The child's age when those costs stop. Each child has their own. |
 | `college_funding_pct` | `0.0` | Share of college you pay (`0` = none, `1` = all). Saved in that child's own 529 from birth to `COLLEGE_START_AGE` (18), then college is paid from it, during working years or retirement; the budget covers anything the 529 can't. |
 | `college_annual_cost` | `$40,000` | One year of college (today's dollars). |

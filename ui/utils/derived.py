@@ -153,6 +153,15 @@ def children_at_home_now(overrides: dict) -> list:
             if 0 <= -kid["years_until_birth"] < kid["leaves_home_age"]]
 
 
+def child_monthly_now(kid: dict) -> int:
+    """What one child at home costs a month today: their monthly cost, plus their childcare
+    while they are under ``cfg.CHILDCARE_END_AGE`` (same rule as ``cfg.calculate_child_expenses``)."""
+    cost = safe_int(kid["monthly_cost"], 0)
+    if -int(kid["years_until_birth"]) < cfg.CHILDCARE_END_AGE:
+        cost += safe_int(kid.get("childcare_monthly", 0), 0)
+    return cost
+
+
 def debt_payments_this_year(overrides: dict) -> float:
     """What the debts (DEBTS, Debts section) cost this plan year: the minimums
     plus the extra each month, less any month after the last debt is gone.
@@ -221,7 +230,7 @@ def compute_expenses_today(overrides: dict) -> int:
     # rule cfg.calculate_child_expenses applies at your current age. (This used
     # to count only the first child, even with two at home.)
     for kid in children_at_home_now(overrides):
-        monthly += safe_int(kid["monthly_cost"], 0)
+        monthly += child_monthly_now(kid)
 
     annual = monthly * 12 + round(carrying)
 
