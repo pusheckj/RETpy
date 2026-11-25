@@ -58,9 +58,9 @@ None.
 | personal exemption (BPM does not model it), retirement-income exclusion (BPM taxes it all); RETpy wins (states: IL MD MS OK) | state_tax_data.STATES rows above | 19 | 6,214.73 | IL-S-ORD-LTCG, IL-S-ORD-LTCG-SS, IL-MFJ-ORD-LTCG |
 | exemption credits (BPM does not model them); RETpy wins (states: CA) | state_tax_data.STATES['CA'] | 13 | 632.00 | CA-S-W2-low, CA-S-W2-high, CA-S-ORD-LTCG |
 | BPM's 8,350 / 16,700 deduction matches no federal or Arizona figure; RETpy follows the federal deduction (states: AZ) | state_tax_data.STATES['AZ'] | 12 | 395.00 | AZ-S-W2-low, AZ-S-W2-high, AZ-S-ORD-LTCG |
-| state taxes Social Security (BPM exempts it everywhere); RETpy wins (states: MN MT NM) | state_tax_data.STATES rows above | 5 | 3,044.15 | MN-MFJ-ORD-LTCG-SS, MT-S-ORD-LTCG-SS, MT-MFJ-ORD-LTCG-SS |
+| state taxes Social Security (BPM exempts it everywhere); RETpy wins (states: MN MT NM) | state_tax_data.STATES rows above | 5 | 3,179.00 | MN-MFJ-ORD-LTCG-SS, MT-S-ORD-LTCG-SS, MT-MFJ-ORD-LTCG-SS |
 | BPM gives a joint return one $3,360 deduction; Kentucky gives each taxpayer one (states: KY) | state_tax_data.STATES['KY'] | 4 | 117.60 | KY-MFJ-W2-low, KY-MFJ-W2-high, KY-MFJ-ORD-LTCG |
-| personal exemption (BPM does not model it), state taxes Social Security (BPM exempts it everywhere); RETpy wins (states: RI VT) | state_tax_data.STATES rows above | 3 | 1,350.38 | RI-MFJ-ORD-LTCG-SS, VT-S-ORD-LTCG-SS, VT-MFJ-ORD-LTCG-SS |
+| personal exemption (BPM does not model it), state taxes Social Security (BPM exempts it everywhere); RETpy wins (states: RI VT) | state_tax_data.STATES rows above | 3 | 2,412.30 | RI-MFJ-ORD-LTCG-SS, VT-S-ORD-LTCG-SS, VT-MFJ-ORD-LTCG-SS |
 | retirement-income exclusion (BPM taxes it all), state capital-gains exclusion (BPM taxes gains in full); RETpy wins (states: AR) | state_tax_data.STATES['AR'] | 2 | 592.00 | AR-S-ORD-LTCG-SS, AR-HOH-ORD-LTCG-SS |
 | state capital-gains exclusion (BPM taxes gains in full); RETpy wins (states: ND) | state_tax_data.STATES['ND'] | 2 | 624.00 | ND-S-ORD-LTCG, ND-MFJ-ORD-LTCG |
 | BPM needs MAGI over the top IRMAA boundary; CMS and RETpy put the top tier at or above it | BPM TABLES.irmaa; RETpy config.medicare_irmaa_tier | 2 | 1.00 | EDGE-irmaa-S-500000-at, EDGE-irmaa-MFJ-750000-at |
@@ -589,7 +589,7 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 RETpy models none of these, so they are known gaps rather than findings: the qualified business income deduction (self-employment income), itemized deductions and the SALT cap, AMT, the earned income credit, and the ACA premium-credit cliff (BPM reports only the required-contribution percentage). BPM does not model them all either (AMT, EITC, loss carryforwards, local taxes).
 
 
-## 8. Fixed: federal income order inside a year
+## 8. Fixed: income order inside a year (federal and state)
 
 The first run found 81 fixtures where the engine's federal tax differed from BPM's and from RETpy's own tables worked in IRS order. All three causes were engine order bugs, now fixed: the engine books each event (pension draw, sale of shares, Social Security, Roth conversion) as the change in one whole-year figure (`AccountPortfolio._federal_year_tax`).
 
@@ -600,3 +600,5 @@ The first run found 81 fixtures where the engine's federal tax differed from BPM
 | The senior deduction was not re-priced when later gains raised MAGI | 1 | 396.00 | EDGE-senior-S-cap-ltcg | yes |
 
 After the fix every one of these fixtures matches BPM to the cent. Pinned by `tests/test_federal_tax_order.py`.
+
+State tax follows the same rule: gains sold earlier in the year (after the state's capital-gains exclusion) are part of the state base for income that comes later, so the state tax booked does not depend on the order of events. The fixtures book ordinary income first, so their results are unchanged apart from the Social Security states (MN MT NM RI VT), where Social Security now sits above the gains in the state brackets. The federal worksheet's last line (tax no higher than the ordinary tax on all taxable income) is also applied; BPM leaves it out, and no fixture falls in the range where it matters (at most $28.50 Single, $57 joint).

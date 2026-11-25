@@ -52,7 +52,7 @@ def bracket_note(income: Optional[float], status=None) -> str:
         return ""
     taxable = income - cfg.STANDARD_DEDUCTION_BY_STATUS[s]
     if taxable <= 0:
-        return "below the standard deduction, so conversions are tax-free"
+        return "within the standard deduction, so no ordinary tax (it also stops sheltering any gains sold this year)"
     lower = 0.0
     for top, rate in cfg.FEDERAL_BRACKETS_BY_STATUS[s]:
         if taxable <= top:

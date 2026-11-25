@@ -895,7 +895,8 @@ class AccountPortfolio:
 
         * the deduction (senior deduction at MAGI = ordinary + gains) takes ordinary
           income first; any unused part shelters gains;
-        * gains stack on top of ordinary TAXABLE income for the 0 / 15 / 20% limits;
+        * gains stack on top of ordinary TAXABLE income for the 0 / 15 / 20% limits,
+          and the total is capped at the ordinary tax on all taxable income;
         * NIIT is 3.8% of the lesser of the gains and the MAGI over its threshold.
 
         Every event of the year is booked as the CHANGE in this figure
@@ -912,7 +913,11 @@ class AccountPortfolio:
             return tax, 0.0
         status = self.return_status[ret]
         sheltered = max(0.0, deduction - ordinary)        # unused deduction
-        tax += calculate_ltcg_tax(max(0.0, gains - sheltered), ordinary_taxable, status=status)
+        taxable_gains = max(0.0, gains - sheltered)
+        worksheet = tax + calculate_ltcg_tax(taxable_gains, ordinary_taxable, status=status)
+        # The worksheet's last line: never more than the ordinary tax on ALL taxable
+        # income (gains in the top of the 12% band would otherwise pay 15% for 12%).
+        tax = min(worksheet, self._federal_model(ret).calculate_tax(ordinary_taxable + taxable_gains))
         niit = cfg.calculate_niit(
             magi, gains,
             years_from_start=max(0, (self.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
@@ -967,6 +972,20 @@ class AccountPortfolio:
             return max(0.0, self.year_partner_income - self.year_partner_state_exempt)
         return max(0.0, (self.year_ordinary_income - self.year_partner_income)
                    - (self.year_state_exempt_income - self.year_partner_state_exempt))
+
+    def _state_gain_share(self, ret: str = "you") -> float:
+        """Share of a long-term gain the return's STATE taxes (1 minus its
+        capital-gains exclusion: Arkansas 50%, South Carolina 44%, ...)."""
+        rules = getattr(self._state_model(ret), "rules", None) or {}
+        return 1.0 - float(rules.get("ltcg_exclusion", 0.0) or 0.0)
+
+    def _state_base_with_gains(self, ret: str = "you") -> float:
+        """The return's state base for the next dollar of income: the ordinary base
+        (``_state_taxable_base``) plus gains already sold this year, after the state's
+        exclusion. States tax gains as ordinary income, so income that comes after a
+        sale starts above the gains in the state's brackets and deduction, whichever
+        of the two the engine books first."""
+        return self._state_taxable_base(ret) + self._return_investment(ret) * self._state_gain_share(ret)
 
     def _state_exempt_portion(self, income: float, owner: str, is_social_security: bool,
                               retirement: bool) -> float:
@@ -1050,7 +1069,7 @@ class AccountPortfolio:
         # State tax on the non-exempt part, after the state's own deduction.
         state = self._state_model(ret)
         state_deduction = getattr(state, "deduction", cfg.CA_STANDARD_DEDUCTION_MFJ_2024)
-        state_base = self._state_taxable_base(ret)
+        state_base = self._state_base_with_gains(ret)
         taxable_part = income - self._state_exempt_portion(
             income, owner, not is_state_taxable, retirement)
         state_taxable_before = max(0, state_base - state_deduction)
@@ -1234,18 +1253,16 @@ class AccountPortfolio:
                             # Everything below is on the return of the account's
                             # owner (one return unless an unmarried couple files two).
                             ret = self._return_of(account.owner)
-                            prior_gains = self._return_investment(ret)
                             federal_ltcg, niit = self._marginal_federal(
                                 account.owner, gains=gains)
 
                             # States tax LTCG as ordinary income, less any
                             # state capital-gains exclusion.
                             state = self._state_model(ret)
-                            state_gains = gains * (1.0 - float(
-                                getattr(state, "rules", {}).get("ltcg_exclusion", 0.0) or 0.0))
+                            state_gains = gains * self._state_gain_share(ret)
                             state_deduction = getattr(state, "deduction",
                                                       cfg.CA_STANDARD_DEDUCTION_MFJ_2024)
-                            state_base = self._state_taxable_base(ret) + prior_gains
+                            state_base = self._state_base_with_gains(ret)
                             state_taxable_before = max(0, state_base - state_deduction)
                             state_taxable_after = max(0, state_base + state_gains - state_deduction)
                             state_ltcg = state.calculate_tax(state_taxable_after) - \
@@ -1937,13 +1954,11 @@ class AccountPortfolio:
         total = 0.0
         for ret, part in shares:
             owner = "partner" if ret == "partner" else "you"
-            prior = self._return_investment(ret)
             federal, niit = self._marginal_federal(owner, gains=part)
             state_model = self._state_model(ret)
-            state_part = part * (1.0 - float(
-                getattr(state_model, "rules", {}).get("ltcg_exclusion", 0.0) or 0.0))
+            state_part = part * self._state_gain_share(ret)
             deduction = getattr(state_model, "deduction", cfg.CA_STANDARD_DEDUCTION_MFJ_2024)
-            base = self._state_taxable_base(ret) + prior
+            base = self._state_base_with_gains(ret)
             state = (state_model.calculate_tax(max(0, base + state_part - deduction))
                      - state_model.calculate_tax(max(0, base - deduction)))
             self.year_investment_income += part

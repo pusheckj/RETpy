@@ -101,22 +101,22 @@ Rev. Proc. 2025-32 §4.03.
 
 LTCG stacks **on top of** taxable ordinary income on the same return: ordinary brackets fill first, then the LTCG brackets begin at that level (IRS Qualified Dividends and Capital Gain Tax Worksheet). Gains realized earlier in the year are part of the stacking base. The deduction reduces ordinary income first; any part left over (ordinary income below the deduction) reduces the gains.
 
+### 3.2 Application to taxable-brokerage withdrawals
+
+On a withdrawal of size `W` from taxable brokerage, the gain is `W × (1 − cost_basis / balance)`; only the gain portion is taxed and the cost basis is reduced pro-rata. Short-term capital gains are not modeled.
+
 ### 3.3 Order of income inside a year
 
 The engine taxes income as it happens: a pension or IRA draw, a sale of shares, a Roth conversion, and Social Security at year end. The IRS return is one calculation on the whole year, so the engine books each event as the **change in one whole-year figure** (`AccountPortfolio._federal_year_tax`, `_marginal_federal`). For a return with ordinary income `O` (taxable Social Security included) and gains `G`:
 
 1. MAGI = `O + G`. The deduction (standard, 65+ add-on, senior deduction at that MAGI) is `D`.
 2. Ordinary taxable income = `max(0, O − D)`. Ordinary tax comes from the ordinary brackets.
-3. Gains taxed = `G − max(0, D − O)`. They stack on top of ordinary taxable income for the 0 / 15 / 20% limits.
+3. Gains taxed = `G − max(0, D − O)`. They stack on top of ordinary taxable income for the 0 / 15 / 20% limits. The total (ordinary tax plus gains tax) is never more than the ordinary tax on all taxable income, the last line of the IRS worksheet (it saves at most $28.50 Single, $57 joint, for gains in the top of the 12% band).
 4. NIIT = 3.8% × the lesser of `G` and MAGI above the threshold.
 
-An event's tax is this total after the event minus the total before it. The booked taxes therefore add up to the whole-year figure in any order. Income that arrives after a sale (a later pension draw, a Roth conversion, taxable Social Security) pushes the gains already sold up the 0 / 15 / 20% stack, takes back deduction that was sheltering them, shrinks the senior deduction and can bring NIIT, and that extra tax is charged to the later income. With no gains in the year this is the plain ordinary-tax schedule. State tax is still booked per event (a state taxes gains as ordinary income and does not stack them), and states re-price their own base as before.
+An event's tax is this total after the event minus the total before it. The booked taxes therefore add up to the whole-year figure in any order. Income that arrives after a sale (a later pension draw, a Roth conversion, taxable Social Security) pushes the gains already sold up the 0 / 15 / 20% stack, takes back deduction that was sheltering them, shrinks the senior deduction and can bring NIIT, and that extra tax is charged to the later income. With no gains in the year this is the plain ordinary-tax schedule. State tax follows the same rule. A state taxes gains as ordinary income (less its capital-gains exclusion, for example Arkansas 50%), with no separate stack. Each event's state tax is the change in the state's tax on the whole year's base: ordinary income not exempted by the state, plus gains sold so far after the exclusion, less the state's deduction. So a pension draw or Roth conversion after a sale starts above the gains in the state's brackets, and the state tax booked is the same in either order.
 
-This is the same result as BiggerPockets Money's engine on every fixture in `tools/tax_crosscheck/` (to the cent), after the fix described in `CHANGELOG.md`.
-
-### 3.2 Application to taxable-brokerage withdrawals
-
-On a withdrawal of size `W` from taxable brokerage, the gain is `W × (1 − cost_basis / balance)`; only the gain portion is taxed and the cost basis is reduced pro-rata. Short-term capital gains are not modeled.
+On every fixture in `tools/tax_crosscheck/` the federal result equals BiggerPockets Money's engine to the cent. (BPM leaves out the worksheet's last line; no fixture falls in that range.)
 
 ---
 

@@ -258,3 +258,102 @@ class TestSeniorDeductionRepriced:
         whole = (cfg.progressive_tax(cfg.get_federal_brackets("Single"), ordinary_taxable)
                  + sim.calculate_ltcg_tax(30_000, ordinary_taxable, status="Single"))
         assert booked == pytest.approx(whole)
+
+
+# ---------------------------------------------------------------------------
+# The worksheet's last line: never more than the ordinary tax on all taxable income
+# ---------------------------------------------------------------------------
+class TestWorksheetCap:
+    def test_gain_in_the_12_percent_band(self, monkeypatch):
+        """Single 62: ordinary taxable 49,950 (66,050 less 16,100), then a 450 gain.
+
+        Worksheet: ordinary tax 1,240 + 12% x 37,550 = 5,746, plus 450 x 15% = 67.50
+        (the 0% band ended at 49,450) = 5,813.50. Ordinary tax on all 50,400 taxable is
+        1,240 + 12% x 38,000 = 5,800. The return pays the lesser, 5,800."""
+        pf = _portfolio(monkeypatch, "Single", 62)
+        booked = _ordinary(pf, 66_050) + _gains(pf, 450)
+        assert booked == pytest.approx(5_800.0)
+
+    def test_largest_case_single(self, monkeypatch):
+        """Ordinary taxable 49,450, 950 of gain to the 12% top: 15% x 950 = 142.50 on the
+        worksheet against 12% x 950 = 114 as ordinary: the cap saves 28.50."""
+        pf = _portfolio(monkeypatch, "Single", 62)
+        booked = _ordinary(pf, 65_550) + _gains(pf, 950)
+        ordinary_only = cfg.progressive_tax(cfg.get_federal_brackets("Single"), 50_400)
+        assert booked == pytest.approx(ordinary_only)
+
+    def test_cap_does_not_bind_above_the_band(self, monkeypatch):
+        """Gains in the 22% bracket: the 15% rate is lower, the worksheet wins."""
+        pf = _portfolio(monkeypatch, "Single", 62)
+        booked = _ordinary(pf, 100_000) + _gains(pf, 20_000)
+        taxable_ord = 100_000 - 16_100
+        assert booked == pytest.approx(
+            cfg.progressive_tax(cfg.get_federal_brackets("Single"), taxable_ord) + 0.15 * 20_000)
+
+
+# ---------------------------------------------------------------------------
+# State tax: the same order independence
+# ---------------------------------------------------------------------------
+def _state_portfolio(monkeypatch, state, status, age, partner_age=0):
+    pf = _portfolio(monkeypatch, status, age)
+    for key, value in {"STATE_CHOICE": state, "PARTNER_AGE": partner_age}.items():
+        monkeypatch.setattr(cfg, key, value, raising=False)
+    pf = AccountPortfolio()
+    pf.update_ages(age)
+    pf.reset_yearly_income()
+    return pf
+
+
+def _state_total(monkeypatch, state, status, age, order, partner_age=0):
+    pf = _state_portfolio(monkeypatch, state, status, age, partner_age)
+    for kind, amount, owner in order:
+        if kind == "gain":
+            pf._tax_home_sale_gain(amount)
+        else:
+            pf.calculate_marginal_tax_on_income(amount, owner=owner, retirement=True)
+    return pf.total_state_taxes_paid
+
+
+class TestStateTaxOrder:
+    """A sale and a pension draw cost the same state tax in either order: income that
+    comes after a sale starts above the gains already booked, in the state's brackets."""
+
+    @pytest.mark.parametrize("state", ["CA", "MN", "NY", "CO", "AR", "ND", "SC", "WI"])
+    @pytest.mark.parametrize("status,age", [("Single", 62), ("MFJ", 62)])
+    def test_sale_then_pension_equals_pension_then_sale(self, monkeypatch, state, status, age):
+        events = [("ord", 60_000, "you"), ("gain", 100_000, "you"), ("ord", 30_000, "you")]
+        totals = {round(_state_total(monkeypatch, state, status, age, order), 4)
+                  for order in itertools.permutations(events)}
+        assert len(totals) == 1, totals
+
+    @pytest.mark.parametrize("state", ["CA", "MN", "CO", "AR"])
+    def test_unmarried_couple_two_returns(self, monkeypatch, state):
+        events = [("ord", 60_000, "you"), ("gain", 100_000, "you"),
+                  ("ord", 45_000, "partner"), ("ord", 20_000, "you")]
+        totals = {round(_state_total(monkeypatch, state, "Single", 62, order, partner_age=60), 4)
+                  for order in itertools.permutations(events)}
+        assert len(totals) == 1, totals
+
+    def test_california_example(self, monkeypatch):
+        """CA Single: a 100,000 gain then 60,000 of ordinary income costs the same as the
+        reverse. The pension draw starts above the gain, so it sits in CA's higher brackets,
+        not the low ones it would reuse if the sale were left out of the state base."""
+        sale_first = _state_total(monkeypatch, "CA", "Single", 62,
+                                  [("gain", 100_000, "you"), ("ord", 60_000, "you")])
+        pension_first = _state_total(monkeypatch, "CA", "Single", 62,
+                                     [("ord", 60_000, "you"), ("gain", 100_000, "you")])
+        assert sale_first == pytest.approx(pension_first)
+        assert sale_first > 0
+
+    def test_exclusion_state_counts_prior_gains_after_the_exclusion(self, monkeypatch):
+        """Arkansas excludes 50% of gains. 100,000 sold counts as 50,000 in the state base
+        for income that follows, not 100,000 (which would over-tax the later income)."""
+        pf = _state_portfolio(monkeypatch, "AR", "Single", 62)
+        pf._tax_home_sale_gain(100_000)
+        state = pf._state_model("you")
+        base = 50_000.0
+        deduction = getattr(state, "deduction")
+        expected = (state.calculate_tax(max(0.0, base + 40_000 - deduction))
+                    - state.calculate_tax(max(0.0, base - deduction)))
+        _, _, quoted = pf._marginal_tax_breakdown(40_000, owner="you", retirement=False)
+        assert quoted == pytest.approx(expected)
