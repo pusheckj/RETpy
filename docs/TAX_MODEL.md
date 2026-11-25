@@ -9,7 +9,7 @@ This document describes every tax rule encoded in the simulator, with bracket ta
 - **Jurisdictions modeled:** US federal income tax, federal long-term capital gains tax, the Net Investment Income Tax (NIIT), Medicare IRMAA surcharges, payroll taxes on wages (FICA, plus California SDI), and **state income tax for all 50 states + DC** (`retirement_sim/state_tax_data.py`).
 - **Tax year baseline:** **2026** for every federal figure (brackets, standard deduction and its 65+ add-on, the OBBBA senior deduction, LTCG thresholds, contribution limits, the Social Security wage base and earnings test, the Roth IRA and student-loan phase-outs, the child tax credit), for Medicare IRMAA (2026 CMS tiers), for ACA credits (Rev. Proc. 2025-25) and for **every state table** (all 50 states and DC). Sources and the rows that differ from them on purpose are in [`DATA_SOURCES.md`](DATA_SOURCES.md). Every 2026 figure was checked against primary sources in November 2026; the report, with quotes and links, is [`docs/data_sources/2026_verification.md`](data_sources/2026_verification.md).
 - **Real frame:** the engine runs in an **all-real (today's-dollars) frame**: statutory items that are CPI-indexed in reality (federal ordinary/LTCG brackets, standard deduction and its 65+ add-on, contribution limits, the Social Security wage base, IRMAA tiers, ACA percentages, state tables) are held **flat at their real values**. Amounts that are *not* indexed in reality — **NIIT** ($250k/$200k), the **Additional Medicare Tax** ($250k/$200k), the **Social Security taxation** thresholds, the child-tax-credit phase-out, the $2,500 student-loan cap and the **senior deduction** ($6,000 and its $75k/$150k phase-out start) — decay in real terms over the horizon (`real_frozen_threshold`; a conservative, realistic bias). See `METHODOLOGY.md` §4.
-- **Granularity:** working-year pay is taxed once per year by `working_year_taxes` (§2.4); retirement-year taxes are computed incrementally as income is recognized (withdrawals, RMDs, conversions, Social Security), each stacked on the income already on the return.
+- **Granularity:** working-year pay is taxed once per year by `working_year_taxes` (§2.4); retirement-year taxes are computed incrementally as income is recognized (withdrawals, RMDs, conversions, Social Security), each priced as the change in the whole year's federal tax on the income already on the return (§3.3).
 - **Filing status:** `FILING_STATUS` — **Married filing jointly**, **Single** or **Head of household** — selects every status-dependent table below, for the whole plan. An **unmarried couple** (a partner in the plan with a status other than MFJ) files **two returns**: you on `FILING_STATUS`, your partner as Single, each person's wages, withdrawals, RMDs, conversions, gains and Social Security on their own return (`files_two_returns()`, `return_status()`). Married filing separately and qualifying widow(er) are not modeled.
 - **Out of scope by design:** AMT, self-employment tax, tax credits other than the working-year child tax credit (last subsection of section 11) and California's exemption credits (§4.1; the earned-income credit and other state credits are out), itemized deductions, city/county income taxes, estate and gift tax, foreign-tax credits.
 
@@ -47,7 +47,7 @@ Rev. Proc. 2025-32 §4.14 (the OBBBA 2025 base, indexed). The 65+ add-on figures
 
 - **Years:** plan year 0 is `CURRENT_YEAR` (2026), so the deduction applies while `CURRENT_YEAR + years_from_start ≤ 2028` and stops after (`SENIOR_DEDUCTION_LAST_YEAR`).
 - **Not indexed:** the $6,000 and the phase-out starts are fixed dollars, so they shrink in real terms (`real_frozen_threshold`).
-- **MAGI** is the return's income recognized so far (ordinary income plus realized gains). In retirement years the deduction is taken at the MAGI before and after each piece of income, so the phase-out's extra marginal rate shows up. For a capital gain the deduction is taken at the MAGI before the gain.
+- **MAGI** is the return's income recognized so far (ordinary income plus realized gains). In retirement years the deduction is taken at the MAGI before and after each piece of income (ordinary income or a gain), so the phase-out's extra marginal rate shows up whatever order the income arrives in (§3.3).
 - Switch: `MODEL_SENIOR_DEDUCTION`.
 
 Example (MFJ, both 66, 2026, MAGI $200,000): 2 × ($6,000 − 6% × $50,000) = **$6,000**, on top of $32,200 + 2 × $1,650.
@@ -99,7 +99,20 @@ Rev. Proc. 2025-32 §4.03.
 | 15%  | – $613,700             | – $545,500 | – $579,600 |
 | 20%  | above                  | above | above |
 
-LTCG stacks **on top of** taxable ordinary income on the same return: ordinary brackets fill first, then the LTCG brackets begin at that level (IRS Qualified Dividends and Capital Gain Tax Worksheet). Gains realized earlier in the year are part of the stacking base.
+LTCG stacks **on top of** taxable ordinary income on the same return: ordinary brackets fill first, then the LTCG brackets begin at that level (IRS Qualified Dividends and Capital Gain Tax Worksheet). Gains realized earlier in the year are part of the stacking base. The deduction reduces ordinary income first; any part left over (ordinary income below the deduction) reduces the gains.
+
+### 3.3 Order of income inside a year
+
+The engine taxes income as it happens: a pension or IRA draw, a sale of shares, a Roth conversion, and Social Security at year end. The IRS return is one calculation on the whole year, so the engine books each event as the **change in one whole-year figure** (`AccountPortfolio._federal_year_tax`, `_marginal_federal`). For a return with ordinary income `O` (taxable Social Security included) and gains `G`:
+
+1. MAGI = `O + G`. The deduction (standard, 65+ add-on, senior deduction at that MAGI) is `D`.
+2. Ordinary taxable income = `max(0, O − D)`. Ordinary tax comes from the ordinary brackets.
+3. Gains taxed = `G − max(0, D − O)`. They stack on top of ordinary taxable income for the 0 / 15 / 20% limits.
+4. NIIT = 3.8% × the lesser of `G` and MAGI above the threshold.
+
+An event's tax is this total after the event minus the total before it. The booked taxes therefore add up to the whole-year figure in any order. Income that arrives after a sale (a later pension draw, a Roth conversion, taxable Social Security) pushes the gains already sold up the 0 / 15 / 20% stack, takes back deduction that was sheltering them, shrinks the senior deduction and can bring NIIT, and that extra tax is charged to the later income. With no gains in the year this is the plain ordinary-tax schedule. State tax is still booked per event (a state taxes gains as ordinary income and does not stack them), and states re-price their own base as before.
+
+This is the same result as BiggerPockets Money's engine on every fixture in `tools/tax_crosscheck/` (to the cent), after the fix described in `CHANGELOG.md`.
 
 ### 3.2 Application to taxable-brokerage withdrawals
 
@@ -187,7 +200,7 @@ SS $40,000; other AGI $60,000; provisional income $80,000 → 0.85 × 36,000 + 6
 - **Rate:** 3.8%
 - **MAGI threshold:** $250,000 (MFJ), $200,000 (Single / HOH) — per return, never indexed (decays in real terms)
 
-The tax applies to the **lesser** of net investment income (here: realized brokerage gains) and MAGI − threshold. It does not apply to Traditional 401(k)/IRA or Roth distributions.
+The tax applies to the **lesser** of net investment income (here: realized brokerage gains) and MAGI − threshold. It does not apply to Traditional 401(k)/IRA or Roth distributions, but those (and taxable Social Security) raise MAGI, so income that arrives after a sale can bring gains already sold into NIIT (§3.3).
 
 ---
 

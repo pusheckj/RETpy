@@ -34,10 +34,10 @@ BPM engine reproduces its verified figures: **yes**. RETpy's tables reproduce th
 
 | Bucket | Fixtures |
 | --- | ---: |
-| match | 152 |
-| BPM simplification | 228 |
-| modeling difference | 42 |
-| RETpy bug | 81 |
+| match | 173 |
+| BPM simplification | 279 |
+| modeling difference | 51 |
+| RETpy bug | 0 |
 
 Unexplained differences: **0**.
 
@@ -45,12 +45,7 @@ Expected-gap edge cases that unexpectedly matched: **0**.
 
 ## 3. RETpy bugs (findings)
 
-| Cause | Responsible | Fixtures | Largest gap ($) | Examples |
-| --- | --- | ---: | ---: | --- |
-| ltcg_tax: gains are taxed before Social Security is added to income, so taxable Social Security does not push gains up the stack or into NIIT; the same tables in IRS order give BPM's figure | account_simulation.py: AccountPortfolio._withdraw_single_pass, _tax_home_sale_gain; account_simulation.py: _true_up_social_security_tax, calculate_marginal_tax_on_income | 77 | 1,674.00 | CA-S-ORD-LTCG-SS, CA-MFJ-ORD-LTCG-SS, TX-S-ORD-LTCG-SS |
-| the senior deduction shrinks as MAGI rises, but ordinary tax already booked is not re-priced when later gains or Social Security raise MAGI; the same tables in IRS order give BPM's figure | account_simulation.py: AccountPortfolio._withdraw_single_pass, _tax_home_sale_gain; config.standard_deduction_for_return | 2 | 396.00 | EDGE-niit-S-ss-order, EDGE-senior-S-cap-ltcg |
-| ltcg_tax: unused standard deduction does not shelter gains (the stack starts at ordinary income minus the deduction, floored at 0); the same tables in IRS order give BPM's figure | account_simulation.py: AccountPortfolio._withdraw_single_pass, _tax_home_sale_gain | 2 | 4,830.00 | EDGE-ltcg-low-ordinary, EDGE-ltcg-no-ordinary |
-| niit: gains are taxed before Social Security is added to income, so taxable Social Security does not push gains up the stack or into NIIT; the same tables in IRS order give BPM's figure | account_simulation.py: AccountPortfolio._withdraw_single_pass, _tax_home_sale_gain; account_simulation.py: _true_up_social_security_tax, calculate_marginal_tax_on_income | 1 | 912.00 | EDGE-niit-S-ss-order |
+None.
 
 ## 4. BPM simplifications (RETpy wins)
 
@@ -89,11 +84,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | CA-S-W2-low | W-2 $90,000 (CA, Single) | BPM simplification | - |
 | CA-S-W2-high | W-2 $275,000 (CA, Single) | BPM simplification | - |
 | CA-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (CA, Single) | BPM simplification | - |
-| CA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (CA, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| CA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (CA, Single) | BPM simplification | - |
 | CA-MFJ-W2-low | W-2 $180,000 (CA, MFJ) | BPM simplification | - |
 | CA-MFJ-W2-high | W-2 $550,000 (CA, MFJ) | BPM simplification | - |
 | CA-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (CA, MFJ) | BPM simplification | - |
-| CA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (CA, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| CA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (CA, MFJ) | BPM simplification | - |
 | CA-HOH-W2-low | W-2 $90,000 (CA, HoH) | BPM simplification | - |
 | CA-HOH-W2-high | W-2 $275,000 (CA, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | CA-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (CA, HoH) | BPM simplification | - |
@@ -101,11 +96,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | TX-S-W2-low | W-2 $90,000 (TX, Single) | match | - |
 | TX-S-W2-high | W-2 $275,000 (TX, Single) | match | - |
 | TX-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (TX, Single) | match | - |
-| TX-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (TX, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| TX-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (TX, Single) | match | - |
 | TX-MFJ-W2-low | W-2 $180,000 (TX, MFJ) | match | - |
 | TX-MFJ-W2-high | W-2 $550,000 (TX, MFJ) | match | - |
 | TX-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (TX, MFJ) | match | - |
-| TX-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (TX, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| TX-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (TX, MFJ) | match | - |
 | TX-HOH-W2-low | W-2 $90,000 (TX, HoH) | match | - |
 | TX-HOH-W2-high | W-2 $275,000 (TX, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | TX-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (TX, HoH) | match | - |
@@ -113,11 +108,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | PA-S-W2-low | W-2 $90,000 (PA, Single) | match | - |
 | PA-S-W2-high | W-2 $275,000 (PA, Single) | match | - |
 | PA-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (PA, Single) | BPM simplification | - |
-| PA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (PA, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| PA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (PA, Single) | BPM simplification | - |
 | PA-MFJ-W2-low | W-2 $180,000 (PA, MFJ) | match | - |
 | PA-MFJ-W2-high | W-2 $550,000 (PA, MFJ) | match | - |
 | PA-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (PA, MFJ) | BPM simplification | - |
-| PA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (PA, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| PA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (PA, MFJ) | BPM simplification | - |
 | PA-HOH-W2-low | W-2 $90,000 (PA, HoH) | match | - |
 | PA-HOH-W2-high | W-2 $275,000 (PA, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | PA-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (PA, HoH) | BPM simplification | - |
@@ -125,11 +120,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | IL-S-W2-low | W-2 $90,000 (IL, Single) | BPM simplification | - |
 | IL-S-W2-high | W-2 $275,000 (IL, Single) | BPM simplification | - |
 | IL-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (IL, Single) | BPM simplification | - |
-| IL-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (IL, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| IL-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (IL, Single) | BPM simplification | - |
 | IL-MFJ-W2-low | W-2 $180,000 (IL, MFJ) | BPM simplification | - |
 | IL-MFJ-W2-high | W-2 $550,000 (IL, MFJ) | BPM simplification | - |
 | IL-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (IL, MFJ) | BPM simplification | - |
-| IL-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (IL, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| IL-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (IL, MFJ) | BPM simplification | - |
 | IL-HOH-W2-low | W-2 $90,000 (IL, HoH) | BPM simplification | - |
 | IL-HOH-W2-high | W-2 $275,000 (IL, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | IL-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (IL, HoH) | BPM simplification | - |
@@ -137,11 +132,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | NJ-S-W2-low | W-2 $90,000 (NJ, Single) | BPM simplification | - |
 | NJ-S-W2-high | W-2 $275,000 (NJ, Single) | BPM simplification | - |
 | NJ-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (NJ, Single) | BPM simplification | - |
-| NJ-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NJ, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| NJ-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NJ, Single) | BPM simplification | - |
 | NJ-MFJ-W2-low | W-2 $180,000 (NJ, MFJ) | BPM simplification | - |
 | NJ-MFJ-W2-high | W-2 $550,000 (NJ, MFJ) | BPM simplification | - |
 | NJ-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (NJ, MFJ) | BPM simplification | - |
-| NJ-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NJ, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| NJ-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NJ, MFJ) | BPM simplification | - |
 | NJ-HOH-W2-low | W-2 $90,000 (NJ, HoH) | BPM simplification | - |
 | NJ-HOH-W2-high | W-2 $275,000 (NJ, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | NJ-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (NJ, HoH) | BPM simplification | - |
@@ -149,11 +144,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | AL-S-W2-low | W-2 $90,000 (AL, Single) | modeling difference | state_tax 4,335.00 vs 4,310.00 (+25.00) |
 | AL-S-W2-high | W-2 $275,000 (AL, Single) | modeling difference | state_tax 13,585.00 vs 13,560.00 (+25.00) |
 | AL-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (AL, Single) | modeling difference | state_tax 4,835.00 vs 4,810.00 (+25.00) |
-| AL-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (AL, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50); state_tax 2,585.00 vs 2,560.00 (+25.00) |
+| AL-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (AL, Single) | modeling difference | state_tax 2,585.00 vs 2,560.00 (+25.00) |
 | AL-MFJ-W2-low | W-2 $180,000 (AL, MFJ) | modeling difference | state_tax 8,670.00 vs 8,495.00 (+175.00) |
 | AL-MFJ-W2-high | W-2 $550,000 (AL, MFJ) | modeling difference | state_tax 27,170.00 vs 26,995.00 (+175.00) |
 | AL-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (AL, MFJ) | modeling difference | state_tax 9,670.00 vs 9,495.00 (+175.00) |
-| AL-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (AL, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00); state_tax 5,170.00 vs 4,995.00 (+175.00) |
+| AL-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (AL, MFJ) | modeling difference | state_tax 5,170.00 vs 4,995.00 (+175.00) |
 | AL-HOH-W2-low | W-2 $90,000 (AL, HoH) | modeling difference | state_tax 4,335.00 vs 4,310.00 (+25.00) |
 | AL-HOH-W2-high | W-2 $275,000 (AL, HoH) | modeling difference | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 13,585.00 vs 13,560.00 (+25.00) |
 | AL-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (AL, HoH) | modeling difference | state_tax 6,085.00 vs 6,060.00 (+25.00) |
@@ -161,11 +156,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | AR-S-W2-low | W-2 $90,000 (AR, Single) | match | - |
 | AR-S-W2-high | W-2 $275,000 (AR, Single) | modeling difference | state_tax 9,716.45 vs 10,003.71 (-287.26) |
 | AR-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (AR, Single) | modeling difference | state_tax 3,241.45 vs 3,518.71 (-277.26) |
-| AR-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (AR, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| AR-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (AR, Single) | BPM simplification | - |
 | AR-MFJ-W2-low | W-2 $180,000 (AR, MFJ) | modeling difference | state_tax 6,110.06 vs 6,397.32 (-287.26) |
 | AR-MFJ-W2-high | W-2 $550,000 (AR, MFJ) | modeling difference | state_tax 19,800.06 vs 20,087.32 (-287.26) |
 | AR-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (AR, MFJ) | modeling difference | state_tax 6,850.06 vs 7,137.32 (-287.26) |
-| AR-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (AR, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00); state_tax 3,520.06 vs 3,807.32 (-287.26) |
+| AR-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (AR, MFJ) | modeling difference | state_tax 3,520.06 vs 3,807.32 (-287.26) |
 | AR-HOH-W2-low | W-2 $90,000 (AR, HoH) | match | - |
 | AR-HOH-W2-high | W-2 $275,000 (AR, HoH) | modeling difference | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 9,716.45 vs 10,003.71 (-287.26) |
 | AR-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (AR, HoH) | modeling difference | state_tax 4,166.45 vs 4,453.71 (-287.26) |
@@ -173,11 +168,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | AZ-S-W2-low | W-2 $90,000 (AZ, Single) | BPM simplification | state_tax 1,847.50 vs 2,041.25 (-193.75) |
 | AZ-S-W2-high | W-2 $275,000 (AZ, Single) | BPM simplification | state_tax 6,472.50 vs 6,666.25 (-193.75) |
 | AZ-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (AZ, Single) | BPM simplification | state_tax 2,097.50 vs 2,291.25 (-193.75) |
-| AZ-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (AZ, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50); state_tax 972.50 vs 1,166.25 (-193.75) |
+| AZ-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (AZ, Single) | BPM simplification | state_tax 972.50 vs 1,166.25 (-193.75) |
 | AZ-MFJ-W2-low | W-2 $180,000 (AZ, MFJ) | BPM simplification | state_tax 3,695.00 vs 4,082.50 (-387.50) |
 | AZ-MFJ-W2-high | W-2 $550,000 (AZ, MFJ) | BPM simplification | state_tax 12,945.00 vs 13,332.50 (-387.50) |
 | AZ-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (AZ, MFJ) | BPM simplification | state_tax 4,195.00 vs 4,582.50 (-387.50) |
-| AZ-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (AZ, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00); state_tax 1,945.00 vs 2,332.50 (-387.50) |
+| AZ-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (AZ, MFJ) | BPM simplification | state_tax 1,945.00 vs 2,332.50 (-387.50) |
 | AZ-HOH-W2-low | W-2 $90,000 (AZ, HoH) | BPM simplification | state_tax 1,646.25 vs 2,041.25 (-395.00) |
 | AZ-HOH-W2-high | W-2 $275,000 (AZ, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 6,271.25 vs 6,666.25 (-395.00) |
 | AZ-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (AZ, HoH) | BPM simplification | state_tax 2,521.25 vs 2,916.25 (-395.00) |
@@ -185,11 +180,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | CO-S-W2-low | W-2 $90,000 (CO, Single) | match | - |
 | CO-S-W2-high | W-2 $275,000 (CO, Single) | match | - |
 | CO-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (CO, Single) | BPM simplification | - |
-| CO-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (CO, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| CO-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (CO, Single) | BPM simplification | - |
 | CO-MFJ-W2-low | W-2 $180,000 (CO, MFJ) | match | - |
 | CO-MFJ-W2-high | W-2 $550,000 (CO, MFJ) | match | - |
 | CO-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (CO, MFJ) | BPM simplification | - |
-| CO-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (CO, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| CO-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (CO, MFJ) | BPM simplification | - |
 | CO-HOH-W2-low | W-2 $90,000 (CO, HoH) | match | - |
 | CO-HOH-W2-high | W-2 $275,000 (CO, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | CO-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (CO, HoH) | BPM simplification | - |
@@ -197,11 +192,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | GA-S-W2-low | W-2 $90,000 (GA, Single) | match | - |
 | GA-S-W2-high | W-2 $275,000 (GA, Single) | match | - |
 | GA-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (GA, Single) | BPM simplification | - |
-| GA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (GA, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| GA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (GA, Single) | BPM simplification | - |
 | GA-MFJ-W2-low | W-2 $180,000 (GA, MFJ) | match | - |
 | GA-MFJ-W2-high | W-2 $550,000 (GA, MFJ) | match | - |
 | GA-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (GA, MFJ) | BPM simplification | - |
-| GA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (GA, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| GA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (GA, MFJ) | BPM simplification | - |
 | GA-HOH-W2-low | W-2 $90,000 (GA, HoH) | match | - |
 | GA-HOH-W2-high | W-2 $275,000 (GA, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | GA-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (GA, HoH) | BPM simplification | - |
@@ -209,11 +204,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | HI-S-W2-low | W-2 $90,000 (HI, Single) | BPM simplification | - |
 | HI-S-W2-high | W-2 $275,000 (HI, Single) | BPM simplification | - |
 | HI-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (HI, Single) | BPM simplification | - |
-| HI-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (HI, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| HI-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (HI, Single) | BPM simplification | - |
 | HI-MFJ-W2-low | W-2 $180,000 (HI, MFJ) | BPM simplification | - |
 | HI-MFJ-W2-high | W-2 $550,000 (HI, MFJ) | BPM simplification | - |
 | HI-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (HI, MFJ) | BPM simplification | - |
-| HI-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (HI, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| HI-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (HI, MFJ) | BPM simplification | - |
 | HI-HOH-W2-low | W-2 $90,000 (HI, HoH) | BPM simplification | - |
 | HI-HOH-W2-high | W-2 $275,000 (HI, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | HI-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (HI, HoH) | BPM simplification | - |
@@ -221,11 +216,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | IA-S-W2-low | W-2 $90,000 (IA, Single) | match | - |
 | IA-S-W2-high | W-2 $275,000 (IA, Single) | match | - |
 | IA-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (IA, Single) | BPM simplification | - |
-| IA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (IA, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| IA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (IA, Single) | BPM simplification | - |
 | IA-MFJ-W2-low | W-2 $180,000 (IA, MFJ) | match | - |
 | IA-MFJ-W2-high | W-2 $550,000 (IA, MFJ) | match | - |
 | IA-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (IA, MFJ) | BPM simplification | - |
-| IA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (IA, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| IA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (IA, MFJ) | BPM simplification | - |
 | IA-HOH-W2-low | W-2 $90,000 (IA, HoH) | match | - |
 | IA-HOH-W2-high | W-2 $275,000 (IA, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | IA-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (IA, HoH) | BPM simplification | - |
@@ -233,11 +228,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | ID-S-W2-low | W-2 $90,000 (ID, Single) | match | - |
 | ID-S-W2-high | W-2 $275,000 (ID, Single) | match | - |
 | ID-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (ID, Single) | match | - |
-| ID-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (ID, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| ID-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (ID, Single) | match | - |
 | ID-MFJ-W2-low | W-2 $180,000 (ID, MFJ) | match | - |
 | ID-MFJ-W2-high | W-2 $550,000 (ID, MFJ) | match | - |
 | ID-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (ID, MFJ) | match | - |
-| ID-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (ID, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| ID-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (ID, MFJ) | match | - |
 | ID-HOH-W2-low | W-2 $90,000 (ID, HoH) | BPM simplification | state_tax 2,980.19 vs 3,235.12 (-254.93) |
 | ID-HOH-W2-high | W-2 $275,000 (ID, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 12,785.19 vs 13,040.12 (-254.93) |
 | ID-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (ID, HoH) | BPM simplification | state_tax 4,835.19 vs 5,090.12 (-254.93) |
@@ -245,11 +240,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | IN-S-W2-low | W-2 $90,000 (IN, Single) | BPM simplification | - |
 | IN-S-W2-high | W-2 $275,000 (IN, Single) | BPM simplification | - |
 | IN-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (IN, Single) | BPM simplification | - |
-| IN-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (IN, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| IN-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (IN, Single) | BPM simplification | - |
 | IN-MFJ-W2-low | W-2 $180,000 (IN, MFJ) | BPM simplification | - |
 | IN-MFJ-W2-high | W-2 $550,000 (IN, MFJ) | BPM simplification | - |
 | IN-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (IN, MFJ) | BPM simplification | - |
-| IN-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (IN, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| IN-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (IN, MFJ) | BPM simplification | - |
 | IN-HOH-W2-low | W-2 $90,000 (IN, HoH) | BPM simplification | - |
 | IN-HOH-W2-high | W-2 $275,000 (IN, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | IN-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (IN, HoH) | BPM simplification | - |
@@ -257,11 +252,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | KY-S-W2-low | W-2 $90,000 (KY, Single) | match | - |
 | KY-S-W2-high | W-2 $275,000 (KY, Single) | match | - |
 | KY-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (KY, Single) | BPM simplification | - |
-| KY-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (KY, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| KY-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (KY, Single) | BPM simplification | - |
 | KY-MFJ-W2-low | W-2 $180,000 (KY, MFJ) | BPM simplification | state_tax 6,064.80 vs 6,182.40 (-117.60) |
 | KY-MFJ-W2-high | W-2 $550,000 (KY, MFJ) | BPM simplification | state_tax 19,014.80 vs 19,132.40 (-117.60) |
 | KY-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (KY, MFJ) | BPM simplification | state_tax 6,764.80 vs 6,882.40 (-117.60) |
-| KY-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (KY, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00); state_tax 3,614.80 vs 3,732.40 (-117.60) |
+| KY-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (KY, MFJ) | BPM simplification | state_tax 3,614.80 vs 3,732.40 (-117.60) |
 | KY-HOH-W2-low | W-2 $90,000 (KY, HoH) | match | - |
 | KY-HOH-W2-high | W-2 $275,000 (KY, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | KY-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (KY, HoH) | BPM simplification | - |
@@ -269,11 +264,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | LA-S-W2-low | W-2 $90,000 (LA, Single) | match | - |
 | LA-S-W2-high | W-2 $275,000 (LA, Single) | match | - |
 | LA-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (LA, Single) | match | - |
-| LA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (LA, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| LA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (LA, Single) | BPM simplification | - |
 | LA-MFJ-W2-low | W-2 $180,000 (LA, MFJ) | match | - |
 | LA-MFJ-W2-high | W-2 $550,000 (LA, MFJ) | match | - |
 | LA-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (LA, MFJ) | match | - |
-| LA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (LA, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| LA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (LA, MFJ) | BPM simplification | - |
 | LA-HOH-W2-low | W-2 $90,000 (LA, HoH) | match | - |
 | LA-HOH-W2-high | W-2 $275,000 (LA, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | LA-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (LA, HoH) | match | - |
@@ -281,11 +276,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | MA-S-W2-low | W-2 $90,000 (MA, Single) | BPM simplification | - |
 | MA-S-W2-high | W-2 $275,000 (MA, Single) | BPM simplification | - |
 | MA-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (MA, Single) | BPM simplification | - |
-| MA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MA, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| MA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MA, Single) | BPM simplification | - |
 | MA-MFJ-W2-low | W-2 $180,000 (MA, MFJ) | BPM simplification | - |
 | MA-MFJ-W2-high | W-2 $550,000 (MA, MFJ) | BPM simplification | - |
 | MA-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (MA, MFJ) | BPM simplification | - |
-| MA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MA, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| MA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MA, MFJ) | BPM simplification | - |
 | MA-HOH-W2-low | W-2 $90,000 (MA, HoH) | BPM simplification | - |
 | MA-HOH-W2-high | W-2 $275,000 (MA, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | MA-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (MA, HoH) | BPM simplification | - |
@@ -293,11 +288,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | MD-S-W2-low | W-2 $90,000 (MD, Single) | BPM simplification | - |
 | MD-S-W2-high | W-2 $275,000 (MD, Single) | BPM simplification | - |
 | MD-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (MD, Single) | BPM simplification | - |
-| MD-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MD, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| MD-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MD, Single) | BPM simplification | - |
 | MD-MFJ-W2-low | W-2 $180,000 (MD, MFJ) | BPM simplification | - |
 | MD-MFJ-W2-high | W-2 $550,000 (MD, MFJ) | BPM simplification | - |
 | MD-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (MD, MFJ) | BPM simplification | - |
-| MD-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MD, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| MD-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MD, MFJ) | BPM simplification | - |
 | MD-HOH-W2-low | W-2 $90,000 (MD, HoH) | BPM simplification | - |
 | MD-HOH-W2-high | W-2 $275,000 (MD, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | MD-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (MD, HoH) | BPM simplification | - |
@@ -305,11 +300,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | ME-S-W2-low | W-2 $90,000 (ME, Single) | BPM simplification | - |
 | ME-S-W2-high | W-2 $275,000 (ME, Single) | BPM simplification | - |
 | ME-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (ME, Single) | BPM simplification | - |
-| ME-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (ME, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| ME-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (ME, Single) | BPM simplification | - |
 | ME-MFJ-W2-low | W-2 $180,000 (ME, MFJ) | BPM simplification | - |
 | ME-MFJ-W2-high | W-2 $550,000 (ME, MFJ) | BPM simplification | - |
 | ME-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (ME, MFJ) | BPM simplification | - |
-| ME-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (ME, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| ME-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (ME, MFJ) | BPM simplification | - |
 | ME-HOH-W2-low | W-2 $90,000 (ME, HoH) | BPM simplification | - |
 | ME-HOH-W2-high | W-2 $275,000 (ME, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | ME-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (ME, HoH) | BPM simplification | - |
@@ -317,11 +312,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | MN-S-W2-low | W-2 $90,000 (MN, Single) | match | - |
 | MN-S-W2-high | W-2 $275,000 (MN, Single) | match | - |
 | MN-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (MN, Single) | match | - |
-| MN-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MN, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| MN-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MN, Single) | match | - |
 | MN-MFJ-W2-low | W-2 $180,000 (MN, MFJ) | match | - |
 | MN-MFJ-W2-high | W-2 $550,000 (MN, MFJ) | match | - |
 | MN-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (MN, MFJ) | match | - |
-| MN-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MN, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| MN-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MN, MFJ) | BPM simplification | - |
 | MN-HOH-W2-low | W-2 $90,000 (MN, HoH) | BPM simplification | state_tax 4,065.16 vs 4,596.60 (-531.45) |
 | MN-HOH-W2-high | W-2 $275,000 (MN, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 17,656.72 vs 19,885.44 (-2,228.72) |
 | MN-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (MN, HoH) | BPM simplification | state_tax 6,445.15 vs 6,979.44 (-534.29) |
@@ -329,11 +324,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | MO-S-W2-low | W-2 $90,000 (MO, Single) | match | - |
 | MO-S-W2-high | W-2 $275,000 (MO, Single) | match | - |
 | MO-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (MO, Single) | match | - |
-| MO-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MO, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| MO-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MO, Single) | match | - |
 | MO-MFJ-W2-low | W-2 $180,000 (MO, MFJ) | match | - |
 | MO-MFJ-W2-high | W-2 $550,000 (MO, MFJ) | match | - |
 | MO-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (MO, MFJ) | match | - |
-| MO-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MO, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| MO-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MO, MFJ) | match | - |
 | MO-HOH-W2-low | W-2 $90,000 (MO, HoH) | match | - |
 | MO-HOH-W2-high | W-2 $275,000 (MO, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | MO-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (MO, HoH) | match | - |
@@ -341,11 +336,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | MS-S-W2-low | W-2 $90,000 (MS, Single) | BPM simplification | - |
 | MS-S-W2-high | W-2 $275,000 (MS, Single) | BPM simplification | - |
 | MS-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (MS, Single) | BPM simplification | - |
-| MS-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MS, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| MS-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MS, Single) | BPM simplification | - |
 | MS-MFJ-W2-low | W-2 $180,000 (MS, MFJ) | BPM simplification | - |
 | MS-MFJ-W2-high | W-2 $550,000 (MS, MFJ) | BPM simplification | - |
 | MS-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (MS, MFJ) | BPM simplification | - |
-| MS-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MS, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| MS-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MS, MFJ) | BPM simplification | - |
 | MS-HOH-W2-low | W-2 $90,000 (MS, HoH) | BPM simplification | - |
 | MS-HOH-W2-high | W-2 $275,000 (MS, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | MS-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (MS, HoH) | BPM simplification | - |
@@ -353,11 +348,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | MT-S-W2-low | W-2 $90,000 (MT, Single) | match | - |
 | MT-S-W2-high | W-2 $275,000 (MT, Single) | match | - |
 | MT-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (MT, Single) | match | - |
-| MT-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MT, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| MT-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (MT, Single) | BPM simplification | - |
 | MT-MFJ-W2-low | W-2 $180,000 (MT, MFJ) | match | - |
 | MT-MFJ-W2-high | W-2 $550,000 (MT, MFJ) | match | - |
 | MT-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (MT, MFJ) | match | - |
-| MT-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MT, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| MT-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (MT, MFJ) | BPM simplification | - |
 | MT-HOH-W2-low | W-2 $90,000 (MT, HoH) | match | - |
 | MT-HOH-W2-high | W-2 $275,000 (MT, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | MT-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (MT, HoH) | match | - |
@@ -365,11 +360,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | NC-S-W2-low | W-2 $90,000 (NC, Single) | match | - |
 | NC-S-W2-high | W-2 $275,000 (NC, Single) | match | - |
 | NC-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (NC, Single) | match | - |
-| NC-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NC, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| NC-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NC, Single) | match | - |
 | NC-MFJ-W2-low | W-2 $180,000 (NC, MFJ) | match | - |
 | NC-MFJ-W2-high | W-2 $550,000 (NC, MFJ) | match | - |
 | NC-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (NC, MFJ) | match | - |
-| NC-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NC, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| NC-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NC, MFJ) | match | - |
 | NC-HOH-W2-low | W-2 $90,000 (NC, HoH) | match | - |
 | NC-HOH-W2-high | W-2 $275,000 (NC, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | NC-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (NC, HoH) | match | - |
@@ -377,11 +372,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | ND-S-W2-low | W-2 $90,000 (ND, Single) | match | - |
 | ND-S-W2-high | W-2 $275,000 (ND, Single) | match | - |
 | ND-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (ND, Single) | BPM simplification | - |
-| ND-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (ND, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| ND-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (ND, Single) | match | - |
 | ND-MFJ-W2-low | W-2 $180,000 (ND, MFJ) | match | - |
 | ND-MFJ-W2-high | W-2 $550,000 (ND, MFJ) | match | - |
 | ND-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (ND, MFJ) | BPM simplification | - |
-| ND-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (ND, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| ND-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (ND, MFJ) | match | - |
 | ND-HOH-W2-low | W-2 $90,000 (ND, HoH) | BPM simplification | state_tax 53.62 vs 338.81 (-285.19) |
 | ND-HOH-W2-high | W-2 $275,000 (ND, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 3,661.12 vs 3,979.45 (-318.32) |
 | ND-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (ND, HoH) | BPM simplification | state_tax 736.12 vs 1,021.31 (-285.19) |
@@ -389,11 +384,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | NE-S-W2-low | W-2 $90,000 (NE, Single) | match | - |
 | NE-S-W2-high | W-2 $275,000 (NE, Single) | match | - |
 | NE-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (NE, Single) | match | - |
-| NE-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NE, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| NE-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NE, Single) | match | - |
 | NE-MFJ-W2-low | W-2 $180,000 (NE, MFJ) | match | - |
 | NE-MFJ-W2-high | W-2 $550,000 (NE, MFJ) | match | - |
 | NE-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (NE, MFJ) | match | - |
-| NE-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NE, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| NE-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NE, MFJ) | match | - |
 | NE-HOH-W2-low | W-2 $90,000 (NE, HoH) | BPM simplification | state_tax 3,079.27 vs 3,391.46 (-312.18) |
 | NE-HOH-W2-high | W-2 $275,000 (NE, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 11,496.77 vs 11,808.96 (-312.18) |
 | NE-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (NE, HoH) | BPM simplification | state_tax 4,671.77 vs 4,983.96 (-312.18) |
@@ -401,11 +396,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | NM-S-W2-low | W-2 $90,000 (NM, Single) | match | - |
 | NM-S-W2-high | W-2 $275,000 (NM, Single) | match | - |
 | NM-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (NM, Single) | match | - |
-| NM-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NM, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| NM-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NM, Single) | match | - |
 | NM-MFJ-W2-low | W-2 $180,000 (NM, MFJ) | match | - |
 | NM-MFJ-W2-high | W-2 $550,000 (NM, MFJ) | match | - |
 | NM-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (NM, MFJ) | match | - |
-| NM-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NM, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| NM-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NM, MFJ) | BPM simplification | - |
 | NM-HOH-W2-low | W-2 $90,000 (NM, HoH) | match | - |
 | NM-HOH-W2-high | W-2 $275,000 (NM, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | NM-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (NM, HoH) | match | - |
@@ -413,11 +408,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | NY-S-W2-low | W-2 $90,000 (NY, Single) | match | - |
 | NY-S-W2-high | W-2 $275,000 (NY, Single) | match | - |
 | NY-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (NY, Single) | BPM simplification | - |
-| NY-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NY, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| NY-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (NY, Single) | BPM simplification | - |
 | NY-MFJ-W2-low | W-2 $180,000 (NY, MFJ) | match | - |
 | NY-MFJ-W2-high | W-2 $550,000 (NY, MFJ) | match | - |
 | NY-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (NY, MFJ) | BPM simplification | - |
-| NY-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NY, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| NY-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (NY, MFJ) | BPM simplification | - |
 | NY-HOH-W2-low | W-2 $90,000 (NY, HoH) | match | - |
 | NY-HOH-W2-high | W-2 $275,000 (NY, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | NY-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (NY, HoH) | BPM simplification | - |
@@ -425,11 +420,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | OH-S-W2-low | W-2 $90,000 (OH, Single) | BPM simplification | - |
 | OH-S-W2-high | W-2 $275,000 (OH, Single) | BPM simplification | - |
 | OH-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (OH, Single) | BPM simplification | - |
-| OH-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (OH, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| OH-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (OH, Single) | BPM simplification | - |
 | OH-MFJ-W2-low | W-2 $180,000 (OH, MFJ) | BPM simplification | - |
 | OH-MFJ-W2-high | W-2 $550,000 (OH, MFJ) | BPM simplification | - |
 | OH-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (OH, MFJ) | BPM simplification | - |
-| OH-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (OH, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| OH-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (OH, MFJ) | BPM simplification | - |
 | OH-HOH-W2-low | W-2 $90,000 (OH, HoH) | BPM simplification | - |
 | OH-HOH-W2-high | W-2 $275,000 (OH, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | OH-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (OH, HoH) | BPM simplification | - |
@@ -437,11 +432,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | OK-S-W2-low | W-2 $90,000 (OK, Single) | BPM simplification | - |
 | OK-S-W2-high | W-2 $275,000 (OK, Single) | BPM simplification | - |
 | OK-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (OK, Single) | BPM simplification | - |
-| OK-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (OK, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| OK-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (OK, Single) | BPM simplification | - |
 | OK-MFJ-W2-low | W-2 $180,000 (OK, MFJ) | BPM simplification | - |
 | OK-MFJ-W2-high | W-2 $550,000 (OK, MFJ) | BPM simplification | - |
 | OK-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (OK, MFJ) | BPM simplification | - |
-| OK-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (OK, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| OK-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (OK, MFJ) | BPM simplification | - |
 | OK-HOH-W2-low | W-2 $90,000 (OK, HoH) | BPM simplification | state_tax 3,199.75 vs 3,549.50 (-349.75) |
 | OK-HOH-W2-high | W-2 $275,000 (OK, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 11,524.75 vs 11,874.50 (-349.75) |
 | OK-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (OK, HoH) | BPM simplification | state_tax 4,774.75 vs 5,124.50 (-349.75) |
@@ -449,11 +444,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | OR-S-W2-low | W-2 $90,000 (OR, Single) | match | - |
 | OR-S-W2-high | W-2 $275,000 (OR, Single) | match | - |
 | OR-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (OR, Single) | match | - |
-| OR-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (OR, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| OR-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (OR, Single) | match | - |
 | OR-MFJ-W2-low | W-2 $180,000 (OR, MFJ) | match | - |
 | OR-MFJ-W2-high | W-2 $550,000 (OR, MFJ) | match | - |
 | OR-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (OR, MFJ) | match | - |
-| OR-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (OR, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| OR-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (OR, MFJ) | match | - |
 | OR-HOH-W2-low | W-2 $90,000 (OR, HoH) | BPM simplification | state_tax 6,850.25 vs 6,982.38 (-132.12) |
 | OR-HOH-W2-high | W-2 $275,000 (OR, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 23,274.42 vs 23,423.91 (-149.49) |
 | OR-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (OR, HoH) | BPM simplification | state_tax 9,912.75 vs 10,044.88 (-132.12) |
@@ -461,11 +456,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | RI-S-W2-low | W-2 $90,000 (RI, Single) | BPM simplification | - |
 | RI-S-W2-high | W-2 $275,000 (RI, Single) | BPM simplification | - |
 | RI-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (RI, Single) | BPM simplification | - |
-| RI-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (RI, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| RI-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (RI, Single) | BPM simplification | - |
 | RI-MFJ-W2-low | W-2 $180,000 (RI, MFJ) | BPM simplification | - |
 | RI-MFJ-W2-high | W-2 $550,000 (RI, MFJ) | BPM simplification | - |
 | RI-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (RI, MFJ) | BPM simplification | - |
-| RI-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (RI, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| RI-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (RI, MFJ) | BPM simplification | - |
 | RI-HOH-W2-low | W-2 $90,000 (RI, HoH) | BPM simplification | - |
 | RI-HOH-W2-high | W-2 $275,000 (RI, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | RI-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (RI, HoH) | BPM simplification | - |
@@ -473,11 +468,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | SC-S-W2-low | W-2 $90,000 (SC, Single) | modeling difference | state_tax 2,941.50 vs 3,651.95 (-710.45) |
 | SC-S-W2-high | W-2 $275,000 (SC, Single) | modeling difference | state_tax 12,580.00 vs 13,361.50 (-781.50) |
 | SC-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (SC, Single) | modeling difference | state_tax 3,462.50 vs 4,244.00 (-781.50) |
-| SC-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (SC, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50); state_tax 1,118.00 vs 1,693.47 (-575.47) |
+| SC-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (SC, Single) | modeling difference | state_tax 1,118.00 vs 1,693.47 (-575.47) |
 | SC-MFJ-W2-low | W-2 $180,000 (SC, MFJ) | modeling difference | state_tax 6,849.00 vs 8,269.91 (-1,420.91) |
 | SC-MFJ-W2-high | W-2 $550,000 (SC, MFJ) | modeling difference | state_tax 26,126.00 vs 27,689.00 (-1,563.00) |
 | SC-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (SC, MFJ) | modeling difference | state_tax 7,891.00 vs 9,454.00 (-1,563.00) |
-| SC-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (SC, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00); state_tax 3,202.00 vs 4,292.55 (-1,090.55) |
+| SC-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (SC, MFJ) | modeling difference | state_tax 3,202.00 vs 4,292.55 (-1,090.55) |
 | SC-HOH-W2-low | W-2 $90,000 (SC, HoH) | modeling difference | state_tax 2,550.75 vs 2,977.02 (-426.27) |
 | SC-HOH-W2-high | W-2 $275,000 (SC, HoH) | modeling difference | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 12,189.25 vs 13,361.50 (-1,172.25) |
 | SC-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (SC, HoH) | modeling difference | state_tax 4,374.25 vs 5,297.84 (-923.59) |
@@ -485,11 +480,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | UT-S-W2-low | W-2 $90,000 (UT, Single) | modeling difference | state_tax 4,005.00 vs 3,965.95 (+39.05) |
 | UT-S-W2-high | W-2 $275,000 (UT, Single) | match | - |
 | UT-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (UT, Single) | match | - |
-| UT-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (UT, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50); state_tax 2,447.50 vs 3,419.70 (-972.20) |
+| UT-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (UT, Single) | modeling difference | state_tax 2,447.50 vs 3,419.70 (-972.20) |
 | UT-MFJ-W2-low | W-2 $180,000 (UT, MFJ) | modeling difference | state_tax 8,010.00 vs 7,931.90 (+78.10) |
 | UT-MFJ-W2-high | W-2 $550,000 (UT, MFJ) | match | - |
 | UT-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (UT, MFJ) | match | - |
-| UT-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (UT, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00); state_tax 4,895.00 vs 6,595.03 (-1,700.03) |
+| UT-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (UT, MFJ) | modeling difference | state_tax 4,895.00 vs 6,595.03 (-1,700.03) |
 | UT-HOH-W2-low | W-2 $90,000 (UT, HoH) | modeling difference | state_tax 4,005.00 vs 3,361.41 (+643.59) |
 | UT-HOH-W2-high | W-2 $275,000 (UT, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | UT-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (UT, HoH) | modeling difference | state_tax 5,562.50 vs 5,373.91 (+188.59) |
@@ -497,11 +492,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | VA-S-W2-low | W-2 $90,000 (VA, Single) | BPM simplification | - |
 | VA-S-W2-high | W-2 $275,000 (VA, Single) | BPM simplification | - |
 | VA-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (VA, Single) | BPM simplification | - |
-| VA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (VA, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| VA-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (VA, Single) | BPM simplification | - |
 | VA-MFJ-W2-low | W-2 $180,000 (VA, MFJ) | BPM simplification | - |
 | VA-MFJ-W2-high | W-2 $550,000 (VA, MFJ) | BPM simplification | - |
 | VA-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (VA, MFJ) | BPM simplification | - |
-| VA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (VA, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| VA-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (VA, MFJ) | BPM simplification | - |
 | VA-HOH-W2-low | W-2 $90,000 (VA, HoH) | BPM simplification | - |
 | VA-HOH-W2-high | W-2 $275,000 (VA, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | VA-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (VA, HoH) | BPM simplification | - |
@@ -509,11 +504,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | VT-S-W2-low | W-2 $90,000 (VT, Single) | BPM simplification | - |
 | VT-S-W2-high | W-2 $275,000 (VT, Single) | BPM simplification | - |
 | VT-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (VT, Single) | BPM simplification | - |
-| VT-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (VT, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| VT-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (VT, Single) | BPM simplification | - |
 | VT-MFJ-W2-low | W-2 $180,000 (VT, MFJ) | BPM simplification | - |
 | VT-MFJ-W2-high | W-2 $550,000 (VT, MFJ) | BPM simplification | - |
 | VT-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (VT, MFJ) | BPM simplification | - |
-| VT-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (VT, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| VT-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (VT, MFJ) | BPM simplification | - |
 | VT-HOH-W2-low | W-2 $90,000 (VT, HoH) | BPM simplification | state_tax 3,120.90 vs 3,829.60 (-708.70) |
 | VT-HOH-W2-high | W-2 $275,000 (VT, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 16,312.90 vs 17,719.08 (-1,406.18) |
 | VT-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (VT, HoH) | BPM simplification | state_tax 5,430.90 vs 6,139.60 (-708.70) |
@@ -521,11 +516,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | WI-S-W2-low | W-2 $90,000 (WI, Single) | modeling difference | state_tax 4,166.46 vs 3,426.58 (+739.88) |
 | WI-S-W2-high | W-2 $275,000 (WI, Single) | modeling difference | state_tax 13,971.46 vs 13,231.58 (+739.88) |
 | WI-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (WI, Single) | modeling difference | state_tax 4,696.46 vs 3,956.58 (+739.88) |
-| WI-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (WI, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50); state_tax 2,311.46 vs 1,669.77 (+641.69) |
+| WI-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (WI, Single) | modeling difference | state_tax 2,311.46 vs 1,669.77 (+641.69) |
 | WI-MFJ-W2-low | W-2 $180,000 (WI, MFJ) | modeling difference | state_tax 8,735.31 vs 7,365.79 (+1,369.52) |
 | WI-MFJ-W2-high | W-2 $550,000 (WI, MFJ) | modeling difference | state_tax 30,845.01 vs 28,868.25 (+1,976.76) |
 | WI-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (WI, MFJ) | modeling difference | state_tax 9,795.31 vs 8,425.79 (+1,369.52) |
-| WI-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (WI, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00); state_tax 5,025.31 vs 3,655.79 (+1,369.52) |
+| WI-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (WI, MFJ) | modeling difference | state_tax 5,025.31 vs 3,655.79 (+1,369.52) |
 | WI-HOH-W2-low | W-2 $90,000 (WI, HoH) | modeling difference | state_tax 4,166.46 vs 3,426.58 (+739.88) |
 | WI-HOH-W2-high | W-2 $275,000 (WI, HoH) | modeling difference | fed_ordinary 54,919.00 vs 54,917.00 (+2.00); state_tax 13,971.46 vs 13,231.58 (+739.88) |
 | WI-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (WI, HoH) | modeling difference | state_tax 6,021.46 vs 5,281.58 (+739.88) |
@@ -533,11 +528,11 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | WV-S-W2-low | W-2 $90,000 (WV, Single) | BPM simplification | - |
 | WV-S-W2-high | W-2 $275,000 (WV, Single) | BPM simplification | - |
 | WV-S-ORD-LTCG | IRA/pension $60,000 + LTCG $40,000 (WV, Single) | BPM simplification | - |
-| WV-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (WV, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| WV-S-ORD-LTCG-SS | pension $35,000 + LTCG $20,000 + SS $30,000 (WV, Single) | BPM simplification | - |
 | WV-MFJ-W2-low | W-2 $180,000 (WV, MFJ) | BPM simplification | - |
 | WV-MFJ-W2-high | W-2 $550,000 (WV, MFJ) | BPM simplification | - |
 | WV-MFJ-ORD-LTCG | IRA/pension $120,000 + LTCG $80,000 (WV, MFJ) | BPM simplification | - |
-| WV-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (WV, MFJ) | RETpy bug | ltcg_tax 0.00 vs 1,674.00 (-1,674.00) |
+| WV-MFJ-ORD-LTCG-SS | pension $70,000 + LTCG $40,000 + SS $55,000 (WV, MFJ) | BPM simplification | - |
 | WV-HOH-W2-low | W-2 $90,000 (WV, HoH) | BPM simplification | - |
 | WV-HOH-W2-high | W-2 $275,000 (WV, HoH) | BPM simplification | fed_ordinary 54,919.00 vs 54,917.00 (+2.00) |
 | WV-HOH-ORD-LTCG | IRA/pension $75,000 + LTCG $50,000 (WV, HoH) | BPM simplification | - |
@@ -548,7 +543,7 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | EDGE-niit-S-full | NIIT: Single MAGI 300,000 (gains fully inside) (TX, Single) | match | - |
 | EDGE-niit-MFJ-cross | NIIT: MFJ MAGI 270,000 (crosses, partial) (TX, MFJ) | match | - |
 | EDGE-niit-HOH-cross | NIIT: HoH MAGI 210,000 (crosses, partial) (TX, HoH) | match | - |
-| EDGE-niit-S-ss-order | NIIT: Single, Social Security pushes MAGI over 200,000 (TX, Single) | RETpy bug | fed_ordinary 32,042.00 vs 32,402.00 (-360.00); niit 0.00 vs 912.00 (-912.00) |
+| EDGE-niit-S-ss-order | NIIT: Single, Social Security pushes MAGI over 200,000 (TX, Single) | match | - |
 | EDGE-irmaa-S-109000-at | IRMAA: Single MAGI 109,000 (TX, Single) | match | - |
 | EDGE-irmaa-S-109000-over | IRMAA: Single MAGI 109,001 (TX, Single) | match | - |
 | EDGE-irmaa-S-137000-at | IRMAA: Single MAGI 137,000 (TX, Single) | match | - |
@@ -572,23 +567,36 @@ Each differing figure shows RETpy, then BPM (RETpy minus BPM). `state_tax` is RE
 | EDGE-senior-HOH-75000 | Senior deduction: HoH age 67+, MAGI 75,000 (TX, HoH) | match | - |
 | EDGE-senior-HOH-100000 | Senior deduction: HoH age 67+, MAGI 100,000 (TX, HoH) | match | - |
 | EDGE-senior-HOH-175000 | Senior deduction: HoH age 67+, MAGI 175,000 (TX, HoH) | match | - |
-| EDGE-senior-S-cap-ltcg | Senior deduction in phase-out with gains (Single 67, 90k + 30k LTCG) (TX, Single) | RETpy bug | fed_ordinary 9,397.00 vs 9,793.00 (-396.00) |
+| EDGE-senior-S-cap-ltcg | Senior deduction in phase-out with gains (Single 67, 90k + 30k LTCG) (TX, Single) | match | - |
 | EDGE-hoh-24-top | HoH: taxable income 201,760 (24% band tops at 201,750 by statute) (TX, HoH) | BPM simplification | fed_ordinary 39,210.20 vs 39,209.40 (+0.80) |
 | EDGE-hoh-24-below | HoH: taxable income 201,700 (TX, HoH) | match | - |
 | EDGE-hoh-32-top | HoH: taxable income 256,200 to 256,300 (TX, HoH) | BPM simplification | fed_ordinary 56,666.00 vs 56,664.00 (+2.00) |
 | EDGE-single-24-top | Single: taxable income 201,780 (24% band tops at 201,775) (TX, Single) | match | - |
 | EDGE-ltcg-0pct | LTCG wholly in the 0% band (Single 30k + 30k) (TX, Single) | match | - |
 | EDGE-ltcg-straddle | LTCG straddling the 0% / 15% line (Single 45k + 30k) (TX, Single) | match | - |
-| EDGE-ltcg-low-ordinary | Ordinary below the standard deduction, large gain (Single 10k + 60k) (TX, Single) | RETpy bug | ltcg_tax 1,582.50 vs 667.50 (+915.00) |
-| EDGE-ltcg-no-ordinary | Gain only (MFJ 0 + 150k) (TX, MFJ) | RETpy bug | ltcg_tax 7,665.00 vs 2,835.00 (+4,830.00) |
+| EDGE-ltcg-low-ordinary | Ordinary below the standard deduction, large gain (Single 10k + 60k) (TX, Single) | match | - |
+| EDGE-ltcg-no-ordinary | Gain only (MFJ 0 + 150k) (TX, MFJ) | match | - |
 | EDGE-ltcg-20pct | LTCG in the 20% band (Single 400k + 300k) (TX, Single) | match | - |
 | EDGE-ss-zero | SS below the first base (Single pension 10k + SS 20k) (TX, Single) | match | - |
 | EDGE-ss-half | SS in the 50% tier (Single pension 20k + SS 24k) (TX, Single) | match | - |
 | EDGE-ss-85 | SS in the 85% tier (Single pension 50k + SS 36k) (TX, Single) | match | - |
 | EDGE-ss-85-MFJ | SS in the 85% tier (MFJ pension 80k + SS 60k) (TX, MFJ) | match | - |
-| EDGE-ss-ltcg-order | Gains with SS (Single 67: pension 35k + LTCG 20k + SS 30k) (TX, Single) | RETpy bug | ltcg_tax 0.00 vs 1,084.50 (-1,084.50) |
+| EDGE-ss-ltcg-order | Gains with SS (Single 67: pension 35k + LTCG 20k + SS 30k) (TX, Single) | match | - |
 | EDGE-ca-sdi | CA SDI on W-2 wages (Single 150k) (CA, Single) | BPM simplification | - |
 | EDGE-wage-base-MFJ | MFJ one earner 400k (over the 184,500 wage base) (TX, MFJ) | match | - |
 ## 7. Not compared
 
 RETpy models none of these, so they are known gaps rather than findings: the qualified business income deduction (self-employment income), itemized deductions and the SALT cap, AMT, the earned income credit, and the ACA premium-credit cliff (BPM reports only the required-contribution percentage). BPM does not model them all either (AMT, EITC, loss carryforwards, local taxes).
+
+
+## 8. Fixed: federal income order inside a year
+
+The first run found 81 fixtures where the engine's federal tax differed from BPM's and from RETpy's own tables worked in IRS order. All three causes were engine order bugs, now fixed: the engine books each event (pension draw, sale of shares, Social Security, Roth conversion) as the change in one whole-year figure (`AccountPortfolio._federal_year_tax`).
+
+| Cause | Fixtures | Largest gap ($) | Example | Fixed |
+| --- | ---: | ---: | --- | --- |
+| Gains were taxed before Social Security was added, so taxable Social Security did not push gains up the 0/15/20% stack or into NIIT | 78 | 1,674.00 | CA-MFJ-ORD-LTCG-SS | yes |
+| Unused standard deduction (ordinary income below it) did not shelter gains | 2 | 4,830.00 | EDGE-ltcg-no-ordinary | yes |
+| The senior deduction was not re-priced when later gains raised MAGI | 1 | 396.00 | EDGE-senior-S-cap-ltcg | yes |
+
+After the fix every one of these fixtures matches BPM to the cent. Pinned by `tests/test_federal_tax_order.py`.

@@ -12,7 +12,8 @@ Two engine paths are used, as in the app:
   * retirement mixes: ``AccountPortfolio`` marginal tax, taxable-account gains
     (``_tax_home_sale_gain`` = the same pieces as a taxable-account sale) and
     ``_true_up_social_security_tax``, booked in the order the engine books them
-    (ordinary income, gains, then Social Security).
+    (ordinary income, gains, then Social Security). Each is booked as the change in one
+    whole-year figure, so the booked federal tax is the year's tax in IRS order.
 Each fixture runs twice: "modeled" (the app as shipped) and "neutral" (state rules BPM
 does not model switched off: personal exemptions and credits, retirement exclusions,
 the capital-gains exclusion, taxed Social Security).
@@ -89,28 +90,36 @@ def _engine(fx):
     p.update_ages(fx["age"])
     p.reset_yearly_income()
     ordinary, gains, ss = fx.get("ordinary", 0.0), fx.get("ltcg", 0.0), fx.get("ss", 0.0)
-    fed_ordinary = 0.0
-    if ordinary > 0:
-        fed, _state = p._marginal_tax_parts(ordinary, True, "you", fx.get("retirement", True))
-        fed_ordinary += fed
-        p.calculate_marginal_tax_on_income(ordinary, owner="you",
-                                           retirement=fx.get("retirement", True))
-    ltcg_tax = 0.0
-    if gains > 0:
+    booked_federal = 0.0              # federal income tax booked event by event (no NIIT)
+
+    def book(event):
+        """Run one engine booking call; add its federal income tax to the running total."""
+        nonlocal booked_federal
         state0, niit0 = p.total_state_taxes_paid, p.total_niit_paid
-        total = p._tax_home_sale_gain(gains)
-        ltcg_tax = total - (p.total_state_taxes_paid - state0) - (p.total_niit_paid - niit0)
+        tax = event()
+        booked_federal += (tax - (p.total_state_taxes_paid - state0)
+                           - (p.total_niit_paid - niit0))
+
+    if ordinary > 0:
+        book(lambda: p.calculate_marginal_tax_on_income(
+            ordinary, owner="you", retirement=fx.get("retirement", True)))
+    if gains > 0:
+        book(lambda: p._tax_home_sale_gain(gains))
     ss_taxable = 0.0
     if ss > 0:
         ss_taxable = cfg.calculate_taxable_social_security(
             ss, p._return_income("you") + p._return_investment("you"), 0, status)
-        state0 = p.total_state_taxes_paid
-        booked = asim._true_up_social_security_tax(p, ss, 0.0)
-        fed_ordinary += booked - (p.total_state_taxes_paid - state0)
-    return {"fed_ordinary": fed_ordinary, "ltcg_tax": ltcg_tax,
-            "niit": p.total_niit_paid, "state_tax": p.total_state_taxes_paid, "sdi": 0.0,
-            "fica": 0.0, "agi": p.year_ordinary_income + p.year_investment_income,
-            "ss_taxable": ss_taxable}
+        book(lambda: asim._true_up_social_security_tax(p, ss, 0.0))
+    # The engine books every event as the change in one whole-year figure, so the booked
+    # total is the year's federal income tax. Ordinary tax comes from the final year's
+    # taxable ordinary income; what is left of the booked total is the gains tax.
+    magi = p.year_ordinary_income + p.year_investment_income
+    ordinary_taxable = max(0.0, p.year_ordinary_income - p.get_standard_deduction("you", magi))
+    fed_ordinary = p._federal_model("you").calculate_tax(ordinary_taxable)
+    return {"fed_ordinary": fed_ordinary, "ltcg_tax": booked_federal - fed_ordinary,
+            "niit": p.total_niit_paid,
+            "state_tax": p.total_state_taxes_paid, "sdi": 0.0,
+            "fica": 0.0, "agi": magi, "ss_taxable": ss_taxable}
 
 
 def _irs(fx, ordinary, gains, taxable_ss):

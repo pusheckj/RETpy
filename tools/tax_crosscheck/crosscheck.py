@@ -118,7 +118,7 @@ def edge_fixtures():
     add("niit-HOH-cross", "NIIT: HoH MAGI 210,000 (crosses, partial)", "ORD_LTCG", "HOH", 62,
         ordinary=190_000, ltcg=20_000)
     add("niit-S-ss-order", "NIIT: Single, Social Security pushes MAGI over 200,000",
-        "ORD_LTCG_SS", "S", 70, expect="gap", tags=["ss_order"],
+        "ORD_LTCG_SS", "S", 70, tags=["ss_order"],
         ordinary=150_000, ltcg=40_000, ss=40_000)
     # IRMAA tier boundaries (MAGI = AGI)
     for st, bounds in (("S", (109_000, 137_000, 500_000)), ("MFJ", (218_000, 274_000, 750_000))):
@@ -137,7 +137,7 @@ def edge_fixtures():
             add(f"senior-{st}-{m}", f"Senior deduction: {LABEL[st]} age {age}+, MAGI {m:,}",
                 "ORD", st, age, ordinary=float(m))
     add("senior-S-cap-ltcg", "Senior deduction in phase-out with gains (Single 67, 90k + 30k LTCG)",
-        "ORD_LTCG", "S", 67, expect="gap", tags=["senior_order"], ordinary=90_000, ltcg=30_000)
+        "ORD_LTCG", "S", 67, tags=["senior_order"], ordinary=90_000, ltcg=30_000)
     # Head of household 24% / 32% bracket tops (BPM tops the 24% band at 201,775)
     add("hoh-24-top", "HoH: taxable income 201,760 (24% band tops at 201,750 by statute)",
         "ORD", "HOH", 62, expect="gap", tags=["hoh_boundary"], ordinary=201_760 + 24_150.0)
@@ -153,9 +153,9 @@ def edge_fixtures():
     add("ltcg-straddle", "LTCG straddling the 0% / 15% line (Single 45k + 30k)", "ORD_LTCG", "S",
         62, ordinary=45_000, ltcg=30_000)
     add("ltcg-low-ordinary", "Ordinary below the standard deduction, large gain (Single 10k + 60k)",
-        "ORD_LTCG", "S", 62, expect="gap", tags=["std_unused"], ordinary=10_000, ltcg=60_000)
+        "ORD_LTCG", "S", 62, tags=["std_unused"], ordinary=10_000, ltcg=60_000)
     add("ltcg-no-ordinary", "Gain only (MFJ 0 + 150k)", "ORD_LTCG", "MFJ", 62,
-        expect="gap", tags=["std_unused"], ordinary=0.0, ltcg=150_000)
+        tags=["std_unused"], ordinary=0.0, ltcg=150_000)
     add("ltcg-20pct", "LTCG in the 20% band (Single 400k + 300k)", "ORD_LTCG", "S", 62,
         ordinary=400_000, ltcg=300_000)
     # Social Security taxability
@@ -168,7 +168,7 @@ def edge_fixtures():
     add("ss-85-MFJ", "SS in the 85% tier (MFJ pension 80k + SS 60k)", "ORD_SS", "MFJ", 70,
         ordinary=80_000, ss=60_000)
     add("ss-ltcg-order", "Gains with SS (Single 67: pension 35k + LTCG 20k + SS 30k)",
-        "ORD_LTCG_SS", "S", 67, expect="gap", tags=["ss_order"], ordinary=35_000, ltcg=20_000,
+        "ORD_LTCG_SS", "S", 67, tags=["ss_order"], ordinary=35_000, ltcg=20_000,
         ss=30_000)
     # CA payroll tax and a high wage (wage base, Additional Medicare)
     add("ca-sdi", "CA SDI on W-2 wages (Single 150k)", "W2", "S", 45, state="CA", wages=150_000)
@@ -280,6 +280,28 @@ def default_example(source, work, env):
 
 
 # ----------------------------------------------------------------------- comparison
+# Findings of the first run of this harness that are now fixed (federal ordering). Kept as a
+# plain section at the end of the report so a regenerated report still says why those edge
+# fixtures are plain "match" rows.
+FEDERAL_FIXED_NOTE = [
+    "", "## 8. Fixed: federal income order inside a year", "",
+    "The first run found 81 fixtures where the engine's federal tax differed from BPM's and "
+    "from RETpy's own tables worked in IRS order. All three causes were engine order bugs, "
+    "now fixed: the engine books each event (pension draw, sale of shares, Social Security, "
+    "Roth conversion) as the change in one whole-year figure "
+    "(`AccountPortfolio._federal_year_tax`).", "",
+    "| Cause | Fixtures | Largest gap ($) | Example | Fixed |", "| --- | ---: | ---: | --- | --- |",
+    "| Gains were taxed before Social Security was added, so taxable Social Security did not "
+    "push gains up the 0/15/20% stack or into NIIT | 78 | 1,674.00 | CA-MFJ-ORD-LTCG-SS | yes |",
+    "| Unused standard deduction (ordinary income below it) did not shelter gains | 2 | "
+    "4,830.00 | EDGE-ltcg-no-ordinary | yes |",
+    "| The senior deduction was not re-priced when later gains raised MAGI | 1 | 396.00 | "
+    "EDGE-senior-S-cap-ltcg | yes |", "",
+    "After the fix every one of these fixtures matches BPM to the cent. Pinned by "
+    "`tests/test_federal_tax_order.py`.", "",
+]
+
+
 def money(x):
     return f"{x:,.2f}"
 
@@ -459,6 +481,7 @@ def write_report(path, ctx):
               "premium-credit cliff (BPM reports only the required-contribution percentage). "
               "BPM does not model them all either (AMT, EITC, loss carryforwards, local "
               "taxes).", ""]
+    lines += FEDERAL_FIXED_NOTE
     with open(path, "w") as fh:
         fh.write("\n".join(lines))
 
