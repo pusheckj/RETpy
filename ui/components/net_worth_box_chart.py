@@ -241,7 +241,7 @@ def trim_table(c, median_today, retirement_age, infl) -> "pd.DataFrame":
     def line_row(name, frac, change):
         at = median * frac
         rows.append({"Guardrail": name, "Portfolio value at the line": money(at),
-                     "$ distance from the median at retirement": money(at - median),
+                     "$ from median at retirement": money(at - median),
                      "% distance": f"{(frac - 1) * 100:+g}%",
                      "Spending change triggered": change})
 
@@ -256,7 +256,7 @@ def trim_table(c, median_today, retirement_age, infl) -> "pd.DataFrame":
     ret = gl.return_rule_row(c.get("return_rule"))
     if ret:
         rows.append({"Guardrail": ret[0], "Portfolio value at the line": "—",
-                     "$ distance from the median at retirement": "—", "% distance": "—",
+                     "$ from median at retirement": "—", "% distance": "—",
                      "Spending change triggered": ret[1]})
     return pd.DataFrame(rows)
 

@@ -107,6 +107,11 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
         out["YOUR_COMPENSATION_BY_AGE"] = _strip_auto_after_tax(comp)
     if out.get("ROTH_CONVERSION_TARGET_BRACKET") in LEGACY_ROTH_TARGETS:
         out["ROTH_CONVERSION_TARGET_BRACKET"] = None
+    # Children always reach the engine with every field (e.g. childcare_monthly, added
+    # 2026-11-25), so a preset or old profile run directly matches the side panel's copy.
+    if isinstance(out.get("CHILDREN"), (list, tuple)):
+        from retirement_sim import config as _cfg
+        out["CHILDREN"] = _cfg.normalize_children(out["CHILDREN"])
 
     # 2. The pay table from the Income inputs. The engine reads your pay only from
     #    YOUR_COMPENSATION_BY_AGE, which the Income section builds from base, bonus,

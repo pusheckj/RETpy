@@ -336,8 +336,8 @@ def render_body(st) -> None:
                                              else getattr(cfg, "ACA_CHILD_MONTHLY", 390)), 390))
         v = st.number_input(f"Same plan, per child (\\$/mo, {year})", min_value=0, max_value=3_000,
                             step=25, key="sa_aca_child", disabled=tiered,
-                            help="New York and Vermont price a family as a tier of one rate, "
-                                 "so a child has no price of its own there." if tiered else None)
+                            help="New York and Vermont price a family as one tier. "
+                                 "A child has no separate price there." if tiered else None)
         set_override(st, "ACA_CHILD_MONTHLY", safe_int(v))
     if area:
         st.caption(hd.SOURCE_LINE)

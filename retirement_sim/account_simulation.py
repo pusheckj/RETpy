@@ -2998,8 +2998,6 @@ def _apply_spending_guardrails(
         portfolio.get_total_balance(),
         portfolio.target_portfolio_inflation_adjusted
     )
-    # Remembered for the spending log: did the portfolio rule (not just a loss year) trim?
-    portfolio.last_portfolio_trim = portfolio_adjustment < 1.0
 
     # 2. Return-based adjustment (apply to discretionary portion)
     # This adjusts spending based on THIS YEAR's market returns
@@ -3663,6 +3661,11 @@ def simulate_retirement_year(
 
     # Spending guardrails: adjust the discretionary portion of expenses
     # (housing held fixed when MODEL_GUARDRAILS_EXCLUDE_HOUSING).
+    # Whether the portfolio rule (a deep fall from the retirement balance, not only a
+    # loss year) trims this year -- for the spending log's "deep" flag. Same inputs as
+    # the rule inside _apply_spending_guardrails.
+    portfolio_rule_trims = cfg.calculate_spending_adjustment(
+        portfolio.get_total_balance(), portfolio.target_portfolio_inflation_adjusted) < 1.0
     adjusted_expenses = _apply_spending_guardrails(
         portfolio, expenses, annual_return, your_age, inflation_factor
     )
@@ -3707,7 +3710,7 @@ def simulate_retirement_year(
         "cut": guardrail_cut,
         # True when the portfolio rule (a deep fall from the retirement balance) was
         # part of this year's trim, not only the loss-year rule.
-        "deep": bool(guardrail_cut > 0 and getattr(portfolio, "last_portfolio_trim", False)),
+        "deep": bool(guardrail_cut > 0 and portfolio_rule_trims),
         # The premium (ACA before 65, Medicare after), so the spending chart can
         # show what the engine really pays. Trued up from actual MAGI in
         # _fund_net_expenses.

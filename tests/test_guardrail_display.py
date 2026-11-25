@@ -346,13 +346,13 @@ def test_table_gives_value_at_the_line_distance_and_the_change_it_triggers():
     st = _draw(_plan())
     df = st.tables[0]
     assert list(df.columns) == ["Guardrail", "Portfolio value at the line",
-                                "$ distance from the median at retirement", "% distance",
+                                "$ from median at retirement", "% distance",
                                 "Spending change triggered"]
     median_48 = next(r["p50"] for r in _rows() if r["age"] == 48)
     row = df.iloc[0]
     assert "70%" in row["Guardrail"]
     assert row["Portfolio value at the line"] == nwb.money(0.70 * median_48)
-    assert row["$ distance from the median at retirement"] == nwb.money(-0.30 * median_48)
+    assert row["$ from median at retirement"] == nwb.money(-0.30 * median_48)
     assert row["% distance"] == "-30%"
     assert row["Spending change triggered"] == (
         f"Fun money trimmed 15%, about {gl.monthly_text(gl.guardrail_cushion(_plan(), 48)['trim_year'])} a month")
