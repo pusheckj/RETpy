@@ -152,6 +152,9 @@ Every heavy analysis in `utils/sim_runner.py` (`plan_full_analysis`,
 - `utils/browser_compute.py` hands calls to `components/browser_compute/`: a
   hidden component running Pyodide in Web Workers, with the engine sources sent
   from the server.
+- Healthcare by area stays out of the browser's engine bundle: `retirement_sim/healthcare_data.py`
+  and its JSON tables are read only on the server, by `config_builder.health_area_overrides`,
+  which hands the engine plain config values (`ACA_AREA_*`). The browser needs no data file.
 - The main result's detailed calls (`Plan.local`) always run on the server. Its
   age scan goes to the browser only when the workers are already loaded.
 - The follow-up analyses (levers, what-if baseline, FI, SWR, mortgage) go to the

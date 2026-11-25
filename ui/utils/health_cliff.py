@@ -56,3 +56,27 @@ def first_crossing(by_year: Dict[Any, Dict[str, float]], your_age: int, current_
             return {"age": age, "year": int(current_year) + age - int(your_age),
                     "lost": float(row["lost"]), "share": row["over"] / row["n"]}
     return None
+
+
+def message(crossing: dict, plan_year: int) -> str:
+    """One short note for the results screen. ``crossing`` is ``first_crossing``'s answer."""
+    lost = int(round(crossing["lost"], -2))
+    share = int(round(100 * crossing["share"]))
+    return (f"Health insurance cliff: from {crossing['year']} (age {crossing['age']}) your income is "
+            f"above 400% of the poverty line in {share}% of simulations, so the ACA premium credit "
+            f"stops. That year it costs you about ${lost:,} in credit. Prices and credit rules "
+            f"are for the {plan_year} plan year, in today's dollars.")
+
+
+def render_note(st, results: Optional[dict], overrides: dict, current_year: int) -> None:
+    """Show the cliff note when the plan's runs cross 400% of the poverty line."""
+    by_year = ((results or {}).get("primary_result") or {}).get("aca_cliff_by_year")
+    if not by_year:
+        return
+    try:
+        from utils import health_area
+    except ImportError:  # pragma: no cover
+        from ui.utils import health_area  # type: ignore
+    crossing = first_crossing(by_year, int((overrides or {}).get("YOUR_AGE", 0) or 0), current_year)
+    if crossing is not None:
+        st.warning(message(crossing, health_area.coverage_year(overrides)).replace("$", "\\$"))

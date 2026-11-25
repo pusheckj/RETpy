@@ -992,13 +992,27 @@ def retirement_spending_basis(user_overrides: dict, retirement_age: int) -> dict
             "housing": float(cfg.housing_annual(age)),
             "pre_medicare": age < int(getattr(cfg, "MEDICARE_AGE", 65)),
             "health_knobs": {
-                "ACA_BENCHMARK_MONTHLY_AT_40": getattr(cfg, "ACA_BENCHMARK_MONTHLY_AT_40", None),
-                "ACA_CHILD_MONTHLY": getattr(cfg, "ACA_CHILD_MONTHLY", None),
+                "ACA_BENCHMARK_MONTHLY_AT_40": _price_in_use("ACA_BENCHMARK_MONTHLY_AT_40", 40),
+                "ACA_CHILD_MONTHLY": _price_in_use("ACA_CHILD_MONTHLY", 10),
                 "HEALTHCARE_COSTS_BY_AGE": dict(bands) if isinstance(bands, dict) else None,
             },
         }
     finally:
         _restore_overrides(original)
+
+
+def _price_in_use(key: str, age: int):
+    """The marketplace price box ``key`` as the engine prices it now: with an area set that is
+    the area's own price at ``age``, not whatever the box holds (the box may be absent or
+    stale). A place then scales it, and ``health_area_overrides`` reads the scaled figure
+    back as a rescaling of the area's prices."""
+    table = getattr(cfg, "ACA_AREA_SILVER_MONTHLY", None)
+    tiers = getattr(cfg, "ACA_AREA_TIERS", None)
+    if table:
+        return float(table[age])
+    if tiers:
+        return float(tiers["single"]) if key == "ACA_BENCHMARK_MONTHLY_AT_40" else getattr(cfg, key, None)
+    return getattr(cfg, key, None)
 
 
 _AREA_HEALTH_KEYS = ("ACA_AREA_SILVER_MONTHLY", "ACA_AREA_TIERS", "ACA_AREA_PLAN_RATIO",

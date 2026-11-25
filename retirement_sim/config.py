@@ -3228,14 +3228,12 @@ ACA_AGE_CURVE = {
 #                            (INFLATION_RATES['healthcare']), as before. Medicare, care and
 #                            out-of-pocket are not affected
 #   ACA_APPLICABLE_PCT_BANDS, ACA_FPL_*  the 2027 credit table and 2026 poverty guidelines
-#   ACA_COVERAGE_YEAR        plan year the prices are for, for labels
 ACA_AREA_KEY = None
 ACA_AREA_SILVER_MONTHLY = None
 ACA_AREA_TIERS = None
 ACA_AREA_PLAN_RATIO = 1.0
 ACA_AREA_OOP_ANNUAL = None
 ACA_PREMIUM_GROWTH_NOMINAL = None
-ACA_COVERAGE_YEAR = 2026
 
 # The general CPI that INFLATION_REAL_EXCESS was measured against: a premium's real
 # growth is its nominal rate less this, fixed, however the inflation slider moves.

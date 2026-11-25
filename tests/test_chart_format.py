@@ -135,10 +135,10 @@ def test_health_insurance_band_comes_from_the_engines_premium():
     ages = list(range(58, 70))
     health = {a: (30_000.0 if a < 65 else 9_000.0) for a in ages}
     series, _ = sc.build_category_series(ages, {**_OV, "YOUR_AGE": 58}, {}, 58, health_by_age=health)
-    ys = _by_label(series)["Health insurance (ACA, Medicare)"]
+    ys = _by_label(series)["Health insurance (ACA 2026 prices, Medicare)"]
     assert ys[0] == 30_000.0 and ys[-1] == 9_000.0
     series, _ = sc.build_category_series(ages, {**_OV, "YOUR_AGE": 58}, {}, 58)
-    assert "Health insurance (ACA, Medicare)" not in _by_label(series)
+    assert "Health insurance (ACA 2026 prices, Medicare)" not in _by_label(series)
 
 
 def test_engine_logs_the_premium_it_pays():

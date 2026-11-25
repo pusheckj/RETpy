@@ -127,7 +127,15 @@ def test_cards_show_the_pieces_and_a_breakdown(monkeypatch):
     assert "Rent there" in text and "FIRE number" in text and "Everyday" in text
     assert 'class="ms-break"' in text and "Food &amp; groceries" in text and "Housing" in text
     assert at.selectbox(key="ms_home_area").value == "CA"            # the plan's state
+    assert "Health insurance and care (2026 plan year)" in text      # every health figure names its plan year
     assert not at.error
+
+
+def test_an_area_prices_health_in_every_place_and_says_2027(monkeypatch):
+    plain = _draw(monkeypatch, load_sample_household())
+    area = _draw(monkeypatch, {**load_sample_household(), "HEALTH_AREA": "AL:1"})
+    assert "Health insurance and care (2027 plan year)" in _md(area)
+    assert _md(area) != _md(plain)                                   # the area's prices reach the cards
 
 
 def test_editing_a_place_changes_its_fire_number_and_is_saved(monkeypatch):

@@ -32,6 +32,16 @@ try:
 except ImportError:  # pragma: no cover
     from ui.utils.slider_input import slider_with_box  # type: ignore
 
+try:
+    from utils import health_area
+except ImportError:  # pragma: no cover
+    from ui.utils import health_area  # type: ignore
+
+try:
+    from retirement_sim import healthcare_data as hd
+except ImportError:  # pragma: no cover
+    hd = None
+
 
 def _section_label(st, txt):
     st.markdown(f'<div style="font-size: 13px; color: #64748b; text-transform: uppercase; '
@@ -212,6 +222,47 @@ def render_investing_body(st) -> None:
         set_override(st, "ROTH_CONVERSION_STOP_AGE", safe_int(v))
 
 
+def _render_healthcare_area(st) -> None:
+    """Healthcare by area: a ZIP code or the state's average sets local marketplace prices (2027
+    plan year). Only the resolved area is kept, never the ZIP. See utils/health_area.py."""
+    overrides = st.session_state.get("user_overrides", {}) or {}
+    area = health_area.area_key(overrides)
+    st.text_input("ZIP code (optional)", key=health_area.ZIP_KEY, max_chars=5,
+                  help="Looks up your marketplace rating area to price health insurance before 65 "
+                       "where you live. The ZIP code is used once and is not saved. Only the area "
+                       "it falls in is kept with your plan.")
+    state = health_area.state_choice_code(overrides)
+    b1, b2 = st.columns(2)
+    with b1:
+        st.button("Use this ZIP code's prices", key="sa_health_zip_btn",
+                  on_click=health_area.apply_zip, args=(st,))
+    with b2:
+        st.button(f"Use {hd.state_names()[state]} average" if state else "Use my state's average",
+                  key="sa_health_state_btn", on_click=health_area.apply_state, args=(st,),
+                  disabled=state is None,
+                  help="Uses the state chosen under Taxes." if state else
+                       "Choose a state under Taxes first. No-state-tax and flat-rate choices have no area.")
+    msg = st.session_state.get(health_area.MSG_KEY)
+    if msg:
+        st.caption(msg)
+    if area:
+        ref = hd.reference_prices(area)
+        st.caption(f"Pricing from {hd.area_label(area)}, {health_area.year_phrase(overrides)}: "
+                   f"benchmark Silver is \\${ref['benchmark_at_40']:,.0f} a month at 40 and "
+                   f"\\${ref['child']:,.0f} a month for a child, before credits. Premiums grow 6% a year "
+                   "before 65. Credits use the 2027 table and the income your plan earns each year.")
+        labels = list(health_area.PLAN_LABELS.values())
+        current = health_area.PLAN_LABELS.get(str(overrides.get("HEALTH_PLAN", "silver")), labels[0])
+        ensure_default(st, health_area.PLAN_KEY, current)
+        pick = st.radio("Plan you buy", labels, horizontal=True, key=health_area.PLAN_KEY,
+                        help="Benchmark Silver is the second-cheapest Silver plan, and it sets your credit. "
+                             "Lowest-cost Bronze costs less each month but carries 30% more out-of-pocket "
+                             "cost. The credit is the same.")
+        set_override(st, "HEALTH_PLAN", "bronze" if pick == labels[1] else "silver")
+        st.button("Back to the national figures", key="sa_health_clear_btn",
+                  on_click=health_area.clear_area, args=(st,))
+
+
 def render_body(st) -> None:
     try:
         from components import assumption_presets
@@ -249,28 +300,45 @@ def render_body(st) -> None:
     v = st.toggle("Include ACA subsidies before Medicare", key="sa_aca")
     set_override(st, "ACA_ENABLED", bool(v))
 
+    _render_healthcare_area(st)
+
     # Marketplace prices before age 65. These replace a "Pre-Medicare healthcare
-    # cost" box that fed a flat band the default age-rated model never reads.
+    # cost" box that fed a flat band the default age-rated model never reads. With an area
+    # set they hold that area's prices; type your own quote over them and the area's prices
+    # scale to it.
+    overrides = st.session_state.get("user_overrides", {}) or {}
+    area = health_area.area_key(overrides)
+    ref = hd.reference_prices(area) if area else None
+    year = health_area.year_phrase(overrides)
     c7, c8 = st.columns(2, vertical_alignment="bottom")
     with c7:
         ensure_default(st, "sa_aca_benchmark",
                        safe_int(get_override(st, "ACA_BENCHMARK_MONTHLY_AT_40",
-                                             getattr(cfg, "ACA_BENCHMARK_MONTHLY_AT_40", 625)), 625))
-        v = st.number_input("Marketplace plan, age 40 ($/mo)", min_value=0, max_value=5_000,
+                                             round(ref["benchmark_at_40"]) if ref
+                                             else getattr(cfg, "ACA_BENCHMARK_MONTHLY_AT_40", 625)), 625))
+        v = st.number_input(f"Marketplace plan, age 40 (\\$/mo, {year})", min_value=0, max_value=5_000,
                             step=25, key="sa_aca_benchmark",
                             help="Before 65, without a work plan, you buy insurance on the "
                                  "marketplace. Enter the price of the second-cheapest Silver "
                                  "plan for a 40-year-old in your area, before subsidies "
                                  "(healthcare.gov, by ZIP code). The plan prices other ages "
-                                 "from it and works out subsidies itself.")
+                                 "from it and works out subsidies itself. With a ZIP code or "
+                                 "state above, this shows that area's price. Type your own "
+                                 "quote to scale the area's prices to it.")
         set_override(st, "ACA_BENCHMARK_MONTHLY_AT_40", safe_int(v))
     with c8:
         ensure_default(st, "sa_aca_child",
                        safe_int(get_override(st, "ACA_CHILD_MONTHLY",
-                                             getattr(cfg, "ACA_CHILD_MONTHLY", 390)), 390))
-        v = st.number_input("Same plan, per child ($/mo)", min_value=0, max_value=3_000,
+                                             round(ref["child"]) if ref
+                                             else getattr(cfg, "ACA_CHILD_MONTHLY", 390)), 390))
+        v = st.number_input(f"Same plan, per child (\\$/mo, {year})", min_value=0, max_value=3_000,
                             step=25, key="sa_aca_child")
         set_override(st, "ACA_CHILD_MONTHLY", safe_int(v))
+    if area:
+        st.caption(hd.SOURCE_LINE)
+    else:
+        st.caption("Flat national figures for the 2026 plan year (KFF). Enter a ZIP code or use your "
+                   "state above for local prices.")
 
     # Long-term care lives in the "Retirement" section (single source of
     # truth — enable + start age + annual cost + per-year probability). It was

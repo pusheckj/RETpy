@@ -443,7 +443,6 @@ def area_overrides(key: Any, plan: str = "silver", benchmark_at_40: Optional[flo
         "ACA_FPL_FIRST_PERSON": first,
         "ACA_FPL_PER_ADDITIONAL_PERSON": extra,
         "ACA_PREMIUM_GROWTH_NOMINAL": PREMIUM_GROWTH_NOMINAL,
-        "ACA_COVERAGE_YEAR": YEAR,
     }
 
 

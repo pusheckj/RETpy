@@ -304,6 +304,10 @@ DIRECT_MAPPINGS: Dict[str, tuple] = {
     "sa_aca":             ("ACA_ENABLED", lambda v: bool(v)),
     "sa_aca_benchmark":   ("ACA_BENCHMARK_MONTHLY_AT_40", _as_int(625, 0, 5_000)),
     "sa_aca_child":       ("ACA_CHILD_MONTHLY", _as_int(390, 0, 3_000)),
+    # Healthcare by area (utils/health_area.py): the plan type bought. The area itself has no box
+    # (a ZIP is never kept); it shows as a caption, and sa_health_zip / sa_health_msg are cleared above.
+    "sa_health_plan":     ("HEALTH_PLAN", lambda v: "Lowest-cost Bronze" if str(v).lower() == "bronze"
+                           else "Benchmark Silver"),
     # Long-term care widgets live in sec_retirement_goals (rg_ltc_*). The
     # probability is stored as a fraction (0-1) but the slider shows a percent.
     "rg_ltc_enabled":     ("LTC_ENABLED", lambda v: bool(v)),
@@ -464,9 +468,12 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "ay_partn
 #             user_overrides["MS_PLACES"] and load with the profile.
 #   debt_     the Debts section (one set of row widgets per debt, plus the extra payment
 #             and payoff order) and the Debt payoff tile's "pay more" amount.
+#   sa_health_  healthcare by area: the ZIP box (never kept past a profile switch), its message,
+#             the plan type and the buttons.
 #   assume_   the Assumptions presets: the Undo snapshot (assume_last) belongs to the plan
 #             it was taken on, so a profile switch or JSON load must drop it.
-_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_", "assume_")
+_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_", "assume_",
+                         "sa_health_")
 
 
 def _is_input_widget_key(key) -> bool:

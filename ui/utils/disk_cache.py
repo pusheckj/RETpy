@@ -86,6 +86,14 @@ def engine_fingerprint() -> str:
                 h.update(folder.encode("utf-8") + b"/" + name.encode("utf-8"))
                 with open(os.path.join(src, name), "rb") as fh:
                     h.update(fh.read())
+        # The engine's data tables (healthcare prices by area): re-vintaged data must not
+        # serve results made from the old tables.
+        for dirpath, _dirs, files in sorted(os.walk(os.path.join(root, "retirement_sim", "data"))):
+            for name in sorted(files):
+                if name.endswith(".json"):
+                    h.update(name.encode("utf-8"))
+                    with open(os.path.join(dirpath, name), "rb") as fh:
+                        h.update(fh.read())
     except Exception:
         # Can't read the engine -> use a random-ish salt so we simply don't
         # serve stale results (degrades to always-miss rather than wrong-hit).

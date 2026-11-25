@@ -145,7 +145,6 @@ def test_without_an_area_growth_and_prices_are_todays():
     expect = (cfg.aca_member_full_price_annual(55) + cfg.aca_member_full_price_annual(50)
               + cfg.aca_member_full_price_annual(10))
     assert bench == plan == pytest.approx(expect)
-    assert cfg.ACA_COVERAGE_YEAR == 2026
 
 
 def test_medicare_and_care_growth_are_not_touched_by_an_area():
@@ -266,7 +265,9 @@ def test_the_area_becomes_plain_config_values_and_never_the_zip():
     assert "HEALTH_AREA" not in built and "HEALTH_PLAN" not in built
     json.dumps(mc_jobs.encode(built))                  # plain data: the browser can take it
     assert not any(k.startswith("ACA_AREA") for k in build_config_overrides({}))
-    assert not any(k.startswith("ACA_AREA") for k in build_config_overrides({"HEALTH_AREA": "ZZ:9"}))
+    for bad in ("ZZ:9", "", 5, ["AL:1"], {"a": 1}):                 # a hostile or broken saved value
+        assert not any(k.startswith("ACA_AREA") for k in build_config_overrides({"HEALTH_AREA": bad})), bad
+    assert build_config_overrides({"HEALTH_AREA": "AL:1", "HEALTH_PLAN": ["x"]})["ACA_AREA_PLAN_RATIO"] == 1.0
 
 
 def test_the_two_price_boxes_rescale_the_area_prices():
@@ -354,3 +355,24 @@ def test_a_fresh_interpreter_matches_the_server_with_an_area(monkeypatch):
                          capture_output=True, text=True, check=True)
     assert json.loads(out.stdout) == server
     sr.clear_cache(include_disk=False)
+
+
+def test_a_place_scales_the_areas_prices_by_its_price_level():
+    """Freedom milestones' "Confirm with simulation" scales the two price inputs by the place's
+    health price level. With an area set that must scale the area's whole price table, even when
+    the boxes were never filled (a profile loaded before the side panel drew)."""
+    ov = {"HEALTH_AREA": "AL:1"}
+    plain = build_config_overrides(ov)
+    original = sr._apply_overrides(plain)
+    try:
+        in_use = (sr._price_in_use("ACA_BENCHMARK_MONTHLY_AT_40", 40), sr._price_in_use("ACA_CHILD_MONTHLY", 10))
+    finally:
+        sr._restore_overrides(original)
+    assert in_use[0] == pytest.approx(plain["ACA_AREA_SILVER_MONTHLY"][40])
+    assert in_use[1] == pytest.approx(plain["ACA_AREA_SILVER_MONTHLY"][10])
+    h = 1.25
+    there = build_config_overrides({**ov, "ACA_BENCHMARK_MONTHLY_AT_40": round(in_use[0] * h, 2),
+                                    "ACA_CHILD_MONTHLY": round(in_use[1] * h, 2)})
+    for age in (5, 30, 40, 60):
+        assert there["ACA_AREA_SILVER_MONTHLY"][age] == pytest.approx(
+            h * plain["ACA_AREA_SILVER_MONTHLY"][age], rel=2e-3)
