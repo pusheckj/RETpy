@@ -887,6 +887,55 @@ class AccountPortfolio:
     def _federal_model(self, ret: str = "you") -> "TaxBrackets":
         return self._partner_federal_brackets if ret == "partner" else self.federal_tax_brackets
 
+    def _federal_year_tax(self, owner: str, ordinary: float, gains: float) -> Tuple[float, float]:
+        """``(income tax, NIIT)`` of ``owner``'s return for a year with ``ordinary``
+        income (taxable Social Security included) and ``gains`` realized, worked out
+        on the whole year at once in IRS order (Qualified Dividends and Capital Gain
+        Tax Worksheet):
+
+        * the deduction (senior deduction at MAGI = ordinary + gains) takes ordinary
+          income first; any unused part shelters gains;
+        * gains stack on top of ordinary TAXABLE income for the 0 / 15 / 20% limits,
+          and the total is capped at the ordinary tax on all taxable income;
+        * NIIT is 3.8% of the lesser of the gains and the MAGI over its threshold.
+
+        Every event of the year is booked as the CHANGE in this figure
+        (``_marginal_federal``), so the booked total always equals the whole-year
+        figure, whatever order the income arrived in. With no gains it is the plain
+        ordinary-tax schedule: nothing extra to compute in the common case.
+        """
+        ret = self._return_of(owner)
+        magi = ordinary + gains
+        deduction = self.get_standard_deduction(owner, magi)
+        ordinary_taxable = max(0.0, ordinary - deduction)
+        tax = self._federal_model(ret).calculate_tax(ordinary_taxable)
+        if gains <= 0:
+            return tax, 0.0
+        status = self.return_status[ret]
+        sheltered = max(0.0, deduction - ordinary)        # unused deduction
+        taxable_gains = max(0.0, gains - sheltered)
+        worksheet = tax + calculate_ltcg_tax(taxable_gains, ordinary_taxable, status=status)
+        # The worksheet's last line: never more than the ordinary tax on ALL taxable
+        # income (gains in the top of the 12% band would otherwise pay 15% for 12%).
+        tax = min(worksheet, self._federal_model(ret).calculate_tax(ordinary_taxable + taxable_gains))
+        niit = cfg.calculate_niit(
+            magi, gains,
+            years_from_start=max(0, (self.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
+            status=status,
+        )
+        return tax, niit
+
+    def _marginal_federal(self, owner: str, ordinary: float = 0.0,
+                          gains: float = 0.0) -> Tuple[float, float]:
+        """``(income tax, NIIT)`` that ``ordinary`` more ordinary income and ``gains``
+        more realized gains add to ``owner``'s return, on top of what the year already
+        holds. Pure (books nothing). See ``_federal_year_tax``."""
+        ret = self._return_of(owner)
+        base, prior = self._return_income(ret), self._return_investment(ret)
+        before_tax, before_niit = self._federal_year_tax(owner, base, prior)
+        after_tax, after_niit = self._federal_year_tax(owner, base + ordinary, prior + gains)
+        return after_tax - before_tax, after_niit - before_niit
+
     def _state_model(self, ret: str = "you"):
         return self._partner_state_tax if ret == "partner" else self.ca_tax_brackets
 
@@ -923,6 +972,20 @@ class AccountPortfolio:
             return max(0.0, self.year_partner_income - self.year_partner_state_exempt)
         return max(0.0, (self.year_ordinary_income - self.year_partner_income)
                    - (self.year_state_exempt_income - self.year_partner_state_exempt))
+
+    def _state_gain_share(self, ret: str = "you") -> float:
+        """Share of a long-term gain the return's STATE taxes (1 minus its
+        capital-gains exclusion: Arkansas 50%, South Carolina 44%, ...)."""
+        rules = getattr(self._state_model(ret), "rules", None) or {}
+        return 1.0 - float(rules.get("ltcg_exclusion", 0.0) or 0.0)
+
+    def _state_base_with_gains(self, ret: str = "you") -> float:
+        """The return's state base for the next dollar of income: the ordinary base
+        (``_state_taxable_base``) plus gains already sold this year, after the state's
+        exclusion. States tax gains as ordinary income, so income that comes after a
+        sale starts above the gains in the state's brackets and deduction, whichever
+        of the two the engine books first."""
+        return self._state_taxable_base(ret) + self._return_investment(ret) * self._state_gain_share(ret)
 
     def _state_exempt_portion(self, income: float, owner: str, is_social_security: bool,
                               retirement: bool) -> float:
@@ -983,33 +1046,37 @@ class AccountPortfolio:
 
     def _marginal_tax_parts(self, income: float, is_state_taxable: bool = True,
                             owner: str = "you", retirement: bool = False) -> Tuple[float, float]:
-        """``(federal, state)`` marginal tax behind ``quote_marginal_tax_on_income``."""
+        """``(federal, state)`` marginal tax behind ``quote_marginal_tax_on_income``
+        (federal includes any NIIT the income adds)."""
+        income_tax, niit, state_tax = self._marginal_tax_breakdown(
+            income, is_state_taxable, owner, retirement)
+        return income_tax + niit, state_tax
+
+    def _marginal_tax_breakdown(self, income: float, is_state_taxable: bool = True,
+                                owner: str = "you",
+                                retirement: bool = False) -> Tuple[float, float, float]:
+        """``(federal income tax, NIIT, state tax)`` on ``income`` of ordinary income."""
         if income <= 0:
-            return 0.0, 0.0
+            return 0.0, 0.0, 0.0
 
         ret = self._return_of(owner)
-        base = self._return_income(ret)
 
-        # Federal tax using taxable income (after the standard deduction). The
-        # senior deduction shrinks as MAGI rises, so the deduction is taken at
-        # the MAGI before and after this income.
-        magi = base + self._return_investment(ret)
-        federal = self._federal_model(ret)
-        taxable_before = max(0, base - self.get_standard_deduction(owner, magi))
-        taxable_after = max(0, base + income - self.get_standard_deduction(owner, magi + income))
-        federal_tax = federal.calculate_tax(taxable_after) - federal.calculate_tax(taxable_before)
+        # Federal: the change in the whole-year figure (_federal_year_tax), which
+        # re-prices gains already realized this year (they stack on top of this
+        # income), the senior deduction and NIIT.
+        federal_tax, niit = self._marginal_federal(owner, ordinary=income)
 
         # State tax on the non-exempt part, after the state's own deduction.
         state = self._state_model(ret)
         state_deduction = getattr(state, "deduction", cfg.CA_STANDARD_DEDUCTION_MFJ_2024)
-        state_base = self._state_taxable_base(ret)
+        state_base = self._state_base_with_gains(ret)
         taxable_part = income - self._state_exempt_portion(
             income, owner, not is_state_taxable, retirement)
         state_taxable_before = max(0, state_base - state_deduction)
         state_taxable_after = max(0, state_base + taxable_part - state_deduction)
         state_tax = state.calculate_tax(state_taxable_after) - state.calculate_tax(state_taxable_before)
 
-        return federal_tax, state_tax
+        return federal_tax, niit, state_tax
 
     def calculate_marginal_tax_on_income(self, income: float, is_state_taxable: bool = True,
                                          owner: str = "you", retirement: bool = False) -> float:
@@ -1030,10 +1097,11 @@ class AccountPortfolio:
             return 0
 
         exempt = self._state_exempt_portion(income, owner, not is_state_taxable, retirement)
-        federal_tax, state_tax = self._marginal_tax_parts(
+        federal_tax, niit, state_tax = self._marginal_tax_breakdown(
             income, is_state_taxable=is_state_taxable, owner=owner, retirement=retirement)
-        tax = federal_tax + state_tax
+        tax = federal_tax + niit + state_tax
         self.total_state_taxes_paid += state_tax
+        self.total_niit_paid += niit
         ret = self._return_of(owner)
         self.year_ordinary_income += income
         if ret == "partner":
@@ -1175,37 +1243,26 @@ class AccountPortfolio:
                             gains_ratio = max(0, min(1, 1 - account.cost_basis / account.balance))
                             gains = withdraw_amount * gains_ratio
 
-                            # Federal LTCG tax. Per the IRS Qualified Dividends &
-                            # Capital Gain worksheet, gains stack on TAXABLE ordinary
-                            # income (gross minus the standard deduction), not gross.
-                            #
-                            # Gains already realized EARLIER THIS YEAR must be part of
-                            # the stacking base too, or every taxable account in the
-                            # withdrawal order — and every iteration of the gross-up
-                            # loop — restarts at the bottom of the 0% bracket. The
-                            # default portfolio shape (your_brokerage +
-                            # partner_brokerage) was claiming the 0% bracket twice.
-                            # Everything below is on the return of the
-                            # account's owner (one return unless an unmarried
-                            # couple files two).
+                            # Federal LTCG tax and NIIT: the change in the whole-year
+                            # figure (_federal_year_tax). Gains stack on TAXABLE
+                            # ordinary income (income after the deduction, which
+                            # shelters gains once ordinary income is used up), on top
+                            # of gains already realized earlier this year, so every
+                            # taxable account in the withdrawal order, and every pass
+                            # of the gross-up loop, continues where the last stopped.
+                            # Everything below is on the return of the account's
+                            # owner (one return unless an unmarried couple files two).
                             ret = self._return_of(account.owner)
-                            ret_status = self.return_status[ret]
-                            prior_gains = self._return_investment(ret)
-                            fed_std_deduction = self.get_standard_deduction(account.owner)
-                            fed_taxable_ordinary = max(
-                                0, self._return_income(ret) + prior_gains - fed_std_deduction
-                            )
-                            federal_ltcg = calculate_ltcg_tax(gains, fed_taxable_ordinary,
-                                                              status=ret_status)
+                            federal_ltcg, niit = self._marginal_federal(
+                                account.owner, gains=gains)
 
                             # States tax LTCG as ordinary income, less any
                             # state capital-gains exclusion.
                             state = self._state_model(ret)
-                            state_gains = gains * (1.0 - float(
-                                getattr(state, "rules", {}).get("ltcg_exclusion", 0.0) or 0.0))
+                            state_gains = gains * self._state_gain_share(ret)
                             state_deduction = getattr(state, "deduction",
                                                       cfg.CA_STANDARD_DEDUCTION_MFJ_2024)
-                            state_base = self._state_taxable_base(ret) + prior_gains
+                            state_base = self._state_base_with_gains(ret)
                             state_taxable_before = max(0, state_base - state_deduction)
                             state_taxable_after = max(0, state_base + state_gains - state_deduction)
                             state_ltcg = state.calculate_tax(state_taxable_after) - \
@@ -1216,14 +1273,6 @@ class AccountPortfolio:
                             if ret == "partner":
                                 self.year_partner_investment += gains
 
-                            # NIIT (3.8% on investment income above the
-                            # return's MAGI threshold)
-                            total_magi = self._return_income(ret) + self._return_investment(ret)
-                            niit = cfg.calculate_niit(
-                                total_magi, gains,
-                                years_from_start=max(0, (self.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
-                                status=ret_status,
-                            )
                             self.total_niit_paid += niit
                             self.total_state_taxes_paid += state_ltcg
 
@@ -1904,26 +1953,17 @@ class AccountPortfolio:
         shares = [("you", gain / 2.0), ("partner", gain / 2.0)] if self.two_returns else [("you", gain)]
         total = 0.0
         for ret, part in shares:
-            status = self.return_status[ret]
-            prior = self._return_investment(ret)
-            fed_taxable_ordinary = max(0, self._return_income(ret) + prior
-                                       - self.get_standard_deduction("partner" if ret == "partner" else "you"))
-            federal = calculate_ltcg_tax(part, fed_taxable_ordinary, status=status)
+            owner = "partner" if ret == "partner" else "you"
+            federal, niit = self._marginal_federal(owner, gains=part)
             state_model = self._state_model(ret)
-            state_part = part * (1.0 - float(
-                getattr(state_model, "rules", {}).get("ltcg_exclusion", 0.0) or 0.0))
+            state_part = part * self._state_gain_share(ret)
             deduction = getattr(state_model, "deduction", cfg.CA_STANDARD_DEDUCTION_MFJ_2024)
-            base = self._state_taxable_base(ret) + prior
+            base = self._state_base_with_gains(ret)
             state = (state_model.calculate_tax(max(0, base + state_part - deduction))
                      - state_model.calculate_tax(max(0, base - deduction)))
             self.year_investment_income += part
             if ret == "partner":
                 self.year_partner_investment += part
-            niit = cfg.calculate_niit(
-                self._return_income(ret) + self._return_investment(ret), part,
-                years_from_start=max(0, (self.current_your_age or cfg.YOUR_AGE) - cfg.YOUR_AGE),
-                status=status,
-            )
             self.total_niit_paid += niit
             self.total_state_taxes_paid += state
             total += federal + state + niit
