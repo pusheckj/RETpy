@@ -90,7 +90,8 @@ def render(st, actual: Optional[Dict[str, int]] = None) -> None:
                        if h.state else "the US")
     st.caption(f"Households with {h.adults} adult{'' if h.adults == 1 else 's'}, you aged {h.age}, "
                f"in the {group.lower()} income group, near {where}. "
-               "Your figures are your plan's monthly inputs"
+               + (f"Housing is sized for all {h.at_home} people at home. " if h.at_home > h.adults else "")
+               + "Your figures are your plan's monthly inputs"
                + (" and your statements where they have the category." if actual else "."))
     st.dataframe(table(rows), hide_index=True, width="stretch")
     total = rows[-1]

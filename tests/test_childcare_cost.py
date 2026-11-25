@@ -41,6 +41,24 @@ def test_the_app_weights_follow_a_childs_first_five_years():
     assert cc.estimate("CA", SD).weights == cc.TIME_IN_TIER
 
 
+def test_weights_follow_only_the_childcare_years_still_ahead():
+    assert cc.weights_from_age(0) == cc.TIME_IN_TIER
+    assert cc.weights_from_age(1) == pytest.approx([0.25, 0.25, 0.5, 0])        # ages 1 to 4
+    assert cc.weights_from_age(2) == pytest.approx([0, 1 / 3, 2 / 3, 0])        # ages 2 to 4
+    assert cc.weights_from_age(3) == pytest.approx([0, 0, 1.0, 0])
+    assert cc.weights_from_age(4) == pytest.approx([0, 0, 1.0, 0])
+    assert cc.weights_from_age(5) == [0, 0, 0, 0] and cc.weights_from_age(9) == [0, 0, 0, 0]
+    assert cc.weights_from_age(-2) == cc.TIME_IN_TIER                            # not born yet: all five years
+    assert cc.estimate("CA", SD, child_age=3).per_child < cc.estimate("CA", SD).per_child   # preschool costs less than infant care
+    assert cc.estimate("CA", SD, child_age=5).per_child == 0
+
+
+def test_for_household_takes_the_childs_age():
+    ov = {"STATE_CHOICE": "CA", "BENCH_AREA": SD, "CHILDREN": [{}]}
+    assert cc.for_household(ov, child_age=4)[0] == cc.estimate("CA", SD, child_age=4)
+    assert cc.for_household(ov)[0] == cc.estimate("CA", SD)
+
+
 def test_san_diego_county_per_child_with_the_app_weights():
     e = cc.estimate("CA", SD)
     prices = [round(p * 1.172) for p in (19719, 16859, 12616)]

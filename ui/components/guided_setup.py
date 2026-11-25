@@ -322,11 +322,20 @@ def commit_kids(st) -> None:
     births += [first_planned + _KIDS_APART * j for j in range(int(plan))]
     cost = int(_num(_val(st, "gs_kid_cost"), _ONE_KID_COST))
     ov = _ov(st)
-    ov["CHILDREN"] = [
-        {**cfg.CHILD_DEFAULTS, "years_until_birth": b, "leaves_home_age": 18,
-         "monthly_cost": cost if i == 0 else int(round(cost * _MORE_KIDS_SHARE))}
-        for i, b in enumerate(births[:MAX_KIDS])
-    ]
+    # A child already using childcare (set in Family) keeps all of its own figures: the monthly
+    # cost was lowered when the childcare box was filled, so rebuilding either one alone would
+    # drop money from the plan. Matched by birth year. Other children follow the cost asked here.
+    using = [c for c in cfg.children_in(ov) if c["childcare_monthly"] > 0]
+
+    def child(i: int, b: int) -> dict:
+        kept = next((c for c in using if c["years_until_birth"] == b), None)
+        if kept is not None:
+            using.remove(kept)
+            return kept
+        return {**cfg.CHILD_DEFAULTS, "years_until_birth": b, "leaves_home_age": 18,
+                "monthly_cost": cost if i == 0 else int(round(cost * _MORE_KIDS_SHARE))}
+
+    ov["CHILDREN"] = [child(i, b) for i, b in enumerate(births[:MAX_KIDS])]
     if household_of(ov) == JUST_ME:
         # A single parent with a child at home usually files as head of
         # household (the side panel's About you can change it).

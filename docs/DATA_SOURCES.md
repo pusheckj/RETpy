@@ -31,8 +31,8 @@ These are BPM's method. We use them and say so on the page and in the code:
 
 ### What this app changes
 
-- **Childcare weights are ours.** The childcare box covers a child's first five years, so the weights follow NDCP's tiers over ages 0 to 4: 0.4 infant, 0.2 toddler, 0.4 preschool.
-- **Household size is the adults only**, because the comparison leaves out your children's costs.
+- **Childcare weights are ours.** The childcare box covers a child's first five years, so the weights follow NDCP's tiers over ages 0 to 4: 0.4 infant, 0.2 toddler, 0.4 preschool. For a child already born they cover only the years still ahead.
+- **Household size.** Housing and utilities are sized for everyone at home now. The other rows use the adults only, because the comparison leaves out your children's costs. Food counts everyone when your figure comes from statements.
 - BEA price levels are **renormalized** so each US component is exactly 1.00, the way `ui/utils/place_costs.py` does (raw BEA US goods is 99.6 and other services 100.1). BPM reads them raw. The tests reproduce BPM's worked examples with the raw reading.
 - The survey's **Pensions** line (payroll tax, retirement contributions, life insurance) is left out. The planner models those elsewhere.
 - Groups are folded into the app's categories (housing with utilities, clothing with Fun and discretionary, your partner's spending with Other), and the tab compares your plan's monthly inputs, or your statement averages.

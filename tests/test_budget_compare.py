@@ -86,19 +86,52 @@ def test_income_groups_follow_pay():
 def test_the_household_is_read_from_the_plan():
     h = bc.household(FAMILY)
     assert (h.adults, h.age, h.income, h.state, h.area) == (2, 38, 130_000, "CA", None)
+    assert h.at_home == 4                               # you, a partner and two children at home
     assert h.auto_quintile == "Q4"
     solo = bc.household({"YOUR_AGE": 30, "PARTNER_AGE": 0, "CHILDREN": [], "STATE_CHOICE": "Other",
                          "YOUR_BASE_SALARY": 0})
     assert (solo.adults, solo.state, solo.auto_quintile) == (1, None, "Q3")   # no pay: the middle group
 
 
-def test_household_size_counts_adults_only_because_children_costs_are_not_compared():
-    """You compare everyday costs without your children's, so the benchmark must not count them."""
-    for kids in ([], [{"years_until_birth": -4}], [{"years_until_birth": -4}, {"years_until_birth": -1}]):
-        assert bc.household({**FAMILY, "CHILDREN": kids}).adults == 2
-        rows, _ = bc.spending_rows({**FAMILY, "CHILDREN": kids})
-        assert rows[-1].typical == bc.spending_rows({**FAMILY, "CHILDREN": []})[0][-1].typical
-    assert bc.household({**FAMILY, "PARTNER_AGE": 0}).adults == 1
+def test_housing_is_sized_for_everyone_at_home_and_the_other_rows_for_the_adults():
+    """The plan's housing pays for the children's rooms. Per-person rows leave the children out
+    because their costs are not in "you"."""
+    kids = [{"years_until_birth": -4}, {"years_until_birth": -1}]
+    none, _ = bc.spending_rows({**FAMILY, "CHILDREN": []})
+    two, h = bc.spending_rows({**FAMILY, "CHILDREN": kids})
+    by0, by2 = {r.label: r for r in none}, {r.label: r for r in two}
+    assert (h.adults, h.at_home) == (2, 4)
+    assert by2["Housing and utilities"].typical > by0["Housing and utilities"].typical
+    for label in ("Transportation", "Healthcare premiums", "Fun and discretionary", "Other", "Food & groceries"):
+        assert by2[label].typical == by0[label].typical             # adults only
+    b4 = bc.benchmark("Q4", "4", "35-44", state="CA")
+    assert by2["Housing and utilities"].typical == pytest.approx((b4["Housing"] + b4["Utilities"]) / 12)
+    b2 = bc.benchmark("Q4", "2", "35-44", state="CA")
+    assert by2["Transportation"].typical == pytest.approx(b2["Transportation"] / 12)
+    only_partner = bc.household({**FAMILY, "PARTNER_AGE": 0, "CHILDREN": kids})
+    assert (only_partner.adults, only_partner.at_home) == (1, 3)
+
+
+def test_children_not_yet_born_or_grown_do_not_count_at_home():
+    ov = {**FAMILY, "CHILDREN": [{"years_until_birth": 2}, {"years_until_birth": -20}]}
+    h = bc.household(ov)
+    assert (h.adults, h.at_home) == (2, 2)
+
+
+def test_food_from_statements_is_sized_for_everyone_at_home():
+    """Statement groceries include the children's food, so only then does Food count the children."""
+    kids = {**FAMILY, "CHILDREN": [{"years_until_birth": -4}, {"years_until_birth": -1}]}
+    plan, _ = bc.spending_rows(kids)
+    stmt, _ = bc.spending_rows(kids, yours={"Food & groceries": 1_500})
+    b4, b2 = bc.benchmark("Q4", "4", "35-44", state="CA"), bc.benchmark("Q4", "2", "35-44", state="CA")
+    assert {r.label: r for r in plan}["Food & groceries"].typical == pytest.approx(b2["Food"] / 12)
+    assert {r.label: r for r in stmt}["Food & groceries"].typical == pytest.approx(b4["Food"] / 12)
+    assert "children's meals" in {r.label: r for r in stmt}["Food & groceries"].note
+    assert "children's meals" not in {r.label: r for r in plan}["Food & groceries"].note
+    # A household with no children has the same size either way.
+    solo = {**FAMILY, "CHILDREN": []}
+    assert (bc.spending_rows(solo, yours={"Food & groceries": 1_500})[0][1].typical
+            == bc.spending_rows(solo)[0][1].typical)
 
 
 def test_rows_compare_your_plan_with_the_benchmark_per_month():
@@ -109,12 +142,14 @@ def test_rows_compare_your_plan_with_the_benchmark_per_month():
     assert by["Housing and utilities"].you == 3_000 + 250        # rent plus utilities
     assert by["Food & groceries"].you == 1_200
     bench = bc.benchmark("Q4", "2", "35-44", state="CA", area_label=SD)
-    assert by["Housing and utilities"].typical == pytest.approx((bench["Housing"] + bench["Utilities"]) / 12)
+    home = bc.benchmark("Q4", "4", "35-44", state="CA", area_label=SD)       # everyone at home sizes housing
+    assert by["Housing and utilities"].typical == pytest.approx((home["Housing"] + home["Utilities"]) / 12)
     # Apparel is folded into Fun and discretionary, as the module says.
     assert by["Fun and discretionary"].typical == pytest.approx((bench["Entertainment"] + bench["Apparel"]) / 12)
     # The CE's Pensions line is not compared, so the total is the six rows.
     assert by["Total"].typical == pytest.approx(sum(r.typical for r in rows[:-1]))
-    assert by["Total"].typical == pytest.approx((_total(bench) - bench["Pensions"]) / 12)
+    swap = (home["Housing"] + home["Utilities"]) - (bench["Housing"] + bench["Utilities"])   # housing sized for all 4
+    assert by["Total"].typical == pytest.approx((_total(bench) - bench["Pensions"] + swap) / 12)
     assert by["Total"].you == pytest.approx(sum(r.you for r in rows[:-1]))
 
 
@@ -226,6 +261,11 @@ def test_a_hand_picked_income_group_is_saved_in_the_plan():
 def test_income_cutoffs_live_in_one_constant_and_only_the_first_is_sourced():
     assert bc.QUINTILE_UPPER[0] == 32_623
     assert len(bc.QUINTILE_UPPER) == 4 and list(bc.QUINTILE_UPPER) == sorted(bc.QUINTILE_UPPER)
+
+
+def test_paid_off_threshold_is_the_check_ups_own():
+    from utils import simple_finance as sf
+    assert bc._PAID_EPS == sf._PAID_EPS
 
 
 def test_all_items_cpi_comes_from_the_data_files():

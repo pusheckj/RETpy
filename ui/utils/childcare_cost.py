@@ -39,16 +39,19 @@ AGE_BANDS = ("Under25", "25-34", "35-44", "45-54", "55-64", "65+")
 _INFANT_UNDER, _TODDLER_UNDER = 2, 3            # NDCP: infant under 2, toddler 2, preschool 3 to 5
 
 
-def _time_in_tier() -> List[float]:
-    """Share of a child's first CHILDCARE_END_AGE years spent in each NDCP tier."""
-    years = cfg.CHILDCARE_END_AGE
+def weights_from_age(age: int = 0) -> List[float]:
+    """Share of a child's childcare years still ahead (from ``age`` up to
+    CHILDCARE_END_AGE) spent in each NDCP tier. Age 0 (or not yet born) gives all five years.
+    No years left (age 5 or more) gives zeros."""
+    first = max(0, int(age))
+    ahead = range(first, cfg.CHILDCARE_END_AGE)
     share = [0.0, 0.0, 0.0, 0.0]
-    for age in range(years):
-        share[0 if age < _INFANT_UNDER else 1 if age < _TODDLER_UNDER else 2] += 1.0 / years
+    for a in ahead:
+        share[0 if a < _INFANT_UNDER else 1 if a < _TODDLER_UNDER else 2] += 1.0 / len(ahead)
     return share
 
 
-TIME_IN_TIER = _time_in_tier()
+TIME_IN_TIER = weights_from_age(0)
 
 
 class Estimate(NamedTuple):
@@ -110,9 +113,11 @@ def _prices(state: Optional[str], area_label: Optional[str], renormalize: bool):
 
 
 def estimate(state: Optional[str], area_label: Optional[str], n_children: int = 1,
-             renormalize: bool = True, weights: Optional[List[float]] = None) -> Estimate:
-    """Typical yearly childcare cost per child (and for ``n_children``), 2026 dollars,
-    for a child in their first five years.
+             renormalize: bool = True, weights: Optional[List[float]] = None,
+             child_age: int = 0) -> Estimate:
+    """Typical yearly childcare cost per child (and for ``n_children``), 2026 dollars, over the
+    childcare years still ahead of a child of ``child_age`` (0 = a newborn or planned child:
+    the first five years). A child past the childcare years gets 0.
 
     ``state`` is a two-letter code (or None), ``area_label`` one of the 739 area labels
     (or None). ``renormalize=False`` reads BEA rents the way BPM does (raw index / 100).
@@ -121,16 +126,17 @@ def estimate(state: Optional[str], area_label: Optional[str], n_children: int = 
     c = bd.constants()
     base, coverage = _prices(state, area_label, renormalize)
     prices = [bd.round_half_up(p * c["CPI_MULT"]) for p in base]       # 2022 -> 2025
-    w = list(TIME_IN_TIER if weights is None else weights)
+    w = list(weights_from_age(child_age) if weights is None else weights)
     per_child = sum(prices[t] * w[t] for t in range(4))
     cpi26 = c["CPI_CC_2025_2026"]                                       # 2025 -> 2026
     annual = bd.round_half_up(bd.round_half_up(per_child * max(0, n_children)) * cpi26)
     return Estimate(bd.round_half_up(per_child * cpi26), annual, coverage, list(base), w)
 
 
-def for_household(overrides: dict) -> Optional[Tuple[Estimate, str]]:
-    """The suggestion for the plan's place and where it applies, in words. None when the
-    plan has no children. The figure does not depend on the parents or the household."""
+def for_household(overrides: dict, child_age: int = 0) -> Optional[Tuple[Estimate, str]]:
+    """The suggestion for the plan's place and where it applies, in words, for a child of
+    ``child_age`` (0 = planned or newborn). None when the plan has no children. The figure
+    does not depend on the parents or the household."""
     try:
         from utils import state_choice as sc
     except ImportError:  # pragma: no cover
@@ -139,4 +145,4 @@ def for_household(overrides: dict) -> Optional[Tuple[Estimate, str]]:
         return None
     state, label = bd.state_code(overrides), bd.picked_area(overrides)
     where = label or (sc.label_for(state) if state else "the US")
-    return estimate(state, label), where
+    return estimate(state, label, child_age=child_age), where

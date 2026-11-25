@@ -62,7 +62,7 @@ def test_the_table_has_a_row_per_group_and_a_total(draw):
     rows, _ = bc.spending_rows({**FAMILY, "BENCH_AREA": SD})
     assert df["Typical, a month"][6] == f"${rows[-1].typical:,.0f}"
     assert df["You, a month"][0] == "$3,250"                          # rent 3,000 plus utilities 250
-    assert df["You are"][0] == "Typical"                              # within 10% of a 1-bedroom rent x 1.25 for 2 adults
+    assert df["You are"][0] == "Below typical"                        # $3,250 against a 3-bedroom rent (4 at home)
     assert df["You are"][0] == sb.VERDICT[rows[0].verdict]
     assert " to " in df["Typical range"][0]
 
@@ -80,7 +80,7 @@ def test_the_page_names_the_household_the_group_and_the_place(draw):
     text = _captions(at)
     assert f"Households with 2 adults, you aged 38, in the fourth 20% income group, near {SD}" in text
     at = draw(FAMILY)
-    assert "near California. Your figures" in _captions(at)
+    assert "near California. Housing is sized for all 4 people at home. Your figures" in _captions(at)
 
 
 def test_it_is_labelled_a_statistical_average_and_credits_its_sources(draw):

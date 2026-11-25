@@ -5,10 +5,16 @@ All notable changes to this project will be documented in this file. Format: [Ke
 ## [Unreleased]
 
 ### Added (local childcare and spending benchmark)
-- Family: the page now shows the typical childcare cost for your state, or for one of 739 metro and county areas you pick, per child per year in 2026 dollars. Each child who is planned or under 5 has a new box, **Childcare until age 5 ($/mo)**. **Use typical** fills it and lowers the monthly cost by the same money spread over the years at home, so the total does not change. A caption says what moved. Plans that do not use the box are unchanged. New child field `childcare_monthly` and `config.CHILDCARE_END_AGE`
-- Spending tab: **Your spending vs similar households** compares your monthly spending by category with what similar households spend, by income group, household size, your age and your area, with a 10% "typical" range per category and a total. The household size is the adults only, because your children's costs are not compared. It works before you load any statements, and uses your statement averages when you have them. The Money check-up gets one short line with the same idea. These are statistical averages, not advice. The retirement and payroll-tax line of the survey is left out
-- Method and data come from BiggerPockets Money's Household Spending Comparison v2.4.0 and the agencies behind it (BLS Consumer Expenditure 2025, BEA price levels, HUD rents, Department of Labor childcare prices). Credits and which constants are BPM's own choices: `docs/DATA_SOURCES.md`. Data files are in `ui/data/budget/`, loaded only when used. The income-group cutoffs are rough estimates (only the first is from the data), so the page lets you pick your group (saved with the plan)
-- The area you pick is saved with your plan (`BENCH_AREA`, UI only, not part of the cache key)
+- Family shows the typical childcare cost for your state, or for one of 739 metro and county areas you pick. It is a yearly figure per child in 2026 dollars.
+- A child who is planned or under 5 has a new box, **Childcare until age 5 ($/mo)**. The plan counts it on top of the monthly cost until the child turns 5.
+- **Use typical** fills the box. It lowers the monthly cost by the same money, spread over the years still at home. A caption says what moved. Future cost stays about the same.
+- For a child aged 3 or 4 the figure covers only the preschool years left. The button is hidden at age 5. Plans that do not use the box are unchanged.
+- New child field `childcare_monthly` and `config.CHILDCARE_END_AGE`. The guided setup keeps a child's childcare amount and monthly cost.
+- Spending tab: **Your spending vs similar households** compares your monthly spending by category with similar households. It uses income group, your age and your area. Each category has a 10% "typical" range, and there is a total.
+- It works before you load statements, and uses your statement averages when you have them. The Money check-up gets one short line. These are statistical averages, not advice.
+- Housing and utilities are sized for everyone at home. The other rows use the adults only, because your children's costs are not compared. The survey's retirement and payroll-tax line is left out.
+- Method and data come from BiggerPockets Money's Household Spending Comparison v2.4.0 and the agencies behind it. Those are BLS, BEA, HUD and the Department of Labor. Credits and BPM's own choices: `docs/DATA_SOURCES.md`.
+- Data files are in `ui/data/budget/` and load only when used. The income-group cutoffs are estimates, so the page lets you pick your group. The group and the area are saved with your plan.
 
 ### Changed (follow-up analyses no longer block the page)
 - After a Run, the ways-to-reach-your-goal, net-worth, safe-withdrawal and mortgage sweeps now compute in a pool of background processes, not on the page's own thread. Clicks and edits answer at once while they run. Before, each sweep held the page for up to 29 seconds.

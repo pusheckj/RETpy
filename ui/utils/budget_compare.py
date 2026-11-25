@@ -19,8 +19,10 @@ What the app adds, and BPM does not:
 * CE "Pensions" (payroll tax, retirement contributions, life insurance) is left out. The
   planner models those elsewhere.
 * The CE groups are folded into the app's spending categories, see ``ROWS``.
-* The household is the adults: your children's costs are not in "you", so they are not in
-  the benchmark's household size either.
+* Size. Housing and utilities are sized for everyone at home now, because the plan's housing
+  pays for the children's rooms. The other rows are sized for the adults, because your
+  children's costs are not in "you". The exception is Food when your figure comes from
+  statements: those groceries include the children's meals, so Food counts everyone at home.
 * The income fifth comes from your household pay, with rough cutoffs (``QUINTILE_UPPER``).
 
 A statistical average of what similar households spend, not a target and not advice.
@@ -36,16 +38,17 @@ try:
     from utils import budget_data as bd
     from utils import childcare_cost as ccost
     from utils.coerce import safe_int
-    from utils.derived import compute_total_income, housing_parts
+    from utils.derived import compute_total_income, housing_parts, children_at_home_now
+    from utils.simple_finance import _PAID_EPS
     from utils.expense_categories import CATEGORIES, PARTNER
 except ImportError:  # pragma: no cover
     from ui.utils import budget_data as bd  # type: ignore
     from ui.utils import childcare_cost as ccost  # type: ignore
     from ui.utils.coerce import safe_int  # type: ignore
-    from ui.utils.derived import compute_total_income, housing_parts  # type: ignore
+    from ui.utils.derived import compute_total_income, housing_parts, children_at_home_now  # type: ignore
+    from ui.utils.simple_finance import _PAID_EPS  # type: ignore
     from ui.utils.expense_categories import CATEGORIES, PARTNER  # type: ignore
 
-_PAID_EPS = 0.005                 # a balance under half a cent is paid off (simple_finance)
 BAND = 0.10                       # the "typical" range: within 10% of the benchmark
 GROUP_KEY = "BENCH_INCOME_GROUP"     # the plan's saved hand-picked income group (UI only)
 QUINTILES = ("Q1", "Q2", "Q3", "Q4", "Q5")
@@ -75,8 +78,8 @@ ROWS: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
     ("Other", ("Other",), ("Other", PARTNER)),
 )
 NOTES = {
-    HOUSING_UTILITIES: "Rent for a home sized to your household. Owners with a small or paid-off "
-                       "mortgage often pay less.",
+    HOUSING_UTILITIES: "Rent for a home sized for everyone living at home now. Owners with a small "
+                       "or paid-off mortgage often pay less.",
     "Healthcare premiums": "The survey line also holds out-of-pocket costs, so it runs above premiums alone.",
     "Fun and discretionary": "Includes the survey's clothing line.",
     "Other": "Includes your partner's own spending, if any.",
@@ -138,7 +141,8 @@ def benchmark(quintile: str, size: str, age: str, state: Optional[str] = None,
 
 
 class Household(NamedTuple):
-    adults: int                  # you, and a partner if any: children are not counted
+    adults: int                  # you, and a partner if any
+    at_home: int                 # adults plus the children living at home now
     age: int
     income: int
     auto_quintile: str
@@ -147,12 +151,13 @@ class Household(NamedTuple):
 
 
 def household(overrides: dict) -> Household:
-    """The household the benchmark describes, read from the plan: you and a partner (your
-    children's costs are not in the comparison, so they are not in the size either), your
-    age, your pay, your state and the area you picked."""
+    """The household the benchmark describes, read from the plan: you and a partner, the
+    children at home now, your age, your pay, your state and the area you picked."""
     partner = safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0
     income = compute_total_income(overrides)
-    return Household(adults=1 + int(partner),
+    adults = 1 + int(partner)
+    return Household(adults=adults,
+                     at_home=adults + len(children_at_home_now(overrides)),
                      age=safe_int(overrides.get("YOUR_AGE", cfg.YOUR_AGE), cfg.YOUR_AGE),
                      income=income,
                      auto_quintile=quintile_for(income) if income > 0 else "Q3",
@@ -196,18 +201,28 @@ def spending_rows(overrides: dict, quintile: Optional[str] = None,
     h = household(overrides)
     saved = overrides.get(GROUP_KEY)
     q = next((c for c in (quintile, saved) if c in QUINTILES), h.auto_quintile)
-    bench = benchmark(q, ccost.size_key(h.adults), ccost.age_band(h.age), h.state, h.area)
+    age = ccost.age_band(h.age)
+    bench = benchmark(q, ccost.size_key(h.adults), age, h.state, h.area)
+    everyone = (bench if h.at_home == h.adults else
+                benchmark(q, ccost.size_key(h.at_home), age, h.state, h.area))
     has_partner = h.adults > 1
     rows: List[Row] = []
     tot_you = tot_typ = 0.0
     for label, ce_groups, mine in ROWS:
-        typical = sum(bench[g] for g in ce_groups) / 12
+        # Housing pays for the children's rooms. Statement groceries include their meals.
+        sized = everyone if label == HOUSING_UTILITIES or (
+            label == "Food & groceries" and "Food & groceries" in (yours or {})) else bench
+        typical = sum(sized[g] for g in ce_groups) / 12
         you = 0.0
         for name in mine:
             if name == PARTNER and not has_partner:
                 continue
             you += (yours or {}).get(name, _plan_value(overrides, name))
-        rows.append(_row(label, you, typical))
+        row = _row(label, you, typical)
+        if sized is everyone and sized is not bench and label == "Food & groceries":
+            row = row._replace(note="Your statement groceries include your children's meals, so "
+                                    "this row counts everyone at home.")
+        rows.append(row)
         tot_you += you
         tot_typ += typical
     rows.append(_row("Total", tot_you, tot_typ))
