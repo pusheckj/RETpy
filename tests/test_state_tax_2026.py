@@ -31,23 +31,22 @@ PINS = [
     ("IA", "MFJ", 200_000, 6376.4), ("IA", "HOH", 100_000, 2882.3),
     ("CO", "S", 100_000, 3691.6), ("CO", "MFJ", 200_000, 7383.2),
     ("CO", "HOH", 100_000, 3337.4), ("LA", "S", 100_000, 2613.75),
-    ("LA", "MFJ", 200_000, 5227.5), ("LA", "HOH", 100_000, 2613.75),
-    ("KY", "S", 100_000, 3382.4), ("KY", "HOH", 100_000, 3382.4),
-    ("MD", "S", 100_000, 4538.38), ("MD", "MFJ", 200_000, 9283.25),
-    ("MD", "HOH", 100_000, 4379.25), ("MN", "S", 100_000, 5276.61),
-    ("MN", "MFJ", 200_000, 10813.05), ("NY", "S", 100_000, 4859.75),
-    ("NY", "MFJ", 200_000, 9712.8), ("NY", "HOH", 100_000, 4546.57),
-    ("HI", "S", 100_000, 5883.2), ("HI", "MFJ", 200_000, 11766.4),
-    ("HI", "HOH", 100_000, 5024.8), ("OR", "S", 100_000, 8176.37),
-    ("OR", "MFJ", 200_000, 16352.75), ("MS", "S", 100_000, 3508), ("MS", "MFJ", 200_000, 7416),
-    ("MS", "HOH", 100_000, 3464), ("WV", "S", 100_000, 3782.5), ("WV", "MFJ", 200_000, 8362.5),
+    ("LA", "MFJ", 200_000, 5227.5), ("KY", "S", 100_000, 3382.4),
+    ("KY", "HOH", 100_000, 3382.4), ("MD", "S", 100_000, 4538.38),
+    ("MD", "MFJ", 200_000, 9283.25), ("MD", "HOH", 100_000, 4379.25),
+    ("MN", "S", 100_000, 5276.61), ("MN", "MFJ", 200_000, 10813.05),
+    ("NY", "S", 100_000, 4859.75), ("NY", "MFJ", 200_000, 9712.8),
+    ("NY", "HOH", 100_000, 4546.57), ("HI", "S", 100_000, 5883.2),
+    ("HI", "MFJ", 200_000, 11766.4), ("HI", "HOH", 100_000, 5024.8),
+    ("OR", "S", 100_000, 8176.37), ("OR", "MFJ", 200_000, 16352.75),
+    ("MS", "S", 100_000, 3508), ("MS", "MFJ", 200_000, 7416), ("MS", "HOH", 100_000, 3464),
+    ("WV", "S", 100_000, 3782.5), ("WV", "MFJ", 200_000, 8362.5),
     ("WV", "HOH", 100_000, 3782.5), ("IN", "S", 100_000, 2950), ("IN", "MFJ", 200_000, 5900),
     ("IN", "HOH", 100_000, 2950), ("NE", "S", 100_000, 3846.46),
     ("NE", "MFJ", 200_000, 7692.91), ("ID", "S", 100_000, 4191.77),
     ("ID", "MFJ", 200_000, 8383.54), ("MT", "S", 100_000, 4289.1),
-    ("MT", "MFJ", 200_000, 8578.2), ("MT", "HOH", 100_000, 3834.28),
-    ("MA", "S", 100_000, 5000), ("MA", "MFJ", 200_000, 10000), ("MA", "HOH", 100_000, 5000),
-    ("NM", "S", 100_000, 3569.1), ("NM", "MFJ", 200_000, 7411.2),
+    ("MT", "MFJ", 200_000, 8578.2), ("MA", "S", 100_000, 5000), ("MA", "MFJ", 200_000, 10000),
+    ("MA", "HOH", 100_000, 5000), ("NM", "S", 100_000, 3569.1), ("NM", "MFJ", 200_000, 7411.2),
     ("NM", "HOH", 100_000, 2953.95), ("VT", "S", 100_000, 4489.6),
     ("VT", "MFJ", 200_000, 9508.95), ("OH", "S", 100_000, 2365.62),
     ("OH", "MFJ", 200_000, 5115.62), ("OH", "HOH", 100_000, 2365.62),
@@ -58,7 +57,8 @@ PINS = [
     ("MO", "MFJ", 200_000, 7705.97), ("MO", "HOH", 100_000, 3384.32),
     ("ND", "S", 100_000, 690.79), ("ND", "MFJ", 200_000, 1693.09),
     ("VA", "S", 100_000, 4989.38), ("VA", "MFJ", 200_000, 10236.25),
-    ("VA", "HOH", 100_000, 4989.38),
+    ("VA", "HOH", 100_000, 4989.38), ("AZ", "S", 100_000, 2291.25),
+    ("AZ", "MFJ", 200_000, 4582.5), ("AZ", "HOH", 100_000, 2291.25),
 ]
 
 
@@ -131,14 +131,16 @@ class TestAppOnlyFieldsSurvive:
     def test_confidence_labels_follow_the_approximations(self):
         s = std_data.STATES
         assert s["AR"]["confidence"] == "approx" and s["SC"]["confidence"] == "approx"
-        assert s["OH"]["confidence"] == "medium" and s["UT"]["confidence"] == "medium"
+        assert s["UT"]["confidence"] == "approx" and s["AZ"]["confidence"] == "medium"
+        assert s["OH"]["confidence"] == "medium"
 
 
 class TestDeliberateDifferencesFromBpm:
-    def test_arizona_keeps_the_federal_deduction(self):
-        """BPM lists 8,350 / 16,700, which matches no federal or Arizona figure."""
-        assert std_data.STATES["AZ"]["std_deduction"] == "federal"
-        assert cfg.state_tax_rules("AZ", "S")["deduction"] == cfg.STANDARD_DEDUCTION_SINGLE
+    def test_arizona_uses_pre_2025_conformity_deduction(self):
+        """Arizona follows federal law as it stood before the 2025 changes."""
+        assert std_data.STATES["AZ"]["std_deduction"] == {"S": 8_350, "MFJ": 16_700,
+                                                          "HOH": 8_350}
+        assert cfg.state_tax_rules("AZ", "S")["deduction"] == 8_350
 
     def test_kentucky_joint_return_gets_two_deductions(self):
         """BPM gives a joint return one $3,360; Kentucky gives each taxpayer one."""
@@ -159,6 +161,12 @@ class TestDeliberateDifferencesFromBpm:
         assert std_data.STATES["NE"]["std_deduction"]["HOH"] == 12_150
         assert std_data.STATES["ID"]["brackets"]["HOH"] == std_data.STATES["ID"]["brackets"]["MFJ"]
         assert std_data.STATES["MN"]["brackets"]["HOH"][0] == (39_010, .0535)
+        # Montana: the head-of-household band is 1.5 times the single band, as before.
+        assert std_data.STATES["MT"]["brackets"]["HOH"] == [(71_250, .047), (INF, .0565)]
+        assert _state_tax("MT", "HOH", 100_000) == pytest.approx(3_608.65)    # BPM: 3,834.28
+        # Louisiana groups head of household with joint filers.
+        assert std_data.STATES["LA"]["std_deduction"]["HOH"] == 25_750
+        assert _state_tax("LA", "HOH", 100_000) == pytest.approx(2_227.50)    # BPM: 2,613.75
 
     def test_federal_head_of_household_24_percent_top_is_the_statute_figure(self):
         """BPM tops the HoH 24% band at 201,775; Rev. Proc. 2025-32 says 201,750."""

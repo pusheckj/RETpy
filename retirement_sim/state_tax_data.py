@@ -105,12 +105,14 @@ STATES = {
              "401(k)/IRA money). Some cities add an occupational tax."),
     "AK": _no_tax("Alaska"),
     "AZ": dict(
-        name="Arizona", year=2026, confidence="high",
-        brackets=_flat(.025), std_deduction="federal", exemption=0,
+        name="Arizona", year=2026, confidence="medium",
+        brackets=_flat(.025),
+        std_deduction={"S": 8_350, "MFJ": 16_700, "HOH": 8_350}, exemption=0,
         social_security="exempt", retirement_exclusion=None,
-        note="Flat 2.5%. The deduction follows the federal standard deduction. BiggerPockets "
-             "Money lists $8,350 single / $16,700 joint for 2026, which matches no federal or "
-             "Arizona figure, so it was not adopted."),
+        note="Flat 2.5%. Arizona follows federal law as it stood before the 2025 changes "
+             "(static conformity), so its standard deduction is $8,350 single / $16,700 joint. "
+             "The head-of-household figure is the single amount and may be low. Verify on the "
+             "Arizona Department of Revenue 2026 form."),
     "AR": dict(
         name="Arkansas", year=2026, confidence="approx",
         brackets=_same([(5_599, 0.0), (11_199, .02), (15_999, .03), (26_399, .034), (INF, .037)]),
@@ -268,17 +270,17 @@ STATES = {
         brackets=_flat(.035), std_deduction={"S": 3_360, "MFJ": 6_720, "HOH": 3_360},
         exemption=0, social_security="exempt",
         retirement_exclusion=[{"min_age": 0, "per_person": 31_110}],
-        note="Flat 3.5% for 2026. The $3,360 standard deduction is per taxpayer, so a joint "
-             "return gets two. Local occupational taxes (often 1-2.5%) are not included."),
+        note="Flat 3.5% for 2026. The $3,360 standard deduction is per taxpayer, and a joint "
+             "return is given two. Local occupational taxes (often 1-2.5%) are not included."),
     "LA": dict(
         name="Louisiana", year=2026, confidence="medium",
         brackets=_flat(.03),
-        std_deduction={"S": 12_875, "MFJ": 25_750, "HOH": 12_875},
+        std_deduction={"S": 12_875, "MFJ": 25_750, "HOH": 25_750},
         exemption=0, social_security="exempt",
         retirement_exclusion=[{"min_age": 65, "per_person": 6_000}],
-        note="Flat 3% since the 2025 reform, which replaced the personal exemption with a larger "
-             "standard deduction ($12,875 single / $25,750 joint). Dependent deductions are left "
-             "out."),
+        note="Flat 3% since the 2025 reform, which replaced the personal exemption with a "
+             "larger standard deduction ($12,875 single / $25,750 joint and head of household). "
+             "Dependent deductions are left out."),
     "ME": dict(
         name="Maine", year=2026, confidence="medium",
         brackets={
@@ -340,7 +342,7 @@ STATES = {
         retirement_exclusion=None,
         note="Social Security is exempt below the income limits and phased in above them (modeled "
              "as fully taxed above). Head-of-household brackets and deduction are the 2024 "
-             "figures, because the 2026 source lists the Single figures for them."),
+             "figures, not updated for 2026."),
     "MS": dict(
         name="Mississippi", year=2026, confidence="medium",
         brackets=_same([(10_000, 0.0), (INF, .04)]),
@@ -362,12 +364,12 @@ STATES = {
         brackets={
             "S": [(47_500, .047), (INF, .0565)],
             "MFJ": [(95_000, .047), (INF, .0565)],
-            "HOH": [(47_500, .047), (INF, .0565)],
+            "HOH": [(71_250, .047), (INF, .0565)],
         },
         std_deduction="federal", exemption=0, social_security="taxed",
         retirement_exclusion=None,
-        note="2026 brackets: 4.7% up to $47,500 single ($95,000 joint) and 5.65% above; head of "
-             "household uses the single figures. Montana taxes Social Security like the federal "
+        note="2026 brackets: 4.7% up to $47,500 single ($95,000 joint, $71,250 head of "
+             "household) and 5.65% above. Montana taxes Social Security like the federal "
              "return; its new $5,500 subtraction at 65+ and lower capital-gains rates are left "
              "out."),
     "NE": dict(
@@ -445,8 +447,7 @@ STATES = {
         },
         std_deduction="federal", exemption=0, social_security="exempt",
         retirement_exclusion=None, ltcg_exclusion=0.40,
-        note="Head-of-household brackets and deduction are the 2024 figures, because the 2026 "
-             "source lists the Single figures for them."),
+        note="Head-of-household brackets are the 2024 figures, not updated for 2026."),
     "OH": dict(
         name="Ohio", year=2026, confidence="medium",
         brackets=_same([(26_050 - 332 / .0275, 0.0), (INF, .0275)]),
@@ -518,13 +519,13 @@ STATES = {
     "TN": _no_tax("Tennessee"),
     "TX": _no_tax("Texas"),
     "UT": dict(
-        name="Utah", year=2026, confidence="medium",
+        name="Utah", year=2026, confidence="approx",
         brackets=_flat(.0445), std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
         exemption=0, social_security="taxed", retirement_exclusion=None,
         note="4.45% flat (SB 60, 2026, retroactive to January 1). Utah's taxpayer credit (6% of "
-             "the federal deduction, phased out above $18,696 single / $37,392 joint of income) "
-             "and its Social Security and retirement credits are left out, so lower incomes are "
-             "overstated."),
+             "the federal deduction, cut by 1.3 cents for each dollar of income above $18,696 "
+             "single / $37,392 joint) and its Social Security and retirement credits are left "
+             "out, so lower incomes are overstated by up to about $1,900."),
     "VT": dict(
         name="Vermont", year=2026, confidence="medium",
         brackets={
@@ -537,7 +538,7 @@ STATES = {
         retirement_exclusion=None,
         note="Social Security is exempt under the income limits and phased in above them (modeled "
              "as fully taxed above). Head-of-household brackets and deduction are the 2024 "
-             "figures, because the 2026 source lists the Single figures for them."),
+             "figures, not updated for 2026."),
     "VA": dict(
         name="Virginia", year=2026, confidence="high",
         brackets=_same([(3_000, .02), (5_000, .03), (17_000, .05), (INF, .0575)]),

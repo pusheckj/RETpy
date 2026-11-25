@@ -35,27 +35,29 @@ GRID_STATES = ("CA TX PA IL NJ AL AR AZ CO GA HI IA ID IN KY LA MA MD ME MN MO M
 QUICK_STATES = "CA TX NY GA OH SC".split()
 
 # Known reasons a state's NEUTRAL result (RETpy with its app-only rules switched off)
-# still differs from BPM. (bucket, reason, statuses or None for all)
+# still differs from BPM: (bucket, reason, statuses or None for all, sign, largest gap).
+# ``sign`` is the expected sign of RETpy minus BPM (None = either way) and the gap limit
+# is a little above the largest difference the cause can produce, so a typo in one of
+# these rows is not hidden behind its waiver.
 HOH_COPY = ("BPM lists Single's figures for head of household; RETpy keeps a real "
             "head-of-household schedule")
 STATE_KNOWN = {
-    "AZ": ("BPM simplification", "BPM's 8,350 / 16,700 deduction matches no federal or Arizona "
-           "figure; RETpy follows the federal deduction", None),
     "AL": ("modeling difference", "BPM takes the top-of-range deduction; RETpy uses the "
-           "income-tested floor", None),
+           "income-tested floor", None, +1, 200),
     "WI": ("modeling difference", "BPM takes the full standard deduction; RETpy leaves the "
-           "sliding deduction out (0)", None),
+           "sliding deduction out (0)", None, +1, 2_000),
     "KY": ("BPM simplification", "BPM gives a joint return one $3,360 deduction; Kentucky "
-           "gives each taxpayer one", {"MFJ"}),
+           "gives each taxpayer one", {"MFJ"}, -1, 120),
     "OH": ("modeling difference", "RETpy smooths Ohio's $332 base amount into a 2.75% rate "
-           "from $13,977; exact above $26,050", None),
+           "from $13,977; exact above $26,050", None, +1, 333),
     "AR": ("modeling difference", "RETpy omits Arkansas's second table above $94,700 "
-           "(adds up to about $290)", None),
-    "UT": ("modeling difference", "RETpy omits Utah's taxpayer credit", None),
-    "SC": ("modeling difference", "RETpy omits the SCIAD phase-out (BPM models it)", None),
+           "(adds up to about $290)", None, -1, 300),
+    "UT": ("modeling difference", "RETpy omits Utah's taxpayer credit", None, +1, 2_000),
+    "SC": ("modeling difference", "RETpy omits the SCIAD phase-out (BPM models it)", None,
+           -1, 1_600),
 }
-for _c in ("MN", "ND", "NE", "VT", "OK", "OR", "ID"):
-    STATE_KNOWN[_c] = ("BPM simplification", HOH_COPY, {"HOH"})
+for _c in ("MN", "ND", "NE", "VT", "OK", "OR", "ID", "MT", "LA"):
+    STATE_KNOWN[_c] = ("BPM simplification", HOH_COPY, {"HOH"}, None, 2_500)
 RULE_TEXT = {
     "exemption": "personal exemption (BPM does not model it)",
     "retirement_exclusion": "retirement-income exclusion (BPM taxes it all)",
@@ -363,7 +365,12 @@ def compare(fx, app, bpm):
         known = STATE_KNOWN.get(fx["state"])
         gap = neutral["state_tax"] - b["state"]["stateTax"]
         if known and (known[2] is None or fx["status"] in known[2]):
-            findings.append(_finding(known[0], known[1], gap, where))
+            if (known[3] is not None and gap * known[3] < 0) or abs(gap) > known[4]:
+                findings.append(_finding(
+                    "RETpy bug", f"state_tax: {known[1]}, but the gap has the wrong sign or "
+                    "is larger than that cause allows (unexplained)", gap, where))
+            else:
+                findings.append(_finding(known[0], known[1], gap, where))
         else:
             findings.append(_finding(
                 "RETpy bug", "state_tax differs after neutralizing app-only rules "
@@ -394,7 +401,7 @@ def write_report(path, ctx):
              "(both are approximations; the choice is documented). Each state result is "
              "compared with RETpy's app-only rules switched off (personal exemptions and "
              "credits, retirement exclusions, capital-gains exclusion, taxed Social "
-             "Security), so any remaining gap is a table or mechanics gap.", "",
+             "Security except in Utah), so any remaining gap is a table or mechanics gap.", "",
              "## 1. BPM's own default example", "",
              "BPM engine reproduces its verified figures: "
              f"**{'yes' if default['bpm_ok'] else 'NO'}**. "
@@ -449,10 +456,10 @@ def write_report(path, ctx):
               "RETpy with its app-only rules switched off.", "",
               "| Fixture | Scenario | Bucket | Differences |", "| --- | --- | --- | --- |"]
     for r in rows:
-        diffs = "; ".join(r["diffs"]) or "-"
+        diffs = "; ".join(r["diffs"]) or "none"
         lines.append(f"| {r['id']} | {r['label']} ({r['state']}, {LABEL[r['status']]}) | "
                      f"{r['bucket']} | {diffs} |")
-    lines += ["## 7. Not compared", "",
+    lines += ["", "## 7. Not compared", "",
               "RETpy models none of these, so they are known gaps rather than findings: the "
               "qualified business income deduction (self-employment income), itemized "
               "deductions and the SALT cap, AMT, the earned income credit, and the ACA "

@@ -38,10 +38,10 @@ right.
 Only `brackets` and `std_deduction` were updated, plus `year` (2026 for every row) and the notes of the rows
 that changed. Everything RETpy models that the calculator does not stays as it was: Social Security
 treatment, retirement-income exclusions, capital-gains exclusions, personal exemptions, the Pennsylvania
-401(k) rule, HSA add-backs, California's credits, surtax and SDI, and each row's confidence label.
-California's row is unchanged.
+401(k) rule, HSA add-backs, and California's credits, surtax and SDI. Confidence labels are kept too, except
+Arizona (now `medium`), Utah and South Carolina (now `approx`). California's row is unchanged.
 
-31 rows changed. Top rate, Single schedule, old to new:
+32 rows changed. Top rate, Single schedule, old to new:
 
 | State | Top rate | State | Top rate | State | Top rate |
 | --- | --- | --- | --- | --- | --- |
@@ -55,26 +55,26 @@ California's row is unchanged.
 | MS | 4.7% to 4% | MT | 5.9% to 5.65% | SC | 6.2% to 5.21% |
 | NC | 4.5% to 3.99% | ND | 2.5% (indexed) | UT | 4.55% to 4.45% |
 | VA | 5.75% (deduction only) | VT | 8.75% (indexed) | WI | 7.65% (indexed) |
-| WV | 5.12% to 4.58% | | | | |
+| WV | 5.12% to 4.58% | AZ | 2.5% (deduction only) | | |
 
-The other 19 rows (AL, AK, AZ, CT, DE, DC, FL, IL, KS, MI, NV, NH, NJ, PA, SD, TN, TX, WA, WY) already equal
-the calculator's 2026 figures, so they only changed their year. AL and AZ keep a deduction that differs
+The other 18 rows (AL, AK, CT, DE, DC, FL, IL, KS, MI, NV, NH, NJ, PA, SD, TN, TX, WA, WY) already equal
+the calculator's 2026 figures, so they only changed their year. AL keeps a deduction that differs
 from the calculator's (below).
 
 ### Where RETpy differs from the calculator on purpose
 
 | Row | What RETpy does | Why |
 | --- | --- | --- |
-| AZ | Standard deduction follows the federal one | The calculator lists $8,350 single / $16,700 joint, which matches no federal or Arizona figure and could not be verified from the reference files. The old value is kept |
+| AZ | $8,350 single / $16,700 joint, as the calculator lists | Arizona follows federal law as it stood before the 2025 changes, which gives about these amounts. The head-of-household figure is the single amount and may be low. Not checked against the Arizona Department of Revenue 2026 form. Confidence is `medium` |
 | AL | Income-tested deduction floor ($2,500 / $5,000) | The calculator takes the top of the range |
 | WI | No standard deduction (the sliding deduction is left out) | The calculator takes the full $13,960 and says it understates tax for high earners |
 | KY | Joint return gets two $3,360 deductions | The calculator gives one; Kentucky gives each taxpayer one |
 | LA | Personal exemption set to 0 | The 2025 reform replaced it with the $12,875 / $25,750 standard deduction; keeping both would count it twice |
-| MN, ND, NE, VT, OK, OR, ID | Head of household keeps its own schedule | The calculator lists Single's figures for head of household. OK, OR and ID use the joint brackets (as before) with 2026 numbers. NE uses the earlier head-of-household thresholds with 2026 rates. MN, ND and VT keep the earlier head-of-household brackets. MN, NE, OK, OR and VT keep the earlier head-of-household deduction. None of these head-of-household figures comes from a 2026 source |
+| MN, ND, NE, VT, OK, OR, ID, MT, LA | Head of household keeps its own schedule | The calculator lists Single's figures for head of household. OK, OR and ID use the joint brackets (as before) with 2026 numbers. MT uses 1.5 times the single band ($71,250), as before. LA uses the joint deduction ($25,750). NE uses the earlier head-of-household thresholds with 2026 rates. MN, ND and VT keep the earlier head-of-household brackets. MN, NE, OK, OR and VT keep the earlier head-of-household deduction. The MN, ND, VT, NE, OK, OR head-of-household deductions and thresholds are earlier figures, and the MT and LA ones are derived, not taken from a 2026 source |
 | Federal HoH | 24% band tops at $201,750 | The calculator tops it at $201,775, which is wrong (Rev. Proc. 2025-32) |
 | OH | 2.75% from $13,977 | Ohio charges $332 plus 2.75% above $26,050. One bracket set cannot hold the jump, so the rate starts where the formula crosses zero. Exact above $26,050, up to $332 high below it |
 | AR | Graduated table only | Above $94,700 of taxable income Arkansas uses a second table that adds up to about $290. Not modeled |
-| UT | Flat 4.45%, no credit | The taxpayer credit (6% of the federal deduction, phased out above $18,696 single / $37,392 joint) is left out. Lower incomes are overstated |
+| UT | Flat 4.45%, no credit | The taxpayer credit (6% of the federal deduction, cut by 1.3 cents per dollar of income above $18,696 single / $37,392 joint) is left out. Lower incomes are overstated by up to about $1,900. Confidence is now `approx` |
 | SC | $15,000 / $30,000 / $22,500 deduction, no phase-out | The deduction phases out between $40,000 and $95,000 (single). Tax is understated above $40,000 by up to about $780 single / $1,560 joint. Confidence is now `approx` |
 
 ### Not updated

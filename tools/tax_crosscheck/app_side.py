@@ -15,7 +15,7 @@ Two engine paths are used, as in the app:
     (ordinary income, gains, then Social Security).
 Each fixture runs twice: "modeled" (the app as shipped) and "neutral" (state rules BPM
 does not model switched off: personal exemptions and credits, retirement exclusions,
-the capital-gains exclusion, taxed Social Security).
+the capital-gains exclusion, taxed Social Security except in Utah, which BPM also taxes).
 """
 import json
 import os
@@ -49,7 +49,9 @@ def _patch_rules(neutralize):
             rules["retirement_exclusion"] = None
         if "ltcg_exclusion" in neutralize:
             rules["ltcg_exclusion"] = 0.0
-        if "social_security" in neutralize:
+        if "social_security" in neutralize and rules["code"] != "UT":
+            # BPM exempts Social Security in every state but Utah, where it taxes the
+            # federally taxable part like RETpy does.
             rules["social_security"] = "exempt"
         if "credits" in neutralize:
             rules["exemption_credits"] = None

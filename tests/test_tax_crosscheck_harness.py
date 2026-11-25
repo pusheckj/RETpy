@@ -64,7 +64,7 @@ def test_grid_covers_the_required_states_and_statuses():
 def test_every_changed_state_is_in_the_grid():
     """Every row whose table is not a plain copy of the old 2024 one is in the grid."""
     drv = _load_driver()
-    changed = {"AR", "CO", "GA", "HI", "IA", "ID", "IN", "KY", "LA", "MA", "MD", "ME", "MN",
+    changed = {"AR", "AZ", "CO", "GA", "HI", "IA", "ID", "IN", "KY", "LA", "MA", "MD", "ME", "MN",
                "MO", "MS", "MT", "NC", "ND", "NE", "NM", "NY", "OH", "OK", "OR", "RI", "SC",
                "UT", "VA", "VT", "WI", "WV"}
     assert changed <= set(drv.GRID_STATES)
@@ -88,3 +88,28 @@ def test_harness_runs_clean_and_leaves_the_config_alone(tmp_path):
     after = (cfg.STATE_CHOICE, cfg.FILING_STATUS, cfg.YOUR_AGE, cfg.CURRENT_YEAR,
              repr(state_tax_data.STATES["GA"]), cfg.state_tax_rules)
     assert before == after
+
+
+def _fake_run(state, status, neutral_tax, bpm_tax):
+    """One compare() call with everything matching except the state tax."""
+    drv = _load_driver()
+    side = {"fed_ordinary": 1.0, "ltcg_tax": 0.0, "niit": 0.0, "state_tax": neutral_tax,
+            "sdi": 0.0, "fica": 0.0, "agi": 100.0, "ss_taxable": 0.0, "irmaa_tier": 0}
+    app = {"modeled": dict(side), "neutral": dict(side), "contrib": []}
+    bpm = {"federal": {"fedOrdinary": 1.0, "ltcgTax": 0.0, "niit": 0.0},
+           "income": {"agi": 100.0, "ordinaryTaxable": 0.0}, "ss": {"taxable": 0.0},
+           "irmaa": {"tier": 0}, "payroll": {"w2FICA": 0.0, "addlMedicare": 0.0},
+           "state": {"stateTax": bpm_tax, "sdi": 0.0}}
+    fx = {"mix": "ORD", "state": state, "status": status, "tags": []}
+    return drv.compare(fx, app, bpm)[1]
+
+
+def test_known_state_waivers_check_sign_and_size():
+    """A waiver for a known state difference only covers the expected sign and size."""
+    ok = _fake_run("UT", "S", 1_100.0, 1_000.0)          # RETpy higher: credit left out
+    assert [f["bucket"] for f in ok] == ["modeling difference"]
+    wrong_sign = _fake_run("UT", "S", 900.0, 1_000.0)    # a typo that lowers the tax
+    assert [f["bucket"] for f in wrong_sign] == ["RETpy bug"]
+    too_big = _fake_run("UT", "S", 5_000.0, 1_000.0)
+    assert [f["bucket"] for f in too_big] == ["RETpy bug"]
+    assert _fake_run("TX", "S", 10.0, 0.0)[0]["bucket"] == "RETpy bug"   # no waiver at all
