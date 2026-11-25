@@ -904,6 +904,24 @@ class AccountPortfolio:
         figure, whatever order the income arrived in. With no gains it is the plain
         ordinary-tax schedule: nothing extra to compute in the common case.
         """
+        # Pure in its inputs for a given year (ages fix the deduction and the NIIT
+        # threshold's real decay), and called twice per event plus inside withdrawal
+        # gross-up loops with the same "before" figure, so remember this year's answers.
+        age_key = self.current_your_age
+        memo = self.__dict__.get("_federal_year_memo")
+        if memo is None or memo[0] != age_key or len(memo[1]) > 512:
+            memo = (age_key, {})
+            self._federal_year_memo = memo
+        key = (owner, ordinary, gains)
+        hit = memo[1].get(key)
+        if hit is not None:
+            return hit
+        result = self._federal_year_tax_uncached(owner, ordinary, gains)
+        memo[1][key] = result
+        return result
+
+    def _federal_year_tax_uncached(self, owner: str, ordinary: float, gains: float) -> Tuple[float, float]:
+        """``_federal_year_tax`` without the per-year memo."""
         ret = self._return_of(owner)
         magi = ordinary + gains
         deduction = self.get_standard_deduction(owner, magi)
