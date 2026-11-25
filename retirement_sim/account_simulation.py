@@ -2933,6 +2933,8 @@ def _apply_spending_guardrails(
         portfolio.get_total_balance(),
         portfolio.target_portfolio_inflation_adjusted
     )
+    # Remembered for the spending log: did the portfolio rule (not just a loss year) trim?
+    portfolio.last_portfolio_trim = portfolio_adjustment < 1.0
 
     # 2. Return-based adjustment (apply to discretionary portion)
     # This adjusts spending based on THIS YEAR's market returns
@@ -3633,6 +3635,9 @@ def simulate_retirement_year(
         # How much the portfolio and return rules trimmed this year (retirement
         # years only), for the "chance you ever cut spending" figure.
         "cut": guardrail_cut,
+        # True when the portfolio rule (a deep fall from the retirement balance) was
+        # part of this year's trim, not only the loss-year rule.
+        "deep": bool(guardrail_cut > 0 and getattr(portfolio, "last_portfolio_trim", False)),
         # The premium (ACA before 65, Medicare after), so the spending chart can
         # show what the engine really pays. Trued up from actual MAGI in
         # _fund_net_expenses.

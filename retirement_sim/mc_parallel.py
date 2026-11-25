@@ -70,11 +70,13 @@ def _bytype_from_portfolio(portfolio) -> List[Dict[str, float]]:
     return out
 
 
-def run_cuts(spending_log) -> List[float]:
-    """Yearly dollars (today's) the spending rules trimmed, for each retirement
-    year of one run that had a trim of at least a dollar, in age order."""
-    return [round(float(r["cut"]), 2) for r in (spending_log or [])
-            if float(r.get("cut", 0.0) or 0.0) >= 1.0]
+def run_cuts(spending_log) -> List[list]:
+    """``[dollars, deep]`` for each retirement year of one run that had a trim of at
+    least a dollar, in age order. ``dollars`` is what the spending rules trimmed
+    (today's dollars); ``deep`` is 1 when the portfolio rule was part of it, 0 when
+    only the loss-year rule trimmed."""
+    return [[round(float(r["cut"]), 2), 1 if r.get("deep") else 0]
+            for r in (spending_log or []) if float(r.get("cut", 0.0) or 0.0) >= 1.0]
 
 
 def sim_task(args) -> Dict[str, Any]:

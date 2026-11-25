@@ -131,7 +131,7 @@ def test_cushion_exposes_the_rule_values_for_the_chart():
 def test_rule_text_quotes_the_engine_rule():
     text = gl.rule_text(gl.guardrail_cushion(_plan(), 48))
     for part in ("compares your portfolio with what you had when you retired",
-                 "in today's dollars", "Below 70% of that", "fun money stays at plan", "30% of spending other than housing",
+                 "in today's dollars", "Below 70% of that", "fun money stays at plan", "30% of living spending other than housing",
                  "trimmed 15%", "Housing is never cut", "130%", "10% that year", "20%",
                  "never goes below 60%", "140%", "as soon as"):
         assert part in text, part
@@ -170,7 +170,7 @@ def test_sim_task_reports_each_runs_cut_years_in_run_order():
     finally:
         sr._restore_overrides(o)
     assert len(out["cuts_by_run"]) == out["n"] == 6
-    assert all(run and all(c > 0 for c in run) for run in out["cuts_by_run"])
+    assert all(run and all(c[0] > 0 and c[1] in (0, 1) for c in run) for run in out["cuts_by_run"])
     o = sr._apply_overrides(build_config_overrides({**SINGLE, **NEVER_TRIM}))
     try:
         quiet = mc_parallel.sim_task((55, 6, 0, 500))
@@ -180,12 +180,25 @@ def test_sim_task_reports_each_runs_cut_years_in_run_order():
 
 
 def test_cut_stats_share_typical_size_and_years():
-    runs = [[], [12_000.0, 12_000.0], [6_000.0], []]
+    runs = [[], [[12_000.0, 1], [12_000.0, 0]], [[6_000.0, 0]], []]
     s = sr.spending_cut_stats(runs)
-    assert s == {"share": 0.5, "median_monthly": 1_000.0, "median_years": 1.5, "n": 4}
-    assert sr.spending_cut_stats([[], []]) == {"share": 0.0, "median_monthly": 0.0,
+    assert s == {"share": 0.5, "deep_share": 0.25, "median_monthly": 1_000.0,
+                 "median_years": 1.5, "n": 4}
+    assert sr.spending_cut_stats([[], []]) == {"share": 0.0, "deep_share": 0.0, "median_monthly": 0.0,
                                                "median_years": 0.0, "n": 2}
     assert sr.spending_cut_stats([]) is None
+    assert sr.spending_cut_stats([[6_000.0]])["deep_share"] == 0.0     # a bare number: loss-year trim
+
+
+def test_deep_falls_are_marked_apart_from_loss_year_trims():
+    """Loss-year trims happen in almost every run; the deep-fall share is what tells plans apart."""
+    o = sr._apply_overrides(build_config_overrides({**SINGLE, **ALWAYS_TRIM}))
+    try:
+        out = mc_parallel.sim_task((55, 6, 0, 500))
+    finally:
+        sr._restore_overrides(o)
+    flags = {deep for run in out["cuts_by_run"] for _d, deep in run}
+    assert flags <= {0, 1}
 
 
 def test_primary_result_carries_the_stat_and_the_browser_job_matches_the_server():
@@ -214,27 +227,32 @@ def test_stat_does_not_depend_on_how_the_run_is_split(monkeypatch):
 
 # ---------------------------------------------------------------- hero line
 
-STATS = {"share": 0.38, "median_monthly": 450.0, "median_years": 3.0, "n": 1000}
+STATS = {"share": 0.97, "deep_share": 0.38, "median_monthly": 450.0, "median_years": 3.0, "n": 1000}
 
 
-def test_hero_shows_the_chance_you_ever_trim_as_a_small_secondary_line():
+def test_hero_shows_the_deep_fall_chance_and_trim_years_as_a_small_secondary_line():
     html = _hero(stats=STATS)
     assert 'class="mc-cushion-sub"' in html
     line = re.sub(r"<[^>]+>", "", html[html.index('class="mc-cushion-sub"'):].split("</div>")[0])
     line = line.replace("&#36;", "$")
-    assert "Chance you ever trim spending: 38%." in line
-    assert "typical trim is about $450 a month for about 3 years" in line
+    assert "Chance of a deep-fall trim: 38%." in line
+    assert "Trims of about $450 a month happen in about 3 of your retirement years." in line
     assert not _long_sentences(line)
     assert html.count("mc-hero-big") == 1                       # one hero: the retirement age
 
 
 def test_hero_line_wording_for_small_and_zero_chances_and_one_year():
-    assert "Chance you ever trim spending: under 1%." in _cushion_text(
-        _hero(stats={**STATS, "share": 0.004, "median_years": 1.0}))
-    assert "for about 1 year" in _cushion_text(_hero(stats={**STATS, "median_years": 1.0}))
-    zero = _cushion_text(_hero(stats={**STATS, "share": 0.0, "median_monthly": 0.0,
+    small = _cushion_text(_hero(stats={**STATS, "deep_share": 0.004, "median_years": 1.0}))
+    assert "Chance of a deep-fall trim: under 1%." in small
+    assert "about 1 of your retirement year." in small
+    near_all = _cushion_text(_hero(stats={**STATS, "deep_share": 0.996}))
+    assert "100%" not in near_all                                # some markets never fall that far
+    zero = _cushion_text(_hero(stats={**STATS, "share": 0.0, "deep_share": 0.0, "median_monthly": 0.0,
                                        "median_years": 0.0}))
-    assert "Chance you ever trim spending: 0%." in zero and "typical trim" not in zero
+    assert "Chance of a deep-fall trim: 0%." in zero and "Trims of about" not in zero
+    old_cache = _cushion_text(_hero(stats={"share": 0.4, "median_monthly": 450.0,
+                                           "median_years": 3.0, "n": 10}))
+    assert "Trims of about" in old_cache                         # older results without deep_share
 
 
 def test_no_stat_line_without_the_stat_or_when_spending_never_adjusts():

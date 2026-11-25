@@ -119,18 +119,25 @@ _NEVER_ADJUSTS = ('<div class="mc-cushion"><b>Spending never adjusts.</b> Your p
 
 
 def _cut_line(stats) -> str:
-    """'Chance you ever trim spending' from the primary result's ``spending_cut_stats``."""
+    """How often spending is trimmed, from the primary result's ``spending_cut_stats``.
+    Loss-year trims happen in almost every market, so the headline chance is the deep
+    one (the portfolio rule); loss-year trims are counted in years."""
     if not stats or not stats.get("n"):
         return ""
-    share = float(stats["share"])
-    chance = "under 1%" if 0 < share < 0.005 else f"{share:.0%}"
-    line = f'Chance you ever trim spending: <b>{chance}</b>.'
+    deep = stats.get("deep_share")
+    parts = []
+    if deep is not None:
+        d = float(deep)
+        parts.append(f'Chance of a deep-fall trim: <b>{"under 1%" if 0 < d < 0.005 else pct(d, 0)}</b>.')
+    share = float(stats.get("share") or 0.0)
     if share > 0 and stats.get("median_monthly", 0) > 0:
         years = max(1, round(float(stats["median_years"])))
-        line += (f' In those markets the typical trim is about '
-                 f'<b>{money(stats["median_monthly"])} a month</b> for about '
-                 f'{years} year{"" if years == 1 else "s"}.')
-    return f'<div class="mc-cushion-sub">{line}</div>'
+        parts.append(f'Trims of about <b>{money(stats["median_monthly"])} a month</b> happen in '
+                     f'about {years} of your retirement year{"" if years == 1 else "s"}.')
+    elif deep is None:
+        parts.append(f'Chance you ever trim spending: '
+                     f'<b>{"under 1%" if 0 < share < 0.005 else pct(share, 0)}</b>.')
+    return f'<div class="mc-cushion-sub">{" ".join(parts)}</div>' if parts else ""
 
 
 def _cushion_html(results: dict, overrides: dict, rate_age) -> str:

@@ -1994,19 +1994,28 @@ def _percentiles_by_age(by_age: Dict[int, List[float]]) -> List[dict]:
 
 
 def spending_cut_stats(cuts_by_run) -> Optional[dict]:
-    """How often the spending rules trim, from per-run lists of yearly cut dollars
-    (``run_cuts``, one list per simulated run, empty = never trimmed).
+    """How often the spending rules trim, from per-run lists of trim years
+    (``mc_parallel.run_cuts``: ``[dollars, deep]`` per year; a bare number counts as
+    a loss-year-only trim). One list per simulated run, empty = never trimmed.
 
-    ``share``: runs with at least one trim. ``median_monthly``: the middle trim,
-    in dollars a month, over every trim year of every run. ``median_years``: the
-    middle number of trim years among runs that trim. None when no run is given."""
+    ``share``: runs with any trim. ``deep_share``: runs where the portfolio rule (a
+    deep fall) ever trimmed. Loss-year trims happen in almost every run, so
+    ``deep_share`` is the figure that tells plans apart. ``median_monthly``: the middle
+    trim in dollars a month over every trim year. ``median_years``: the middle number
+    of trim years among runs that trim. None when no run is given."""
     runs = [list(r) for r in (cuts_by_run or []) if isinstance(r, (list, tuple))]
     if not runs:
         return None
-    trimmed = [r for r in runs if r]
-    every = [float(c) for r in trimmed for c in r]
+
+    def _year(y):
+        return (float(y[0]), bool(y[1])) if isinstance(y, (list, tuple)) else (float(y), False)
+
+    years = [[_year(y) for y in r] for r in runs]
+    trimmed = [r for r in years if r]
+    every = [d for r in trimmed for d, _deep in r]
     return {
         "share": len(trimmed) / len(runs),
+        "deep_share": sum(1 for r in years if any(deep for _d, deep in r)) / len(runs),
         "median_monthly": float(np.median(every)) / 12.0 if every else 0.0,
         "median_years": float(np.median([len(r) for r in trimmed])) if trimmed else 0.0,
         "n": len(runs),

@@ -437,7 +437,7 @@ def rule_text(c: dict) -> str:
         sentences.append("Each year the plan compares your portfolio with what you had when "
                          "you retired, in today's dollars.")
         sentences.append(f"Below {_p(c['floor_trigger'])} of that, fun money "
-                         f"({_p(c['flexible_share'])} of spending{housing}) is trimmed {_p(c['cut'])}.")
+                         f"({_p(c['flexible_share'])} of living spending{housing}) is trimmed {_p(c['cut'])}.")
         if c["housing_excluded"]:
             sentences.append("Housing is never cut.")
         if c["ceiling_increase"] > 0:
