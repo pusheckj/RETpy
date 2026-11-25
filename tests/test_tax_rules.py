@@ -12,7 +12,7 @@ Pins the audit's taxes/income items:
   R14 the current year comes from the clock
 
 Hand-computed figures use the official 2026 tables (Rev. Proc. 2025-32; FTB
-2026 for California; the other states are 2024).
+2026 for California; the other states are 2026 too, see docs/DATA_SOURCES.md).
 """
 import datetime
 import os
@@ -89,7 +89,7 @@ class TestTakeHomeByHand:
         t = cfg.working_year_taxes(60_000, status="HOH", partner=False, state="NC")
         # 2026: 60,000 - 24,150 = 35,850 -> 1,770 + 12% x 18,150
         assert t["federal"] == pytest.approx(1_770 + 2_178)
-        assert t["state"] == pytest.approx((60_000 - 19_125) * 0.045)
+        assert t["state"] == pytest.approx((60_000 - 19_125) * 0.0399)
         assert t["fica"] == pytest.approx(4_590.0)
 
     def test_high_earner_over_the_wage_base(self):
@@ -342,7 +342,7 @@ class TestStateTables:
     @pytest.mark.parametrize("code", sorted(state_tax_data.STATES))
     def test_row_is_well_formed(self, code):
         row = state_tax_data.STATES[code]
-        assert row["year"] >= 2024
+        assert row["year"] == 2026
         assert row["confidence"] in ("high", "medium", "approx")
         for status in ("S", "MFJ", "HOH"):
             brackets = row["brackets"][status]
@@ -431,7 +431,7 @@ class TestStateTables:
         assert state_tax("PA", 62) == pytest.approx(0.0)            # after 59.5
         assert state_tax("PA", 55) == pytest.approx(30_000 * 0.0307)
         ny = state_tax("NY", 62)                                     # $20k excluded
-        assert ny == pytest.approx(10_000 * 0.055)
+        assert ny == pytest.approx(10_000 * 0.054)
 
 
 # ---------------------------------------------------------------------------

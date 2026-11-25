@@ -349,7 +349,7 @@ Social Security benefits are entered in today's dollars. Because SS is COLA-inde
 
 ## 9. Tax configuration
 
-Federal tables, IRMAA, ACA and California are 2026 figures; the other states are 2024. All are held flat in today's dollars (statutory amounts that are never indexed decay; see METHODOLOGY §4). Sources: [`data_sources/2026_verification.md`](data_sources/2026_verification.md). Every filing-status-dependent table follows `FILING_STATUS` ("Married filing jointly" / "Single" / "Head of household").
+Federal tables, IRMAA, ACA and every state table (all 50 states and DC) are 2026 figures; see [`DATA_SOURCES.md`](DATA_SOURCES.md). All are held flat in today's dollars (statutory amounts that are never indexed decay; see METHODOLOGY §4). Sources: [`data_sources/2026_verification.md`](data_sources/2026_verification.md). Every filing-status-dependent table follows `FILING_STATUS` ("Married filing jointly" / "Single" / "Head of household").
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -371,7 +371,7 @@ Federal tables, IRMAA, ACA and California are 2026 figures; the other states are
 
 ### State tax
 
-`STATE_CHOICE` is a two-letter code for any state or `"DC"`, read from `retirement_sim/state_tax_data.py`: brackets by filing status, standard deduction, personal exemptions, whether Social Security is taxed (exempt, taxed, or exempt below an income limit), retirement-income exclusions by age, state capital-gains exclusions, and quirks (Pennsylvania taxes 401(k) deferrals; California and New Jersey tax HSA contributions; California SDI 1.3% of wages). Optional `exemption_credits` and `surtax` fields add nonrefundable credits and a surtax (California 2026: personal $158, senior $158, dependent $491, phased out above estimated AGI thresholds; 1% Behavioral Health Services Tax above $1M). Each row carries its tax year (2024; California 2026) and a confidence level (`high`, `medium`, or `approx`, which the app labels as approximate). City/county income taxes, credits and itemized deductions are not modeled. To verify or refresh the table, see [`state_tax_research_prompt.md`](state_tax_research_prompt.md).
+`STATE_CHOICE` is a two-letter code for any state or `"DC"`, read from `retirement_sim/state_tax_data.py`: brackets by filing status, standard deduction, personal exemptions, whether Social Security is taxed (exempt, taxed, or exempt below an income limit), retirement-income exclusions by age, state capital-gains exclusions, and quirks (Pennsylvania taxes 401(k) deferrals; California and New Jersey tax HSA contributions; California SDI 1.3% of wages). Optional `exemption_credits` and `surtax` fields add nonrefundable credits and a surtax (California 2026: personal $158, senior $158, dependent $491, phased out above estimated AGI thresholds; 1% Behavioral Health Services Tax above $1M). Each row carries its tax year (2026) and a confidence level (`high`, `medium`, or `approx`, which the app labels as approximate). City/county income taxes, credits and itemized deductions are not modeled. To verify or refresh the table, see [`state_tax_research_prompt.md`](state_tax_research_prompt.md).
 
 Legacy values still work: `"CA"`, `"No state tax"` (zero) and `"Other"` (flat rate). Unknown values fall back to CA. `MODEL_CA_EXEMPTS_SOCIAL_SECURITY` (historical name) switches every state's Social Security exemption off when set `False`.
 

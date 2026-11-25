@@ -358,7 +358,7 @@ def hsa_is_family() -> bool:
 YOUR_MARGINAL_TAX_RATE = 0.05
 
 # State of residence for state income tax. One of:
-#   a two-letter code ("CA", "NY", "TX", "DC", ...) -> that state's 2024 tax
+#   a two-letter code ("CA", "NY", "TX", "DC", ...) -> that state's 2026 tax
 #       table in state_tax_data.py (brackets by filing status, deductions,
 #       Social Security and retirement-income rules)
 #   "No state tax"  -> no state income tax (legacy; same as picking TX/FL/...)

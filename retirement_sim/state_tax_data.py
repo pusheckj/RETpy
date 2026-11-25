@@ -1,6 +1,9 @@
 """
-State income tax tables: all 50 states + DC. Tax year 2024, except California
-(2026, FTB Tax News October 2026; see docs/data_sources/2026_verification.md).
+State income tax tables: all 50 states + DC, tax year 2026.
+Brackets and standard deductions follow the BiggerPockets Money Income Tax
+Projection Calculator (v1.11.2, captured 2026-11-25) and the state agencies it
+cites; California is FTB Tax News, October 2026. See docs/DATA_SOURCES.md for the
+rows that differ from that source and why, and docs/data_sources/2026_verification.md.
 
 License: MIT (see LICENSE at project root)
 
@@ -62,7 +65,7 @@ for top earners.
 
 INF = float("inf")
 
-TAX_YEAR = 2024
+TAX_YEAR = 2026
 
 
 def _same(brackets):
@@ -87,7 +90,7 @@ def _no_tax(name, note=""):
 
 STATES = {
     "AL": dict(
-        name="Alabama", year=2024, confidence="approx",
+        name="Alabama", year=2026, confidence="approx",
         brackets={"S": [(500, .02), (3_000, .04), (INF, .05)],
                   "MFJ": [(1_000, .02), (6_000, .04), (INF, .05)],
                   "HOH": [(500, .02), (3_000, .04), (INF, .05)]},
@@ -102,19 +105,25 @@ STATES = {
              "401(k)/IRA money). Some cities add an occupational tax."),
     "AK": _no_tax("Alaska"),
     "AZ": dict(
-        name="Arizona", year=2024, confidence="high",
-        brackets=_flat(.025), std_deduction="federal", exemption=0,
+        name="Arizona", year=2026, confidence="medium",
+        brackets=_flat(.025),
+        std_deduction={"S": 8_350, "MFJ": 16_700, "HOH": 8_350}, exemption=0,
         social_security="exempt", retirement_exclusion=None,
-        note="Flat 2.5%."),
+        note="Flat 2.5%. Arizona follows federal law as it stood before the 2025 changes "
+             "(static conformity), so its standard deduction is $8,350 single / $16,700 joint. "
+             "The head-of-household figure is the single amount and may be low. Verify on the "
+             "Arizona Department of Revenue 2026 form."),
     "AR": dict(
-        name="Arkansas", year=2024, confidence="approx",
-        brackets=_flat(.039), std_deduction={"S": 2_340, "MFJ": 4_680, "HOH": 2_340},
+        name="Arkansas", year=2026, confidence="approx",
+        brackets=_same([(5_599, 0.0), (11_199, .02), (15_999, .03), (26_399, .034), (INF, .037)]),
+        std_deduction={"S": 2_470, "MFJ": 4_940, "HOH": 2_470},
         exemption=0, social_security="exempt",
         retirement_exclusion=[{"min_age": 59.5, "per_person": 6_000}],
         ltcg_exclusion=0.50,
-        note="Approximated as the 3.9% top rate on all taxable income (the lower "
-             "brackets and the $29 personal credit are left out), so lower "
-             "incomes are slightly overstated."),
+        note="2026 table: 0% to $5,599, then 2%, 3% and 3.4%, and 3.7% above $26,399 (2026 "
+             "special session, retroactive to January 1). Above $94,700 of taxable income "
+             "Arkansas uses a second table that adds up to about $290, which is not modeled, so "
+             "higher incomes are slightly understated. The $29 personal credit is left out."),
     "CA": dict(
         # 2026 figures: FTB Tax News, October 2026 (3.4% CCPI indexing). The
         # brackets apply to Form 540 taxable income (after the standard
@@ -154,16 +163,15 @@ STATES = {
              "deduction as AGI. State Disability Insurance is 1.3% of all "
              "wages (2026 rate, not in the verification report; owner-approved)."),
     "CO": dict(
-        name="Colorado", year=2024, confidence="medium",
-        brackets=_flat(.0425), std_deduction="federal", exemption=0,
+        name="Colorado", year=2026, confidence="medium",
+        brackets=_flat(.044), std_deduction="federal", exemption=0,
         social_security="exempt",
         retirement_exclusion=[{"min_age": 55, "per_person": 20_000},
                               {"min_age": 65, "per_person": 24_000}],
-        note="4.25% is the 2024 rate after the TABOR refund trigger; the "
-             "standing rate is 4.40%. Social Security is fully deductible at 65+ "
-             "and partly at 55-64 (treated as exempt)."),
+        note="Flat 4.40%, the standing rate; a TABOR refund trigger can lower it in some years. "
+             "Social Security is fully deductible at 65+ and partly at 55-64 (treated as exempt)."),
     "CT": dict(
-        name="Connecticut", year=2024, confidence="medium",
+        name="Connecticut", year=2026, confidence="medium",
         brackets={
             "S": [(10_000, .02), (50_000, .045), (100_000, .055), (200_000, .06),
                   (250_000, .065), (500_000, .069), (INF, .0699)],
@@ -180,7 +188,7 @@ STATES = {
              "as exempt). Pension/IRA exclusions for lower incomes are not "
              "modeled."),
     "DE": dict(
-        name="Delaware", year=2024, confidence="medium",
+        name="Delaware", year=2026, confidence="medium",
         brackets=_same([(2_000, 0.0), (5_000, .022), (10_000, .039), (20_000, .048),
                         (25_000, .052), (60_000, .0555), (INF, .066)]),
         std_deduction={"S": 3_250, "MFJ": 6_500, "HOH": 3_250}, exemption=0,
@@ -189,7 +197,7 @@ STATES = {
         note="The $110 personal credit is left out. Wilmington's 1.25% city "
              "wage tax is not included."),
     "DC": dict(
-        name="District of Columbia", year=2024, confidence="high",
+        name="District of Columbia", year=2026, confidence="high",
         brackets=_same([(10_000, .04), (40_000, .06), (60_000, .065), (250_000, .085),
                         (500_000, .0925), (1_000_000, .0975), (INF, .1075)]),
         std_deduction="federal", exemption=0,
@@ -197,181 +205,191 @@ STATES = {
         note=""),
     "FL": _no_tax("Florida"),
     "GA": dict(
-        name="Georgia", year=2024, confidence="medium",
-        brackets=_flat(.0539), std_deduction={"S": 12_000, "MFJ": 24_000, "HOH": 12_000},
+        name="Georgia", year=2026, confidence="medium",
+        brackets=_flat(.0499), std_deduction={"S": 15_000, "MFJ": 30_000, "HOH": 15_000},
         exemption=0, social_security="exempt",
         retirement_exclusion=[{"min_age": 62, "per_person": 35_000},
                               {"min_age": 65, "per_person": 65_000}],
-        note="Flat 5.39% for 2024 (scheduled to keep falling). Dependent "
-             "exemptions are left out."),
+        note="Flat 4.99% with a $15,000 single / $30,000 joint standard deduction (HB 463, 2026, "
+             "retroactive to January 1). Dependent exemptions are left out."),
     "HI": dict(
-        name="Hawaii", year=2024, confidence="approx",
+        name="Hawaii", year=2026, confidence="approx",
         brackets={
-            "S": [(2_400, .014), (4_800, .032), (9_600, .055), (14_400, .064),
-                  (19_200, .068), (24_000, .072), (36_000, .076), (48_000, .079),
-                  (150_000, .0825), (175_000, .09), (200_000, .10), (INF, .11)],
-            "MFJ": [(4_800, .014), (9_600, .032), (19_200, .055), (28_800, .064),
-                    (38_400, .068), (48_000, .072), (72_000, .076), (96_000, .079),
-                    (300_000, .0825), (350_000, .09), (400_000, .10), (INF, .11)],
-            "HOH": [(3_600, .014), (7_200, .032), (14_400, .055), (21_600, .064),
-                    (28_800, .068), (36_000, .072), (54_000, .076), (72_000, .079),
-                    (225_000, .0825), (262_500, .09), (300_000, .10), (INF, .11)],
+            "S": [(9_600, .014), (14_400, .032), (19_200, .055), (24_000, .064), (36_000, .068),
+                  (48_000, .072), (125_000, .076), (175_000, .079), (225_000, .0825),
+                  (275_000, .09), (325_000, .1), (INF, .11)],
+            "MFJ": [(19_200, .014), (28_800, .032), (38_400, .055), (48_000, .064), (72_000, .068),
+                    (96_000, .072), (250_000, .076), (350_000, .079), (450_000, .0825),
+                    (550_000, .09), (650_000, .1), (INF, .11)],
+            "HOH": [(14_400, .014), (21_600, .032), (28_800, .055), (36_000, .064), (54_000, .068),
+                    (72_000, .072), (187_500, .076), (262_500, .079), (337_500, .0825),
+                    (412_500, .09), (487_500, .1), (INF, .11)],
         },
-        std_deduction={"S": 4_400, "MFJ": 8_800, "HOH": 6_424}, exemption=1_144,
+        std_deduction={"S": 8_000, "MFJ": 16_000, "HOH": 12_000}, exemption=1_144,
         social_security="exempt", retirement_exclusion=None,
-        note="Hawaii's 2024 law (Act 46) raises the standard deduction and widens "
-             "the brackets in stages from 2024; the figures here may lag it. "
-             "Employer-funded pensions are exempt but 401(k)/IRA money is taxed."),
+        note="2026 brackets and standard deduction ($8,000 single / $16,000 joint / $12,000 head "
+             "of household; Act 46). Employer-funded pensions are exempt but 401(k)/IRA money is "
+             "taxed."),
     "ID": dict(
-        name="Idaho", year=2024, confidence="medium",
-        brackets=_flat(.05695, zero_up_to={"S": 4_673, "MFJ": 9_346, "HOH": 9_346}),
+        name="Idaho", year=2026, confidence="medium",
+        brackets=_flat(.053, zero_up_to={"S": 4_810, "MFJ": 9_620, "HOH": 9_620}),
         std_deduction="federal", exemption=0,
         social_security="exempt", retirement_exclusion=None,
-        note="Flat 5.695% above a small zero bracket (2024)."),
+        note="Flat 5.3% above a zero bracket of $4,810 single ($9,620 joint and head of "
+             "household), 2026."),
     "IL": dict(
-        name="Illinois", year=2024, confidence="high",
+        name="Illinois", year=2026, confidence="high",
         brackets=_flat(.0495), std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
         exemption=2_775, social_security="exempt",
         retirement_exclusion=[{"min_age": 0, "per_person": INF}],
         note="Retirement plan distributions and Social Security are exempt. The "
              "exemption phases out above $250k ($500k joint) income."),
     "IN": dict(
-        name="Indiana", year=2024, confidence="high",
-        brackets=_flat(.0305), std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
+        name="Indiana", year=2026, confidence="high",
+        brackets=_flat(.0295), std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
         exemption=1_000, social_security="exempt", retirement_exclusion=None,
         note="County income taxes (about 0.5%-3%, typically ~1.5-2%) are not "
              "included."),
     "IA": dict(
-        name="Iowa", year=2024, confidence="medium",
-        brackets={"S": [(6_210, .044), (31_050, .0482), (INF, .057)],
-                  "MFJ": [(12_420, .044), (62_100, .0482), (INF, .057)],
-                  "HOH": [(12_420, .044), (62_100, .0482), (INF, .057)]},
+        name="Iowa", year=2026, confidence="medium",
+        brackets=_flat(.038),
         std_deduction="federal", exemption=0, social_security="exempt",
         retirement_exclusion=[{"min_age": 55, "per_person": INF}],
-        note="Iowa moves to a flat 3.8% in 2025. Retirement income is exempt at "
-             "55+."),
+        note="Flat 3.8% since 2025. Retirement income is exempt at 55+."),
     "KS": dict(
-        name="Kansas", year=2024, confidence="medium",
+        name="Kansas", year=2026, confidence="medium",
         brackets={"S": [(23_000, .052), (INF, .0558)],
                   "MFJ": [(46_000, .052), (INF, .0558)],
                   "HOH": [(23_000, .052), (INF, .0558)]},
         std_deduction={"S": 3_605, "MFJ": 8_240, "HOH": 6_180},
         exemption={"S": 9_160, "MFJ": 18_320, "HOH": 9_160},
         social_security="exempt", retirement_exclusion=None,
-        note="2024 rates from the June 2024 tax cut; Social Security is exempt "
-             "from 2024."),
+        note="Rates from the 2024 tax cut, still in force. Social Security is exempt."),
     "KY": dict(
-        name="Kentucky", year=2024, confidence="medium",
-        brackets=_flat(.04), std_deduction={"S": 3_160, "MFJ": 6_320, "HOH": 3_160},
+        name="Kentucky", year=2026, confidence="medium",
+        brackets=_flat(.035), std_deduction={"S": 3_360, "MFJ": 6_720, "HOH": 3_360},
         exemption=0, social_security="exempt",
         retirement_exclusion=[{"min_age": 0, "per_person": 31_110}],
-        note="Flat 4% (3.5% from 2026). Local occupational taxes (often 1-2.5%) "
-             "are not included."),
+        note="Flat 3.5% for 2026. The $3,360 standard deduction is per taxpayer, and a joint "
+             "return is given two. Local occupational taxes (often 1-2.5%) are not included."),
     "LA": dict(
-        name="Louisiana", year=2024, confidence="medium",
-        brackets={"S": [(12_500, .0185), (50_000, .035), (INF, .0425)],
-                  "MFJ": [(25_000, .0185), (100_000, .035), (INF, .0425)],
-                  "HOH": [(25_000, .0185), (100_000, .035), (INF, .0425)]},
-        std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
-        exemption={"S": 4_500, "MFJ": 9_000, "HOH": 9_000},
-        social_security="exempt",
+        name="Louisiana", year=2026, confidence="medium",
+        brackets=_flat(.03),
+        std_deduction={"S": 12_875, "MFJ": 25_750, "HOH": 25_750},
+        exemption=0, social_security="exempt",
         retirement_exclusion=[{"min_age": 65, "per_person": 6_000}],
-        note="Louisiana switches to a flat 3% in 2025 with a larger standard "
-             "deduction."),
+        note="Flat 3% since the 2025 reform, which replaced the personal exemption with a "
+             "larger standard deduction ($12,875 single / $25,750 joint and head of household). "
+             "Dependent deductions are left out."),
     "ME": dict(
-        name="Maine", year=2024, confidence="medium",
-        brackets={"S": [(26_050, .058), (61_600, .0675), (INF, .0715)],
-                  "MFJ": [(52_100, .058), (123_250, .0675), (INF, .0715)],
-                  "HOH": [(39_050, .058), (92_450, .0675), (INF, .0715)]},
-        std_deduction="federal", exemption=5_000,
-        social_security="exempt", retirement_exclusion=None,
-        note="Maine's pension deduction (up to $35k, reduced by Social Security) "
-             "is left out, and the deduction/exemption phase-outs for high "
-             "incomes too."),
-    "MD": dict(
-        name="Maryland", year=2024, confidence="medium",
+        name="Maine", year=2026, confidence="medium",
         brackets={
-            "S": [(1_000, .02), (2_000, .03), (3_000, .04), (100_000, .0475),
-                  (125_000, .05), (150_000, .0525), (250_000, .055), (INF, .0575)],
-            "MFJ": [(1_000, .02), (2_000, .03), (3_000, .04), (150_000, .0475),
-                    (175_000, .05), (225_000, .0525), (300_000, .055), (INF, .0575)],
-            "HOH": [(1_000, .02), (2_000, .03), (3_000, .04), (150_000, .0475),
-                    (175_000, .05), (225_000, .0525), (300_000, .055), (INF, .0575)],
+            "S": [(27_400, .058), (64_850, .0675), (1_000_000, .0715), (INF, .0915)],
+            "MFJ": [(54_850, .058), (129_750, .0675), (1_500_000, .0715), (INF, .0915)],
+            "HOH": [(41_100, .058), (97_300, .0675), (1_500_000, .0715), (INF, .0915)],
         },
-        std_deduction={"S": 2_550, "MFJ": 5_150, "HOH": 5_150}, exemption=3_200,
+        std_deduction={"S": 15_700, "MFJ": 31_400, "HOH": 23_550}, exemption=5_000,
+        social_security="exempt", retirement_exclusion=None,
+        note="2026 brackets and standard deduction ($15,700 single / $31,400 joint / $23,550 head "
+             "of household). The new 2% surcharge above $1 million single ($1.5 million joint and "
+             "head of household) is modeled as a 9.15% top rate. Maine's pension deduction (up to "
+             "$35k, reduced by Social Security) is left out, and the deduction/exemption "
+             "phase-outs for high incomes too."),
+    "MD": dict(
+        name="Maryland", year=2026, confidence="medium",
+        brackets={
+            "S": [(1_000, .02), (2_000, .03), (3_000, .04), (100_000, .0475), (125_000, .05),
+                  (150_000, .0525), (250_000, .055), (500_000, .0575), (1_000_000, .0625),
+                  (INF, .065)],
+            "MFJ": [(1_000, .02), (2_000, .03), (3_000, .04), (150_000, .0475), (175_000, .05),
+                    (225_000, .0525), (300_000, .055), (600_000, .0575), (1_200_000, .0625),
+                    (INF, .065)],
+            "HOH": [(1_000, .02), (2_000, .03), (3_000, .04), (150_000, .0475), (175_000, .05),
+                    (225_000, .0525), (300_000, .055), (600_000, .0575), (1_200_000, .0625),
+                    (INF, .065)],
+        },
+        std_deduction={"S": 3_350, "MFJ": 6_700, "HOH": 6_700}, exemption=3_200,
         social_security="exempt",
         retirement_exclusion=[{"min_age": 65, "per_person": 39_500}],
-        note="County income tax (2.25%-3.2%, most counties ~3%) is NOT included, "
-             "so total Maryland tax is noticeably higher. The pension exclusion "
-             "covers employer plans only (here applied to all 401(k)/IRA money)."),
+        note="2026 adds 6.25% and 6.5% rates on very high incomes. County income tax (2.25%-3.2%, "
+             "most counties ~3%) is NOT included, so total Maryland tax is noticeably higher. The "
+             "pension exclusion covers employer plans only (here applied to all 401(k)/IRA "
+             "money)."),
     "MA": dict(
-        name="Massachusetts", year=2024, confidence="high",
-        brackets=_same([(1_053_750, .05), (INF, .09)]),
+        name="Massachusetts", year=2026, confidence="high",
+        brackets=_same([(1_107_750, .05), (INF, .09)]),
         std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
         exemption={"S": 4_400, "MFJ": 8_800, "HOH": 6_800},
         social_security="exempt", retirement_exclusion=None,
-        note="5% plus a 4% surtax on income above $1,053,750 (2024). Private "
-             "pensions and IRA money are taxed."),
+        note="5% plus a 4% surtax on income above $1,107,750 (2026). Private pensions and IRA "
+             "money are taxed."),
     "MI": dict(
-        name="Michigan", year=2024, confidence="medium",
+        name="Michigan", year=2026, confidence="medium",
         brackets=_flat(.0425), std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
         exemption=5_600, social_security="exempt", retirement_exclusion=None,
         note="Michigan's retirement-income deduction is being phased back in by "
              "birth year and is left out. City income taxes (e.g. Detroit 2.4%) "
              "are not included."),
     "MN": dict(
-        name="Minnesota", year=2024, confidence="medium",
-        brackets={"S": [(31_690, .0535), (104_090, .068), (193_240, .0785), (INF, .0985)],
-                  "MFJ": [(46_330, .0535), (184_040, .068), (321_450, .0785), (INF, .0985)],
-                  "HOH": [(39_010, .0535), (156_760, .068), (256_880, .0785), (INF, .0985)]},
-        std_deduction={"S": 14_575, "MFJ": 29_150, "HOH": 21_900}, exemption=0,
+        name="Minnesota", year=2026, confidence="medium",
+        brackets={
+            "S": [(33_310, .0535), (109_430, .068), (203_150, .0785), (INF, .0985)],
+            "MFJ": [(48_700, .0535), (193_480, .068), (337_930, .0785), (INF, .0985)],
+            "HOH": [(39_010, .0535), (156_760, .068), (256_880, .0785), (INF, .0985)],
+        },
+        std_deduction={"S": 15_300, "MFJ": 30_600, "HOH": 21_900}, exemption=0,
         social_security={"exempt_below_agi": {"S": 82_190, "MFJ": 105_380, "HOH": 82_190}},
         retirement_exclusion=None,
-        note="Social Security is exempt below the income limits and phased in "
-             "above them (modeled as fully taxed above)."),
+        note="Social Security is exempt below the income limits and phased in above them (modeled "
+             "as fully taxed above). Head-of-household brackets and deduction are the 2024 "
+             "figures, not updated for 2026."),
     "MS": dict(
-        name="Mississippi", year=2024, confidence="medium",
-        brackets=_same([(10_000, 0.0), (INF, .047)]),
+        name="Mississippi", year=2026, confidence="medium",
+        brackets=_same([(10_000, 0.0), (INF, .04)]),
         std_deduction={"S": 2_300, "MFJ": 4_600, "HOH": 3_400},
         exemption={"S": 6_000, "MFJ": 12_000, "HOH": 9_500},
         social_security="exempt",
         retirement_exclusion=[{"min_age": 0, "per_person": INF}],
-        note="4.7% above $10,000 in 2024 (falling toward 4%). Retirement income "
-             "is exempt once you retire."),
+        note="4% above $10,000 (2026). Retirement income is exempt once you retire."),
     "MO": dict(
-        name="Missouri", year=2024, confidence="medium",
-        brackets=_same([(1_273, 0.0), (2_546, .02), (3_819, .025), (5_092, .03),
-                        (6_365, .035), (7_638, .04), (8_911, .045), (INF, .048)]),
+        name="Missouri", year=2026, confidence="medium",
+        brackets=_same([(1_348, 0.0), (2_696, .02), (4_044, .025), (5_392, .03), (6_740, .035),
+                        (8_088, .04), (9_436, .045), (INF, .047)]),
         std_deduction="federal", exemption=0, social_security="exempt",
         retirement_exclusion=None,
-        note="Social Security is exempt from 2024. Kansas City and St. Louis 1% "
-             "earnings taxes are not included."),
+        note="Social Security is exempt. Kansas City and St. Louis 1% earnings taxes are not "
+             "included."),
     "MT": dict(
-        name="Montana", year=2024, confidence="medium",
-        brackets={"S": [(20_500, .047), (INF, .059)],
-                  "MFJ": [(41_000, .047), (INF, .059)],
-                  "HOH": [(30_750, .047), (INF, .059)]},
+        name="Montana", year=2026, confidence="medium",
+        brackets={
+            "S": [(47_500, .047), (INF, .0565)],
+            "MFJ": [(95_000, .047), (INF, .0565)],
+            "HOH": [(71_250, .047), (INF, .0565)],
+        },
         std_deduction="federal", exemption=0, social_security="taxed",
         retirement_exclusion=None,
-        note="Montana taxes Social Security like the federal return; its new "
-             "$5,500 subtraction at 65+ and lower capital-gains rates are left "
+        note="2026 brackets: 4.7% up to $47,500 single ($95,000 joint, $71,250 head of "
+             "household) and 5.65% above. Montana taxes Social Security like the federal "
+             "return; its new $5,500 subtraction at 65+ and lower capital-gains rates are left "
              "out."),
     "NE": dict(
-        name="Nebraska", year=2024, confidence="approx",
-        brackets={"S": [(3_880, .0246), (23_370, .0351), (37_670, .0501), (INF, .0584)],
-                  "MFJ": [(7_770, .0246), (46_750, .0351), (75_340, .0501), (INF, .0584)],
-                  "HOH": [(7_250, .0246), (37_190, .0351), (55_630, .0501), (INF, .0584)]},
-        std_deduction={"S": 8_300, "MFJ": 16_600, "HOH": 12_150}, exemption=0,
+        name="Nebraska", year=2026, confidence="approx",
+        brackets={
+            "S": [(4_130, .0246), (24_760, .0351), (INF, .0455)],
+            "MFJ": [(8_250, .0246), (49_530, .0351), (INF, .0455)],
+            "HOH": [(7_250, .0246), (37_190, .0351), (INF, .0455)],
+        },
+        std_deduction={"S": 8_850, "MFJ": 17_700, "HOH": 12_150}, exemption=0,
         social_security="exempt", retirement_exclusion=None,
-        note="Standard deduction and head-of-household brackets are best "
-             "estimates; the $157 personal credit is left out. Rates are "
-             "scheduled to fall to 3.99% by 2027."),
+        note="2026 rates: 2.46%, 3.51% and 4.55% on top (scheduled to fall to 3.99% by 2027). "
+             "Head-of-household brackets use the 2024 thresholds with the 2026 rates, and its "
+             "deduction is the 2024 figure. The $157 personal credit is left out."),
     "NV": _no_tax("Nevada"),
     "NH": _no_tax("New Hampshire",
                   "No tax on wages or retirement income (the old tax on interest "
                   "and dividends ended in 2025)."),
     "NJ": dict(
-        name="New Jersey", year=2024, confidence="high",
+        name="New Jersey", year=2026, confidence="high",
         brackets={
             "S": [(20_000, .014), (35_000, .0175), (40_000, .035), (75_000, .05525),
                   (500_000, .0637), (1_000_000, .0897), (INF, .1075)],
@@ -385,26 +403,30 @@ STATES = {
         note="New Jersey's pension exclusion for incomes under $150k is left "
              "out. Employee SDI/FLI/UI payroll contributions are not included."),
     "NM": dict(
-        name="New Mexico", year=2024, confidence="medium",
-        brackets={"S": [(5_500, .017), (11_000, .032), (16_000, .047), (210_000, .049), (INF, .059)],
-                  "MFJ": [(8_000, .017), (16_000, .032), (24_000, .047), (315_000, .049), (INF, .059)],
-                  "HOH": [(8_000, .017), (16_000, .032), (24_000, .047), (315_000, .049), (INF, .059)]},
+        name="New Mexico", year=2026, confidence="medium",
+        brackets={
+            "S": [(5_500, .015), (16_500, .032), (33_500, .043), (66_500, .047), (210_000, .049),
+                  (INF, .059)],
+            "MFJ": [(8_000, .015), (25_000, .032), (50_000, .043), (100_000, .047), (315_000, .049),
+                    (INF, .059)],
+            "HOH": [(8_000, .015), (25_000, .032), (50_000, .043), (100_000, .047), (315_000, .049),
+                    (INF, .059)],
+        },
         std_deduction="federal", exemption=0,
         social_security={"exempt_below_agi": {"S": 100_000, "MFJ": 150_000, "HOH": 150_000}},
         retirement_exclusion=None,
-        note="New brackets start in 2025."),
+        note="The 2025 brackets (1.5% to 5.9%) are in force."),
     "NY": dict(
-        name="New York", year=2024, confidence="high",
+        name="New York", year=2026, confidence="high",
         brackets={
-            "S": [(8_500, .04), (11_700, .045), (13_900, .0525), (80_650, .055),
-                  (215_400, .06), (1_077_550, .0685), (5_000_000, .0965),
-                  (25_000_000, .103), (INF, .109)],
-            "MFJ": [(17_150, .04), (23_600, .045), (27_900, .0525), (161_550, .055),
-                    (323_200, .06), (2_155_350, .0685), (5_000_000, .0965),
-                    (25_000_000, .103), (INF, .109)],
-            "HOH": [(12_800, .04), (17_650, .045), (20_900, .0525), (107_650, .055),
-                    (269_300, .06), (1_616_450, .0685), (5_000_000, .0965),
-                    (25_000_000, .103), (INF, .109)],
+            "S": [(8_500, .039), (11_700, .044), (13_900, .0515), (80_650, .054), (215_400, .059),
+                  (1_077_550, .0685), (5_000_000, .0965), (25_000_000, .103), (INF, .109)],
+            "MFJ": [(17_150, .039), (23_600, .044), (27_900, .0515), (161_550, .054),
+                    (323_200, .059), (2_155_350, .0685), (5_000_000, .0965), (25_000_000, .103),
+                    (INF, .109)],
+            "HOH": [(12_800, .039), (17_650, .044), (20_900, .0515), (107_650, .054),
+                    (269_300, .059), (1_616_450, .0685), (5_000_000, .0965), (25_000_000, .103),
+                    (INF, .109)],
         },
         std_deduction={"S": 8_000, "MFJ": 16_050, "HOH": 11_200}, exemption=0,
         social_security="exempt",
@@ -412,51 +434,58 @@ STATES = {
         note="New York City (3.078%-3.876%) and Yonkers taxes are not included, "
              "nor the recapture of the low brackets above $107,650."),
     "NC": dict(
-        name="North Carolina", year=2024, confidence="high",
-        brackets=_flat(.045), std_deduction={"S": 12_750, "MFJ": 25_500, "HOH": 19_125},
+        name="North Carolina", year=2026, confidence="high",
+        brackets=_flat(.0399), std_deduction={"S": 12_750, "MFJ": 25_500, "HOH": 19_125},
         exemption=0, social_security="exempt", retirement_exclusion=None,
-        note="Flat 4.5% for 2024 (4.25% in 2025)."),
+        note="Flat 3.99% for 2026."),
     "ND": dict(
-        name="North Dakota", year=2024, confidence="medium",
-        brackets={"S": [(47_150, 0.0), (238_200, .0195), (INF, .025)],
-                  "MFJ": [(78_775, 0.0), (289_975, .0195), (INF, .025)],
-                  "HOH": [(63_100, 0.0), (264_100, .0195), (INF, .025)]},
+        name="North Dakota", year=2026, confidence="medium",
+        brackets={
+            "S": [(48_475, 0.0), (244_825, .0195), (INF, .025)],
+            "MFJ": [(80_975, 0.0), (298_075, .0195), (INF, .025)],
+            "HOH": [(63_100, 0.0), (264_100, .0195), (INF, .025)],
+        },
         std_deduction="federal", exemption=0, social_security="exempt",
         retirement_exclusion=None, ltcg_exclusion=0.40,
-        note=""),
+        note="Head-of-household brackets are the 2024 figures, not updated for 2026."),
     "OH": dict(
-        name="Ohio", year=2024, confidence="medium",
-        brackets=_same([(26_050, 0.0), (100_000, .0275), (INF, .035)]),
+        name="Ohio", year=2026, confidence="medium",
+        brackets=_same([(26_050 - 332 / .0275, 0.0), (INF, .0275)]),
         std_deduction={"S": 0, "MFJ": 0, "HOH": 0}, exemption=1_900,
         social_security="exempt", retirement_exclusion=None,
-        note="The personal exemption is income-tested ($1,900-$2,400); the "
-             "lowest amount is used. Municipal income taxes (often 1-2.5%) are "
-             "not included."),
+        note="Ohio taxes nothing up to $26,050, then $332 plus 2.75% of the excess. The brackets "
+             "here start 2.75% at $13,977. That matches the formula above $26,050 and overstates "
+             "tax by up to $332 between $13,977 and $26,050. The personal exemption is "
+             "income-tested ($1,900-$2,400); the lowest amount is used. Municipal income taxes "
+             "(often 1-2.5%) are not included."),
     "OK": dict(
-        name="Oklahoma", year=2024, confidence="medium",
-        brackets={"S": [(1_000, .0025), (2_500, .0075), (3_750, .0175), (4_900, .0275),
-                        (7_200, .0375), (INF, .0475)],
-                  "MFJ": [(2_000, .0025), (5_000, .0075), (7_500, .0175), (9_800, .0275),
-                          (12_200, .0375), (INF, .0475)],
-                  "HOH": [(2_000, .0025), (5_000, .0075), (7_500, .0175), (9_800, .0275),
-                          (12_200, .0375), (INF, .0475)]},
+        name="Oklahoma", year=2026, confidence="medium",
+        brackets={
+            "S": [(3_750, 0.0), (4_900, .025), (7_200, .035), (INF, .045)],
+            "MFJ": [(7_500, 0.0), (9_800, .025), (14_400, .035), (INF, .045)],
+            "HOH": [(7_500, 0.0), (9_800, .025), (14_400, .035), (INF, .045)],
+        },
         std_deduction={"S": 6_350, "MFJ": 12_700, "HOH": 9_350}, exemption=1_000,
         social_security="exempt",
         retirement_exclusion=[{"min_age": 0, "per_person": 10_000}],
-        note=""),
+        note="2026 rates: 2.5%, 3.5% and 4.5%. Head of household uses the joint brackets and its "
+             "2024 standard deduction."),
     "OR": dict(
-        name="Oregon", year=2024, confidence="medium",
-        brackets={"S": [(4_300, .0475), (10_750, .0675), (125_000, .0875), (INF, .099)],
-                  "MFJ": [(8_600, .0475), (21_500, .0675), (250_000, .0875), (INF, .099)],
-                  "HOH": [(8_600, .0475), (21_500, .0675), (250_000, .0875), (INF, .099)]},
-        std_deduction={"S": 2_745, "MFJ": 5_495, "HOH": 4_420}, exemption=0,
+        name="Oregon", year=2026, confidence="medium",
+        brackets={
+            "S": [(4_550, .0475), (11_400, .0675), (125_000, .0875), (INF, .099)],
+            "MFJ": [(9_100, .0475), (22_800, .0675), (250_000, .0875), (INF, .099)],
+            "HOH": [(9_100, .0475), (22_800, .0675), (250_000, .0875), (INF, .099)],
+        },
+        std_deduction={"S": 2_910, "MFJ": 5_820, "HOH": 4_420}, exemption=0,
         social_security="exempt", retirement_exclusion=None,
-        note="Oregon's deduction for federal tax paid (up to $8,250, gone above "
-             "$125k/$250k income) and its $249 personal credit are left out, "
-             "which overstates tax below those incomes by up to ~$800. The "
-             "Portland-area Metro/Multnomah taxes are not included."),
+        note="2026 brackets and standard deduction; head of household uses the joint brackets and "
+             "its 2024 deduction. Oregon's deduction for federal tax paid (up to $8,250, gone "
+             "above $125k/$250k income) and its $249 personal credit are left out, which "
+             "overstates tax below those incomes by up to ~$800. The Portland-area "
+             "Metro/Multnomah taxes are not included."),
     "PA": dict(
-        name="Pennsylvania", year=2024, confidence="high",
+        name="Pennsylvania", year=2026, confidence="high",
         brackets=_flat(.0307), std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
         exemption=0, social_security="exempt",
         retirement_exclusion=[{"min_age": 59.5, "per_person": INF}],
@@ -465,63 +494,75 @@ STATES = {
              "income after 59.5 is exempt. Local earned-income taxes (~1%, "
              "Philadelphia 3.75%) are not included."),
     "RI": dict(
-        name="Rhode Island", year=2024, confidence="medium",
-        brackets=_same([(77_450, .0375), (176_050, .0475), (INF, .0599)]),
-        std_deduction={"S": 10_550, "MFJ": 21_150, "HOH": 15_850}, exemption=4_950,
+        name="Rhode Island", year=2026, confidence="medium",
+        brackets=_same([(82_050, .0375), (186_450, .0475), (INF, .0599)]),
+        std_deduction={"S": 11_200, "MFJ": 22_400, "HOH": 16_800}, exemption=4_950,
         social_security={"exempt_below_agi": {"S": 101_000, "MFJ": 126_250, "HOH": 101_000}},
         retirement_exclusion=None,
         note="Social Security is exempt at full retirement age under the income "
              "limits (limits approximate). The $20k retirement-income "
              "exclusion is left out."),
     "SC": dict(
-        name="South Carolina", year=2024, confidence="medium",
-        brackets=_same([(3_460, 0.0), (17_330, .03), (INF, .062)]),
-        std_deduction="federal", exemption=0, social_security="exempt",
+        name="South Carolina", year=2026, confidence="approx",
+        brackets=_same([(30_000, .0199), (INF, .0521)]),
+        std_deduction={"S": 15_000, "MFJ": 30_000, "HOH": 22_500}, exemption=0,
+        social_security="exempt",
         retirement_exclusion=[{"min_age": 0, "per_person": 3_000},
                               {"min_age": 65, "per_person": 10_000}],
         ltcg_exclusion=0.44,
-        note="Top rate 6.2% for 2024 (falling toward 6%)."),
+        note="2026 rates: 1.99% up to $30,000 and 5.21% above (H.4216, retroactive to January 1). "
+             "The SCIAD deduction ($15,000 single / $30,000 joint / $22,500 head of household) "
+             "shrinks to zero between $40,000 and $95,000 of single income; that phase-out is not "
+             "modeled, so tax is understated above $40,000 (by up to about $780 single / $1,560 "
+             "joint)."),
     "SD": _no_tax("South Dakota"),
     "TN": _no_tax("Tennessee"),
     "TX": _no_tax("Texas"),
     "UT": dict(
-        name="Utah", year=2024, confidence="medium",
-        brackets=_flat(.0455), std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
+        name="Utah", year=2026, confidence="approx",
+        brackets=_flat(.0445), std_deduction={"S": 0, "MFJ": 0, "HOH": 0},
         exemption=0, social_security="taxed", retirement_exclusion=None,
-        note="Utah's taxpayer credit (which phases out by ~$80k single / $160k "
-             "joint) and its Social Security and retirement credits are left "
-             "out, so lower incomes are overstated."),
+        note="4.45% flat (SB 60, 2026, retroactive to January 1). Utah's taxpayer credit (6% of "
+             "the federal deduction, cut by 1.3 cents for each dollar of income above $18,696 "
+             "single / $37,392 joint) and its Social Security and retirement credits are left "
+             "out, so lower incomes are overstated by up to about $1,900."),
     "VT": dict(
-        name="Vermont", year=2024, confidence="medium",
-        brackets={"S": [(47_900, .0335), (116_000, .066), (242_000, .076), (INF, .0875)],
-                  "MFJ": [(79_950, .0335), (193_300, .066), (294_600, .076), (INF, .0875)],
-                  "HOH": [(64_200, .0335), (165_700, .066), (268_300, .076), (INF, .0875)]},
-        std_deduction={"S": 7_400, "MFJ": 14_850, "HOH": 11_100}, exemption=5_100,
+        name="Vermont", year=2026, confidence="medium",
+        brackets={
+            "S": [(49_400, .0335), (119_700, .066), (249_700, .076), (INF, .0875)],
+            "MFJ": [(82_500, .0335), (199_450, .066), (304_000, .076), (INF, .0875)],
+            "HOH": [(64_200, .0335), (165_700, .066), (268_300, .076), (INF, .0875)],
+        },
+        std_deduction={"S": 7_650, "MFJ": 15_300, "HOH": 11_100}, exemption=5_100,
         social_security={"exempt_below_agi": {"S": 50_000, "MFJ": 65_000, "HOH": 50_000}},
         retirement_exclusion=None,
-        note="Social Security is exempt under the income limits and phased in "
-             "above them (modeled as fully taxed above)."),
+        note="Social Security is exempt under the income limits and phased in above them (modeled "
+             "as fully taxed above). Head-of-household brackets and deduction are the 2024 "
+             "figures, not updated for 2026."),
     "VA": dict(
-        name="Virginia", year=2024, confidence="high",
+        name="Virginia", year=2026, confidence="high",
         brackets=_same([(3_000, .02), (5_000, .03), (17_000, .05), (INF, .0575)]),
-        std_deduction={"S": 8_500, "MFJ": 17_000, "HOH": 8_500}, exemption=930,
+        std_deduction={"S": 8_750, "MFJ": 17_500, "HOH": 8_750}, exemption=930,
         social_security="exempt", retirement_exclusion=None,
         note="The income-tested $12,000 age deduction at 65+ is left out."),
     "WA": _no_tax("Washington",
                   "No tax on wages or retirement income. Washington's 7% tax on "
                   "long-term capital gains above ~$262k a year is not included."),
     "WV": dict(
-        name="West Virginia", year=2024, confidence="medium",
-        brackets=_same([(10_000, .0236), (25_000, .0315), (40_000, .0354),
-                        (60_000, .0472), (INF, .0512)]),
+        name="West Virginia", year=2026, confidence="medium",
+        brackets=_same([(10_000, .0211), (25_000, .0281), (40_000, .0316), (60_000, .0422),
+                        (INF, .0458)]),
         std_deduction={"S": 0, "MFJ": 0, "HOH": 0}, exemption=2_000,
         social_security="exempt", retirement_exclusion=None,
-        note="Social Security becomes fully exempt in 2026 (treated as exempt)."),
+        note="All rates cut 5% for 2026, top rate 4.58% (SB 392, retroactive to January 1). "
+             "Social Security is exempt."),
     "WI": dict(
-        name="Wisconsin", year=2024, confidence="approx",
-        brackets={"S": [(14_320, .035), (28_640, .044), (315_310, .053), (INF, .0765)],
-                  "MFJ": [(19_090, .035), (38_190, .044), (420_420, .053), (INF, .0765)],
-                  "HOH": [(14_320, .035), (28_640, .044), (315_310, .053), (INF, .0765)]},
+        name="Wisconsin", year=2026, confidence="approx",
+        brackets={
+            "S": [(15_110, .035), (51_950, .044), (332_720, .053), (INF, .0765)],
+            "MFJ": [(20_150, .035), (69_260, .044), (443_630, .053), (INF, .0765)],
+            "HOH": [(15_110, .035), (51_950, .044), (332_720, .053), (INF, .0765)],
+        },
         std_deduction={"S": 0, "MFJ": 0, "HOH": 0}, exemption=700,
         social_security="exempt", retirement_exclusion=None, ltcg_exclusion=0.30,
         note="Wisconsin's sliding standard deduction (largest at low incomes, "
