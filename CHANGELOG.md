@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Changed (spending guardrails, shown in plain words)
+- The cushion line on the results card now names both spending rules. The portfolio rule trims fun money after the portfolio falls about 30% below its value at retirement. The return rule also trims it in a year with a loss: 10%, or 20% with a loss over 10%. Before, the line implied no trim happens until a 30% fall. The numbers come from your settings. If only the return rule is on, the card says so instead of "Spending never adjusts".
+- New small line in the cushion box: "Chance of a deep-fall trim", the share of simulated markets where the portfolio rule ever trims. Loss-year trims happen in almost every market, so the line counts those in years instead ("Trims of about $X a month happen in about N of your retirement years"). Same on the server, the process pool and the browser (`cuts_by_run`, `spending_cut_stats`)
+- The portfolio-over-time chart (Range + milestones) now draws a red dashed spending trim line at 70% of the median balance at retirement, from retirement on. In Future $ it rises with inflation. A small table under the chart lists each rule, the portfolio value where it acts, the distance from the median at retirement in $ and %, and the spending change it causes. A short note spells out the rule, including that housing is never cut.
+- A 100% success result now says it is not a promise. The success rate is still the one headline number.
+
 ### Changed (follow-up analyses no longer block the page)
 - After a Run, the ways-to-reach-your-goal, net-worth, safe-withdrawal and mortgage sweeps now compute in a pool of background processes, not on the page's own thread. Clicks and edits answer at once while they run. Before, each sweep held the page for up to 29 seconds.
 - The page does not poll the server. When sweeps finish, the server asks for one page refresh itself (`ui/utils/session_wake.py`). The server waits until all of them are done, or for 20 seconds after the first, so a Run costs one or two refreshes. Any edit or click you make in the meantime shows what has finished. The server never interrupts a run of yours: if the page is busy in any way (even a click inside a tile), it waits and asks again a moment later, so a click or edit is never lost. A new Run, a profile switch or a loaded file cancels sweeps that are still going, so old results never show under new inputs.

@@ -1993,6 +1993,35 @@ def _percentiles_by_age(by_age: Dict[int, List[float]]) -> List[dict]:
     return out
 
 
+def spending_cut_stats(cuts_by_run) -> Optional[dict]:
+    """How often the spending rules trim, from per-run lists of trim years
+    (``mc_parallel.run_cuts``: ``[dollars, deep]`` per year; a bare number counts as
+    a loss-year-only trim). One list per simulated run, empty = never trimmed.
+
+    ``share``: runs with any trim. ``deep_share``: runs where the portfolio rule (a
+    deep fall) ever trimmed. Loss-year trims happen in almost every run, so
+    ``deep_share`` is the figure that tells plans apart. ``median_monthly``: the middle
+    trim in dollars a month over every trim year. ``median_years``: the middle number
+    of trim years among runs that trim. None when no run is given."""
+    runs = [list(r) for r in (cuts_by_run or []) if isinstance(r, (list, tuple))]
+    if not runs:
+        return None
+
+    def _year(y):
+        return (float(y[0]), bool(y[1])) if isinstance(y, (list, tuple)) else (float(y), False)
+
+    years = [[_year(y) for y in r] for r in runs]
+    trimmed = [r for r in years if r]
+    every = [d for r in trimmed for d, _deep in r]
+    return {
+        "share": len(trimmed) / len(runs),
+        "deep_share": sum(1 for r in years if any(deep for _d, deep in r)) / len(runs),
+        "median_monthly": float(np.median(every)) / 12.0 if every else 0.0,
+        "median_years": float(np.median([len(r) for r in trimmed])) if trimmed else 0.0,
+        "n": len(runs),
+    }
+
+
 def _error_totals(results: List[dict]) -> Tuple[int, Optional[str]]:
     """Total engine errors across ``sim_task`` / ``scan_age`` results, and the
     first error message (None if there was none)."""
@@ -2015,8 +2044,12 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
     details: List[dict] = []
     spending_by_age: Dict[int, List[float]] = {}
     health_by_age: Dict[int, List[float]] = {}
+    cuts_by_run: List[list] = []
     sim_errors, sim_first_error = _error_totals(chunks)
     for r in chunks:
+        cuts = r.get("cuts_by_run")
+        if isinstance(cuts, list):
+            cuts_by_run.extend(cuts)
         finals.extend(r.get("finals", []))
         successes += int(r.get("successes", 0))
         n += int(r.get("n", 0))
@@ -2094,6 +2127,7 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
         "withdrawals_basis": _withdrawals_basis(det_successes),
         "spending_by_year": spending_by_year,
         "health_by_year": health_by_year,
+        "spending_cut_stats": spending_cut_stats(cuts_by_run),
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, logs, retirement_age),
     }
@@ -2245,6 +2279,8 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
         "withdrawals_basis": _withdrawals_basis(successes),
         "spending_by_year": spending_by_year,
         "health_by_year": health_by_year,
+        "spending_cut_stats": spending_cut_stats(
+            [_mcp.run_cuts(log) for log in spending_logs]),
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, wlogs, retirement_age),
     }
@@ -3087,7 +3123,7 @@ def _snapshot_config() -> dict:
         "TOTAL_INVESTMENTS", "TOTAL_NET_WORTH", "CURRENT_ANNUAL_EXPENSES",
         "PLAN_UNTIL_AGE", "PARTNER_PLAN_UNTIL_AGE", "TARGET_SUCCESS_RATE", "NUM_SIMULATIONS",
         "ACTIVE_RETURN_SCENARIO", "INCLUDE_SOCIAL_SECURITY",
-        "DYNAMIC_SPENDING_ENABLED", "ENABLE_ROTH_CONVERSION",
+        "DYNAMIC_SPENDING_ENABLED", "RETURN_BASED_SPENDING_ENABLED", "ENABLE_ROTH_CONVERSION",
         "SS_CLAIM_AGE",
     ]
     snap = {k: getattr(cfg, k, None) for k in keys}

@@ -262,7 +262,8 @@ def test_cushion_uses_the_median_balance_and_the_rule():
 
 
 def test_no_cushion_when_spending_never_adjusts():
-    html = _hero(0.737, dict(COUPLE_SNAP, DYNAMIC_SPENDING_ENABLED=False), _overrides(),
+    html = _hero(0.737, dict(COUPLE_SNAP, DYNAMIC_SPENDING_ENABLED=False,
+                             RETURN_BASED_SPENDING_ENABLED=False), _overrides(),
                  [{"age": 48, "p50": 3_000_000.0}])
     assert "Spending never adjusts." in html and "Your cushion" not in html
 

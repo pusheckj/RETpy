@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import math
 
+import pandas as pd
 import plotly.graph_objects as go
 
 try:
@@ -35,11 +36,13 @@ try:
     from utils.household import plan_end_ages
     from utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, beeswarm_xy
     from utils.household import has_partner
+    from utils.formatting import money
 except ImportError:  # pragma: no cover
     from ui.utils.household import has_partner  # type: ignore
     from ui.utils.coerce import safe_int, as_fraction  # type: ignore
     from ui.utils.household import plan_end_ages  # type: ignore
     from ui.utils.plot_theme import style_fig, show_chart, PLOTLY_CONFIG, is_dark, beeswarm_xy  # type: ignore
+    from ui.utils.formatting import money  # type: ignore
 
 
 STYLES = ["Box plot", "Point cloud (violin)", "Range + milestones"]
@@ -210,8 +213,56 @@ def axis_top(p75, p90) -> tuple:
     return (min(peak90, limit), peak90 > limit)
 
 
+def trim_line(ages, median_today, retirement_age, c, infl):
+    """The spending trim line: ``{"x", "y", "level"}`` or None.
+
+    The engine compares the portfolio with that run's own balance at retirement,
+    flat in today's dollars, and trims below ``floor_trigger`` of it. The line is
+    that fraction of the median balance at retirement, drawn from retirement on.
+    ``infl(age)`` turns today's dollars into the chart's dollars (1 in Today's $)."""
+    if not c or not c.get("enabled") or retirement_age not in ages:
+        return None
+    level = float(median_today[ages.index(retirement_age)]) * c["floor_trigger"]
+    xs = [a for a in ages if a >= retirement_age]
+    return {"x": xs, "y": [level * infl(a) for a in xs], "level": level}
+
+
+def trim_table(c, median_today, retirement_age, infl) -> "pd.DataFrame":
+    """Rows under the chart: each rule, the portfolio value where it acts, how far
+    that is from the median at retirement ($ and %), and the spending change."""
+    try:
+        from utils import goal_levers as gl
+    except ImportError:  # pragma: no cover
+        from ui.utils import goal_levers as gl  # type: ignore
+    scale = infl(retirement_age)
+    median = float(median_today) * scale
+    rows = []
+
+    def line_row(name, frac, change):
+        at = median * frac
+        rows.append({"Guardrail": name, "Portfolio value at the line": money(at),
+                     "$ distance from the median at retirement": money(at - median),
+                     "% distance": f"{(frac - 1) * 100:+g}%",
+                     "Spending change triggered": change})
+
+    if c.get("enabled"):
+        line_row(f"Spending trim line (portfolio below {gl._p(c['floor_trigger'])} of its "
+                 "value at retirement)", c["floor_trigger"],
+                 f"Fun money trimmed {gl._p(c['cut'])}, about "
+                 f"{gl.monthly_text(c['trim_year'] * scale)} a month")
+        if c["ceiling_increase"] > 0:
+            line_row(f"Spending raise line (portfolio above {gl._p(c['ceiling_trigger'])})",
+                     c["ceiling_trigger"], f"Fun money raised {gl._p(c['ceiling_increase'])}")
+    ret = gl.return_rule_row(c.get("return_rule"))
+    if ret:
+        rows.append({"Guardrail": ret[0], "Portfolio value at the line": "—",
+                     "$ distance from the median at retirement": "—", "% distance": "—",
+                     "Spending change triggered": ret[1]})
+    return pd.DataFrame(rows)
+
+
 def _milestone_figure(ages, p10, p25, p50, p75, p90, items, *, dark: bool, compact: bool,
-                      mode_label: str, unit: str) -> go.Figure:
+                      mode_label: str, unit: str, trim: dict = None) -> go.Figure:
     """Median line, 25-75% and 10-90% bands, and the milestone markers."""
     line = "#14b8a6" if dark else "#0f766e"
     band_outer = "rgba(20,184,166,0.20)" if dark else "rgba(13,148,136,0.13)"
@@ -242,6 +293,18 @@ def _milestone_figure(ages, p10, p25, p50, p75, p90, items, *, dark: bool, compa
                        "median $%{y:,.0f}<br>25th $%{customdata[1]:,.0f}<br>"
                        "10th $%{customdata[0]:,.0f}<extra></extra>"),
     ))
+
+    if trim:
+        red = "#f87171" if dark else "#dc2626"
+        fig.add_trace(go.Scatter(
+            x=trim["x"], y=trim["y"], mode="lines", name="Spending trim line",
+            line=dict(color=red, width=1.6, dash="dash"),
+            hovertemplate="Age %{x}<br>Spending trim line $%{y:,.0f}<extra></extra>"))
+        fig.add_annotation(
+            x=trim["x"][0], xref="x", y=trim["y"][0], yref="y", yanchor="top", xanchor="left",
+            xshift=4, yshift=-3, showarrow=False,
+            text=f"Spending trim line ≈ {money(trim['y'][0], shorten=True)}",
+            font=dict(size=LABEL_SIZE, color=red), bgcolor=chip, borderpad=1)
 
     def median_at(a: float) -> float:
         if a <= ages[0]:
@@ -293,6 +356,18 @@ def _milestone_figure(ages, p10, p25, p50, p75, p90, items, *, dark: bool, compa
     return fig
 
 
+def _guardrails(overrides: dict, age: int):
+    """The engine's spending rules for this plan (``goal_levers.guardrail_cushion``),
+    or None when the plan can't be read."""
+    if not overrides:
+        return None
+    try:
+        from utils.goal_levers import guardrail_cushion
+    except ImportError:  # pragma: no cover
+        from ui.utils.goal_levers import guardrail_cushion  # type: ignore
+    return guardrail_cushion(overrides, age)
+
+
 def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> None:
     if not results:
         return
@@ -303,6 +378,7 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
     overrides = st.session_state.get("user_overrides", {}) or {}
     current_age = safe_int(overrides.get("YOUR_AGE", 25), 25)
     retirement_age = safe_int(overrides.get("TARGET_RETIREMENT_AGE", 55), 55)
+    guard_age = safe_int((results.get("primary_result") or {}).get("retirement_age"), retirement_age)
     plan_until = plan_end_ages(overrides)[0]  # when the plan ends (cfg.plan_end_age)
     inflation_rate = as_fraction(overrides.get("EXPECTED_INFLATION", 0.0275), 0.0275)
 
@@ -337,9 +413,12 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
             mode_label = "future (nominal) dollars" if future else "today's dollars"
             unit = "$, nominal" if future else "$, today"
             items = milestones(overrides, current_age, plan_until)
+            guard = _guardrails(overrides, guard_age)
+            median_today = [float(r["p50"]) for r in rows]
+            trim = trim_line(ages, median_today, guard_age, guard, infl) if guard else None
             show_chart(st, lambda compact: _milestone_figure(
                 ages, p10, p25, p50, p75, p90, items, dark=dark, compact=compact,
-                mode_label=mode_label, unit=unit),
+                mode_label=mode_label, unit=unit, trim=trim),
                 f"{chart_key}_{'nom' if future else 'tod'}_ms_{'dk' if dark else 'lt'}",
                 PLOTLY_CONFIG)
             clipped = axis_top(p75, p90)[1]
@@ -351,6 +430,15 @@ def render(st, results: dict = None, chart_key: str = "net_worth_box_main") -> N
                 + (" The axis stops early so the median stays readable. The top of the light "
                    "band runs past it." if clipped else "")
             )
+            if guard and guard_age in ages:
+                table = trim_table(guard, median_today[ages.index(guard_age)], guard_age, infl)
+                if len(table):
+                    st.dataframe(table, hide_index=True, width="stretch")
+                    try:
+                        from utils.goal_levers import rule_text
+                    except ImportError:  # pragma: no cover
+                        from ui.utils.goal_levers import rule_text  # type: ignore
+                    st.caption(rule_text(guard))
             return
         box_color = "#14b8a6" if dark else "#0d9488"
         fill = "rgba(20,184,166,0.35)" if dark else "rgba(13,148,136,0.30)"
