@@ -154,17 +154,20 @@ def test_engine_prices_children_at_home():
     p = _household(40, 40, kids=True)
     cfg.CHILDREN = _kids(2, 5)
     child = cfg.ACA_CHILD_MONTHLY * 12
+    # Premiums grow 6% a year nominal before 65 (3.25% above inflation), counted from age 40 today.
+    g = lambda age: cfg.aca_premium_extra(age - 40)           # noqa: E731
+    assert g(40) == 1.0 and g(41) == pytest.approx(1.0325 / 1.0175)   # on top of the healthcare factor
     adults = 2 * _rate(41)
     p.update_ages(41)
-    assert p.quote_marketplace_cost(41, [41, 41], RICH)[0] == pytest.approx(adults)
+    assert p.quote_marketplace_cost(41, [41, 41], RICH)[0] == pytest.approx(adults * g(41))
     p.update_ages(42)   # first child born
-    assert p.quote_marketplace_cost(42, [42, 42], RICH)[0] == pytest.approx(2 * _rate(42) + child)
+    assert p.quote_marketplace_cost(42, [42, 42], RICH)[0] == pytest.approx((2 * _rate(42) + child) * g(42))
     p.update_ages(45)   # both at home
-    assert p.quote_marketplace_cost(45, [45, 45], RICH)[0] == pytest.approx(2 * _rate(45) + 2 * child)
+    assert p.quote_marketplace_cost(45, [45, 45], RICH)[0] == pytest.approx((2 * _rate(45) + 2 * child) * g(45))
     p.update_ages(60)   # first left at 18 (born 42)
-    assert p.quote_marketplace_cost(60, [60, 60], RICH)[0] == pytest.approx(2 * _rate(60) + child)
+    assert p.quote_marketplace_cost(60, [60, 60], RICH)[0] == pytest.approx((2 * _rate(60) + child) * g(60))
     p.update_ages(63)   # both gone
-    assert p.quote_marketplace_cost(63, [63, 63], RICH)[0] == pytest.approx(2 * _rate(63))
+    assert p.quote_marketplace_cost(63, [63, 63], RICH)[0] == pytest.approx(2 * _rate(63) * g(63))
 
 
 # ---------------------------------------------------------------------------

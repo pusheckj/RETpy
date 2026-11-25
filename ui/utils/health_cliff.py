@@ -46,13 +46,17 @@ def merge(chunks: Iterable[Dict[int, List[Optional[float]]]]) -> Dict[int, List[
     return out
 
 
+#: A credit loss under this (dollars a year) is not worth a warning.
+MIN_LOST = 100.0
+
+
 def first_crossing(by_year: Dict[Any, Dict[str, float]], your_age: int, current_year: int,
-                   majority: float = 0.5) -> Optional[dict]:
-    """The first year at least ``majority`` of the runs are over the cliff:
-    ``{"age", "year", "lost", "share"}``, or None when none is."""
+                   majority: float = 0.5, min_lost: float = MIN_LOST) -> Optional[dict]:
+    """The first year at least ``majority`` of the runs are over the cliff AND the credit lost
+    is at least ``min_lost``: ``{"age", "year", "lost", "share"}``, or None when none is."""
     for age in sorted(int(a) for a in (by_year or {})):
         row = by_year.get(age) or by_year.get(str(age))
-        if row and row["n"] and row["over"] / row["n"] >= majority:
+        if row and row["n"] and row["over"] / row["n"] >= majority and row["lost"] >= min_lost:
             return {"age": age, "year": int(current_year) + age - int(your_age),
                     "lost": float(row["lost"]), "share": row["over"] / row["n"]}
     return None
@@ -62,10 +66,10 @@ def message(crossing: dict, plan_year: int) -> str:
     """One short note for the results screen. ``crossing`` is ``first_crossing``'s answer."""
     lost = int(round(crossing["lost"], -2))
     share = int(round(100 * crossing["share"]))
-    return (f"Health insurance cliff: from {crossing['year']} (age {crossing['age']}) your income is "
-            f"above 400% of the poverty line in {share}% of simulations, so the ACA premium credit "
-            f"stops. That year it costs you about ${lost:,} in credit. Prices and credit rules "
-            f"are for the {plan_year} plan year, in today's dollars.")
+    return (f"Health insurance cliff: from {crossing['year']} (age {crossing['age']}), your income tops "
+            f"400% of the poverty line in {share}% of simulations. The ACA premium credit stops. "
+            f"That year it costs you about ${lost:,} in credit. "
+            f"Prices and credit rules are for the {plan_year} plan year, in today's dollars.")
 
 
 def render_note(st, results: Optional[dict], overrides: dict, current_year: int) -> None:
@@ -77,6 +81,8 @@ def render_note(st, results: Optional[dict], overrides: dict, current_year: int)
         from utils import health_area
     except ImportError:  # pragma: no cover
         from ui.utils import health_area  # type: ignore
-    crossing = first_crossing(by_year, int((overrides or {}).get("YOUR_AGE", 0) or 0), current_year)
+    from retirement_sim import config as cfg
+    age = (overrides or {}).get("YOUR_AGE")
+    crossing = first_crossing(by_year, int(age if age is not None else cfg.YOUR_AGE), current_year)
     if crossing is not None:
         st.warning(message(crossing, health_area.coverage_year(overrides)).replace("$", "\\$"))

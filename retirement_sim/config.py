@@ -3210,10 +3210,10 @@ ACA_AGE_CURVE = {
 # -----------------------------------------------------------------------------
 # HEALTHCARE BY AREA (plan year 2027)
 # -----------------------------------------------------------------------------
-# With the side panel's area set, config_builder fills these from
+# With the side panel's area set, config_builder fills the ACA_AREA_* values from
 # retirement_sim/healthcare_data.py (resolved to plain values, so the engine, and
-# the browser's copy of it, never read a data file). All None / default = today's
-# flat model: nothing below changes a plan that has no area.
+# the browser's copy of it, never read a data file). None / default = the flat
+# two-input model above.
 #
 #   ACA_AREA_SILVER_MONTHLY  benchmark Silver price a month at each age 0-64 (children's
 #                            rates below 21, adults' from 21); replaces the two price
@@ -3223,17 +3223,20 @@ ACA_AGE_CURVE = {
 #   ACA_AREA_PLAN_RATIO      the plan bought / Silver: 1.0, or the bronze-to-silver ratio.
 #                            The credit always follows Silver
 #   ACA_AREA_OOP_ANNUAL      out-of-pocket a year by age (bronze x1.30 already in it)
-#   ACA_PREMIUM_GROWTH_NOMINAL  pre-Medicare premiums grow at this nominal rate (6.0%, the
-#                            owner's reference file). None: they grow with healthcare
-#                            (INFLATION_RATES['healthcare']), as before. Medicare, care and
-#                            out-of-pocket are not affected
 #   ACA_APPLICABLE_PCT_BANDS, ACA_FPL_*  the 2027 credit table and 2026 poverty guidelines
+#                            (set with an area)
+#
+# ACA_PREMIUM_GROWTH_NOMINAL (all plans, area or not): marketplace premiums before 65 grow
+# 6.0% a year nominal (the owner's validated assumptions file, pre65_premiums base case).
+# That is 3.25% above inflation in this all-real frame, against healthcare's 1.75%. The FULL
+# price grows before the credit; the credit's income share does not. Medicare, long-term care
+# and out-of-pocket costs keep INFLATION_RATES['healthcare']. None: premiums grow with healthcare.
 ACA_AREA_KEY = None
 ACA_AREA_SILVER_MONTHLY = None
 ACA_AREA_TIERS = None
 ACA_AREA_PLAN_RATIO = 1.0
 ACA_AREA_OOP_ANNUAL = None
-ACA_PREMIUM_GROWTH_NOMINAL = None
+ACA_PREMIUM_GROWTH_NOMINAL = 0.06
 
 # The general CPI that INFLATION_REAL_EXCESS was measured against: a premium's real
 # growth is its nominal rate less this, fixed, however the inflation slider moves.
@@ -3266,7 +3269,7 @@ def aca_area_active(get=None) -> bool:
 
 def aca_premium_extra(years: float, get=None) -> float:
     """How much faster pre-Medicare premiums grow than the healthcare factor, after
-    ``years``: 1.0 without ACA_PREMIUM_GROWTH_NOMINAL. The engine is all-real, so a
+    ``years``: 1.0 when ACA_PREMIUM_GROWTH_NOMINAL is None. The engine is all-real, so a
     premium's growth is its nominal rate less CPI (6.0% - 2.75% = 3.25% a year, against
     healthcare's 1.75%), applied on top of the healthcare factor. Worked out from the
     year, so it draws no random numbers and the healthcare factor's noise is shared."""
@@ -3336,17 +3339,13 @@ def aca_marketplace_premium(modified_agi: float, adult_ages, kid_ages, household
     ``household_size`` is the tax household that sets the FPL (a Medicare spouse stays in it).
     ``factor`` is the healthcare factor and ``years`` how far the year is from today.
 
-    Without an area the net premium is multiplied by ``factor`` (today's behaviour). With one,
-    prices grow by ``factor`` x aca_premium_extra(years) BEFORE the credit, while the income
-    share does not: the credit rises as prices rise, which is how the law works."""
+    Prices grow by ``factor`` x aca_premium_extra(years) BEFORE the credit, while the income share
+    does not: the credit rises as prices rise, which is how the law works. (Before area pricing,
+    the net premium was multiplied by ``factor`` instead.)"""
     get = get or globals().get
     bench, plan = aca_household_prices_annual(adult_ages, kid_ages, get)
-    bench *= price_scale
-    plan *= price_scale
-    if aca_area_active(get):
-        growth = factor * aca_premium_extra(years, get)
-        return _aca_net_premium(modified_agi, bench * growth, plan * growth, household_size, get)
-    return _aca_net_premium(modified_agi, bench, plan, household_size, get) * factor
+    growth = factor * aca_premium_extra(years, get) * price_scale
+    return _aca_net_premium(modified_agi, bench * growth, plan * growth, household_size, get)
 
 
 def aca_marketplace_cliff(modified_agi: float, adult_ages, kid_ages, household_size: int,
@@ -3355,16 +3354,18 @@ def aca_marketplace_cliff(modified_agi: float, adult_ages, kid_ages, household_s
     """(over the cliff?, credit lost). ``over`` is True when MAGI is at or above
     ACA_SUBSIDY_CLIFF_PCT of FPL, where the credit stops dead. ``lost`` is the credit the
     household would get at the edge of the cliff (benchmark less 400% of FPL x the top
-    applicable %), in the same dollars as the premium: what crossing costs that year."""
+    applicable %, at most the price of the plan bought), in the same dollars as the premium:
+    what crossing costs that year."""
     get = get or globals().get
     cliff = get("ACA_SUBSIDY_CLIFF_PCT", ACA_SUBSIDY_CLIFF_PCT)
     fpl = aca_fpl(household_size, get)
     if modified_agi / fpl < cliff:
         return False, 0.0
-    bench = aca_household_prices_annual(adult_ages, kid_ages, get)[0] * price_scale
-    bench *= factor * (aca_premium_extra(years, get) if aca_area_active(get) else 1.0)
+    bench, plan = aca_household_prices_annual(adult_ages, kid_ages, get)
+    growth = factor * aca_premium_extra(years, get) * price_scale
     edge_share = cliff * fpl * aca_applicable_pct(cliff, get("ACA_APPLICABLE_PCT_BANDS"))
-    return True, max(0.0, bench - edge_share)
+    credit = max(0.0, bench * growth - edge_share)
+    return True, min(credit, plan * growth)       # a credit never exceeds the plan bought
 
 
 def calculate_aca_premium_age_rated(modified_agi: float, member_ages,

@@ -25,13 +25,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 YEAR = 2027             # plan year of the prices, credit table and out-of-pocket limits
 LEGACY_YEAR = 2026      # plan year of the flat figures used when no area is set
 FPL_YEAR = 2026         # HHS guideline year that governs 2027 coverage
-#: Pre-Medicare premium growth per year, nominal (the owner's reference file, base case).
-PREMIUM_GROWTH_NOMINAL = 0.06
 BRONZE_FALLBACK_RATIO = 0.72   # the estimator's fallback when a state lists no bronze ratio
 
-SOURCE_LINE = ("2027 plan year. Prices from the CMS Rate PUF, KFF and Covered California; credit table "
-               "from Rev. Proc. 2026-26; poverty guidelines from HHS (2026). Method and tables from "
-               "BiggerPockets Money's Healthcare Costs Estimator v3.6.2. See docs/DATA_SOURCES.md.")
+SOURCE_LINE = ("Prices are for the 2027 plan year. They come from the CMS marketplace rate files, KFF and "
+               "Covered California. The credit table is IRS Rev. Proc. 2026-26. Poverty guidelines are HHS 2026. "
+               "Method and tables are from BiggerPockets Money's Healthcare Costs Estimator v3.6.2. "
+               "See docs/DATA_SOURCES.md.")
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "healthcare", str(YEAR))
 
@@ -205,7 +204,7 @@ def area_label(key: Any) -> str:
     if name == "avg":
         return f"{state}, statewide average"
     if a["state"] == "CA":
-        return f"{state}, Covered California region {a['entry'].get('reg', name)}"
+        return f"{state}, Covered California region {a['entry'].get('reg', name)}, price group {name}"
     return f"{state}, rating area {name}"
 
 
@@ -403,7 +402,9 @@ def reference_prices(key: Any) -> Optional[Dict[str, float]]:
     if a is None:
         return None
     table = _silver_table(a)
-    return {"benchmark_at_40": table[40], "child": table[10]}
+    tiered = bool(a["entry"].get("cr") and a["entry"].get("tiers"))
+    # New York and Vermont price a household as a tier of one rate: there is no child price.
+    return {"benchmark_at_40": table[40], "child": None if tiered else table[10]}
 
 
 def area_overrides(key: Any, plan: str = "silver", benchmark_at_40: Optional[float] = None,
@@ -414,16 +415,16 @@ def area_overrides(key: Any, plan: str = "silver", benchmark_at_40: Optional[flo
     ``plan`` is ``"silver"`` (the benchmark, which also sets the credit) or ``"bronze"`` (the
     lowest-cost bronze, priced through the state's bronze-to-silver ratio). ``benchmark_at_40``
     and ``child`` are the side panel's two price boxes: a figure that is not the area's own
-    (to the dollar) rescales that group of prices, like a quote you know.
+    (to the dollar) rescales that group of prices, like a quote you know. A figure equal to the
+    area's own changes nothing, so a real quote of any size, $625 included, is honoured.
     """
     a = area(key)
     if a is None:
         return {}
     bronze = plan == "bronze"
     table = _silver_table(a)
-    ref = {"benchmark_at_40": table[40], "child": table[10]}
-    adult_scale = _scale(benchmark_at_40, ref["benchmark_at_40"])
-    child_scale = _scale(child, ref["child"])
+    adult_scale = _scale(benchmark_at_40, table[40])
+    child_scale = _scale(child, table[10])
     table = [round(v * (child_scale if age < 21 else adult_scale), 4) for age, v in enumerate(table)]
     e = a["entry"]
     tiers = None
@@ -442,7 +443,6 @@ def area_overrides(key: Any, plan: str = "silver", benchmark_at_40: Optional[flo
         "ACA_APPLICABLE_PCT_BANDS": ptc_bands(),
         "ACA_FPL_FIRST_PERSON": first,
         "ACA_FPL_PER_ADDITIONAL_PERSON": extra,
-        "ACA_PREMIUM_GROWTH_NOMINAL": PREMIUM_GROWTH_NOMINAL,
     }
 
 

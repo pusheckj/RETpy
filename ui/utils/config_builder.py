@@ -169,7 +169,7 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
     # 5b. Healthcare by area: the area key becomes plain price tables (retirement_sim/
     #     healthcare_data.py), so the engine, and the browser's copy of it, never read a
     #     data file. The two marketplace price boxes rescale them when they hold a quote of
-    #     the user's own: a figure that is neither the area's price nor the boxes' starting one.
+    #     the user's own (any figure but the area's own price).
     out.update(health_area_overrides(user_overrides))
 
     # 6. What the side panel would store for the inputs left out (see below).
@@ -204,7 +204,7 @@ def health_area_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
             v = float(v)
         except (TypeError, ValueError):
             return None
-        return None if round(v) == round(STARTING_PRICES[name]) else v
+        return v        # healthcare_data ignores a figure equal to the area's own price
 
     plan = "bronze" if str(user_overrides.get("HEALTH_PLAN", "silver")).lower() == "bronze" else "silver"
     return hd.area_overrides(key, plan, benchmark_at_40=typed("ACA_BENCHMARK_MONTHLY_AT_40"),

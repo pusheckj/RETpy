@@ -117,10 +117,13 @@ def test_only_the_three_oldest_children_under_21_are_charged_in_an_area():
 # Premium growth: 6.0% a year nominal for pre-Medicare premiums only
 # ---------------------------------------------------------------------------
 
-def test_premiums_grow_at_6_percent_nominal_when_an_area_is_set():
-    _area("AL:1")
+@pytest.mark.parametrize("area_key", [None, "AL:1"])
+def test_premiums_grow_at_6_percent_nominal_with_or_without_an_area(area_key):
+    if area_key:
+        _area(area_key)
     ex_h = cfg.INFLATION_REAL_EXCESS["healthcare"]
     assert ex_h == pytest.approx(0.0175)                   # unchanged: Medicare, care, out-of-pocket
+    assert cfg.ACA_PREMIUM_GROWTH_NOMINAL == 0.06           # the one source of the rate
     base = cfg.aca_marketplace_premium(10_000_000, [35, 35], [5, 3], 4)
     grown = cfg.aca_marketplace_premium(10_000_000, [35, 35], [5, 3], 4,
                                         factor=(1 + ex_h) ** 10, years=10)
@@ -128,23 +131,40 @@ def test_premiums_grow_at_6_percent_nominal_when_an_area_is_set():
     assert grown / base == pytest.approx(1.0325 ** 10)
 
 
-def test_the_credit_does_not_grow_with_prices_in_an_area():
+@pytest.mark.parametrize("area_key", [None, "AL:1"])
+def test_the_credit_does_not_grow_with_prices(area_key):
     """The required contribution is a share of income. Prices rise, income does not, so the
-    credit gets bigger and the household's bill below the cliff stays put."""
-    _area("AL:1")
+    credit gets bigger and the household's bill below the cliff stays put (no area too)."""
+    if area_key:
+        _area(area_key)
     now = cfg.aca_marketplace_premium(80_000, [35, 35], [5, 3], 4)
     later = cfg.aca_marketplace_premium(80_000, [35, 35], [5, 3], 4,
                                         factor=1.0175 ** 10, years=10)
     assert later == pytest.approx(now)
 
 
-def test_without_an_area_growth_and_prices_are_todays():
-    assert cfg.ACA_AREA_SILVER_MONTHLY is None and cfg.ACA_PREMIUM_GROWTH_NOMINAL is None
-    assert cfg.aca_premium_extra(30) == 1.0
+def test_the_growth_rate_has_one_source():
+    assert not hasattr(hd, "PREMIUM_GROWTH_NOMINAL")
+    assert "ACA_PREMIUM_GROWTH_NOMINAL" not in hd.area_overrides("AL:1")
+    assert build_config_overrides({"HEALTH_AREA": "AL:1"}).get("ACA_PREMIUM_GROWTH_NOMINAL") is None
+
+
+def test_without_an_area_prices_are_todays_and_the_full_price_grows_before_the_credit():
+    assert cfg.ACA_AREA_SILVER_MONTHLY is None
     bench, plan = cfg.aca_household_prices_annual([55, 50], [10])
     expect = (cfg.aca_member_full_price_annual(55) + cfg.aca_member_full_price_annual(50)
               + cfg.aca_member_full_price_annual(10))
     assert bench == plan == pytest.approx(expect)
+    ex_h = cfg.INFLATION_REAL_EXCESS["healthcare"]
+    f, yrs = (1 + ex_h) ** 12, 12
+    g = f * cfg.aca_premium_extra(yrs)
+    assert g == pytest.approx(1.0325 ** 12)
+    magi = 60_000.0
+    fpl = cfg.aca_fpl(3)
+    share = magi * cfg.aca_applicable_pct(magi / fpl)
+    got = cfg.aca_marketplace_premium(magi, [55, 50], [10], 3, f, yrs)
+    assert got == pytest.approx(min(share, bench * g))     # the income share, not grown with prices
+    assert got != pytest.approx(min(share, bench) * f)     # not the old net-premium growth
 
 
 def test_medicare_and_care_growth_are_not_touched_by_an_area():
@@ -210,11 +230,24 @@ def test_cliff_helper_names_the_subsidy_lost_at_400_percent_fpl():
     assert lost == pytest.approx(bench - edge * top, abs=0.2)
 
 
+def test_cliff_credit_lost_is_capped_at_the_bronze_price():
+    _area("AL:1", "bronze")
+    edge = 4 * cfg.aca_fpl(4)
+    bronze = cfg.aca_household_prices_annual([35, 35], [5, 3])[1]
+    over, lost = cfg.aca_marketplace_cliff(edge, [35, 35], [5, 3], 4)
+    assert over and 0 < lost <= bronze + 1e-9
+    # A household whose Silver credit exceeds the Bronze price loses only the Bronze price.
+    assert lost == pytest.approx(min(12 * 2134.11 - edge * 0.1022, bronze), abs=0.2)
+
+
 def test_cliff_helper_without_an_area_uses_the_2026_table():
     cliff = 4 * cfg.aca_fpl(2)
     over, lost = cfg.aca_marketplace_cliff(cliff + 5_000, [55, 55], [], 2)
     bench = cfg.aca_household_prices_annual([55, 55], [])[0]
     assert over and lost == pytest.approx(bench - cliff * 0.0996)
+    # Years of growth raise the price, and so the credit the cliff takes.
+    _o, later = cfg.aca_marketplace_cliff(cliff + 5_000, [55, 55], [], 2, factor=1.0175 ** 10, years=10)
+    assert later == pytest.approx(bench * 1.0325 ** 10 - cliff * 0.0996)
 
 
 def test_a_simulated_year_records_whether_income_cleared_the_cliff():
@@ -268,6 +301,16 @@ def test_the_area_becomes_plain_config_values_and_never_the_zip():
     for bad in ("ZZ:9", "", 5, ["AL:1"], {"a": 1}):                 # a hostile or broken saved value
         assert not any(k.startswith("ACA_AREA") for k in build_config_overrides({"HEALTH_AREA": bad})), bad
     assert build_config_overrides({"HEALTH_AREA": "AL:1", "HEALTH_PLAN": ["x"]})["ACA_AREA_PLAN_RATIO"] == 1.0
+
+
+@pytest.mark.parametrize("box,age", [("ACA_BENCHMARK_MONTHLY_AT_40", 40), ("ACA_CHILD_MONTHLY", 10)])
+def test_a_real_quote_equal_to_the_national_figure_is_kept(box, age):
+    """625 a month (390 a child) is a legitimate quote: it must not be mistaken for an untouched box."""
+    quote = {"ACA_BENCHMARK_MONTHLY_AT_40": 625, "ACA_CHILD_MONTHLY": 390}[box]
+    built = build_config_overrides({"HEALTH_AREA": "AZ:4", box: quote})
+    assert built["ACA_AREA_SILVER_MONTHLY"][age] == pytest.approx(quote, abs=0.01)
+    plain = build_config_overrides({"HEALTH_AREA": "AZ:4"})
+    assert plain["ACA_AREA_SILVER_MONTHLY"][age] != pytest.approx(quote, abs=1)
 
 
 def test_the_two_price_boxes_rescale_the_area_prices():

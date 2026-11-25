@@ -170,7 +170,8 @@ def test_every_state_and_dc_has_prices():
 
 def test_labels_name_the_state_and_area():
     assert hd.area_label("AL:3") == "Alabama, rating area 3"
-    assert hd.area_label("CA:19") == "California, Covered California region 19"
+    assert hd.area_label("CA:19") == "California, Covered California region 19, price group 19"
+    assert hd.area_label("CA:19d") == "California, Covered California region 19, price group 19d"
     assert hd.area_label("GA:avg") == "Georgia, statewide average"
     assert hd.area_label("nonsense") == ""
 
@@ -190,3 +191,15 @@ def test_out_of_pocket_follows_the_age_curve():
 def test_alaska_and_hawaii_have_their_own_poverty_guidelines():
     assert hd.fpl(1) == 15_960 and hd.fpl(4) == 33_000
     assert hd.fpl(1, "AK") == 19_950 and hd.fpl(3, "HI") == 18_360 + 2 * 6_530
+
+
+def test_family_tier_areas_have_no_child_price():
+    assert hd.reference_prices("NY:avg")["child"] is None
+    assert hd.reference_prices("VT:avg")["child"] is None
+    assert hd.reference_prices("AL:1")["child"] > 0
+
+
+def test_the_source_note_is_plain_sentences():
+    note = hd.SOURCE_LINE
+    assert ";" not in note and "PUF" not in note and "BiggerPockets Money" in note
+    assert all(len(sentence.split()) <= 20 for sentence in note.split(". "))

@@ -26,10 +26,11 @@ Not shipped (not needed): the one-row-per-ZIP and ZIP-range crosswalks (2.8 MB; 
 - **Plan:** Benchmark Silver (default) or the lowest-cost Bronze, priced through the area's Bronze-to-Silver ratio. The credit always follows Silver.
 - **Credit:** benchmark Silver less income times the applicable percentage, capped at the plan's price, and none at or above 400% of the poverty line. Income is the plan's own income each simulated year.
 - **Out-of-pocket:** per person by age from the curve, Bronze times 1.30.
-- **Growth:** pre-Medicare premiums grow 6.0% a year nominal, from the owner's validated assumptions file (3.25% a year after the model's 2.75% inflation). Medicare, long-term care and out-of-pocket costs keep the 4.5% healthcare rate.
+- **Growth:** pre-Medicare premiums grow 6.0% a year nominal for every plan, from the owner's validated assumptions file (3.25% a year after the model's 2.75% inflation). The full price grows before the credit. Medicare, long-term care and out-of-pocket costs keep the 4.5% healthcare rate.
 
 ### Limits and open points
 
+- The 2027 prices are applied from today (2026) on, as today's dollars. The model does not take one year off for the gap between the 2027 plan year and now.
 - Prices are for a rating area, not a county. The estimator reports the area figure equals the county's own benchmark in 68% of federal-exchange counties and is never above it.
 - Statewide averages weight rating areas by plan count, an enrollment proxy. They sit within about 1 to 3% (median) of KFF's own averages, but up to 10 to 12% off in SD, ND and AZ.
 - The pediatric dental add-on, state premium credits, Medicaid and CHIP, cost-sharing reductions and maximum-out-of-pocket years are not modeled.

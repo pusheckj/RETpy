@@ -463,7 +463,7 @@ Applied in addition to guardrails.
 | `ACA_AREA_TIERS` | `None` | New York and Vermont: `{"single", "spk", "fam"}`, one community rate and its family-tier multiples, in place of the age table. |
 | `ACA_AREA_PLAN_RATIO` | `1.0` | Plan bought / Silver price: 1.0 for Benchmark Silver, the area's Bronze-to-Silver ratio for lowest-cost Bronze (`HEALTH_PLAN`). The credit always follows Silver. |
 | `ACA_AREA_OOP_ANNUAL` | `None` | Out-of-pocket a year at each age 0-64 (Bronze x1.30 included). `None` = `ACA_OOP_PER_PERSON_ANNUAL` per member. |
-| `ACA_PREMIUM_GROWTH_NOMINAL` | `None` | Pre-65 premium growth, nominal. The app sets 6.0% with an area (the 3.25%/yr above inflation, `METHODOLOGY.md` §11). `None` = premiums grow with healthcare (1.75%/yr above inflation). Medicare, care and out-of-pocket are not affected. |
+| `ACA_PREMIUM_GROWTH_NOMINAL` | `0.06` | Pre-65 marketplace premium growth, nominal, with or without an area (3.25%/yr above inflation, `METHODOLOGY.md` §11). The full price grows before the credit. `None` = premiums grow with healthcare (1.75%/yr above inflation). Medicare, care and out-of-pocket are not affected. |
 | (with an area) | | The app also sets `ACA_APPLICABLE_PCT_BANDS` (Rev. Proc. 2026-26) and `ACA_FPL_FIRST_PERSON` / `ACA_FPL_PER_ADDITIONAL_PERSON` (2026 HHS guidelines; Alaska and Hawaii differ), so the credit table and poverty line move to the 2027 plan year with the prices. |
 
 ### Long-term care

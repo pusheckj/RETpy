@@ -96,6 +96,21 @@ def test_a_zip_code_finds_the_area_and_fills_the_price_boxes(monkeypatch):
                                       if k != "sa_health_zip_btn"}, default=str)
 
 
+def test_the_grow_caption_shows_with_or_without_an_area(monkeypatch):
+    for extra in ({}, {"HEALTH_AREA": "AL:1"}):
+        at = _open(monkeypatch, **extra)
+        assert "grow 6% a year" in _text(at) and "3\u00bc% above inflation" in _text(at)
+
+
+def test_a_family_tier_state_shows_no_child_price(monkeypatch):
+    at = _open(monkeypatch, HEALTH_AREA="NY:avg")
+    assert at.number_input(key="sa_aca_child").disabled
+    text = _text(at)
+    assert "New York, statewide average" in text and "for a child" not in text
+    ok = _open(monkeypatch, HEALTH_AREA="AL:1")
+    assert not ok.number_input(key="sa_aca_child").disabled and "for a child" in _text(ok)
+
+
 def test_a_bad_zip_changes_nothing_and_says_so(monkeypatch):
     at = _open(monkeypatch)
     _use_zip(at, "00000")
@@ -167,6 +182,27 @@ def test_the_cliff_note_names_the_year_and_the_credit_lost():
     msg = hc.message({"age": 57, "year": 2033, "lost": 12_119.0, "share": 0.6}, 2027)
     assert "2033" in msg and "age 57" in msg and "$12,100" in msg and "400%" in msg
     assert "60% of simulations" in msg and "2027" in msg
+    assert all(len(sentence.split()) <= 20 for sentence in msg.split(". "))
+
+
+def test_a_tiny_credit_loss_is_not_worth_a_warning():
+    shown = []
+    st = SimpleNamespace(warning=lambda t: shown.append(t))
+    small = hc.compact({55: [40.0] * 4})                      # would read "about $0"
+    hc.render_note(st, _results(small), {"YOUR_AGE": 50}, current_year=2026)
+    assert shown == []
+    # The first year over a real amount is named, not the first year over the cliff.
+    mixed = hc.compact({55: [40.0] * 4, 56: [900.0] * 4})
+    hc.render_note(st, _results(mixed), {"YOUR_AGE": 50}, current_year=2026)
+    assert len(shown) == 1 and "age 56" in shown[0]
+
+
+def test_the_cliff_year_falls_back_to_the_configs_age_not_zero():
+    from retirement_sim import config as cfg
+    shown = []
+    st = SimpleNamespace(warning=lambda t: shown.append(t))
+    hc.render_note(st, _results(hc.compact({cfg.YOUR_AGE + 3: [5_000.0] * 4})), {}, current_year=2026)
+    assert "2029" in shown[0]
 
 
 def test_the_cliff_note_is_drawn_only_when_the_plan_crosses():

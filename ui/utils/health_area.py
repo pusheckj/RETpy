@@ -54,6 +54,8 @@ def apply_area(st, key: str) -> None:
     ref = hd.reference_prices(key)
     for box, name, value in ((_BENCH_KEY, "ACA_BENCHMARK_MONTHLY_AT_40", ref["benchmark_at_40"]),
                              (_CHILD_KEY, "ACA_CHILD_MONTHLY", ref["child"])):
+        if value is None:           # a family-tier area has no child price
+            continue
         ov[name] = int(round(value))
         st.session_state[box] = int(round(value))
     st.session_state[PLAN_KEY] = PLAN_LABELS[ov["HEALTH_PLAN"]]

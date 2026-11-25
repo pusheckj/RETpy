@@ -225,6 +225,8 @@ def render_investing_body(st) -> None:
 def _render_healthcare_area(st) -> None:
     """Healthcare by area: a ZIP code or the state's average sets local marketplace prices (2027
     plan year). Only the resolved area is kept, never the ZIP. See utils/health_area.py."""
+    if hd is None:      # the engine package's data module is missing: keep the flat national prices
+        return
     overrides = st.session_state.get("user_overrides", {}) or {}
     area = health_area.area_key(overrides)
     st.text_input("ZIP code (optional)", key=health_area.ZIP_KEY, max_chars=5,
@@ -247,10 +249,10 @@ def _render_healthcare_area(st) -> None:
         st.caption(msg)
     if area:
         ref = hd.reference_prices(area)
-        st.caption(f"Pricing from {hd.area_label(area)}, {health_area.year_phrase(overrides)}: "
-                   f"benchmark Silver is \\${ref['benchmark_at_40']:,.0f} a month at 40 and "
-                   f"\\${ref['child']:,.0f} a month for a child, before credits. Premiums grow 6% a year "
-                   "before 65. Credits use the 2027 table and the income your plan earns each year.")
+        child = f" and \\${ref['child']:,.0f} a month for a child" if ref["child"] else ""
+        st.caption(f"Pricing from {hd.area_label(area)}, {health_area.year_phrase(overrides)}. "
+                   f"Benchmark Silver costs \\${ref['benchmark_at_40']:,.0f} a month at 40{child}, before credits. "
+                   "Credits use the 2027 table and the income your plan earns each year.")
         labels = list(health_area.PLAN_LABELS.values())
         current = health_area.PLAN_LABELS.get(str(overrides.get("HEALTH_PLAN", "silver")), labels[0])
         ensure_default(st, health_area.PLAN_KEY, current)
@@ -307,8 +309,9 @@ def render_body(st) -> None:
     # set they hold that area's prices; type your own quote over them and the area's prices
     # scale to it.
     overrides = st.session_state.get("user_overrides", {}) or {}
-    area = health_area.area_key(overrides)
+    area = health_area.area_key(overrides) if hd is not None else None
     ref = hd.reference_prices(area) if area else None
+    tiered = bool(ref) and ref["child"] is None        # New York and Vermont: one family-tier rate
     year = health_area.year_phrase(overrides)
     c7, c8 = st.columns(2, vertical_alignment="bottom")
     with c7:
@@ -329,16 +332,19 @@ def render_body(st) -> None:
     with c8:
         ensure_default(st, "sa_aca_child",
                        safe_int(get_override(st, "ACA_CHILD_MONTHLY",
-                                             round(ref["child"]) if ref
+                                             round(ref["child"]) if ref and not tiered
                                              else getattr(cfg, "ACA_CHILD_MONTHLY", 390)), 390))
         v = st.number_input(f"Same plan, per child (\\$/mo, {year})", min_value=0, max_value=3_000,
-                            step=25, key="sa_aca_child")
+                            step=25, key="sa_aca_child", disabled=tiered,
+                            help="New York and Vermont price a family as a tier of one rate, "
+                                 "so a child has no price of its own there." if tiered else None)
         set_override(st, "ACA_CHILD_MONTHLY", safe_int(v))
     if area:
         st.caption(hd.SOURCE_LINE)
     else:
-        st.caption("Flat national figures for the 2026 plan year (KFF). Enter a ZIP code or use your "
-                   "state above for local prices.")
+        st.caption("These are flat national figures for the 2026 plan year (KFF). "
+                   "Enter a ZIP code or use your state above for local prices.")
+    st.caption("Premiums grow 6% a year before 65 (about 3\u00bc% above inflation).")
 
     # Long-term care lives in the "Retirement" section (single source of
     # truth — enable + start age + annual cost + per-year probability). It was
