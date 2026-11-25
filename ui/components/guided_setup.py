@@ -29,7 +29,8 @@ try:
     from utils.expense_categories import CATEGORIES
     from utils.formatting import money, money_md, money_echo
     from utils.derived import (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL, KEEP_AMOUNTS_LABEL,
-                               get_limit, children_at_home_now, compute_total_income, compute_taxes,
+                               get_limit, children_at_home_now, child_monthly_now,
+                               compute_total_income, compute_taxes,
                                compute_expenses_today)
     from utils import simple_to_full as s2f
     from utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH, household_of,
@@ -42,7 +43,7 @@ except ImportError:  # pragma: no cover
     from ui.utils.formatting import money, money_md, money_echo  # type: ignore
     from ui.utils.derived import (AUTO_ALLOCATE_MODE, KEEP_AMOUNTS_MODE, AUTO_ALLOCATE_LABEL,  # type: ignore
                                   KEEP_AMOUNTS_LABEL, get_limit, children_at_home_now,
-                                  compute_total_income, compute_taxes, compute_expenses_today)
+                                  child_monthly_now, compute_total_income, compute_taxes, compute_expenses_today)
     from ui.utils import simple_to_full as s2f  # type: ignore
     from ui.utils.household import (JUST_ME, SPOUSE, PARTNER, MFJ, SINGLE, HOH,  # type: ignore
                                     household_of, clear_partner, forget_partner_widgets)
@@ -321,11 +322,20 @@ def commit_kids(st) -> None:
     births += [first_planned + _KIDS_APART * j for j in range(int(plan))]
     cost = int(_num(_val(st, "gs_kid_cost"), _ONE_KID_COST))
     ov = _ov(st)
-    ov["CHILDREN"] = [
-        {**cfg.CHILD_DEFAULTS, "years_until_birth": b, "leaves_home_age": 18,
-         "monthly_cost": cost if i == 0 else int(round(cost * _MORE_KIDS_SHARE))}
-        for i, b in enumerate(births[:MAX_KIDS])
-    ]
+    # A child already using childcare (set in Family) keeps all of its own figures: the monthly
+    # cost was lowered when the childcare box was filled, so rebuilding either one alone would
+    # drop money from the plan. Matched by birth year. Other children follow the cost asked here.
+    using = [c for c in cfg.children_in(ov) if c["childcare_monthly"] > 0]
+
+    def child(i: int, b: int) -> dict:
+        kept = next((c for c in using if c["years_until_birth"] == b), None)
+        if kept is not None:
+            using.remove(kept)
+            return kept
+        return {**cfg.CHILD_DEFAULTS, "years_until_birth": b, "leaves_home_age": 18,
+                "monthly_cost": cost if i == 0 else int(round(cost * _MORE_KIDS_SHARE))}
+
+    ov["CHILDREN"] = [child(i, b) for i, b in enumerate(births[:MAX_KIDS])]
     if household_of(ov) == JUST_ME:
         # A single parent with a child at home usually files as head of
         # household (the side panel's About you can change it).
@@ -833,7 +843,7 @@ def review_lines(ov: Dict[str, Any]) -> List[str]:
                 + (_PARTNER_ACCOUNTS if partner else []))
     housing = _num(ov.get("MORTGAGE_MONTHLY")) or _num(ov.get("SPEND_RENT_MONTHLY"))
     spend = sum(_num(ov.get(c.key)) for c in CATEGORIES if partner or not c.partner_only)
-    kids_now = sum(_num(k["monthly_cost"]) for k in children_at_home_now(ov))
+    kids_now = sum(child_monthly_now(k) for k in children_at_home_now(ov))
     yearly = sum(_num(ov.get(k)) for k in ("YOUR_401K_CONTRIBUTION", "YOUR_HSA_CONTRIBUTION",
                                            "YOUR_BACKDOOR_ROTH"))
     ss = (f"Social Security {money_md(_num(ov.get('YOUR_SS_MONTHLY_FRA')))}/month"

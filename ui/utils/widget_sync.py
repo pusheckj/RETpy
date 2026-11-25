@@ -319,12 +319,15 @@ def _sync_children(st, overrides: dict) -> None:
     kids = cfg.children_in(overrides)[:6]
     ss = st.session_state
     ss["se_kids_n"] = len(kids)
+    for key in ("se_kid_area", "se_kid_area_spend", "sb_income"):   # redrawn from BENCH_AREA / BENCH_INCOME_GROUP
+        ss.pop(key, None)
     for i, kid in enumerate(kids):
         p, yub = f"se_kid{i}_", int(kid["years_until_birth"])
         ss[p + "born"] = yub <= 0
         ss[p + "age" if yub <= 0 else p + "in"] = _clamp(abs(yub), 0 if yub <= 0 else 1, 30)
         ss[p + "leaves"] = _as_int(18, 16, 30)(kid["leaves_home_age"])
         ss[p + "cost"] = _as_int(0, 0, 10_000)(kid["monthly_cost"])
+        ss[p + "care"] = _as_int(0, 0, 10_000)(kid["childcare_monthly"])
         ss[p + "college"] = _clamp(int(round(100 * float(kid["college_funding_pct"]))), 0, 100)
     funded = [k for k in kids if k["college_funding_pct"] > 0]
     if funded:
@@ -464,9 +467,10 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "ay_partn
 #             user_overrides["MS_PLACES"] and load with the profile.
 #   debt_     the Debts section (one set of row widgets per debt, plus the extra payment
 #             and payoff order) and the Debt payoff tile's "pay more" amount.
+#   sb_       the Spending tab's benchmark income group (saved as BENCH_INCOME_GROUP).
 #   assume_   the Assumptions presets: the Undo snapshot (assume_last) belongs to the plan
 #             it was taken on, so a profile switch or JSON load must drop it.
-_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_", "assume_")
+_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_", "assume_", "sb_")
 
 
 def _is_input_widget_key(key) -> bool:

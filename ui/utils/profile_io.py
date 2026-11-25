@@ -79,7 +79,8 @@ def _restore_int_keys(obj: Any) -> Any:
 
 # Keys the UI itself stores, which are not config constants (so there is no default to read).
 _UI_KEY_DEFAULTS = {"TARGET_RETIREMENT_AGE": 60, "HOUSEHOLD_INCOME_QUICK": 0,
-                    "TOTAL_SAVINGS_QUICK": 0, "NEW_HOME_ESCROW_PCT": 0.0135}
+                    "TOTAL_SAVINGS_QUICK": 0, "NEW_HOME_ESCROW_PCT": 0.0135,
+                    "BENCH_AREA": "", "BENCH_INCOME_GROUP": ""}
 _TRUE, _FALSE = {"true", "yes", "on", "1"}, {"false", "no", "off", "0"}
 # A home move's fields (utils.derived.housing_timeline): text for "action", numbers for the rest.
 _MOVE_FIELDS = {"action": "", "age": 0, "price": 0, "down_pct": 0, "rate": 0, "years": 0, "costs": 0,

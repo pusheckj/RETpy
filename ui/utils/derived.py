@@ -153,6 +153,15 @@ def children_at_home_now(overrides: dict) -> list:
             if 0 <= -kid["years_until_birth"] < kid["leaves_home_age"]]
 
 
+def child_monthly_now(kid: dict) -> int:
+    """What one child at home costs a month today: their monthly cost, plus their childcare
+    while they are under ``cfg.CHILDCARE_END_AGE`` (same rule as ``cfg.calculate_child_expenses``)."""
+    cost = safe_int(kid["monthly_cost"], 0)
+    if -int(kid["years_until_birth"]) < cfg.CHILDCARE_END_AGE:
+        cost += safe_int(kid.get("childcare_monthly", 0), 0)
+    return cost
+
+
 def debt_payments_this_year(overrides: dict) -> float:
     """What the debts (DEBTS, Debts section) cost this plan year: the minimums
     plus the extra each month, less any month after the last debt is gone.
@@ -165,6 +174,32 @@ def debt_payments_this_year(overrides: dict) -> float:
         return 0.0
     plan = dm.amortize(debts, overrides.get("DEBT_EXTRA_MONTHLY", 0), overrides.get("DEBT_STRATEGY"))
     return float(sum(plan.payments[:12]))
+
+
+def housing_parts(overrides: dict) -> tuple:
+    """Today's housing as the plan counts it: (monthly payment, yearly carrying cost).
+
+    The payment is the mortgage while the loan is active (a payment with no years left is a
+    paid-off loan, like cfg.has_mortgage), else the rent of a renter. An owner with no loan
+    still owes property tax and insurance: the yearly carrying cost, at the same rate and
+    toggle as the engine (cfg.home_carrying_cost_annual), so this and the simulation agree.
+    """
+    mortgage = safe_int(overrides.get("MORTGAGE_MONTHLY", 0), 0)
+    rent = safe_int(overrides.get("SPEND_RENT_MONTHLY", 0), 0)
+    home_value = safe_int(overrides.get("HOME_VALUE", 0), 0)
+    loan_active = mortgage > 0 and safe_int(overrides.get("MORTGAGE_YEARS_REMAINING", 0), 0) > 0
+    payment = 0
+    if loan_active:
+        payment = mortgage
+    elif mortgage <= 0 and home_value == 0 and rent > 0:
+        payment = rent
+    carrying = 0.0
+    if not loan_active and home_value > 0 and bool(
+            overrides.get("MODEL_HOME_CARRYING_COST_AFTER_PAYOFF", True)):
+        pct = safe_float(overrides.get("HOME_CARRYING_COST_PCT",
+                                       overrides.get("NEW_HOME_ESCROW_PCT", 0.0135)), 0.0135)
+        carrying = home_value * max(0.0, pct)
+    return payment, carrying
 
 
 def compute_expenses_today(overrides: dict) -> int:
@@ -197,31 +232,14 @@ def compute_expenses_today(overrides: dict) -> int:
                              overrides.get("PARTNER_MONTHLY_SPENDING", 1_500))
     monthly += safe_int(_partner, 1_500)
 
-    mortgage = safe_int(overrides.get("MORTGAGE_MONTHLY", 0), 0)
-    rent = safe_int(overrides.get("SPEND_RENT_MONTHLY", 0), 0)
-    home_value = safe_int(overrides.get("HOME_VALUE", 0), 0)
-    # A payment with no years left is a paid-off loan (cfg.has_mortgage).
-    loan_active = mortgage > 0 and safe_int(overrides.get("MORTGAGE_YEARS_REMAINING", 0), 0) > 0
-
-    if loan_active:
-        monthly += mortgage
-    elif mortgage <= 0 and home_value == 0 and rent > 0:
-        monthly += rent
-    # Owned outright: property tax + insurance are still due. Same rate and
-    # toggle as the engine (cfg.home_carrying_cost_annual), so this total and
-    # the simulation agree for an owner with no loan.
-    carrying = 0.0
-    if not loan_active and home_value > 0 and bool(
-            overrides.get("MODEL_HOME_CARRYING_COST_AFTER_PAYOFF", True)):
-        pct = safe_float(overrides.get("HOME_CARRYING_COST_PCT",
-                                       overrides.get("NEW_HOME_ESCROW_PCT", 0.0135)), 0.0135)
-        carrying = home_value * max(0.0, pct)
+    payment, carrying = housing_parts(overrides)
+    monthly += payment
 
     # Children living at home today, each at their own monthly cost: the same
     # rule cfg.calculate_child_expenses applies at your current age. (This used
     # to count only the first child, even with two at home.)
     for kid in children_at_home_now(overrides):
-        monthly += safe_int(kid["monthly_cost"], 0)
+        monthly += child_monthly_now(kid)
 
     annual = monthly * 12 + round(carrying)
 

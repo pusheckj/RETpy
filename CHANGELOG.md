@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Added (local childcare and spending benchmark)
+- Family shows the typical childcare cost for your state, or for one of 739 metro and county areas you pick. It is a yearly figure per child in 2026 dollars.
+- A child who is planned or under 5 has a new box, **Childcare until age 5 ($/mo)**. The plan counts it on top of the monthly cost until the child turns 5.
+- **Use typical** fills the box. It lowers the monthly cost by the same money, spread over the years still at home. A caption says what moved. Future cost stays about the same.
+- For a child aged 3 or 4 the figure covers only the preschool years left. The button is hidden at age 5. Plans that do not use the box are unchanged.
+- New child field `childcare_monthly` and `config.CHILDCARE_END_AGE`. The guided setup keeps a child's childcare amount and monthly cost.
+- Spending tab: **Your spending vs similar households** compares your monthly spending by category with similar households. It uses income group, your age and your area. Each category has a 10% "typical" range, and there is a total.
+- It works before you load statements, and uses your statement averages when you have them. The Money check-up gets one short line. These are statistical averages, not advice.
+- Housing and utilities are sized for everyone at home. The other rows use the adults only, because your children's costs are not compared. The survey's retirement and payroll-tax line is left out.
+- Method and data come from BiggerPockets Money's Household Spending Comparison v2.4.0 and the agencies behind it. Those are BLS, BEA, HUD and the Department of Labor. Credits and BPM's own choices: `docs/DATA_SOURCES.md`.
+- Data files are in `ui/data/budget/` and load only when used. The income-group cutoffs are estimates, so the page lets you pick your group. The group and the area are saved with your plan.
+
 ### Changed (state income tax now uses 2026 tables)
 - State income tax for all 50 states and DC now uses 2026 brackets and standard deductions. It used 2024 figures before, except California. 32 states changed. Examples: Iowa is a flat 3.8%, Louisiana a flat 3%, Georgia 4.99% with a $15,000 deduction, North Carolina 3.99%, Colorado 4.40%, and Maryland's top rate is 6.5%. If you live in one of them, your tax and your retirement age will shift a little.
 - The tables come from the BiggerPockets Money tax calculator (v1.11.2) and the state agencies it cites. Credit and the full list of what was taken and what was not are in `docs/DATA_SOURCES.md`. Only brackets and standard deductions were updated. Personal exemptions, retirement-income and Social Security rules, and California are as before.

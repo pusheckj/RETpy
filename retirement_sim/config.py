@@ -607,6 +607,9 @@ def granular_nonhousing_annual():
 #                        already born (-5 is a 5-year-old today)
 #   monthly_cost         what the child costs each month while living at home
 #                        (today's dollars; grows with the childcare factor)
+#   childcare_monthly    paid childcare each month in the child's first
+#                        CHILDCARE_END_AGE years, on top of monthly_cost (today's
+#                        dollars; grows with the childcare factor). 0 = none.
 #   leaves_home_age      the child's age when those costs stop
 #   college_annual_cost  one year of college (today's dollars)
 #   college_years        years of college, starting at COLLEGE_START_AGE
@@ -618,6 +621,7 @@ def granular_nonhousing_annual():
 CHILD_DEFAULTS = {
     "years_until_birth": 0,
     "monthly_cost": 0,
+    "childcare_monthly": 0,
     "leaves_home_age": 18,
     "college_annual_cost": 40_000,
     "college_years": 4,
@@ -629,6 +633,10 @@ CHILDREN = [
     {"years_until_birth": 6, "monthly_cost": 1_400, "leaves_home_age": 18,
      "college_annual_cost": 40_000, "college_years": 4, "college_funding_pct": 0.0},
 ]
+
+# Paid childcare (a child's childcare_monthly) runs from birth up to this age.
+# Infant, toddler and preschool care; school-age care is not modeled.
+CHILDCARE_END_AGE = 5
 
 # College starts at this age for every child; 529 saving runs from birth to it.
 COLLEGE_START_AGE = 18
@@ -663,13 +671,16 @@ def children_at_home_ages(your_age: int) -> list:
 
 def calculate_child_expenses(your_age: int) -> float:
     """Annual cost of the children living at home when the primary is
-    ``your_age``: each child's monthly_cost x 12, from birth until they leave."""
+    ``your_age``: each child's monthly_cost x 12, from birth until they leave, plus
+    their childcare_monthly x 12 while under CHILDCARE_END_AGE."""
     years = your_age - YOUR_AGE
     total = 0.0
     for c in CHILDREN:
         age = years - _child(c, "years_until_birth")
         if 0 <= age < _child(c, "leaves_home_age"):
             total += _child(c, "monthly_cost") * 12
+            if age < CHILDCARE_END_AGE:
+                total += _child(c, "childcare_monthly") * 12
     return total
 
 
@@ -725,7 +736,7 @@ def children_in(values: dict) -> list:
     if values.get("CHILDREN") is not None:
         return normalize_children(values["CHILDREN"])
     if any(k in values for k in LEGACY_CHILD_KEYS):
-        return legacy_children(values)
+        return normalize_children(legacy_children(values))
     return normalize_children(CHILDREN)
 
 

@@ -442,3 +442,35 @@ def test_checkup_debts_carry_into_the_planner_and_the_review(wizard):
     _walk_to(at, "All set")
     line = next(m.value for m in at.markdown if "**Debts:**" in m.value)
     assert "3 debts" in line and "28,700" in line                   # 6,500 + 4,200 + 18,000 owed
+
+
+def test_redoing_the_children_step_keeps_a_childs_childcare_and_its_lowered_monthly_cost(wizard):
+    """Skip setup, use the typical childcare in Family, then continue setup: the Children step must
+    not reset the childcare box (which would drop money from the plan)."""
+    kid = {**cfg_defaults(), "years_until_birth": -2, "monthly_cost": 1_700, "childcare_monthly": 1_500}
+    at = wizard(CHILDREN=[kid])
+    _walk_to(at, "Children")
+    at.number_input(key="gs_kids_have").set_value(1).run()
+    at.number_input(key="gs_kid0_age").set_value(2)
+    at.number_input(key="gs_kids_plan").set_value(0)
+    _next(at)
+    (kept,) = at.session_state["user_overrides"]["CHILDREN"]
+    assert kept["childcare_monthly"] == 1_500 and kept["monthly_cost"] == 1_700
+    assert kept["years_until_birth"] == -2
+
+
+def test_children_without_childcare_still_follow_the_steps_monthly_cost(wizard):
+    at = wizard(CHILDREN=[{**cfg_defaults(), "years_until_birth": -2, "monthly_cost": 900}])
+    _walk_to(at, "Children")
+    at.number_input(key="gs_kids_have").set_value(1).run()
+    at.number_input(key="gs_kid0_age").set_value(2)
+    at.number_input(key="gs_kids_plan").set_value(0)
+    at.number_input(key="gs_kid_cost").set_value(1_234)
+    _next(at)
+    (kid,) = at.session_state["user_overrides"]["CHILDREN"]
+    assert kid["monthly_cost"] == 1_234 and kid["childcare_monthly"] == 0
+
+
+def cfg_defaults():
+    from retirement_sim import config as cfg
+    return dict(cfg.CHILD_DEFAULTS)
