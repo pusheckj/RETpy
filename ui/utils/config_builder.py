@@ -20,6 +20,9 @@ _UI_ONLY_KEYS = {
     # Freedom milestones: edited and custom places (utils/places.py). Saved with the
     # profile, never read by the engine, and left out of the cache keys (_hashable).
     "MS_PLACES",
+    # Healthcare by area: the resolved area key ("AL:3", never a ZIP code) and the plan bought.
+    # build_config_overrides turns them into the plain ACA_AREA_* values the engine reads.
+    "HEALTH_AREA", "HEALTH_PLAN",
 }
 
 # Derived on every run: birth years from age (sim_runner._recompute_derived),
@@ -163,6 +166,12 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
     if escrow_pct is not None and "HOME_CARRYING_COST_PCT" not in user_overrides:
         out["HOME_CARRYING_COST_PCT"] = escrow_pct
 
+    # 5b. Healthcare by area: the area key becomes plain price tables (retirement_sim/
+    #     healthcare_data.py), so the engine, and the browser's copy of it, never read a
+    #     data file. The two marketplace price boxes rescale them when they hold a quote of
+    #     the user's own: a figure that is neither the area's price nor the boxes' starting one.
+    out.update(health_area_overrides(user_overrides))
+
     # 6. What the side panel would store for the inputs left out (see below).
     merged = {**user_overrides, **out}
     for key, value in sidebar_defaults(merged).items():
@@ -170,6 +179,36 @@ def build_config_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
             out[key] = value
 
     return out
+
+
+#: The price boxes' starting figures (config defaults at import, before any override).
+def _read_starting_prices() -> Dict[str, float]:
+    from retirement_sim import config as cfg
+    return {k: float(getattr(cfg, k)) for k in ("ACA_BENCHMARK_MONTHLY_AT_40", "ACA_CHILD_MONTHLY")}
+
+
+STARTING_PRICES = _read_starting_prices()
+
+
+def health_area_overrides(user_overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """The engine's healthcare-by-area values for ``HEALTH_AREA`` ({} when none is set or the
+    key names nothing). ``HEALTH_PLAN`` is "silver" (default) or "bronze"."""
+    key = user_overrides.get("HEALTH_AREA")
+    if not key:
+        return {}
+    from retirement_sim import healthcare_data as hd
+
+    def typed(name: str):
+        v = user_overrides.get(name)
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return None
+        return None if round(v) == round(STARTING_PRICES[name]) else v
+
+    plan = "bronze" if str(user_overrides.get("HEALTH_PLAN", "silver")).lower() == "bronze" else "silver"
+    return hd.area_overrides(key, plan, benchmark_at_40=typed("ACA_BENCHMARK_MONTHLY_AT_40"),
+                             child=typed("ACA_CHILD_MONTHLY"))
 
 
 def sidebar_defaults(overrides: Dict[str, Any]) -> Dict[str, Any]:

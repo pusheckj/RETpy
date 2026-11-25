@@ -1675,15 +1675,40 @@ class AccountPortfolio:
         if not cfg.ACA_ENABLED:
             return 0.0, 0.0
         kids = cfg.children_at_home_ages(your_age)
-        members = [a for a in adult_ages if a < cfg.MEDICARE_AGE] + kids
+        adults = [a for a in adult_ages if a < cfg.MEDICARE_AGE]
+        members = adults + kids
         if not members:
             return 0.0, 0.0
         household = len(adult_ages) + len(kids)
-        premium = cfg.calculate_aca_premium_age_rated(
-            modified_agi, members, household
-        ) * inflation_factor
-        oop = cfg.aca_oop_annual(len(members), len(members) / household, inflation_factor)
+        premium = cfg.aca_marketplace_premium(
+            modified_agi, adults, kids, household, inflation_factor,
+            years=self._years_from_today(your_age),
+        )
+        oop = cfg.aca_oop_annual(len(members), len(members) / household, inflation_factor, members)
         return premium, oop
+
+    @staticmethod
+    def _years_from_today(your_age: int) -> int:
+        """Plan years from the first simulated year (premium growth is counted from it)."""
+        return max(0, int(your_age) - int(cfg.YOUR_AGE))
+
+    def marketplace_cliff(self, your_age: int, modified_agi: float,
+                          inflation_factor: float = 1.0):
+        """(over the 400% FPL cliff?, credit lost) for this year's marketplace household,
+        or None when nobody is on the marketplace (employer plan, Medicare, no age-rated
+        model). Side-effect-free, same household and dollars as quote_marketplace_cost."""
+        if (not cfg.ACA_ENABLED or not getattr(cfg, "MODEL_ACA_AGE_RATED", False)
+                or self.employer_health_coverage):
+            return None
+        ages = [your_age] + ([self.current_partner_age] if cfg.has_partner() else [])
+        kids = cfg.children_at_home_ages(your_age)
+        adults = [a for a in ages if a < cfg.MEDICARE_AGE]
+        if not adults and not kids:
+            return None
+        return cfg.aca_marketplace_cliff(
+            modified_agi, adults, kids, len(ages) + len(kids), inflation_factor,
+            years=self._years_from_today(your_age),
+        )
 
     def calculate_health_insurance_cost(self, your_age: int, modified_agi: float,
                                          inflation_factor: float = 1.0) -> float:
@@ -3371,6 +3396,11 @@ def _fund_net_expenses(
     # The year's logged premium becomes the true one (the logged row is this year's).
     if portfolio.spending_log and portfolio.spending_log[-1].get("age") == int(your_age):
         portfolio.spending_log[-1]["health"] = float(true_health_insurance)
+        # Did income clear the 400% FPL cliff this year, and what credit did that cost?
+        cliff = portfolio.marketplace_cliff(your_age, actual_magi, healthcare_factor)
+        if cliff is not None:
+            portfolio.spending_log[-1].update(
+                magi=float(actual_magi), aca_over=bool(cliff[0]), aca_lost=float(cliff[1]))
     # Record the TRUE premium into the running totals (once).
     if true_health_insurance > 0:
         if your_age >= cfg.MEDICARE_AGE:

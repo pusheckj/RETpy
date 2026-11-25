@@ -1,0 +1,30 @@
+{
+  "below_133_pct": 0.0215,
+  "breakpoints": [
+    {
+      "fpl_ratio": 1.33,
+      "applicable_pct": 0.0323
+    },
+    {
+      "fpl_ratio": 1.5,
+      "applicable_pct": 0.043
+    },
+    {
+      "fpl_ratio": 2,
+      "applicable_pct": 0.0678
+    },
+    {
+      "fpl_ratio": 2.5,
+      "applicable_pct": 0.0866
+    },
+    {
+      "fpl_ratio": 3,
+      "applicable_pct": 0.1022
+    },
+    {
+      "fpl_ratio": 4,
+      "applicable_pct": 0.1022
+    }
+  ],
+  "note": "breakpoints are [FPL ratio, applicable %]; interpolate linearly between them; 10.22% flat 300-400%; no credit above 400% FPL"
+}

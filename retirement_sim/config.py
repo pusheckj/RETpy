@@ -2878,11 +2878,13 @@ ACA_APPLICABLE_PCT_BANDS = (
 )
 
 
-def aca_applicable_pct(fpl_ratio: float) -> float:
-    """2026 applicable percentage at ``fpl_ratio`` (1.5 = 150% FPL), linear
-    inside each band of ACA_APPLICABLE_PCT_BANDS. Callers apply the 400% cliff;
-    at or above it this returns the last band's final percentage."""
-    bands = ACA_APPLICABLE_PCT_BANDS
+def aca_applicable_pct(fpl_ratio: float, bands=None) -> float:
+    """Applicable percentage at ``fpl_ratio`` (1.5 = 150% FPL), linear inside
+    each band of ACA_APPLICABLE_PCT_BANDS (the 2026 table; a plan with an area
+    set holds the 2027 table there). Callers apply the 400% cliff; at or above
+    it this returns the last band's final percentage. ``bands`` reads another
+    table (a saved plan's)."""
+    bands = ACA_APPLICABLE_PCT_BANDS if bands is None else bands
     for lo, hi, initial, final in bands:
         if fpl_ratio < hi:
             if fpl_ratio <= lo:
@@ -3003,26 +3005,35 @@ def healthcare_cost_per_adult(age: int, inflation_factor: float = 1.0) -> float:
     return calculate_healthcare_cost(age, True, inflation_factor) / HEALTHCARE_BAND_ADULTS
 
 
+def _getter(source=None):
+    """``get(key, default)`` over this module's globals, reading ``source`` (a mapping)
+    first when one is given, so a plan can be priced after its overrides are gone."""
+    if source is None:
+        return globals().get
+
+    def get(key, default=None):
+        value = source.get(key)
+        return globals().get(key, default) if value is None else value
+    return get
+
+
 def pre_medicare_health_quote(modified_agi: float, adult_ages, kid_ages=(),
                               inflation_factor: float = 1.0, price_scale: float = 1.0,
-                              source=None) -> float:
+                              source=None, years: int = 0) -> float:
     """Marketplace cost of the pre-Medicare members in one retirement year: the
     marketplace branch of AccountPortfolio.quote_health_insurance_cost (premium
     after subsidy, plus out-of-pocket when MODEL_ACA_AGE_RATED), side-effect free.
+    Same formulas as the engine (aca_marketplace_premium, aca_oop_annual).
 
     ``price_scale`` multiplies the marketplace prices (ACA_BENCHMARK_MONTHLY_AT_40,
-    ACA_CHILD_MONTHLY, the 'early_retirement' band), as a place's health price
-    level does in the Freedom milestones check; the subsidy cap does not scale.
-    ``source`` is an optional mapping read before this module's globals, so a
-    caller can price a plan after its overrides are gone. A working partner's
-    employer plan (no marketplace premium) is the caller's to apply.
+    ACA_CHILD_MONTHLY, the area's prices, the 'early_retirement' band), as a place's
+    health price level does in the Freedom milestones check; the subsidy cap does
+    not scale. ``years`` is how far the year is from today (premium growth when an
+    area is set). ``source`` is an optional mapping read before this module's
+    globals, so a caller can price a plan after its overrides are gone. A working
+    partner's employer plan (no marketplace premium) is the caller's to apply.
     """
-    if source is None:
-        get = globals().get
-    else:
-        def get(key, default=None):
-            value = source.get(key)
-            return globals().get(key, default) if value is None else value
+    get = _getter(source)
     if not get("ACA_ENABLED", True):
         return 0.0
     adult_ages = list(adult_ages)
@@ -3035,17 +3046,11 @@ def pre_medicare_health_quote(modified_agi: float, adult_ages, kid_ages=(),
         if not members:
             return 0.0
         household = len(adult_ages) + len(kids)
-        bench = float(get("ACA_BENCHMARK_MONTHLY_AT_40"))
-        child = float(get("ACA_CHILD_MONTHLY"))
-        full = 12.0 * price_scale * sum(
-            child if a < ACA_CHILD_RATE_UNDER_AGE
-            else bench * ACA_AGE_CURVE[min(int(a), 64)] / ACA_AGE_CURVE[40] for a in members)
-        ratio = magi / aca_fpl(household)
-        premium = (full if ratio >= ACA_SUBSIDY_CLIFF_PCT
-                   else min(max(0.0, magi) * aca_applicable_pct(ratio), full))
-        oop = max(0.0, float(get("ACA_OOP_PER_PERSON_ANNUAL")) * len(members) * inflation_factor
-                  - float(get("SPEND_HEALTH_MONTHLY", 0) or 0) * 12.0 * len(members) / household)
-        return premium * inflation_factor + oop
+        premium = aca_marketplace_premium(magi, pre, kids, household, inflation_factor,
+                                          years, price_scale, get)
+        oop = aca_oop_annual(len(members), len(members) / household, inflation_factor,
+                             members, get)
+        return premium + oop
     if not pre:
         return 0.0
     # Legacy flat band (calculate_aca_premium): family-of-4 FPL, band ceiling.
@@ -3202,18 +3207,166 @@ ACA_AGE_CURVE = {
     63: 2.952, 64: 3.000,
 }
 
-def aca_member_full_price_annual(age: int) -> float:
-    """Unsubsidized benchmark-silver premium for ONE member (today's $/yr)."""
+# -----------------------------------------------------------------------------
+# HEALTHCARE BY AREA (plan year 2027)
+# -----------------------------------------------------------------------------
+# With the side panel's area set, config_builder fills these from
+# retirement_sim/healthcare_data.py (resolved to plain values, so the engine, and
+# the browser's copy of it, never read a data file). All None / default = today's
+# flat model: nothing below changes a plan that has no area.
+#
+#   ACA_AREA_SILVER_MONTHLY  benchmark Silver price a month at each age 0-64 (children's
+#                            rates below 21, adults' from 21); replaces the two price
+#                            inputs above and the 3:1 curve
+#   ACA_AREA_TIERS           New York / Vermont: {"single", "spk", "fam"}, one community
+#                            rate times a family-tier multiple, in place of the table
+#   ACA_AREA_PLAN_RATIO      the plan bought / Silver: 1.0, or the bronze-to-silver ratio.
+#                            The credit always follows Silver
+#   ACA_AREA_OOP_ANNUAL      out-of-pocket a year by age (bronze x1.30 already in it)
+#   ACA_PREMIUM_GROWTH_NOMINAL  pre-Medicare premiums grow at this nominal rate (6.0%, the
+#                            owner's reference file). None: they grow with healthcare
+#                            (INFLATION_RATES['healthcare']), as before. Medicare, care and
+#                            out-of-pocket are not affected
+#   ACA_APPLICABLE_PCT_BANDS, ACA_FPL_*  the 2027 credit table and 2026 poverty guidelines
+#   ACA_COVERAGE_YEAR        plan year the prices are for, for labels
+ACA_AREA_KEY = None
+ACA_AREA_SILVER_MONTHLY = None
+ACA_AREA_TIERS = None
+ACA_AREA_PLAN_RATIO = 1.0
+ACA_AREA_OOP_ANNUAL = None
+ACA_PREMIUM_GROWTH_NOMINAL = None
+ACA_COVERAGE_YEAR = 2026
+
+# The general CPI that INFLATION_REAL_EXCESS was measured against: a premium's real
+# growth is its nominal rate less this, fixed, however the inflation slider moves.
+_GENERAL_INFLATION_AT_IMPORT = INFLATION_RATES['general']
+
+
+def aca_member_full_price_annual(age: int, get=None) -> float:
+    """Unsubsidized benchmark-silver premium for ONE member (today's $/yr), from the
+    two price inputs and the federal age curve. (With an area set the engine prices
+    households through aca_household_prices_annual instead.)"""
+    get = get or globals().get
     if age < ACA_CHILD_RATE_UNDER_AGE:
-        return float(ACA_CHILD_MONTHLY) * 12.0
+        return float(get("ACA_CHILD_MONTHLY")) * 12.0
     factor = ACA_AGE_CURVE[min(int(age), 64)]
-    return float(ACA_BENCHMARK_MONTHLY_AT_40) * factor / ACA_AGE_CURVE[40] * 12.0
+    return float(get("ACA_BENCHMARK_MONTHLY_AT_40")) * factor / ACA_AGE_CURVE[40] * 12.0
 
 
-def aca_fpl(household_size: int) -> float:
+def aca_fpl(household_size: int, get=None) -> float:
     """Federal poverty level for a household of ``household_size`` people."""
+    get = get or globals().get
     n = max(1, int(household_size))
-    return float(ACA_FPL_FIRST_PERSON + ACA_FPL_PER_ADDITIONAL_PERSON * (n - 1))
+    return float(get("ACA_FPL_FIRST_PERSON") + get("ACA_FPL_PER_ADDITIONAL_PERSON") * (n - 1))
+
+
+def aca_area_active(get=None) -> bool:
+    """True when the plan prices the marketplace by area."""
+    get = get or globals().get
+    return bool(get("ACA_AREA_SILVER_MONTHLY") or get("ACA_AREA_TIERS"))
+
+
+def aca_premium_extra(years: float, get=None) -> float:
+    """How much faster pre-Medicare premiums grow than the healthcare factor, after
+    ``years``: 1.0 without ACA_PREMIUM_GROWTH_NOMINAL. The engine is all-real, so a
+    premium's growth is its nominal rate less CPI (6.0% - 2.75% = 3.25% a year, against
+    healthcare's 1.75%), applied on top of the healthcare factor. Worked out from the
+    year, so it draws no random numbers and the healthcare factor's noise is shared."""
+    get = get or globals().get
+    growth = get("ACA_PREMIUM_GROWTH_NOMINAL")
+    if growth is None or years <= 0:
+        return 1.0
+    premium = float(growth) - _GENERAL_INFLATION_AT_IMPORT
+    healthcare = float((get("INFLATION_REAL_EXCESS") or {}).get("healthcare", 0.0))
+    return ((1.0 + premium) / (1.0 + healthcare)) ** years
+
+
+def aca_household_prices_annual(adult_ages, kid_ages=(), get=None):
+    """(benchmark Silver, plan bought) a year for the marketplace household, before any
+    credit, in today's prices. ``adult_ages`` are the pre-Medicare adults, ``kid_ages``
+    the children on the plan. They differ only for a bronze plan, whose price is the
+    Silver price times ACA_AREA_PLAN_RATIO; the credit follows the benchmark.
+
+    By area: adults at their own age's price, the three oldest children under 21 at
+    their child prices (45 CFR 147.102(c)), children 21 and over at adult prices. New
+    York and Vermont price the household as a tier of one community rate. Without an
+    area: the two price inputs and the 3:1 curve, every member counted."""
+    get = get or globals().get
+    adults = list(adult_ages)
+    kids = list(kid_ages or ())
+    table = get("ACA_AREA_SILVER_MONTHLY")
+    tiers = get("ACA_AREA_TIERS")
+    if table or tiers:
+        if tiers:
+            n = len(adults)
+            any_kids = any(k < 26 for k in kids)
+            multiple = ((tiers["fam"] if any_kids else 2.0) if n >= 2
+                        else (tiers["spk"] if any_kids else 1.0) if n == 1
+                        else (tiers["spk"] if any_kids else 0.0))
+            bench = 12.0 * float(tiers["single"]) * multiple
+        else:
+            under21 = sorted((k for k in kids if k < 21), reverse=True)[:3]
+            ages = adults + under21 + [k for k in kids if k >= 21]
+            bench = 12.0 * sum(table[min(max(int(a), 0), 64)] for a in ages)
+        return bench, bench * float(get("ACA_AREA_PLAN_RATIO") or 1.0)
+    bench = sum(aca_member_full_price_annual(a, get) for a in adults + kids)
+    return bench, bench
+
+
+def _aca_net_premium(magi: float, bench: float, plan: float, household_size: int, get) -> float:
+    """What the household pays a year for ``plan`` after the credit. The credit is the
+    benchmark less ``MAGI x applicable %`` (so a household that buys the benchmark pays
+    that share of income, never more than the price), capped at the plan's price. None at
+    or above ACA_SUBSIDY_CLIFF_PCT of FPL."""
+    ratio = magi / aca_fpl(household_size, get)
+    if ratio >= get("ACA_SUBSIDY_CLIFF_PCT", ACA_SUBSIDY_CLIFF_PCT):
+        return plan
+    share = max(0.0, magi) * aca_applicable_pct(ratio, get("ACA_APPLICABLE_PCT_BANDS"))
+    if plan == bench:
+        return min(share, plan)
+    return max(0.0, plan - max(0.0, bench - share))
+
+
+def aca_marketplace_premium(modified_agi: float, adult_ages, kid_ages, household_size: int,
+                            factor: float = 1.0, years: float = 0, price_scale: float = 1.0,
+                            get=None) -> float:
+    """Annual marketplace premium after the credit, in the caller's healthcare-factor dollars.
+    The ONE price formula: the engine (AccountPortfolio.quote_marketplace_cost) and the
+    Freedom-milestones quote (pre_medicare_health_quote) both call it.
+
+    ``adult_ages`` are the pre-Medicare adults and ``kid_ages`` the children on the plan;
+    ``household_size`` is the tax household that sets the FPL (a Medicare spouse stays in it).
+    ``factor`` is the healthcare factor and ``years`` how far the year is from today.
+
+    Without an area the net premium is multiplied by ``factor`` (today's behaviour). With one,
+    prices grow by ``factor`` x aca_premium_extra(years) BEFORE the credit, while the income
+    share does not: the credit rises as prices rise, which is how the law works."""
+    get = get or globals().get
+    bench, plan = aca_household_prices_annual(adult_ages, kid_ages, get)
+    bench *= price_scale
+    plan *= price_scale
+    if aca_area_active(get):
+        growth = factor * aca_premium_extra(years, get)
+        return _aca_net_premium(modified_agi, bench * growth, plan * growth, household_size, get)
+    return _aca_net_premium(modified_agi, bench, plan, household_size, get) * factor
+
+
+def aca_marketplace_cliff(modified_agi: float, adult_ages, kid_ages, household_size: int,
+                          factor: float = 1.0, years: float = 0, price_scale: float = 1.0,
+                          get=None):
+    """(over the cliff?, credit lost). ``over`` is True when MAGI is at or above
+    ACA_SUBSIDY_CLIFF_PCT of FPL, where the credit stops dead. ``lost`` is the credit the
+    household would get at the edge of the cliff (benchmark less 400% of FPL x the top
+    applicable %), in the same dollars as the premium: what crossing costs that year."""
+    get = get or globals().get
+    cliff = get("ACA_SUBSIDY_CLIFF_PCT", ACA_SUBSIDY_CLIFF_PCT)
+    fpl = aca_fpl(household_size, get)
+    if modified_agi / fpl < cliff:
+        return False, 0.0
+    bench = aca_household_prices_annual(adult_ages, kid_ages, get)[0] * price_scale
+    bench *= factor * (aca_premium_extra(years, get) if aca_area_active(get) else 1.0)
+    edge_share = cliff * fpl * aca_applicable_pct(cliff, get("ACA_APPLICABLE_PCT_BANDS"))
+    return True, max(0.0, bench - edge_share)
 
 
 def calculate_aca_premium_age_rated(modified_agi: float, member_ages,
@@ -3224,28 +3377,35 @@ def calculate_aca_premium_age_rated(modified_agi: float, member_ages,
     adults + children at home); ``household_size`` is the tax household that
     sets the FPL. Above ACA_SUBSIDY_CLIFF_PCT (400%) FPL there is no credit and
     the full age-rated price is due; below it the household pays
-    min(MAGI x applicable %, full price).
+    min(MAGI x applicable %, full price). Members under ACA_CHILD_RATE_UNDER_AGE
+    are children. (The engine calls aca_marketplace_premium, which is told who
+    the children are.)
     """
     if not ACA_ENABLED or not member_ages:
         return 0.0
-    full_price = sum(aca_member_full_price_annual(a) for a in member_ages)
-    fpl_ratio = modified_agi / aca_fpl(household_size)
-    if fpl_ratio >= ACA_SUBSIDY_CLIFF_PCT:
-        return full_price
-    return min(max(0.0, modified_agi) * aca_applicable_pct(fpl_ratio), full_price)
+    members = list(member_ages)
+    adults = [a for a in members if a >= ACA_CHILD_RATE_UNDER_AGE]
+    kids = [a for a in members if a < ACA_CHILD_RATE_UNDER_AGE]
+    return aca_marketplace_premium(modified_agi, adults, kids, household_size)
 
 
 def aca_oop_annual(n_members: int, marketplace_share: float,
-                   healthcare_factor: float = 1.0) -> float:
+                   healthcare_factor: float = 1.0, member_ages=None, get=None) -> float:
     """Marketplace out-of-pocket NOT already in the living base.
 
     ACA_OOP_PER_PERSON_ANNUAL x members (grown by the healthcare factor, like
-    premiums) minus the marketplace share of the living base's real-flat
+    premiums), or with an area set the sum of its by-age table over ``member_ages``,
+    minus the marketplace share of the living base's real-flat
     SPEND_HEALTH_MONTHLY x 12 line, floored at 0 -- so health dollars the base
     already funds are not charged twice.
     """
-    gross = float(ACA_OOP_PER_PERSON_ANNUAL) * n_members * healthcare_factor
-    in_base = float(SPEND_HEALTH_MONTHLY or 0) * 12.0 * marketplace_share
+    get = get or globals().get
+    table = get("ACA_AREA_OOP_ANNUAL")
+    if table and member_ages is not None:
+        gross = sum(table[min(max(int(a), 0), 64)] for a in member_ages) * healthcare_factor
+    else:
+        gross = float(get("ACA_OOP_PER_PERSON_ANNUAL")) * n_members * healthcare_factor
+    in_base = float(get("SPEND_HEALTH_MONTHLY") or 0) * 12.0 * marketplace_share
     return max(0.0, gross - in_base)
 
 # -----------------------------------------------------------------------------

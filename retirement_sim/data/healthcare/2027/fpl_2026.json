@@ -1,0 +1,16 @@
+{
+  "contiguous_48_plus_dc": {
+    "base_1_person": 15960,
+    "per_additional_person": 5680
+  },
+  "alaska": {
+    "base_1_person": 19950,
+    "per_additional_person": 7100
+  },
+  "hawaii": {
+    "base_1_person": 18360,
+    "per_additional_person": 6530
+  },
+  "medicaid_expansion_ratio": 1.38,
+  "source": "HHS 2026 Federal Poverty Guidelines (ASPE detailed-guidelines-2026); govern 2027 coverage-year credits"
+}

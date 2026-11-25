@@ -362,6 +362,8 @@ def full_run(monkeypatch):
         sr.clear_cache(include_disk=False)
         r = sr.run_full_analysis(dict(overrides), n_simulations=120,
                                  target_retirement_age=42, scan_age_range=(40, 47, 3))
+        # The cliff report only exists with the age-rated model (this test is about prices).
+        r["primary_result"].pop("aca_cliff_by_year", None)
         return hashlib.sha256(pickle.dumps(r)).hexdigest()
 
     yield run

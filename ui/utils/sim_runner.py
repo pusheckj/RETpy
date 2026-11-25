@@ -30,6 +30,7 @@ from retirement_sim import config as cfg
 from retirement_sim import mc_parallel as _mcp
 from retirement_sim import mc_jobs
 
+from utils import health_cliff
 from utils.config_builder import build_config_overrides
 from utils.config_builder import _UI_ONLY_KEYS as _BUILDER_UI_ONLY_KEYS
 
@@ -1000,6 +1001,12 @@ def retirement_spending_basis(user_overrides: dict, retirement_age: int) -> dict
         _restore_overrides(original)
 
 
+_AREA_HEALTH_KEYS = ("ACA_AREA_SILVER_MONTHLY", "ACA_AREA_TIERS", "ACA_AREA_PLAN_RATIO",
+                     "ACA_AREA_OOP_ANNUAL", "ACA_PREMIUM_GROWTH_NOMINAL",
+                     "ACA_APPLICABLE_PCT_BANDS", "ACA_FPL_FIRST_PERSON",
+                     "ACA_FPL_PER_ADDITIONAL_PERSON", "ACA_SUBSIDY_CLIFF_PCT")
+
+
 def _health_params(age: int, core: float) -> dict:
     """The engine's health pricing as plain data (cfg must hold the plan): who
     is covered, the expected healthcare factor, a working partner's pay, the
@@ -1056,7 +1063,11 @@ def _health_params(age: int, core: float) -> dict:
             "SPEND_HEALTH_MONTHLY": float(getattr(cfg, "SPEND_HEALTH_MONTHLY", 0) or 0),
             "HEALTHCARE_COSTS_BY_AGE": dict(bands) if isinstance(bands, dict) else {},
             "ACA_BASE_ANNUAL_PREMIUM": float(getattr(cfg, "ACA_BASE_ANNUAL_PREMIUM", 0) or 0),
+            # Healthcare by area: the plan's own prices, credit table and poverty line.
+            **{k: copy.deepcopy(getattr(cfg, k, None)) for k in _AREA_HEALTH_KEYS},
+            "INFLATION_REAL_EXCESS": dict(getattr(cfg, "INFLATION_REAL_EXCESS", {}) or {}),
         },
+        "years": max(0, age - int(cfg.YOUR_AGE)),
     }
 
 
@@ -2026,6 +2037,8 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
                 v for v in vals if v == v and abs(v) != float("inf"))
         for age, vals in (r.get("health_by_age") or {}).items():
             health_by_age.setdefault(int(age), []).extend(vals)
+    aca_cliff_by_year = health_cliff.compact(
+        health_cliff.merge(r.get("aca_cliff_by_age") for r in chunks))
 
     if n == 0:
         # Nothing ran (all errored) — defer to the legacy serial path.
@@ -2094,6 +2107,8 @@ def _assemble_primary_from_chunks(retirement_age: int, chunks: List[dict]) -> di
         "withdrawals_basis": _withdrawals_basis(det_successes),
         "spending_by_year": spending_by_year,
         "health_by_year": health_by_year,
+        # Per age: runs on the marketplace, runs over the 400% FPL cliff, median credit lost.
+        "aca_cliff_by_year": aca_cliff_by_year,
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, logs, retirement_age),
     }
@@ -2245,6 +2260,7 @@ def _run_primary_at_age(retirement_age: int, n_simulations: int) -> dict:
         "withdrawals_basis": _withdrawals_basis(successes),
         "spending_by_year": spending_by_year,
         "health_by_year": health_by_year,
+        "aca_cliff_by_year": health_cliff.from_spending_logs(spending_logs),
         "networth_by_year": _networth_percentiles(paths),
         "accessible_by_year": _accessible_percentiles(bytype_logs, wlogs, retirement_age),
     }
