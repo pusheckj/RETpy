@@ -27,12 +27,12 @@ except ImportError:  # pragma: no cover
     from ui.components import budget_area  # type: ignore
 
 AUTO = "auto"
-VERDICT = {"below": "Below typical", "in range": "Typical", "above": "Above typical"}
-CREDIT = ("A statistical average of what similar households spend, not a target and not advice. "
-          "Source: US Bureau of Labor Statistics Consumer Expenditure Survey 2025, with prices "
-          "adjusted for your area (BEA Regional Price Parities, HUD Fair Market Rents) and "
+VERDICT = {"below": "Below typical", "in range": "Typical", "above": "Above typical", "": "–"}
+CREDIT = ("This is a statistical average of what similar households spend. It is not a target "
+          "and not advice. Source: BLS Consumer Expenditure Survey 2025. Prices are adjusted for "
+          "your area with BEA Regional Price Parities and HUD Fair Market Rents. Costs are "
           "carried to 2026 with BLS CPI. Method from BiggerPockets Money's Household Spending "
-          "Comparison. See docs/DATA_SOURCES.md.")
+          "Comparison.")
 
 
 def yours_from_actual(actual: Optional[Dict[str, int]]) -> Dict[str, float]:
@@ -49,11 +49,21 @@ def table(rows) -> pd.DataFrame:
     """The comparison as display text, one line per group and a Total."""
     return pd.DataFrame({
         "Category": [r.label for r in rows],
-        "You, a month": [money(r.you) for r in rows],
+        "You, a month": [money(r.you) if r.you > 0 else "–" for r in rows],
         "Typical, a month": [money(r.typical) for r in rows],
         "Typical range": [f"{money(r.low)} to {money(r.high)}" for r in rows],
         "You are": [VERDICT[r.verdict] for r in rows],
     })
+
+
+def _pick_group(st) -> None:
+    """Selectbox callback: save the hand-picked income group in the plan ("auto" forgets it)."""
+    ov = st.session_state.setdefault("user_overrides", {})
+    choice = st.session_state.get("sb_income")
+    if choice in bc.QUINTILES:
+        ov[bc.GROUP_KEY] = choice
+    else:
+        ov.pop(bc.GROUP_KEY, None)
 
 
 def render(st, actual: Optional[Dict[str, int]] = None) -> None:
@@ -63,25 +73,29 @@ def render(st, actual: Optional[Dict[str, int]] = None) -> None:
     with c1:
         budget_area.render(st, "se_kid_area_spend")
     auto = bc.household(ov).auto_quintile
+    saved = ov.get(bc.GROUP_KEY) if ov.get(bc.GROUP_KEY) in bc.QUINTILES else AUTO
+    if st.session_state.get("sb_income") not in (AUTO, *bc.QUINTILES):
+        st.session_state["sb_income"] = saved
     with c2:
         pick = st.selectbox("Income group", [AUTO, *bc.QUINTILES], key="sb_income",
+                            on_change=_pick_group, args=(st,),
                             format_func=lambda q: (f"From your pay: {bc.QUINTILE_LABELS[auto]}"
                                                    if q == AUTO else bc.QUINTILE_LABELS[q]),
                             help="Households are split into five equal groups by income before "
                                  "tax. The cutoffs here are rough, so pick your group if it "
-                                 "looks wrong.")
+                                 "looks wrong. Saved with your plan.")
     rows, h = bc.spending_rows(ov, None if pick == AUTO else pick, yours_from_actual(actual))
     group = bc.QUINTILE_LABELS[auto if pick == AUTO else pick]
     where = h.area or (bd.statewide(h.state)["l"].replace(" " + bd.STATEWIDE_SUFFIX, "")
                        if h.state else "the US")
-    st.caption(f"Households of {h.size} {'person' if h.size == 1 else 'people'}, "
-               f"you aged {h.age}, in the {group.lower()} income group, near {where}. "
+    st.caption(f"Households with {h.adults} adult{'' if h.adults == 1 else 's'}, you aged {h.age}, "
+               f"in the {group.lower()} income group, near {where}. "
                "Your figures are your plan's monthly inputs"
                + (" and your statements where they have the category." if actual else "."))
     st.dataframe(table(rows), hide_index=True, width="stretch")
     total = rows[-1]
-    st.caption(f"Typical total {money_md(total.typical)} a month, with a range of "
-               f"{money_md(total.low)} to {money_md(total.high)} (10% either side of typical). "
+    st.caption(f"Typical total: {money_md(total.typical)} a month. The typical range is "
+               f"{money_md(total.low)} to {money_md(total.high)}, 10% either side. "
                f"You are at {money_md(total.you)}.")
     notes = [f"{r.label}: {r.note}" for r in rows if r.note]
     st.caption(" ".join(notes) + " " + bc.EXCLUDED + " Your children's costs are not compared.")

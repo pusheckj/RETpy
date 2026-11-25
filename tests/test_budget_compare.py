@@ -22,7 +22,7 @@ FAMILY = {"YOUR_AGE": 38, "PARTNER_AGE": 37, "STATE_CHOICE": "CA", "YOUR_BASE_SA
           "SPEND_RENT_MONTHLY": 3_000, "MORTGAGE_MONTHLY": 0,
           "SPEND_UTILITIES_MONTHLY": 250, "SPEND_FOOD_MONTHLY": 1_200, "SPEND_TRANSPORT_MONTHLY": 900,
           "SPEND_HEALTH_MONTHLY": 500, "SPEND_DISCRETIONARY_MONTHLY": 700, "SPEND_OTHER_MONTHLY": 500,
-          "PARTNER_OTHER_MONTHLY": 0}
+          "PARTNER_OTHER_MONTHLY": 0, "HOME_VALUE": 0}
 
 
 def _total(b):
@@ -85,13 +85,20 @@ def test_income_groups_follow_pay():
 
 def test_the_household_is_read_from_the_plan():
     h = bc.household(FAMILY)
-    assert (h.size, h.age, h.income, h.state, h.area) == (4, 38, 130_000, "CA", None)
+    assert (h.adults, h.age, h.income, h.state, h.area) == (2, 38, 130_000, "CA", None)
     assert h.auto_quintile == "Q4"
     solo = bc.household({"YOUR_AGE": 30, "PARTNER_AGE": 0, "CHILDREN": [], "STATE_CHOICE": "Other",
                          "YOUR_BASE_SALARY": 0})
-    assert (solo.size, solo.state, solo.auto_quintile) == (1, None, "Q3")   # no pay: the middle group
-    not_yet = bc.household({**FAMILY, "CHILDREN": [{"years_until_birth": 2}]})
-    assert not_yet.size == 2                            # only children at home today count
+    assert (solo.adults, solo.state, solo.auto_quintile) == (1, None, "Q3")   # no pay: the middle group
+
+
+def test_household_size_counts_adults_only_because_children_costs_are_not_compared():
+    """You compare everyday costs without your children's, so the benchmark must not count them."""
+    for kids in ([], [{"years_until_birth": -4}], [{"years_until_birth": -4}, {"years_until_birth": -1}]):
+        assert bc.household({**FAMILY, "CHILDREN": kids}).adults == 2
+        rows, _ = bc.spending_rows({**FAMILY, "CHILDREN": kids})
+        assert rows[-1].typical == bc.spending_rows({**FAMILY, "CHILDREN": []})[0][-1].typical
+    assert bc.household({**FAMILY, "PARTNER_AGE": 0}).adults == 1
 
 
 def test_rows_compare_your_plan_with_the_benchmark_per_month():
@@ -101,7 +108,7 @@ def test_rows_compare_your_plan_with_the_benchmark_per_month():
                         "Healthcare premiums", "Fun and discretionary", "Other", "Total"]
     assert by["Housing and utilities"].you == 3_000 + 250        # rent plus utilities
     assert by["Food & groceries"].you == 1_200
-    bench = bc.benchmark("Q4", "4", "35-44", state="CA", area_label=SD)
+    bench = bc.benchmark("Q4", "2", "35-44", state="CA", area_label=SD)
     assert by["Housing and utilities"].typical == pytest.approx((bench["Housing"] + bench["Utilities"]) / 12)
     # Apparel is folded into Fun and discretionary, as the module says.
     assert by["Fun and discretionary"].typical == pytest.approx((bench["Entertainment"] + bench["Apparel"]) / 12)
@@ -112,7 +119,8 @@ def test_rows_compare_your_plan_with_the_benchmark_per_month():
 
 
 def test_an_owner_is_compared_by_the_mortgage_payment():
-    rows, _ = bc.spending_rows({**FAMILY, "SPEND_RENT_MONTHLY": 0, "MORTGAGE_MONTHLY": 2_400, "HOME_VALUE": 500_000})
+    rows, _ = bc.spending_rows({**FAMILY, "SPEND_RENT_MONTHLY": 0, "MORTGAGE_MONTHLY": 2_400, "HOME_VALUE": 500_000,
+                                          "MORTGAGE_YEARS_REMAINING": 20})
     assert {r.label: r for r in rows}["Housing and utilities"].you == 2_400 + 250
 
 
@@ -172,3 +180,62 @@ def test_checkup_counts_a_married_partner_in_size_and_pay_but_not_when_single():
 def test_checkup_says_nothing_without_pay_or_age():
     assert bc.checkup_compare({**CHECKUP, "gross_salary_annual": 0.0}) is None
     assert bc.checkup_compare({**CHECKUP, "age": 0}) is None
+
+
+# ---- review fixes
+
+def test_a_row_with_no_figure_of_yours_has_no_verdict():
+    assert bc._row("X", 0.0, 500.0).verdict == ""
+    rows, _ = bc.spending_rows({**FAMILY, "SPEND_FOOD_MONTHLY": 0})
+    by = {r.label: r for r in rows}
+    assert by["Food & groceries"].verdict == "" and by["Transportation"].verdict != ""
+    none, _ = bc.spending_rows({"YOUR_AGE": 35, "STATE_CHOICE": "CA", "SPEND_RENT_MONTHLY": 0,
+                                **{k: 0 for k in FAMILY if k.startswith("SPEND_") and k != "SPEND_RENT_MONTHLY"}})
+    assert none[-1].verdict == ""
+
+
+def test_housing_follows_the_plans_own_rule_for_a_paid_off_home():
+    from utils import derived
+    paid_off = {**FAMILY, "SPEND_RENT_MONTHLY": 0, "HOME_VALUE": 800_000, "MORTGAGE_MONTHLY": 3_000,
+                "MORTGAGE_YEARS_REMAINING": 0}
+    rows, _ = bc.spending_rows(paid_off)
+    carry = 800_000 * 0.0135 / 12                        # property tax and insurance, as the plan counts them
+    assert {r.label: r for r in rows}["Housing and utilities"].you == pytest.approx(carry + 250)
+    payment, carrying = derived.housing_parts(paid_off)
+    assert payment == 0 and carrying == pytest.approx(800_000 * 0.0135)
+    live = {**paid_off, "MORTGAGE_YEARS_REMAINING": 12}
+    assert {r.label: r for r in bc.spending_rows(live)[0]}["Housing and utilities"].you == 3_000 + 250
+    renter = {**FAMILY, "HOME_VALUE": 0, "MORTGAGE_MONTHLY": 0, "SPEND_RENT_MONTHLY": 2_000}
+    assert {r.label: r for r in bc.spending_rows(renter)[0]}["Housing and utilities"].you == 2_000 + 250
+
+
+def test_a_partner_with_no_spending_figure_gets_the_plans_default_of_1500():
+    ov = {k: v for k, v in FAMILY.items() if k != "PARTNER_OTHER_MONTHLY"}
+    rows, _ = bc.spending_rows(ov)
+    assert {r.label: r for r in rows}["Other"].you == 500 + 1_500
+
+
+def test_a_hand_picked_income_group_is_saved_in_the_plan():
+    auto, _ = bc.spending_rows(FAMILY)
+    picked, _ = bc.spending_rows({**FAMILY, "BENCH_INCOME_GROUP": "Q5"})
+    assert picked[-1].typical > auto[-1].typical
+    junk, _ = bc.spending_rows({**FAMILY, "BENCH_INCOME_GROUP": "Q9"})
+    assert junk[-1].typical == auto[-1].typical
+
+
+def test_income_cutoffs_live_in_one_constant_and_only_the_first_is_sourced():
+    assert bc.QUINTILE_UPPER[0] == 32_623
+    assert len(bc.QUINTILE_UPPER) == 4 and list(bc.QUINTILE_UPPER) == sorted(bc.QUINTILE_UPPER)
+
+
+def test_all_items_cpi_comes_from_the_data_files():
+    assert bc.CPI_ALL_ITEMS == bc.bd.cpi_factors()["Other"] == 1.0462
+
+
+def test_checkup_leaves_out_minimum_debt_payments():
+    debts = [{"name": "Card", "balance": 5_000.0, "min_payment": 160.0},
+             {"name": "Paid", "balance": 0.0, "min_payment": 99.0}]
+    c = bc.checkup_compare({**CHECKUP, "debts": debts})
+    assert c.you == 3_300 - 160                          # the survey has no debt principal; paid-off debts are not counted
+    big = bc.checkup_compare({**CHECKUP, "needs_monthly": 100.0, "wants_monthly": 0.0, "debts": debts})
+    assert big.you == 0                                  # never below zero

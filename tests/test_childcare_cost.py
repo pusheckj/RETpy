@@ -23,49 +23,65 @@ LOW_RENT_AREA = "Appalachian Highlands (WV / VA / KY)"     # no county figure, r
 
 
 def test_bpms_worked_example_for_san_diego_county():
-    two = cc.estimate("CA", SD, parent_age=40, household_size=4, n_children=2)
+    """BPM's README: parent 35-44, household of 4, so its own age weights. We keep that
+    method here only to check the data and rounding against BPM."""
+    w = cc.bpm_weights(parent_age=40, household_size=4)
+    two = cc.estimate("CA", SD, n_children=2, weights=w)
     assert two.annual == 35_244                        # BPM README, to the dollar
     assert two.coverage == "county"
     assert two.weights == pytest.approx([0.10, 0.30, 0.60, 0.0])   # school-age moved to preschool
-    one = cc.estimate("CA", SD, 40, 4)
-    assert one.per_child == 17_622                     # 17,110 in 2025 dollars x 1.0299
+    assert cc.estimate("CA", SD, weights=w).per_child == 17_622    # 17,110 in 2025 dollars x 1.0299
+
+
+def test_the_app_weights_follow_a_childs_first_five_years():
+    # NDCP tiers: infant under 2, toddler 2, preschool 3 to 5 (school-age starts at 5).
+    # Ages 0 to 4 are two years of infant, one of toddler, two of preschool.
+    assert cc.TIME_IN_TIER == pytest.approx([0.4, 0.2, 0.4, 0.0])
+    assert sum(cc.TIME_IN_TIER) == pytest.approx(1.0)
+    assert cc.estimate("CA", SD).weights == cc.TIME_IN_TIER
+
+
+def test_san_diego_county_per_child_with_the_app_weights():
+    e = cc.estimate("CA", SD)
+    prices = [round(p * 1.172) for p in (19719, 16859, 12616)]
+    assert e.per_child == round((prices[0] * 0.4 + prices[1] * 0.2 + prices[2] * 0.4) * 1.0299)
+    assert e.per_child == 19_682
 
 
 def test_a_county_is_used_as_it_is_whatever_its_rents():
-    a = cc.estimate("CA", SD, 40, 4, renormalize=True)
-    b = cc.estimate("CA", SD, 40, 4, renormalize=False)
+    a = cc.estimate("CA", SD, renormalize=True)
+    b = cc.estimate("CA", SD, renormalize=False)
     assert a.per_child == b.per_child                  # the rents index never touches a county
 
 
 def test_a_state_with_no_area_uses_the_state_price_unscaled():
-    e = cc.estimate("CA", None, 40, 4)
+    e = cc.estimate("CA", None)
     assert e.coverage == "state" and e.prices_2022 == bd.state_childcare_prices("CA")
     prices = [round(p * 1.172) for p in bd.state_childcare_prices("CA")]
-    expected = (prices[0] * 0.1 + prices[1] * 0.3 + prices[2] * 0.6) * 1.0299
+    expected = (prices[0] * 0.4 + prices[1] * 0.2 + prices[2] * 0.4) * 1.0299
     assert e.per_child == pytest.approx(expected, abs=1)
 
 
 def test_an_area_without_a_county_figure_scales_its_states_price_by_its_rents():
     row = bd.area(LOW_RENT_AREA)
     assert bd.county_childcare_prices(LOW_RENT_AREA) is None and row["rr"] == 54
-    e = cc.estimate(row["st"], LOW_RENT_AREA, 40, 4)
+    e = cc.estimate(row["st"], LOW_RENT_AREA)
     assert e.coverage == "area"
     # Rents are 0.54 of the US, below BPM's floor of 0.65, so the floor applies.
     assert e.prices_2022 == [int(p * 0.65 + 0.5) for p in bd.state_childcare_prices(row["st"])]  # half up, as BPM rounds
 
 
 def test_no_state_falls_back_to_bpms_national_prices():
-    e = cc.estimate(None, None, 40, 4)
+    e = cc.estimate(None, None)
     assert e.coverage == "national" and e.prices_2022 == bd.constants()["NATIONAL"]
 
 
-def test_older_parents_pay_less_because_their_children_are_older():
-    young = cc.estimate("TX", None, 28, 3).per_child
-    middle = cc.estimate("TX", None, 40, 3).per_child
-    older = cc.estimate("TX", None, 50, 3).per_child
+def test_bpms_age_weights_move_with_the_parent_and_stay_available_for_checks():
+    young = cc.estimate("TX", None, weights=cc.bpm_weights(28, 3)).per_child
+    middle = cc.estimate("TX", None, weights=cc.bpm_weights(40, 3)).per_child
+    older = cc.estimate("TX", None, weights=cc.bpm_weights(50, 3)).per_child
     assert young > middle > older > 0
-    # 55-64: every child is school age, which full-time care moves to preschool.
-    assert cc.estimate("TX", None, 58, 3).weights == pytest.approx([0, 0, 1.0, 0])
+    assert cc.bpm_weights(58, 3) == pytest.approx([0, 0, 1.0, 0])
 
 
 def test_household_size_and_age_pick_the_bands():
@@ -74,14 +90,14 @@ def test_household_size_and_age_pick_the_bands():
     assert [cc.size_key(n) for n in (0, 1, 4, 5, 9)] == ["1", "1", "4", "5+", "5+"]
 
 
-def test_for_household_counts_every_child_in_the_plan_and_the_partner():
+def test_for_household_does_not_depend_on_the_parents_age_or_the_household_size():
     ov = {"YOUR_AGE": 34, "PARTNER_AGE": 33, "STATE_CHOICE": "CA", "BENCH_AREA": SD,
           "CHILDREN": [{"years_until_birth": -2}, {"years_until_birth": 3}]}
     est, where = cc.for_household(ov)
     assert where == SD and est.coverage == "county"
-    assert est == cc.estimate("CA", SD, 34, 1 + 1 + 2)           # two adults and two children
-    solo, _ = cc.for_household({**ov, "PARTNER_AGE": 0})
-    assert solo == cc.estimate("CA", SD, 34, 3)
+    assert est == cc.estimate("CA", SD)
+    other, _ = cc.for_household({**ov, "YOUR_AGE": 52, "PARTNER_AGE": 0})
+    assert other == est
 
 
 def test_for_household_names_the_state_without_an_area_and_none_without_children():

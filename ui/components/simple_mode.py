@@ -534,11 +534,12 @@ def _render_budget(st, buckets: List[sf.BudgetBucket], inputs: Dict[str, Any]) -
         cmp = bc.checkup_compare(inputs)
         if cmp:
             st.caption(f"For comparison, households your age in the {cmp.group} income group "
-                       f"typically spend about {money_md(cmp.typical)} a month on everyday costs, at "
-                       f"US average prices. Your needs and wants add up to {money_md(cmp.you)}. A "
-                       "statistical average, not advice. Open the Retirement planner's Spending tab "
-                       "to compare by category and area. Source: BLS Consumer Expenditure 2025, "
-                       "method from BiggerPockets Money.")
+                       f"typically spend about {money_md(cmp.typical)} a month. That covers everyday "
+                       f"costs at US average prices. Your needs and wants, without debt payments, "
+                       f"add up to {money_md(cmp.you)}. This is a statistical average, not advice. "
+                       "For a breakdown by category and area, see the Spending tab in the "
+                       "Retirement planner. Source: BLS Consumer Expenditure Survey 2025. "
+                       "Method from BiggerPockets Money.")
 
 
 def _load_checkup(ss, answers: Dict[str, Any]) -> None:

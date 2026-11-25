@@ -319,7 +319,7 @@ def _sync_children(st, overrides: dict) -> None:
     kids = cfg.children_in(overrides)[:6]
     ss = st.session_state
     ss["se_kids_n"] = len(kids)
-    for key in ("se_kid_area", "se_kid_area_spend"):   # the area pickers redraw from BENCH_AREA
+    for key in ("se_kid_area", "se_kid_area_spend", "sb_income"):   # redrawn from BENCH_AREA / BENCH_INCOME_GROUP
         ss.pop(key, None)
     for i, kid in enumerate(kids):
         p, yub = f"se_kid{i}_", int(kid["years_until_birth"])
@@ -467,9 +467,10 @@ _EXTRA_INPUT_KEYS = ("si_comp_editor", "si_comp_customized", "le_age", "ay_partn
 #             user_overrides["MS_PLACES"] and load with the profile.
 #   debt_     the Debts section (one set of row widgets per debt, plus the extra payment
 #             and payoff order) and the Debt payoff tile's "pay more" amount.
+#   sb_       the Spending tab's benchmark income group (saved as BENCH_INCOME_GROUP).
 #   assume_   the Assumptions presets: the Undo snapshot (assume_last) belongs to the plan
 #             it was taken on, so a profile switch or JSON load must drop it.
-_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_", "assume_")
+_EXTRA_INPUT_PREFIXES = ("sv_pct_", "ea_", "bp_", "wifc_", "le_", "se_kid", "ms_", "debt_", "assume_", "sb_")
 
 
 def _is_input_widget_key(key) -> bool:

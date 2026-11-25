@@ -24,6 +24,8 @@ _UI_ONLY_KEYS = {
     # label from ui/data/budget/locations.json). Saved with the profile, never read by
     # the engine and left out of the cache keys.
     "BENCH_AREA",
+    # The income group picked by hand in the Spending tab's benchmark ("" = from pay).
+    "BENCH_INCOME_GROUP",
 }
 
 # Derived on every run: birth years from age (sim_runner._recompute_derived),

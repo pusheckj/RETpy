@@ -62,33 +62,50 @@ def test_the_table_has_a_row_per_group_and_a_total(draw):
     rows, _ = bc.spending_rows({**FAMILY, "BENCH_AREA": SD})
     assert df["Typical, a month"][6] == f"${rows[-1].typical:,.0f}"
     assert df["You, a month"][0] == "$3,250"                          # rent 3,000 plus utilities 250
-    assert df["You are"][0] == "Below typical"                        # San Diego rent for 4 is about $4,000+
+    assert df["You are"][0] == "Typical"                              # within 10% of a 1-bedroom rent x 1.25 for 2 adults
+    assert df["You are"][0] == sb.VERDICT[rows[0].verdict]
     assert " to " in df["Typical range"][0]
+
+
+def test_a_row_with_no_figure_shows_a_dash_not_a_verdict(draw):
+    at = draw({**FAMILY, "BENCH_AREA": SD, "SPEND_FOOD_MONTHLY": 0})
+    df = _table(at)
+    food = df[df["Category"] == "Food & groceries"].iloc[0]
+    assert food["You, a month"] == "–" and food["You are"] == "–"
+    assert df[df["Category"] == "Transportation"].iloc[0]["You are"] in ("Below typical", "Typical", "Above typical")
 
 
 def test_the_page_names_the_household_the_group_and_the_place(draw):
     at = draw({**FAMILY, "BENCH_AREA": SD})
     text = _captions(at)
-    assert f"Households of 4 people, you aged 38, in the fourth 20% income group, near {SD}" in text
+    assert f"Households with 2 adults, you aged 38, in the fourth 20% income group, near {SD}" in text
     at = draw(FAMILY)
     assert "near California. Your figures" in _captions(at)
 
 
 def test_it_is_labelled_a_statistical_average_and_credits_its_sources(draw):
     text = _captions(draw(FAMILY))
-    assert "A statistical average of what similar households spend, not a target and not advice" in text
-    for credit in ("BiggerPockets Money", "Consumer Expenditure Survey 2025", "BEA Regional Price Parities",
-                   "HUD Fair Market Rents", "docs/DATA_SOURCES.md"):
+    assert "This is a statistical average of what similar households spend. It is not a target and not advice" in text
+    for credit in ("BiggerPockets Money", "BLS Consumer Expenditure Survey 2025", "BEA Regional Price Parities",
+                   "HUD Fair Market Rents"):
         assert credit in text
+    assert "docs/DATA_SOURCES.md" not in text            # a plain source line, not a file path
     assert "10% either side" in text
+
+
+def test_every_sentence_of_the_page_copy_is_short(draw):
+    import re
+    for line in re.split(r"(?<=[.!?])\s+", _captions(draw({**FAMILY, "BENCH_AREA": SD}))):
+        assert len(line.split()) <= 20, line
 
 
 def test_it_says_what_is_left_out_and_what_was_folded_in(draw):
     text = _captions(draw(FAMILY))
-    assert "Retirement contributions and payroll tax (the CE's Pensions line) are not compared" in text
-    assert "Includes the CE's clothing line" in text                  # apparel folded into Fun
+    assert "retirement contribution and payroll tax line is not compared" in text
+    assert "Includes the survey's clothing line" in text            # apparel folded into Fun
     assert "Includes your partner's own spending" in text
     assert "children's costs are not compared" in text
+    assert "(the CE" not in text and "CE " not in text.replace("BLS Consumer Expenditure", "")
 
 
 def test_the_income_group_defaults_to_your_pay_and_can_be_changed(draw):
@@ -100,6 +117,15 @@ def test_the_income_group_defaults_to_your_pay_and_can_be_changed(draw):
     assert not at.exception, at.exception
     assert "top 20% income group" in _captions(at)
     assert _table(at)["Typical, a month"][6] != before
+    assert at.session_state["user_overrides"]["BENCH_INCOME_GROUP"] == "Q5"   # saved with the plan
+    at.selectbox(key="sb_income").select("auto").run()
+    assert "BENCH_INCOME_GROUP" not in at.session_state["user_overrides"]
+
+
+def test_a_saved_income_group_is_shown_on_load(draw):
+    at = draw({**FAMILY, "BENCH_INCOME_GROUP": "Q2"})
+    assert at.selectbox(key="sb_income").value == "Q2"
+    assert "second 20% income group" in _captions(at)
 
 
 def _both():
@@ -187,7 +213,10 @@ def test_the_money_checkup_shows_one_short_comparison_line():
     assert not at.exception, at.exception
     text = _captions(at)
     assert "For comparison, households your age in the middle 20% income group typically spend about" in text
-    assert "A statistical average, not advice" in text and "BiggerPockets Money" in text
+    assert "This is a statistical average, not advice" in text and "BiggerPockets Money" in text
+    assert "BLS Consumer Expenditure Survey" in text and "CE" not in text.replace("Expenditure", "")
+    import re
+    assert all(len(s.split()) <= 20 for s in re.split(r"(?<=[.!?])\s+", text))
     at.session_state["simple_inputs"] = {"gross_salary_annual": 0, "age": 30}
     at.run()
     assert "For comparison, households your age" not in _captions(at)

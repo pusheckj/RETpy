@@ -19,6 +19,8 @@ What the app adds, and BPM does not:
 * CE "Pensions" (payroll tax, retirement contributions, life insurance) is left out. The
   planner models those elsewhere.
 * The CE groups are folded into the app's spending categories, see ``ROWS``.
+* The household is the adults: your children's costs are not in "you", so they are not in
+  the benchmark's household size either.
 * The income fifth comes from your household pay, with rough cutoffs (``QUINTILE_UPPER``).
 
 A statistical average of what similar households spend, not a target and not advice.
@@ -34,28 +36,31 @@ try:
     from utils import budget_data as bd
     from utils import childcare_cost as ccost
     from utils.coerce import safe_int
-    from utils.derived import compute_total_income, children_at_home_now
-    from utils.expense_categories import CATEGORIES, HOUSING_KEYS, PARTNER
+    from utils.derived import compute_total_income, housing_parts
+    from utils.expense_categories import CATEGORIES, PARTNER
 except ImportError:  # pragma: no cover
     from ui.utils import budget_data as bd  # type: ignore
     from ui.utils import childcare_cost as ccost  # type: ignore
     from ui.utils.coerce import safe_int  # type: ignore
-    from ui.utils.derived import compute_total_income, children_at_home_now  # type: ignore
-    from ui.utils.expense_categories import CATEGORIES, HOUSING_KEYS, PARTNER  # type: ignore
+    from ui.utils.derived import compute_total_income, housing_parts  # type: ignore
+    from ui.utils.expense_categories import CATEGORIES, PARTNER  # type: ignore
 
+_PAID_EPS = 0.005                 # a balance under half a cent is paid off (simple_finance)
 BAND = 0.10                       # the "typical" range: within 10% of the benchmark
+GROUP_KEY = "BENCH_INCOME_GROUP"     # the plan's saved hand-picked income group (UI only)
 QUINTILES = ("Q1", "Q2", "Q3", "Q4", "Q5")
 QUINTILE_LABELS = {"Q1": "Bottom 20%", "Q2": "Second 20%", "Q3": "Middle 20%",
                    "Q4": "Fourth 20%", "Q5": "Top 20%"}
 
-# Top of each income fifth (US households, before tax, 2025 dollars). ROUGH: only the
-# first, $32,623, comes from BPM's data (the CE's published bottom-fifth ceiling). The
-# others are round estimates and are NOT in the BPM files. Replace them with the CE
-# Table 1101 income cutoffs when you have them. The page lets you pick the group by hand.
-QUINTILE_UPPER = (32_623, 61_000, 98_000, 158_000)
+# Top of each income fifth (US households, before tax, 2025 dollars). ESTIMATES. Only the
+# first, $32,623, is sourced: it is the bottom fifth's ceiling in BPM's data. BPM ships no
+# other cutoff. The rest are round figures scaled from Census household income cutoffs.
+# TODO: replace them with the BLS Consumer Expenditure Survey 2025, Table 1101 ("Quintiles of
+# income before taxes") upper limits. The page also lets people pick their group by hand.
+QUINTILE_UPPER = (32_623, 63_000, 102_000, 166_000)
 
-# CPI factor that BPM uses for all-items (located Utilities, whose line is the phone share).
-CPI_ALL_ITEMS = 1.0462
+# BPM's all-items CPI factor. Its "Other" group uses it, and so does its located Utilities line.
+CPI_ALL_ITEMS = bd.cpi_factors()["Other"]
 
 # Spending groups on screen: (label, CE groups it adds up, app expense categories it compares).
 HOUSING_UTILITIES = "Housing and utilities"
@@ -72,11 +77,12 @@ ROWS: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
 NOTES = {
     HOUSING_UTILITIES: "Rent for a home sized to your household. Owners with a small or paid-off "
                        "mortgage often pay less.",
-    "Healthcare premiums": "The CE line also holds out-of-pocket costs, so it runs above premiums alone.",
-    "Fun and discretionary": "Includes the CE's clothing line.",
+    "Healthcare premiums": "The survey line also holds out-of-pocket costs, so it runs above premiums alone.",
+    "Fun and discretionary": "Includes the survey's clothing line.",
     "Other": "Includes your partner's own spending, if any.",
 }
-EXCLUDED = "Retirement contributions and payroll tax (the CE's Pensions line) are not compared."
+PARTNER_DEFAULT = 1_500        # the plan's own default for a partner's spending (derived.py)
+EXCLUDED = "The survey's retirement contribution and payroll tax line is not compared."
 
 
 def quintile_for(income: float) -> str:
@@ -132,7 +138,7 @@ def benchmark(quintile: str, size: str, age: str, state: Optional[str] = None,
 
 
 class Household(NamedTuple):
-    size: int
+    adults: int                  # you, and a partner if any: children are not counted
     age: int
     income: int
     auto_quintile: str
@@ -141,15 +147,15 @@ class Household(NamedTuple):
 
 
 def household(overrides: dict) -> Household:
-    """The household the benchmark describes, read from the plan: you, a partner, and the
-    children at home now; your age; your pay; your state and the area you picked."""
+    """The household the benchmark describes, read from the plan: you and a partner (your
+    children's costs are not in the comparison, so they are not in the size either), your
+    age, your pay, your state and the area you picked."""
     partner = safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0
-    size = 1 + int(partner) + len(children_at_home_now(overrides))
-    return Household(size=size,
+    income = compute_total_income(overrides)
+    return Household(adults=1 + int(partner),
                      age=safe_int(overrides.get("YOUR_AGE", cfg.YOUR_AGE), cfg.YOUR_AGE),
-                     income=compute_total_income(overrides),
-                     auto_quintile=quintile_for(compute_total_income(overrides))
-                     if compute_total_income(overrides) > 0 else "Q3",
+                     income=income,
+                     auto_quintile=quintile_for(income) if income > 0 else "Q3",
                      state=bd.state_code(overrides),
                      area=bd.picked_area(overrides))
 
@@ -165,9 +171,15 @@ class Row(NamedTuple):
 
 
 def _plan_value(overrides: dict, label: str) -> float:
+    """The plan's monthly figure for a spending label. Housing follows the plan's own rule
+    (``derived.housing_parts``): the loan payment, the renter's rent, or an owner's
+    property tax and insurance once the loan is paid off."""
     if label == "Housing":
-        vals = [float(overrides.get(k, 0) or 0) for k in HOUSING_KEYS]
-        return next((v for v in vals if v > 0), 0.0)
+        payment, carrying = housing_parts(overrides)
+        return payment + carrying / 12
+    if label == PARTNER:                  # the plan's default when no figure is saved
+        return float(overrides.get("PARTNER_OTHER_MONTHLY",
+                                   overrides.get("PARTNER_MONTHLY_SPENDING", PARTNER_DEFAULT)) or 0)
     key = next(c.key for c in CATEGORIES if c.label == label)
     return float(overrides.get(key, 0) or 0)
 
@@ -176,13 +188,16 @@ def spending_rows(overrides: dict, quintile: Optional[str] = None,
                   yours: Optional[Dict[str, float]] = None) -> Tuple[List[Row], Household]:
     """The comparison table: one row per ``ROWS`` group and a last "Total" row.
 
-    ``yours`` maps an expense label (a ``CATEGORIES`` label or "Housing") to $ a month and
-    replaces the plan's own figure for it, for example your statements' averages.
+    The income group is ``quintile`` if given, else the plan's saved pick
+    (``BENCH_INCOME_GROUP``), else the one from pay. ``yours`` maps an expense label (a
+    ``CATEGORIES`` label or "Housing") to $ a month and replaces the plan's own figure for it,
+    for example your statements' averages.
     """
     h = household(overrides)
-    q = quintile if quintile in QUINTILES else h.auto_quintile
-    bench = benchmark(q, ccost.size_key(h.size), ccost.age_band(h.age), h.state, h.area)
-    has_partner = safe_int(overrides.get("PARTNER_AGE", 0), 0) > 0
+    saved = overrides.get(GROUP_KEY)
+    q = next((c for c in (quintile, saved) if c in QUINTILES), h.auto_quintile)
+    bench = benchmark(q, ccost.size_key(h.adults), ccost.age_band(h.age), h.state, h.area)
+    has_partner = h.adults > 1
     rows: List[Row] = []
     tot_you = tot_typ = 0.0
     for label, ce_groups, mine in ROWS:
@@ -201,7 +216,7 @@ def spending_rows(overrides: dict, quintile: Optional[str] = None,
 
 def _row(label: str, you: float, typical: float) -> Row:
     low, high = typical * (1 - BAND), typical * (1 + BAND)
-    verdict = "below" if you < low else "above" if you > high else "in range"
+    verdict = "" if you <= 0 else "below" if you < low else "above" if you > high else "in range"
     return Row(label, you, typical, low, high, verdict, NOTES.get(label, ""))
 
 
@@ -224,5 +239,8 @@ def checkup_compare(inputs: dict) -> Optional[Checkup]:
     q = quintile_for(gross)
     bench = benchmark(q, ccost.size_key(1 + int(married)), ccost.age_band(age))
     typical = (sum(bench.values()) - bench["Pensions"]) / 12
-    you = float(inputs.get("needs_monthly") or 0) + float(inputs.get("wants_monthly") or 0)
+    # The survey counts no debt principal, so minimum payments on debts still owed are left out.
+    owed = sum(float(d.get("min_payment") or 0) for d in inputs.get("debts") or []
+               if float(d.get("balance") or 0) > _PAID_EPS)
+    you = max(0.0, float(inputs.get("needs_monthly") or 0) + float(inputs.get("wants_monthly") or 0) - owed)
     return Checkup(typical, you, QUINTILE_LABELS[q].lower())

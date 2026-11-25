@@ -495,11 +495,13 @@ Two features use public cost-of-living data (`ui/data/budget/`, loaded by `ui/ut
 1. Prices are the Department of Labor's National Database of Childcare Prices (NDCP, 2022), center-based care, for four age tiers: infant, toddler, preschool and school-age.
 2. A county median is used as it is. If you pick an area with no county figure, the state's price is scaled by the area's BEA Rents index, kept between 0.65 and 1.70. With no area picked, the state's price is used as it is. With no state, BPM's national prices are used.
 3. 2022 prices are carried to 2025 with the BLS day-care price index (x 1.172) and to 2026 (x 1.0299).
-4. A child's cost is the sum of the four tier prices times four age weights. The weights are BPM's own estimate of how a household's children spread over the tiers, by the parent's age band and the household size. With full-time paid care the school-age weight moves to preschool. They are BPM's method, not a published statistic. The household is you, a partner, and every child in the plan.
+4. A child's yearly cost is the sum of the four tier prices times four weights. The weights are our own method, not BPM's. The childcare box covers a child's first five years (ages 0 to 4). In NDCP's tiers that is two years of infant care (under 2), one of toddler care (2) and two of preschool (3 and 4), so the weights are 0.4, 0.2, 0.4 and 0 for school-age. They do not depend on your age or household. BPM's own weights guess the spread of children from the parent's age and household size. They are kept in the code only to check the data against BPM's tool.
 
-Example: San Diego County, a parent aged 35 to 44, a household of 4: $17,110 in 2025 dollars, $17,622 in 2026 dollars per child.
+Example: San Diego County: $19,682 a year per child in 2026 dollars. (BPM's own weights for a parent aged 35 to 44 in a household of 4 give $17,622.)
 
-The child's **Childcare until age 5 ($/mo)** box (`childcare_monthly` in `CHILDREN`) is the only engine change. It adds that amount each month while the child is under `CHILDCARE_END_AGE` (5), on top of `monthly_cost`, in today's dollars, growing with the childcare factor. Default 0, so existing plans are unchanged. "Use typical" copies the suggestion into the box. It does not lower `monthly_cost`: that flat figure was a guess that included childcare, so lower it yourself when you use the box. School-age care (ages 5 to 12) is not modeled.
+The child's **Childcare until age 5 ($/mo)** box (`childcare_monthly` in `CHILDREN`) is the only engine change. It adds that amount each month while the child is under `CHILDCARE_END_AGE` (5), on top of `monthly_cost`, in today's dollars, growing with the childcare factor. Default 0, so existing plans are unchanged. The box and its button show only for planned children, children under 5, and any child who already has an amount in it. School-age care (ages 5 to 12) is not modeled.
+
+The default monthly cost ($2,100 for a first child) is a flat guess that already includes childcare, and it runs for every year at home, while childcare runs for five. So **Use typical** moves money instead of adding it: it sets `childcare_monthly` to the typical amount C and lowers `monthly_cost` by `round((C - old childcare) x 5 / leaves-home age)`, never below zero. A child's lifetime cost stays the same, to the dollar a month, and the early years carry more of it. A caption says what changed, for example "Monthly cost lowered from $2,100 to $1,692." If you type a different childcare amount later, the monthly cost is not changed.
 
 **Your spending vs similar households** (Spending tab and a line in the Money check-up; `ui/utils/budget_compare.py`). For each BLS Consumer Expenditure (CE) 2025 group:
 
@@ -511,11 +513,11 @@ What the app adds:
 
 - CE "Pensions" (payroll tax, retirement contributions, life insurance) is left out. The planner models those elsewhere.
 - Groups are folded into the app's categories: Housing and utilities together (the HUD rent includes utilities), Apparel into Fun and discretionary, and your partner's own spending into Other.
-- Your figures are the plan's monthly inputs, or your statement averages where statements are loaded. Your children's costs are not compared.
-- The income fifth comes from your household pay with rough cutoffs (`QUINTILE_UPPER` in `budget_compare.py`). Only the first, $32,623, comes from BPM's data. The others are round estimates. Pick the group by hand if it looks wrong.
+- Your figures are the plan's monthly inputs, or your statement averages where statements are loaded. Housing follows the plan's own rule (`derived.housing_parts`): the loan payment, a renter's rent, or an owner's property tax and insurance once the loan is paid off. Your children's costs are not compared, so the household size is the adults only (you and a partner). Counting the children would put every parent below typical.
+- The income fifth comes from your household pay with rough cutoffs (`QUINTILE_UPPER` in `budget_compare.py`, one constant with a TODO to replace it with BLS CE 2025 Table 1101). Only the first, $32,623, comes from BPM's data. The others are estimates scaled from Census household income. Pick the group by hand if it looks wrong. The pick is saved with the plan (`BENCH_INCOME_GROUP`).
 - A row is "typical" when you are within 10% of the benchmark.
 
-The Money check-up has no area or children, so its line uses US average prices and a household of one or two. The README of the data folder lists BPM's own checks. The tests reproduce its worked examples: $89,152 a year with no area, $114,447 in San Diego (with BEA unrenormalized, as BPM reads it), and $35,244 a year of childcare for two children in San Diego County.
+The Money check-up has no area or children, so its line uses US average prices and a household of one or two. Its "you" is needs plus wants without the minimum payments on debts still owed, because the survey counts no debt principal. The README of the data folder lists BPM's own checks. The tests reproduce its worked examples: $89,152 a year with no area, $114,447 in San Diego (with BEA unrenormalized, as BPM reads it), and $35,244 a year of childcare for two children in San Diego County (with BPM's own weights).
 
 ## 16. Known limitations
 

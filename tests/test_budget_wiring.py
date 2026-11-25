@@ -44,6 +44,15 @@ def test_the_area_is_not_a_config_key_and_not_part_of_the_cache_key():
     b = sim_runner._hashable({"YOUR_AGE": 40})
     assert a == b
     assert "BENCH_AREA" in sim_runner.UI_ONLY_KEYS
+    assert "BENCH_INCOME_GROUP" in sim_runner.UI_ONLY_KEYS
+    assert sim_runner._hashable({"YOUR_AGE": 40, "BENCH_INCOME_GROUP": "Q2"}) == b
+    assert "BENCH_INCOME_GROUP" not in config_builder.build_config_overrides({"BENCH_INCOME_GROUP": "Q2"})
+
+
+def test_the_income_group_survives_save_and_load():
+    back = profile_io.deserialize_overrides(profile_io.serialize_overrides({"BENCH_INCOME_GROUP": "Q4"}))
+    assert back["BENCH_INCOME_GROUP"] == "Q4"
+    assert profile_io.sanitize_overrides({"BENCH_INCOME_GROUP": ["x"]}).get("BENCH_INCOME_GROUP") in (None, "")
 
 
 def test_childcare_reaches_the_engine_inside_the_children_list():

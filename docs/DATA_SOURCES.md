@@ -23,7 +23,7 @@ BiggerPockets Money's own README for these files (their formulas, worked example
 These are BPM's method. We use them and say so on the page and in the code:
 
 - **Dampening 0.5** on the size and age adjustments (`DAMP` in `ce_xtab.json`). Income already tracks size and age, so the full ratios would count them twice.
-- **Childcare age weights** (`AGE_WEIGHT` in `constants.json`): how a household's children spread over infant, toddler, preschool and school-age, by the parent's age band and household size. With full-time paid care the school-age weight moves to preschool.
+- **Childcare age weights** (`AGE_WEIGHT` in `constants.json`): how a household's children spread over infant, toddler, preschool and school-age, by the parent's age band and household size. The app does not use them. They stay in the code (`bpm_weights`) so the tests can reproduce BPM's worked example.
 - **Childcare scaling.** A state's price is scaled by the area's BEA Rents index, kept between 0.65 and 1.70, when you pick an area with no county figure. A county median is used as it is.
 - **Housing from HUD rent.** With an area, housing is the HUD Fair Market Rent for BPM's bedroom count, times a rent-by-income factor (0.75, 0.85, 1.00, 1.25, 1.25). Utilities keep only the phone and internet share.
 - **Price index for each group**: goods for food, transport and clothing; other services for health and entertainment; all items for other and utilities.
@@ -31,11 +31,13 @@ These are BPM's method. We use them and say so on the page and in the code:
 
 ### What this app changes
 
+- **Childcare weights are ours.** The childcare box covers a child's first five years, so the weights follow NDCP's tiers over ages 0 to 4: 0.4 infant, 0.2 toddler, 0.4 preschool.
+- **Household size is the adults only**, because the comparison leaves out your children's costs.
 - BEA price levels are **renormalized** so each US component is exactly 1.00, the way `ui/utils/place_costs.py` does (raw BEA US goods is 99.6 and other services 100.1). BPM reads them raw. The tests reproduce BPM's worked examples with the raw reading.
 - The survey's **Pensions** line (payroll tax, retirement contributions, life insurance) is left out. The planner models those elsewhere.
 - Groups are folded into the app's categories (housing with utilities, clothing with Fun and discretionary, your partner's spending with Other), and the tab compares your plan's monthly inputs, or your statement averages.
 - A state with no area picked uses the state's own childcare price as it is. BPM's tool always works from an area, and scales a state price by that area's rents.
-- **Income-group cutoffs are rough estimates.** BPM asks you to pick the group and ships no dollar cutoffs. Only the first, $32,623, is in its data. The others (`QUINTILE_UPPER` in `ui/utils/budget_compare.py`) are round numbers, not published figures. Replace them with the BLS CE Table 1101 cutoffs. The page lets people pick their group by hand.
+- **Income-group cutoffs are estimates.** BPM asks you to pick the group and ships no dollar cutoffs. Only the first, $32,623, is in its data. The others (`QUINTILE_UPPER` in `ui/utils/budget_compare.py`) are round numbers scaled from Census, not published CE figures. Replace them with the BLS CE 2025 Table 1101 cutoffs. The page lets people pick their group by hand.
 - Not used: BPM's address and city aliases (`aliases.json`), its childcare participation and setting-mix factors (inactive in its calculator), and its fixed-versus-flexible sliders.
 
 ### Vintages
