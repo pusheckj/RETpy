@@ -333,6 +333,15 @@ def test_hosted_tab_never_reads_the_server_folder(tmp_path, monkeypatch):
     assert sd.PRIVACY_NOTE in _captions(at) and "Supported" in _captions(at)
 
 
+def test_statements_uploader_tells_phone_users_how_to_retry(monkeypatch):
+    """The statements uploader stays on st.file_uploader (CSV/PDF, many, large files)."""
+    monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "1")
+    at = _app()
+    assert not at.exception, at.exception
+    assert len(at.get("file_uploader")) == 1
+    assert "On a phone, if the upload shows an error, tap × and choose the file again." in _captions(at)
+
+
 def test_hosted_tab_renders_uploads(monkeypatch):
     monkeypatch.setenv("RETIREMENT_SIM_HOSTED", "1")
     at = _app(UPLOADS)

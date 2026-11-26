@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>file-reader</title>
+<style>
+  :root {
+    --ink: #0f172a; --muted: #64748b; --box: #e7ddc8; --tile: #ffffff;
+    --line: #cbb48c; --teal: #0d9488; --err: #b91c1c;
+    --font: Lora, Georgia, serif;
+  }
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font-family: var(--font); color: var(--ink); font-size: 15px; line-height: 1.35; }
+  #root { padding: 2px 1px 4px; }
+  .label { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  .box {
+    box-sizing: border-box; border: 1.5px dashed var(--line); border-radius: 16px;
+    background: var(--box); padding: 14px; display: flex; align-items: center;
+    gap: 12px; flex-wrap: wrap; min-height: 76px;
+  }
+  .box.over { border-color: var(--teal); }
+  .hint { flex: 1 1 140px; min-width: 0; }
+  .hint .main { font-size: 15px; }
+  .hint .small { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .btn {
+    box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+    min-height: 44px; padding: 0 20px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--tile); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+  }
+  .btn:hover, .btn:focus-within { border-color: var(--teal); }
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+  input[type=file]:focus-visible + .btn { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .file { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+  .file .name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .file .size { flex: 0 0 auto; font-size: 13px; color: var(--muted); }
+  .x {
+    flex: 0 0 auto; width: 44px; height: 44px; margin: -6px -8px -6px 0; border: 0; border-radius: 999px;
+    background: transparent; color: var(--ink); font: inherit; font-size: 22px; line-height: 1; cursor: pointer;
+  }
+  .x:hover { color: var(--teal); }
+  .err { color: var(--err); font-size: 14px; margin-top: 6px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="label" id="label"></div>
+  <div class="box" id="box">
+    <div class="hint" id="hint">
+      <div class="main" id="hintMain"></div>
+      <div class="small" id="hintSmall"></div>
+    </div>
+    <input type="file" id="f">
+    <label class="btn" id="choose" for="f">Choose a file</label>
+    <div class="file" id="file" hidden>
+      <span class="name" id="name"></span>
+      <span class="size" id="size"></span>
+      <button type="button" class="x" id="clear" aria-label="Remove file" title="Remove file">&times;</button>
+    </div>
+  </div>
+  <div class="err" id="err" role="alert" hidden></div>
+</div>
+<script>
+/*
+ * In-browser file reader for utils/file_reader.py (Streamlit custom component,
+ * plain JS, no build step).
+ *
+ * Why it exists: st.file_uploader sends the file in a separate HTTP PUT that is
+ * refused unless this session has a live websocket. On an iPhone the Files
+ * picker puts Safari in the background, the websocket drops, and the PUT goes
+ * out before it is back (HTTP 400). Here the browser reads the file itself
+ * (FileReader) and returns its text as the component value. That value travels
+ * with the normal rerun message, and Streamlit resends widget state on reconnect.
+ *
+ * The file never leaves this page except as that component value. No network
+ * requests are made from here.
+ *
+ * Render args (from Python, re-sent on every rerun):
+ *   label      text above the box
+ *   accept     value for the <input accept=...> filter
+ *   max_bytes  largest file taken (checked here and again on the server)
+ *   shown      name of the file Python holds now, or null (re-shows the name if
+ *              the frame is rebuilt while Python still holds the file)
+ *
+ * Values posted to Python (setComponentValue):
+ *   {name, text, size, nonce}   a file was read; a new nonce each pick, so picking
+ *                               the same file twice still registers
+ *   null                        the visitor cleared the file
+ */
+(function () {
+  "use strict";
+
+  var ORIGIN = window.location.origin;
+  var TARGET = ORIGIN && ORIGIN !== "null" ? ORIGIN : "*";
+  var DEFAULT_MAX = 2000000;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var input = $("f"), box = $("box"), err = $("err");
+
+  var maxBytes = DEFAULT_MAX;
+  var picked = null;       // {name, size} of the file this frame holds
+  var shownByPython = null;
+  var counter = 0;
+  var lastHeight = -1;
+
+  function send(type, data) {
+    var msg = { isStreamlitMessage: true, type: type };
+    for (var k in data) {
+      if (Object.prototype.hasOwnProperty.call(data, k)) msg[k] = data[k];
+    }
+    window.parent.postMessage(msg, TARGET);
+  }
+  function setValue(value) { send("streamlit:setComponentValue", { value: value, dataType: "json" }); }
+
+  function nonce() {
+    counter += 1;
+    return Date.now().toString(36) + "-" + counter + "-" + Math.floor(Math.random() * 1e9).toString(36);
+  }
+
+  function megabytes(n) {
+    var mb = n / 1000000;
+    return (mb >= 10 || mb === Math.floor(mb) ? String(Math.round(mb)) : mb.toFixed(1)) + " MB";
+  }
+  function sizeText(n) {
+    if (n < 1000) return n + " B";
+    if (n < 1000000) return Math.max(1, Math.round(n / 1000)) + " KB";
+    return (n / 1000000).toFixed(1) + " MB";
+  }
+
+  // ---- look: borrow the app's own tokens from the parent page ---------------
+
+  function applyTheme() {
+    try {
+      var doc = window.parent.document;
+      var root = window.getComputedStyle(doc.documentElement);
+      var map = { "--ink": "--mc-ink", "--muted": "--mc-muted", "--box": "--mc-sidebar-bg",
+                  "--tile": "--mc-tile", "--line": "--mc-btn-border-hover", "--teal": "--mc-teal" };
+      for (var local in map) {
+        var v = root.getPropertyValue(map[local]).trim();
+        if (v) document.documentElement.style.setProperty(local, v);
+      }
+      var font = window.getComputedStyle(doc.body).fontFamily;
+      if (font) document.documentElement.style.setProperty("--font", font);
+    } catch (e) { /* keep the built-in colours */ }
+  }
+
+  // ---- drawing ------------------------------------------------------------
+
+  var canHover = (function () {
+    try { return window.matchMedia("(hover: hover) and (pointer: fine)").matches; } catch (e) { return false; }
+  })();
+
+  function setError(text) {
+    err.textContent = text || "";
+    err.hidden = !text;
+  }
+
+  function reportHeight() {
+    var h = Math.ceil($("root").getBoundingClientRect().height) + 6;
+    if (h !== lastHeight) { lastHeight = h; send("streamlit:setFrameHeight", { height: h }); }
+  }
+
+  function draw() {
+    $("hintMain").textContent = canHover ? "Drag and drop a file here" : "Choose a saved file";
+    $("hintSmall").textContent = "JSON file, up to " + megabytes(maxBytes);
+    var has = !!picked;
+    $("hint").hidden = has;
+    $("choose").hidden = has;
+    $("file").hidden = !has;
+    if (has) {
+      $("name").textContent = picked.name;
+      $("name").title = picked.name;
+      $("size").textContent = picked.size != null ? sizeText(picked.size) : "";
+    }
+    reportHeight();
+  }
+
+  // ---- reading ------------------------------------------------------------
+
+  function take(file) {
+    setError("");
+    if (!file) return;
+    if (file.size > maxBytes) {
+      setError("That file is too large. The limit is " + megabytes(maxBytes) + ".");
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var text = typeof reader.result === "string" ? reader.result : "";
+      picked = { name: file.name, size: file.size };
+      setValue({ name: file.name, text: text, size: file.size, nonce: nonce() });
+      draw();
+    };
+    reader.onerror = function () {
+      setError("Could not read that file. Tap Choose a file and try again.");
+      reportHeight();
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  input.addEventListener("change", function () {
+    var file = input.files && input.files[0];
+    take(file);
+    try { input.value = ""; } catch (e) { /* older browsers */ }   // so the same file can be picked again
+    reportHeight();
+  });
+
+  $("clear").addEventListener("click", function () {
+    picked = null;
+    setError("");
+    setValue(null);
+    draw();
+  });
+
+  ["dragenter", "dragover"].forEach(function (name) {
+    box.addEventListener(name, function (e) { e.preventDefault(); box.classList.add("over"); });
+  });
+  ["dragleave", "drop"].forEach(function (name) {
+    box.addEventListener(name, function (e) { e.preventDefault(); box.classList.remove("over"); });
+  });
+  box.addEventListener("drop", function (e) {
+    var files = e.dataTransfer && e.dataTransfer.files;
+    take(files && files[0]);
+    reportHeight();
+  });
+
+  // ---- Streamlit protocol -------------------------------------------------
+
+  window.addEventListener("message", function (event) {
+    if (event.source !== window.parent) return;
+    if (TARGET !== "*" && event.origin !== ORIGIN) return;
+    var data = event.data;
+    if (!data || data.type !== "streamlit:render") return;
+    var args = data.args || {};
+    if (typeof args.label === "string") $("label").textContent = args.label;
+    if (typeof args.accept === "string") input.setAttribute("accept", args.accept);
+    if (typeof args.max_bytes === "number" && args.max_bytes > 0) maxBytes = args.max_bytes;
+    shownByPython = typeof args.shown === "string" ? args.shown : null;
+    // A rebuilt frame knows nothing, but Python still holds the file: show its name.
+    if (!picked && shownByPython) picked = { name: shownByPython, size: null };
+    applyTheme();
+    draw();
+  });
+
+  send("streamlit:componentReady", { apiVersion: 1 });
+  draw();
+})();
+</script>
+</body>
+</html>

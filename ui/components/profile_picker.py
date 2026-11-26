@@ -268,12 +268,16 @@ def render(st) -> None:
             # dropping them would make the page treat the loaded workers as never started.
             "_bc",
         }
+        upload_n = st.session_state.get("_save_load_upload_n", 0)
         for state_key in list(st.session_state.keys()):
             if state_key not in _PRESERVE:
                 try:
                     del st.session_state[state_key]
                 except Exception:
                     pass
+        # A file staged in Save / Load belongs to the profile just left. The counter is part of
+        # the file reader's key, so a new number gives an empty one (the old key's state is gone).
+        st.session_state["_save_load_upload_n"] = upload_n + 1
         try:
             from utils.widget_sync import sync_widgets_from_overrides
         except Exception:  # pragma: no cover

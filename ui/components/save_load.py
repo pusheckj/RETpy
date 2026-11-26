@@ -4,7 +4,7 @@ Renders inside an expander at the top of the sidebar. Lets the user:
   - Download the current ``st.session_state.user_overrides`` as a JSON file.
   - Upload a previously saved JSON file AND explicitly click "Load" to apply.
 
-The explicit two-step (upload → click Load) avoids the file_uploader
+The explicit two-step (upload → click Load) avoids the uploader
 auto-retriggering on every rerun, which was causing sidebar values to reset
 after clicking "Run simulation".
 """
@@ -15,6 +15,7 @@ from datetime import date
 try:
     # Preferred: package-relative import.
     from utils.config_builder import comp_table_edited_by_hand
+    from utils.file_reader import read_file
     from utils.profile_io import serialize_overrides, deserialize_overrides
     from utils.widget_sync import (
         sync_widgets_from_overrides,
@@ -22,6 +23,7 @@ try:
     )
 except Exception:  # pragma: no cover - fallback for unusual sys.path configs
     from ui.utils.config_builder import comp_table_edited_by_hand  # type: ignore
+    from ui.utils.file_reader import read_file  # type: ignore
     from ui.utils.profile_io import serialize_overrides, deserialize_overrides  # type: ignore
     from ui.utils.widget_sync import (  # type: ignore
         sync_widgets_from_overrides,
@@ -87,22 +89,16 @@ def render(st) -> None:
         )
 
         # --- Upload: explicit two-step (stage a file, then click Load) ---
-        uploaded = st.file_uploader(
-            "Upload saved inputs",
-            type=["json"],
-            key=f"save_load_upload_{st.session_state.get('_save_load_upload_n', 0)}",
-        )
+        # The browser reads the file itself (utils/file_reader.py): st.file_uploader's separate
+        # HTTP upload fails on phones whose connection drops while the file picker is open.
+        n = st.session_state.get("_save_load_upload_n", 0)
+        uploaded = read_file(st, "Upload saved inputs", key=f"save_load_upload_{n}")
 
         # Preview + Load button appear only when a file is staged.
         if uploaded is not None:
             # Parse once per file to offer a preview.
             try:
-                raw = uploaded.getvalue()
-                if isinstance(raw, bytes):
-                    raw_text = raw.decode("utf-8")
-                else:
-                    raw_text = str(raw)
-                preview = deserialize_overrides(raw_text)
+                preview = deserialize_overrides(uploaded["text"])
             except ValueError as exc:
                 st.error(f"Couldn't read that file: {exc}")
                 preview = None
@@ -111,17 +107,18 @@ def render(st) -> None:
                 preview = None
 
             if isinstance(preview, dict):
-                st.caption(f"**{uploaded.name}**: {len(preview)} inputs ready to load.")
+                st.caption(f"**{uploaded['name']}**: {len(preview)} inputs ready to load.")
                 if st.button(
                     "Load these inputs",
                     key="save_load_apply_btn",
                     width="stretch",
                     type="primary",
                 ):
-                    _apply_restored(st, preview, uploaded.name)
-                    st.session_state["_save_load_msg"] = f"Loaded {len(preview)} inputs from {uploaded.name}."
-                    # A new uploader key clears the staged file, so the button goes away.
-                    st.session_state["_save_load_upload_n"] = st.session_state.get("_save_load_upload_n", 0) + 1
+                    _apply_restored(st, preview, uploaded["name"])
+                    st.session_state["_save_load_msg"] = f"Loaded {len(preview)} inputs from {uploaded['name']}."
+                    # A new component key clears the staged file, so the button goes away.
+                    st.session_state["_save_load_upload_n"] = n + 1
+                    st.session_state.pop(f"save_load_upload_{n}", None)   # drop the file's text
                     try:
                         st.rerun()
                     except Exception:

@@ -29,6 +29,7 @@ try:
     from utils import simple_finance as sf
     from utils import simple_to_full
     from utils.formatting import money, money_md, money_echo, months_text
+    from utils.file_reader import read_file
     from utils.profile_io import serialize_checkup, deserialize_checkup
     from utils.plot_theme import is_dark, style_fig
     from utils.derived import hsa_limit_note
@@ -37,6 +38,7 @@ except ImportError:  # pragma: no cover
     from ui.utils import simple_finance as sf  # type: ignore
     from ui.utils import simple_to_full  # type: ignore
     from ui.utils.formatting import money, money_md, money_echo, months_text  # type: ignore
+    from ui.utils.file_reader import read_file  # type: ignore
     from ui.utils.profile_io import serialize_checkup, deserialize_checkup  # type: ignore
     from ui.utils.plot_theme import is_dark, style_fig  # type: ignore
     from ui.utils.derived import hsa_limit_note  # type: ignore
@@ -44,6 +46,7 @@ except ImportError:  # pragma: no cover
 
 STATE_KEY = "simple_inputs"
 _SYNC_KEY = "_simple_inputs_synced"   # copy of what this page last wrote
+_UPLOAD_N_KEY = "_simple_upload_n"      # counts loads: part of the file reader's key, so a load clears it
 _W = "simple_w_"                      # widget-key prefix
 _SCALARS = [k for k in sf.DEFAULT_INPUTS if k != "debts"]
 # Inputs that are only drawn while a toggle is on. Streamlit forgets a widget's value
@@ -546,6 +549,10 @@ def _load_checkup(ss, answers: Dict[str, Any]) -> None:
     """Button callback: replace the check-up's answers (every widget reseeds)."""
     ss[STATE_KEY] = sf.normalize_inputs(answers)
     ss[_SYNC_KEY] = None
+    # A new file-reader key clears the staged file (and the Load button with it).
+    n = ss.get(_UPLOAD_N_KEY, 0)
+    ss.pop(f"simple_save_upload_{n}", None)
+    ss[_UPLOAD_N_KEY] = n + 1
 
 
 def _render_save_load(st, inputs: Dict[str, Any]) -> None:
@@ -555,10 +562,11 @@ def _render_save_load(st, inputs: Dict[str, Any]) -> None:
                            file_name=f"money_checkup_{date.today().isoformat()}.json",
                            mime="application/json", key="simple_save_download")
         st.caption("Keep your numbers in a file, or turn on Remember me to keep them on this device.")
-        up = st.file_uploader("Upload saved answers", type=["json"], key="simple_save_upload")
+        n = st.session_state.get(_UPLOAD_N_KEY, 0)
+        up = read_file(st, "Upload saved answers", key=f"simple_save_upload_{n}")
         if up is not None:
             try:
-                answers = deserialize_checkup(up.getvalue())
+                answers = deserialize_checkup(up["text"])
             except ValueError as exc:
                 st.error(f"Couldn't read that file: {exc}")
                 return

@@ -90,16 +90,7 @@ def test_what_if_copy_and_home_move_labels():
 def test_load_message_set_then_shown_on_next_run(monkeypatch):
     from components import save_load
 
-    class Up:
-        name = "p.json"
-        def getvalue(self):
-            return b"{}"
-
     class St(_Rec):
-        staged = True
-
-        def file_uploader(self, *a, **k):
-            return Up() if self.staged else None
         def button(self, *a, **k):
             return True
         def expander(self, *a, **k):
@@ -107,6 +98,8 @@ def test_load_message_set_then_shown_on_next_run(monkeypatch):
         def rerun(self):
             pass
 
+    staged = [{"name": "p.json", "text": "{}", "size": 2, "nonce": "n"}]
+    monkeypatch.setattr(save_load, "read_file", lambda st, label, key, **k: staged[0])
     monkeypatch.setattr(save_load, "deserialize_overrides", lambda raw: {"YOUR_AGE": 30})
     monkeypatch.setattr(save_load, "serialize_overrides", lambda o: "{}")
     monkeypatch.setattr(save_load, "_apply_restored", lambda st, r, n: None)
@@ -114,7 +107,7 @@ def test_load_message_set_then_shown_on_next_run(monkeypatch):
     save_load.render(st)
     assert "Loaded 1 inputs from p.json" in st.session_state["_save_load_msg"]
     assert "success" not in [k for k, _ in st.calls]      # not painted before the rerun
-    st.staged = False                                      # the new uploader key is empty
+    staged[0] = None                                       # the new reader key is empty
     save_load.render(st)                                   # the next run
     assert "Loaded 1 inputs" in st.text("success")
     assert "_save_load_msg" not in st.session_state

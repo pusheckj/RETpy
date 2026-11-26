@@ -827,6 +827,7 @@ def _upload_panel(st, store: Dict) -> None:
              "that matches anywhere in a description, upper or lower case (no regex): "
              "write `gadget.com/us`, not `GADGET\\.COM/US`. At most 500 patterns of 200 "
              "characters. A file with the same name as an earlier one replaces it.")
+    st.caption("On a phone, if the upload shows an error, tap × and choose the file again.")
     n = len(store["files"])
     if n or store["rules"]:
         rules = f"rules from {store['rules'][0]}" if store["rules"] else "default rules"

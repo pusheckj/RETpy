@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Format: [Ke
 
 ## [Unreleased]
 
+### Fixed (loading a saved file on iPhone)
+- Loading a saved file now works on iPhone. Before, the Files picker showed "AxiosError: Request failed with status code 400". The phone drops its connection to the app while the picker is open. The upload then went out before the connection came back.
+- Save / Load profile and the Money check-up now read the file in your browser. Only its text goes to the app. The file box shows the file name with a small × to remove it. Files up to 2 MB work.
+- The Spending tab still uploads statements the old way. It has a short note: on a phone, if the upload shows an error, tap × and choose the file again.
+
 ### Added (local childcare and spending benchmark)
 - Family shows the typical childcare cost for your state, or for one of 739 metro and county areas you pick. It is a yearly figure per child in 2026 dollars.
 - A child who is planned or under 5 has a new box, **Childcare until age 5 ($/mo)**. The plan counts it on top of the monthly cost until the child turns 5.
