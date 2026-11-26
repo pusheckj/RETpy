@@ -5,8 +5,10 @@ All notable changes to this project will be documented in this file. Format: [Ke
 ## [Unreleased]
 
 ### Fixed (loading a saved file on iPhone)
-- Loading a saved file now works on iPhone. Before, the Files picker showed "AxiosError: Request failed with status code 400". The phone drops its connection to the app while the picker is open. The upload then went out before the connection came back.
-- Save / Load profile and the Money check-up now read the file in your browser. Only its text goes to the app. The file box shows the file name with a small × to remove it. Files up to 2 MB work.
+- Loading a saved file now works on iPhone. Before, the Files picker showed "AxiosError: Request failed with status code 400". The server rejected the phone's upload request because the connection was interrupted while the picker was open.
+- Save / Load profile and the Money check-up now read the file in your browser. Only its text goes to the app, over the app's normal connection.
+- The file box sends the file again until the app confirms it. If that takes about a minute, it says so and you can choose the file again.
+- The box shows the file name and a small × to remove it. Files up to 2 MB work.
 - The Spending tab still uploads statements the old way. It has a short note: on a phone, if the upload shows an error, tap × and choose the file again.
 
 ### Added (local childcare and spending benchmark)

@@ -2,8 +2,8 @@
 // prints what it posted to its parent as JSON. Usage: node run.js <index.html> <scenario.json>
 //
 // scenario: {args: {...render args}, steps: [ {pick: {name, size, text}} | {drop: {...}} | {clear: true}
-//            | {render: {...args}} | {fail_read: true, pick: {...}} ]}
-// output:   {posted: [msg...], ui: {id: {hidden, text}}}
+//            | {render: {...args}} | {ack_last: true} (render showing the last posted nonce) | {tick: n} (fire every running timer n times) | {fail_read: true, pick: {...}} ]}
+// output:   {posted: [msg...], ui: {id: {hidden, text}}, timers: running timer count, docEvents: [names]}
 "use strict";
 const fs = require("fs");
 
@@ -29,7 +29,13 @@ function makeEl(id) {
   };
   return el;
 }
+const docListeners = {};
+const timers = {};
+let nextTimer = 1;
+function setInterval(fn) { const id = nextTimer++; timers[id] = fn; return id; }
+function clearInterval(id) { delete timers[id]; }
 const document = {
+  addEventListener(name, fn) { (docListeners[name] = docListeners[name] || []).push(fn); },
   getElementById(id) { return (elements[id] = elements[id] || makeEl(id)); },
   documentElement: { style: { setProperty() {} } },
   body: {},
@@ -56,13 +62,18 @@ const window = {
 parent.document = document;
 
 async function main() {
-  new Function("window", "document", "FileReader", "Date", script)(window, document, FileReader, Date);
+  new Function("window", "document", "FileReader", "Date", "setInterval", "clearInterval", script)(
+    window, document, FileReader, Date, setInterval, clearInterval);
   const send = (args) => (winListeners.message || []).forEach((fn) =>
     fn({ source: parent, origin: "http://localhost:8501", data: { type: "streamlit:render", args } }));
   send(scenario.args || {});
   const tick = () => new Promise((r) => setTimeout(r, 5));
   for (const step of scenario.steps || []) {
     if (step.render) send(step.render);
+    if (step.ack_last) {   // a render that shows the nonce of the last value posted
+      const last = posted.filter((m) => m.type === "streamlit:setComponentValue" && m.value).pop();
+      send({ ...(scenario.args || {}), shown: last.value.name, shown_nonce: last.value.nonce });
+    }
     if (step.fail_read) readerFails = true;
     if (step.pick) {
       const f = step.pick;
@@ -76,15 +87,23 @@ async function main() {
       await tick();
     }
     if (step.clear) elements.clear.fire("click");
+    if (step.tick) for (let i = 0; i < step.tick; i++) Object.values(timers).forEach((fn) => fn());
     if (step.fail_read) readerFails = false;
   }
   const ui = {};
-  for (const id of ["file", "hint", "choose", "name", "size", "err", "label"]) {
+  for (const id of ["file", "hint", "hintSmall", "choose", "name", "size", "err", "label"]) {
     const e = elements[id];
     if (e) ui[id] = { hidden: !!e.hidden, text: e.textContent };
   }
+  ui.tabIndex = elements.f ? elements.f.tabIndex : null;
   ui.inputValue = elements.f ? elements.f.value : null;
   ui.accept = elements.f ? elements.f.attrs.accept : null;
-  process.stdout.write(JSON.stringify({ posted, ui }));
+  const docEvents = {};
+  for (const name of Object.keys(docListeners)) {
+    let prevented = false;
+    docListeners[name].forEach((fn) => fn({ preventDefault() { prevented = true; } }));
+    docEvents[name] = prevented;
+  }
+  process.stdout.write(JSON.stringify({ posted, ui, timers: Object.keys(timers).length, docEvents }));
 }
 main().catch((e) => { console.error(e); process.exit(1); });

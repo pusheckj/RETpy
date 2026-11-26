@@ -2,18 +2,21 @@
 
 WHY NOT st.file_uploader
     ``st.file_uploader`` sends the file in a separate HTTP PUT to
-    ``/_stcore/upload_file/<session>/<file>``. The server refuses it (HTTP 400,
+    ``/_stcore/upload_file/<session>/<file>``. The server rejects it (HTTP 400,
     "Invalid session_id") unless that session has a live websocket. On an iPhone
-    the Files picker puts Safari in the background, the websocket drops, and the
-    upload goes out before the page reconnects.
+    the Files picker puts Safari in the background, the connection is
+    interrupted, and the upload goes out before it is back.
 
 HOW THIS WORKS
     A static-HTML component (``components/file_reader/index.html``, plain JS, no
     build step) reads the chosen file with FileReader and returns
-    ``{name, text, size, nonce}`` as its component value. A component value
-    travels with the normal rerun message, and Streamlit keeps widget state in
-    the browser and resends it after a reconnect, so it survives the dropped
-    socket.
+    ``{name, text, size, nonce}`` as its component value, over the app's normal
+    connection. Streamlit drops a value posted while the connection is down, and
+    does not resend it by itself on reconnect. So the page keeps the value as
+    "pending" and posts it again (same nonce) until a render arrives whose
+    ``shown_nonce`` equals it: the app's confirmation. It retries on a timer and
+    at once when the app's widgets turn from disabled to enabled (that happens
+    when the connection returns). It gives up after about a minute.
 
 LIMITS
     Meant for small text files (saved inputs, a few KB). The size cap is checked
@@ -22,6 +25,7 @@ LIMITS
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, Optional
 
@@ -64,13 +68,15 @@ def parse_value(value: Any, max_bytes: int = DEFAULT_MAX_BYTES) -> tuple[Optiona
     is chosen, or ``(None, plain-words problem)``. Never raises."""
     if value is None:
         return None, None
-    unreadable = "That file could not be read. Choose it again."
+    unreadable = "We could not read that file. Choose it again."
     if not isinstance(value, dict):
         return None, unreadable
     name, text, size, nonce = (value.get(k) for k in ("name", "text", "size", "nonce"))
     if not isinstance(text, str) or not isinstance(name, str):
         return None, unreadable
     if isinstance(size, bool) or not isinstance(size, (int, float)) or size < 0:
+        return None, unreadable
+    if isinstance(size, float) and not math.isfinite(size):
         return None, unreadable
     # Judge the text itself (the browser's size is only what it claims).
     if max(int(size), len(text.encode("utf-8", errors="replace"))) > max_bytes:
@@ -91,9 +97,13 @@ def read_file(st, label: str, key: str, accept: str = DEFAULT_ACCEPT,
         held = st.session_state.get(key)
     except Exception:  # pragma: no cover
         held = None
-    shown = held.get("name") if isinstance(held, dict) and isinstance(held.get("name"), str) else None
+    held = held if isinstance(held, dict) else {}
+    shown = held.get("name") if isinstance(held.get("name"), str) else None
+    # The held nonce is the app's confirmation: the page resends its file until it sees this.
+    # It is passed even for a value rejected below, so the page stops resending that too.
+    shown_nonce = held.get("nonce") if isinstance(held.get("nonce"), str) else None
     value = _component()(label=label, accept=accept, max_bytes=max_bytes, shown=shown,
-                         key=key, default=None)
+                         shown_nonce=shown_nonce, key=key, default=None)
     file, problem = parse_value(value, max_bytes)
     if problem:
         st.error(problem)

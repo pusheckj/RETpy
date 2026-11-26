@@ -67,22 +67,31 @@
  * In-browser file reader for utils/file_reader.py (Streamlit custom component,
  * plain JS, no build step).
  *
- * Why it exists: st.file_uploader sends the file in a separate HTTP PUT that is
- * refused unless this session has a live websocket. On an iPhone the Files
- * picker puts Safari in the background, the websocket drops, and the PUT goes
- * out before it is back (HTTP 400). Here the browser reads the file itself
- * (FileReader) and returns its text as the component value. That value travels
- * with the normal rerun message, and Streamlit resends widget state on reconnect.
+ * Why it exists: st.file_uploader sends the file in a separate HTTP PUT that the
+ * server rejects (status 400) unless this session has a live connection. On an
+ * iPhone the Files picker puts Safari in the background and the connection is
+ * interrupted. Here the browser reads the file itself (FileReader) and returns
+ * its text as the component value, over the app's normal connection.
+ *
+ * Streamlit DROPS a value posted while the connection is down, and does not
+ * resend it by itself on reconnect. So this page keeps the value it posted as
+ * "pending" and posts it again (same nonce) until the app confirms it: a render
+ * whose `shown_nonce` equals the pending nonce. It retries every RETRY_MS (at
+ * most RETRY_LIMIT times, then shows a plain line) and at once when `disabled`
+ * goes from true to false (the app disables widgets while disconnected). A clear
+ * (null) is retried the same way, until the app shows no file held.
  *
  * The file never leaves this page except as that component value. No network
  * requests are made from here.
  *
  * Render args (from Python, re-sent on every rerun):
- *   label      text above the box
- *   accept     value for the <input accept=...> filter
- *   max_bytes  largest file taken (checked here and again on the server)
- *   shown      name of the file Python holds now, or null (re-shows the name if
- *              the frame is rebuilt while Python still holds the file)
+ *   label        text above the box
+ *   accept       value for the <input accept=...> filter (the hint follows it)
+ *   max_bytes    largest file taken (checked here and again on the server)
+ *   shown        name of the file Python holds now, or null (re-shows the name if
+ *                the frame is rebuilt while Python still holds the file)
+ *   shown_nonce  nonce of the file Python holds now, or null: the confirmation
+ *   disabled     set by Streamlit itself; true while the app is disconnected
  *
  * Values posted to Python (setComponentValue):
  *   {name, text, size, nonce}   a file was read; a new nonce each pick, so picking
@@ -99,9 +108,17 @@
   var $ = function (id) { return document.getElementById(id); };
   var input = $("f"), box = $("box"), err = $("err");
 
+  var RETRY_MS = 2000;
+  var RETRY_LIMIT = 30;    // about a minute
+  var GAVE_UP = "Still connecting. Choose the file again if nothing appears.";
+
   var maxBytes = DEFAULT_MAX;
+  var acceptText = "";
   var picked = null;       // {name, size} of the file this frame holds
   var shownByPython = null;
+  var pending = null;      // {value, nonce, tries}: posted, not yet confirmed by the app
+  var timer = null;
+  var wasDisabled = false;
   var counter = 0;
   var lastHeight = -1;
 
@@ -114,9 +131,43 @@
   }
   function setValue(value) { send("streamlit:setComponentValue", { value: value, dataType: "json" }); }
 
+  // ---- posting with confirmation --------------------------------------------
+
+  function stopRetrying() {
+    pending = null;
+    if (timer !== null) { clearInterval(timer); timer = null; }
+  }
+
+  function post(value) {
+    stopRetrying();
+    pending = { value: value, nonce: value ? value.nonce : null, tries: 0 };
+    setValue(value);
+    timer = setInterval(function () {
+      if (!pending) { stopRetrying(); return; }
+      if (pending.tries >= RETRY_LIMIT) {
+        var gaveUp = pending.value !== null;
+        stopRetrying();
+        if (gaveUp) { setError(GAVE_UP); reportHeight(); }
+        return;
+      }
+      pending.tries += 1;
+      setValue(pending.value);
+    }, RETRY_MS);
+  }
+
+  function confirmed(shownNonce) {
+    if (pending && shownNonce === pending.nonce) stopRetrying();
+  }
+
   function nonce() {
     counter += 1;
     return Date.now().toString(36) + "-" + counter + "-" + Math.floor(Math.random() * 1e9).toString(36);
+  }
+
+  // "JSON file" from accept=".json,application/json"; just "File" when it names no extension.
+  function kindText() {
+    var m = /\.([a-z0-9]+)/i.exec(acceptText);
+    return m ? m[1].toUpperCase() + " file" : "File";
   }
 
   function megabytes(n) {
@@ -135,6 +186,8 @@
     try {
       var doc = window.parent.document;
       var root = window.getComputedStyle(doc.documentElement);
+      var dark = !!doc.getElementById("mc-dark-theme");
+      document.documentElement.style.setProperty("--err", dark ? "#fca5a5" : "#b91c1c");
       var map = { "--ink": "--mc-ink", "--muted": "--mc-muted", "--box": "--mc-sidebar-bg",
                   "--tile": "--mc-tile", "--line": "--mc-btn-border-hover", "--teal": "--mc-teal" };
       for (var local in map) {
@@ -163,12 +216,13 @@
   }
 
   function draw() {
-    $("hintMain").textContent = canHover ? "Drag and drop a file here" : "Choose a saved file";
-    $("hintSmall").textContent = "JSON file, up to " + megabytes(maxBytes);
+    $("hintMain").textContent = canHover ? "Drag and drop a file here" : "Choose a file";
+    $("hintSmall").textContent = kindText() + ", up to " + megabytes(maxBytes);
     var has = !!picked;
     $("hint").hidden = has;
     $("choose").hidden = has;
     $("file").hidden = !has;
+    try { input.tabIndex = has ? -1 : 0; } catch (e) { /* ignore */ }
     if (has) {
       $("name").textContent = picked.name;
       $("name").title = picked.name;
@@ -190,11 +244,11 @@
     reader.onload = function () {
       var text = typeof reader.result === "string" ? reader.result : "";
       picked = { name: file.name, size: file.size };
-      setValue({ name: file.name, text: text, size: file.size, nonce: nonce() });
+      post({ name: file.name, text: text, size: file.size, nonce: nonce() });
       draw();
     };
     reader.onerror = function () {
-      setError("Could not read that file. Tap Choose a file and try again.");
+      setError("We could not read that file. Choose a file and try again.");
       reportHeight();
     };
     reader.readAsText(file, "utf-8");
@@ -210,10 +264,14 @@
   $("clear").addEventListener("click", function () {
     picked = null;
     setError("");
-    setValue(null);
+    post(null);
     draw();
   });
 
+  // A file dropped outside the box must not replace this frame with the file.
+  ["dragover", "drop"].forEach(function (name) {
+    document.addEventListener(name, function (e) { e.preventDefault(); });
+  });
   ["dragenter", "dragover"].forEach(function (name) {
     box.addEventListener(name, function (e) { e.preventDefault(); box.classList.add("over"); });
   });
@@ -235,9 +293,15 @@
     if (!data || data.type !== "streamlit:render") return;
     var args = data.args || {};
     if (typeof args.label === "string") $("label").textContent = args.label;
-    if (typeof args.accept === "string") input.setAttribute("accept", args.accept);
+    if (typeof args.accept === "string") { acceptText = args.accept; input.setAttribute("accept", args.accept); }
     if (typeof args.max_bytes === "number" && args.max_bytes > 0) maxBytes = args.max_bytes;
     shownByPython = typeof args.shown === "string" ? args.shown : null;
+    var shownNonce = typeof args.shown_nonce === "string" ? args.shown_nonce : null;
+    confirmed(shownNonce);
+    // Widgets are disabled while the app is disconnected: enabled again means it is back.
+    var disabled = !!args.disabled;
+    if (wasDisabled && !disabled && pending) { pending.tries = 0; setValue(pending.value); }
+    wasDisabled = disabled;
     // A rebuilt frame knows nothing, but Python still holds the file: show its name.
     if (!picked && shownByPython) picked = { name: shownByPython, size: null };
     applyTheme();
